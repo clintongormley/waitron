@@ -171,6 +171,12 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-schedule", { bubbles: true, composed: true }));
   }
 
+  /** Announce that the operator wants the live floor (FP-1). The app switches to the floor screen
+   * (loading zones + occupancy) WITHOUT clearing the basket — mirrors {@link #showSchedule}. */
+  #showFloor(): void {
+    this.dispatchEvent(new CustomEvent("show-floor", { bubbles: true, composed: true }));
+  }
+
   /** Reveal the allergen lookup screen in place of the sale body. */
   #openAllergens(): void {
     this.showAllergens = true;
@@ -231,6 +237,9 @@ export class TillCounterScreen extends LitElement {
           <div class="session">
             <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
               ${t("allergens.open")}
+            </wt-button>
+            <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
+              ${t("floor.open")}
             </wt-button>
             <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
               ${t("schedule.open")}

@@ -10,7 +10,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   beginPasskeyAuthentication,
@@ -30,7 +30,21 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { getLayout, putLayout, putReceipt } from "@waitron/layouts";
-import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
+import {
+  createStatus,
+  createTable,
+  createZone,
+  deactivateStatus,
+  deactivateTable,
+  deactivateZone,
+  listStatuses,
+  listTables,
+  listZones,
+  updateStatus,
+  updateTable,
+  updateZone,
+} from "./tables.js";
+import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import {
   clearManagementCookie,
@@ -51,6 +65,18 @@ import type { Logger } from "./logger.js"; // the same Logger till-api.ts's rout
 export interface ManagementApiDeps {
   db: Database;
   cfg: { tenantId: string };
+  /**
+   * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
+   * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
+   * carry a `location_id`), so those routes need the venue's location, which `cfg.tenantId` alone cannot
+   * give; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
+   * the dashboard "Sala" config surface and the operator till surface CRUD the same tables under one
+   * scope. Only `tenantId` + `locationId` are read on this surface (the fiscal ids a `TillConfig` also
+   * carries are inert here — these are config routes that touch no fiscal path). OPTIONAL so the
+   * identity/passkey unit-test harnesses, which never exercise the zone/table routes, can omit it; a
+   * request that reaches one of those routes without it fails closed (see `requireVenueCfg`).
+   */
+  venueCfg?: TillConfig;
   secureCookies: boolean;
   /** The WebAuthn Relying Party ID the passkey ceremonies below bind credentials to (`config.ts`'s
    * `managementRpId`, defaulted to `localhost` for dev). A passkey is bound to its RP ID, so this is
@@ -139,6 +165,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // config surface, so it is deliberately absent here.)
   "status.not_found": 404,
   "status.label_taken": 409,
+  // Floor-zone + table config CRUD (FP-1). An unknown zone/table id (or a malformed one screened to it
+  // at the PATCH/DELETE routes) names no row → 404 (`zone.not_found` / `table.not_found`); a duplicate
+  // name/label collides on the `(tenant, location, …)` unique → 409 (`zone.name_taken` /
+  // `table.label_taken`), the same conflict shape a taken status label has. `zone.not_found` is ALSO
+  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the composite FK, mapped in
+  // the verb). The code's own semantics already imply these statuses, but they are listed explicitly as
+  // the house style requires (see this map's doc) — an unmapped code would default to 400, the wrong 4xx.
+  "zone.not_found": 404,
+  "zone.name_taken": 409,
+  "table.not_found": 404,
+  "table.label_taken": 409,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -179,6 +216,69 @@ function requireStatusId(id: string): string {
 }
 
 /**
+ * Screen a `/management-api/zones/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
+ * for the zone routes: a malformed id passed into a `uuid` column would `22P02` → an opaque 500, so
+ * refusing it here as `zone.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
+ * clean 404. Shared by the PATCH and DELETE `:id` zone routes below.
+ */
+function requireZoneId(id: string): string {
+  if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
+  return id;
+}
+
+/**
+ * Screen a `/management-api/tables/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
+ * for the table routes: a malformed id → `22P02` → opaque 500 without this, so it is refused as
+ * `table.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the same screen
+ * `till-api.ts`'s `PATCH`/`DELETE /api/tables/:id` routes apply inline. Shared by the PATCH and DELETE
+ * `:id` table routes below.
+ */
+function requireTableId(id: string): string {
+  if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+  return id;
+}
+
+/**
+ * The venue config the floor-zone + table config routes need (`deps.venueCfg`), or a fail-closed throw.
+ * `venueCfg` is OPTIONAL on `ManagementApiDeps` (the identity/passkey harnesses omit it), so a route that
+ * reaches a config verb has to narrow `TillConfig | undefined` to `TillConfig` first. `boot.ts` always
+ * supplies it for a real venue server, so the throw is structurally unreachable in production and is a
+ * misconfiguration guard, not a request fault — the same posture `readOrderFlow`'s "no location" guard
+ * takes (`till-config.ts`).
+ */
+function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
+  /* v8 ignore next 4 -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
+     route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
+  if (deps.venueCfg === undefined) {
+    throw new Error("mountManagementApi: venueCfg is required for the zone/table config routes");
+  }
+  return deps.venueCfg;
+}
+
+/**
+ * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
+ * tenant-scoped transaction as the app role, confirm the caller's management session carries
+ * `till.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
+ * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
+ * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
+ * `withTenant` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
+ * route resolved via `requireVenueCfg`, whose `tenantId` scopes the transaction (the zone/table verbs
+ * are location-scoped, so they take `cfg`, unlike the status verbs).
+ */
+function withVenueAuth<T>(
+  deps: ManagementApiDeps,
+  cfg: TillConfig,
+  sessionId: string,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await authorizeManager(tx, { managementSessionId: sessionId, permission: "till.configure" });
+    return fn(tx);
+  });
+}
+
+/**
  * Parse and validate a `displayOrder` request field, shared by the status POST and PATCH routes. An
  * absent field stays `undefined` (a legitimate no-op — POST then defaults it, PATCH leaves it
  * untouched); a PRESENT value must be an integer NUMBER, else it is refused as
@@ -201,6 +301,23 @@ function parseDisplayOrder(value: unknown): number | undefined {
     value > 2_147_483_647
   )
     throw new AppError("management.request_invalid", { field: "displayOrder" });
+  return value;
+}
+
+/**
+ * Parse and validate a `capacity` request field for the table config routes, shared by the table POST
+ * and PATCH routes. An absent field stays `undefined` (a legitimate no-op — POST leaves the column NULL,
+ * PATCH leaves it untouched); a PRESENT value must be a non-negative integer NUMBER in int4 range, else
+ * it is refused as `management.request_invalid` naming the FIELD (never the value). The `typeof` screen
+ * comes first (matching `parseDisplayOrder`), so a non-number such as `null` is REJECTED rather than
+ * coerced; the int4 upper bound closes the same opaque-500-on-overflow class (`capacity` is a Postgres
+ * `integer`; "Plazas" is only its Spanish UI label). The same rule `till-api.ts`'s `requireCapacity`
+ * applies to the operator table routes.
+ */
+function parseCapacity(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647)
+    throw new AppError("management.request_invalid", { field: "capacity" });
   return value;
 }
 
@@ -699,6 +816,203 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           id,
         });
       });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Floor-plan zone + table configuration (FP-1) ──────────────────────────────────────────────────
+  // The dashboard "Sala" config screen (design §3d): CRUD the venue's floor zones and — as thin
+  // wrappers over TS-1's table verbs — its dining tables. All eight routes are gated exactly like the
+  // layout `GET` above: `requireManagementSession` first (401 before any DB work), then each route calls
+  // `authorizeManager(…, "till.configure")` EXPLICITLY inside `withTenant` + `asAppUser` (unlike the
+  // status verbs, the zone/table verbs do NOT authorize themselves — they take a plain venue `cfg` — so
+  // the gate lives at the route, the layout-`GET` shape). The verbs are location-scoped, so each reads
+  // the venue's config via `requireVenueCfg`. Body-shape screens mirror the service-status routes above.
+
+  // Create a zone. Body { name, displayOrder? }; a bad shape → management.request_invalid naming the
+  // FIELD; a duplicate name → zone.name_taken (409). Returns the new id at 201, matching every other
+  // management-surface create (createPerson/staff, createStatus).
+  app.post("/management-api/zones", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = (await c.req.json<{ name?: unknown; displayOrder?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string")
+        throw new AppError("management.request_invalid", { field: "name" });
+      const displayOrder = parseDisplayOrder(body.displayOrder);
+      // Bind the validated field to a local: the `typeof` guard narrows `body.name` to `string` HERE,
+      // but that narrowing does not survive into the `withTenant` closure (TS resets a captured property
+      // to its declared type), so the closure reads this — the login/create-person pattern above.
+      const { name } = body;
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createZone(tx, cfg, { name, displayOrder }),
+      );
+      return c.json(result, 201);
+    }),
+  );
+
+  // The venue's ACTIVE zones, by display order, for the editor. Gated on till.configure.
+  app.get("/management-api/zones", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const zones = await withVenueAuth(deps, cfg, sessionId, (tx) => listZones(tx, cfg));
+      return c.json(zones);
+    }),
+  );
+
+  // Edit a zone (name/displayOrder/active — any subset). Malformed :id → zone.not_found (a bad id names
+  // no zone), not a 500. A present field with the wrong type → management.request_invalid. A patch
+  // carrying no mutable field is a 204 no-op (the sibling status PATCH shape) — returned WITHOUT reaching
+  // updateZone's empty `.set()`, which Drizzle rejects ("No values to set") as an opaque 500.
+  app.patch("/management-api/zones/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireZoneId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      if (body.name !== undefined) {
+        if (typeof body.name !== "string")
+          throw new AppError("management.request_invalid", { field: "name" });
+        patch.name = body.name;
+      }
+      if (body.displayOrder !== undefined) {
+        patch.displayOrder = parseDisplayOrder(body.displayOrder);
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean")
+          throw new AppError("management.request_invalid", { field: "active" });
+        patch.active = body.active;
+      }
+      if (
+        patch.name === undefined &&
+        patch.displayOrder === undefined &&
+        patch.active === undefined
+      ) {
+        return c.body(null, 204);
+      }
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateZone(tx, cfg, id, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Deactivate a zone (DELETE = deactivate; app_user holds no hard DELETE). Malformed :id → zone.not_found.
+  app.delete("/management-api/zones/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireZoneId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateZone(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Create a table (thin wrapper over TS-1's `createTable`). Body { label, zoneId?, capacity? }; a bad
+  // shape → management.request_invalid naming the FIELD; a duplicate label → table.label_taken (409); a
+  // `zoneId` naming no floor_zones row (or another tenant's) → zone.not_found (404), mapped in the verb
+  // (`isZoneFkViolation`) and NOT re-mapped here. Returns the new id at 201 (the management-surface
+  // create convention; TS-1's till POST returns 200, but this surface is 201 throughout).
+  app.post("/management-api/tables", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.label !== "string")
+        throw new AppError("management.request_invalid", { field: "label" });
+      let zoneId: string | undefined;
+      if (body.zoneId !== undefined) {
+        if (typeof body.zoneId !== "string")
+          throw new AppError("management.request_invalid", { field: "zoneId" });
+        // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened reaches
+        // the `zone_id` uuid column → `22P02` → opaque 500. Screen it as a UUID and give it the SAME
+        // `zone.not_found` a well-formed-but-missing zoneId gets (the composite FK's 23503, mapped in the
+        // verb) — the till surface's create/patch routes screen it identically.
+        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
+        zoneId = body.zoneId;
+      }
+      const capacity = parseCapacity(body.capacity);
+      // Bind the validated `label` to a local: the `typeof` guard narrows `body.label` to `string` HERE,
+      // but that narrowing does not survive into the `withTenant` closure (a captured property resets to
+      // its declared type), so the closure reads this local — the login/create-person pattern above.
+      const { label } = body;
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createTable(tx, cfg, { label, zoneId, capacity }),
+      );
+      return c.json(result, 201);
+    }),
+  );
+
+  // The venue's ACTIVE tables, by label (thin wrapper over TS-1's `listTables`). Gated on till.configure.
+  app.get("/management-api/tables", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const tables = await withVenueAuth(deps, cfg, sessionId, (tx) => listTables(tx, cfg));
+      return c.json(tables);
+    }),
+  );
+
+  // Edit a table — label/zoneId/capacity, any subset (thin wrapper over TS-1's `updateTable`). Malformed
+  // :id → table.not_found; an unknown id → table.not_found; a label collision → table.label_taken; a
+  // `zoneId` naming no zone → zone.not_found (verb-mapped). A present field with the wrong type →
+  // management.request_invalid; a patch with no mutable field is a 204 no-op (avoids updateTable's empty
+  // `.set()` 500, the sibling status/zone PATCH shape).
+  app.patch("/management-api/tables/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireTableId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const patch: { label?: string; zoneId?: string; capacity?: number } = {};
+      if (body.label !== undefined) {
+        if (typeof body.label !== "string")
+          throw new AppError("management.request_invalid", { field: "label" });
+        patch.label = body.label;
+      }
+      if (body.zoneId !== undefined) {
+        if (typeof body.zoneId !== "string")
+          throw new AppError("management.request_invalid", { field: "zoneId" });
+        // Screen a string-typed but MALFORMED zoneId as a UUID (same as the POST route above): un-screened
+        // it reaches the `zone_id` uuid column → `22P02` → opaque 500, so it gets the SAME `zone.not_found`
+        // a well-formed-but-missing zoneId does.
+        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
+        patch.zoneId = body.zoneId;
+      }
+      if (body.capacity !== undefined) {
+        patch.capacity = parseCapacity(body.capacity);
+      }
+      if (patch.label === undefined && patch.zoneId === undefined && patch.capacity === undefined) {
+        return c.body(null, 204);
+      }
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateTable(tx, cfg, id, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Deactivate a table (DELETE = deactivate; app_user holds no hard DELETE; the table has order history).
+  // Malformed :id → table.not_found (thin wrapper over TS-1's `deactivateTable`).
+  app.delete("/management-api/tables/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireTableId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateTable(tx, cfg, id));
       return c.body(null, 204);
     }),
   );

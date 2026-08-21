@@ -50,10 +50,24 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
  *
  * Pass `theme` to pin `data-theme="light"|"dark"` on the host (overriding
  * `prefers-color-scheme`); omit it to test whatever theme the environment currently resolves to.
+ *
+ * It also paints the page CANVAS (`<body>`/`<html>`) with the host's resolved theme background. A
+ * real deployment themes the canvas — `index.html` sets `body { background: var(--wt-color-bg) }`
+ * under `applyTokens(document.documentElement)` — so in the app every element ultimately sits on the
+ * theme's background. Painting only the nested `host` leaves the page's default WHITE canvas behind
+ * it, and axe-core composites the background of any element it cannot trace back to `host` (e.g. one
+ * pushed off-viewport, where `elementsFromPoint` returns nothing) against that canvas: on white the
+ * dark theme's light text reads as a false color-contrast failure (`#eceef2` on `#ffffff` → 1.16:1)
+ * even though the element renders correctly on the dark canvas in the app. `<body>`/`<html>` are not
+ * themselves theme roots, so read the concrete colour off `host` rather than passing the `var()`;
+ * `cleanup()` in test-helpers.ts resets it.
  */
 export async function mountThemed(html: string, theme?: Theme): Promise<HTMLElement> {
   const el = await mount(html);
   if (theme) host.setAttribute("data-theme", theme);
   host.style.background = "var(--wt-color-bg)";
+  const canvasBg = getComputedStyle(host).backgroundColor;
+  document.body.style.background = canvasBg;
+  document.documentElement.style.background = canvasBg;
   return el;
 }

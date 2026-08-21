@@ -71,15 +71,17 @@ describe("dining_tables schema (RLS + grants)", () => {
 
   it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
     const id = await seedTable(TENANT_A, LOCATION_A, "T-control");
+    // `capacity` (a plain nullable integer) since the former free-text `zone` column was dropped by
+    // FP-1 in favour of the `zone_id` FK to floor_zones — this control only needs a writable column.
     await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update dining_tables set zone = 'terrace' where id = ${id}`),
+      tx.execute(sql`update dining_tables set capacity = 4 where id = ${id}`),
     );
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
-        .execute<{ zone: string }>(sql`select zone from dining_tables where id = ${id}`)
+        .execute<{ capacity: number }>(sql`select capacity from dining_tables where id = ${id}`)
         .then((r) => r.rows),
     );
-    expect(row!.zone).toBe("terrace");
+    expect(row!.capacity).toBe(4);
   });
 
   it("app_user has no DELETE on dining_tables (deactivate, never delete)", async () => {

@@ -23,6 +23,9 @@ export async function mount(html: string): Promise<HTMLElement> {
 /** Removes every host mounted since the last cleanup. Use as `afterEach(cleanup)`. */
 export function cleanup(): void {
   for (const el of mounted.splice(0)) el.remove();
+  // Reset the themed canvas that mountThemed() (a11y-helpers.ts) paints on <body>/<html>.
+  document.body.style.background = "";
+  document.documentElement.style.background = "";
 }
 
 /**

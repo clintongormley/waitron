@@ -261,6 +261,34 @@ export interface ServiceStatus {
   createdAt: string;
 }
 
+// ── Floor-plan types (FP-1) ─────────────────────────────────────────────────────────────────────
+// LOCAL copies of the server's floor-zone/dining-table JSON shapes (`apps/server/src/tables.ts`'s
+// `FloorZone`/`DiningTable`, wrapped by the `/management-api/zones` + `/management-api/tables`
+// routes), deliberately NOT imported from `apps/server` (the #70 rule the staff/catalogue/layout
+// shapes above follow). These are the CONTRACT the floor-plan config screen builds on; the server shapes
+// stay the source of truth, and a mismatch surfaces as a runtime shape error a view test catches.
+
+/** One `floor_zones` row as the config surface returns it (`GET /management-api/zones`, active only,
+ * by `displayOrder`) — mirrors the server's `FloorZone`. */
+export interface FloorZone {
+  id: string;
+  name: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/** One `dining_tables` row as the config surface returns it (`GET /management-api/tables`, active
+ * only, by `label`) — mirrors the server's `DiningTable`. `zoneId` is the `floor_zones` FK or null;
+ * `createdAt` is an ISO instant. */
+export interface DashboardTable {
+  id: string;
+  label: string;
+  zoneId: string | null;
+  capacity: number | null;
+  active: boolean;
+  createdAt: string;
+}
+
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 // LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping
 // `@waitron/workforce`'s verbs), deliberately NOT imported from `@waitron/workforce`/`@waitron/db` — a
@@ -792,6 +820,68 @@ export class DashboardApi {
    * empty 204. */
   deactivateStatus(id: string): Promise<void> {
     return this.#request<void>(`/management-api/service-statuses/${id}`, "DELETE");
+  }
+
+  // ── Floor-plan zone + table configuration (FP-1) ────────────────────────────────────────────────
+  // The per-item CRUD the floor-plan config screen drives (the `/management-api/zones` + `/management-api/
+  // tables` routes in `apps/server/src/management-api.ts`, `till.configure`-gated). One endpoint per
+  // mutation and a reload (`listZones`/`listTables`) after each — the routes are per-item
+  // POST/PATCH/DELETE, not a single bulk PUT (the service-status shape above). Creates return the
+  // minted id at 201; PATCH/DELETE answer an empty 204. `updateTable` carries no `active` field: the
+  // table PATCH route accepts only `label`/`zoneId`/`capacity` (deactivate is the DELETE route), unlike
+  // the zone PATCH route, which does take `active`.
+
+  /** `GET /management-api/zones` — the venue's ACTIVE floor zones, by display order. */
+  listZones(): Promise<FloorZone[]> {
+    return this.#request<FloorZone[]>("/management-api/zones", "GET");
+  }
+
+  /** `POST /management-api/zones` — create a zone (name, optional display order); returns its id (201). */
+  createZone(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/zones", "POST", input);
+  }
+
+  /** `PATCH /management-api/zones/:id` — patch a zone's mutable slice (name, order, active). Answers an
+   * empty 204. */
+  updateZone(
+    id: string,
+    patch: { name?: string; displayOrder?: number; active?: boolean },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/zones/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/zones/:id` — soft-delete (deactivate) a zone. Answers an empty 204. */
+  deactivateZone(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
+  }
+
+  /** `GET /management-api/tables` — the venue's ACTIVE dining tables, by label. */
+  listTables(): Promise<DashboardTable[]> {
+    return this.#request<DashboardTable[]>("/management-api/tables", "GET");
+  }
+
+  /** `POST /management-api/tables` — create a table (label, optional zone + capacity); returns its id
+   * (201). */
+  createTable(input: {
+    label: string;
+    capacity?: number;
+    zoneId?: string;
+  }): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/tables", "POST", input);
+  }
+
+  /** `PATCH /management-api/tables/:id` — patch a table's mutable slice (label, zone, capacity). The
+   * route takes no `active` field (deactivate is the DELETE route). Answers an empty 204. */
+  updateTable(
+    id: string,
+    patch: { label?: string; zoneId?: string; capacity?: number },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/tables/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/tables/:id` — soft-delete (deactivate) a table. Answers an empty 204. */
+  deactivateTable(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/tables/${id}`, "DELETE");
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────

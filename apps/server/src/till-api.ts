@@ -14,7 +14,15 @@ import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { createTable, deactivateTable, listTables, setTableStatus, updateTable } from "./tables.js";
+import {
+  createTable,
+  deactivateTable,
+  listServiceStatuses,
+  listTables,
+  listZones,
+  setTableStatus,
+  updateTable,
+} from "./tables.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -25,13 +33,16 @@ import {
   listHeldOrders,
   listPrepQueue,
   listTablesWithState,
+  markLineServed,
   mergeTabs,
   moveTab,
   openTab,
   parkOrder,
   placeOrder,
+  readTabLines,
   sendToPrep,
   transferLines,
+  unmarkLineServed,
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
@@ -126,6 +137,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.inactive": 409,
+  // Floor-plan zone (FP-1). The table create/patch routes now accept a `zoneId`; one naming no
+  // `floor_zones` row (or another tenant's, RLS-hidden) surfaces `zone.not_found` — a 404, the same
+  // shape `table.not_found`/`status.not_found` use for an absent referenced row. (`zone.name_taken`
+  // is thrown only by the zone CRUD verbs, which the MANAGEMENT API exposes and maps there; the till
+  // surface only LISTS zones (`GET /api/zones`) and never creates/renames one, so it never throws it.)
+  "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
@@ -215,6 +232,26 @@ function requireTabParam(id: string): string {
     throw new AppError("tab.not_open", { tabId: id });
   }
   return id;
+}
+
+/**
+ * Screen a `:lineNo` path param as an in-range int4 line number before it reaches a query — the ONE
+ * screen the void-line `DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine) route and the served
+ * POST/DELETE all share. `line_no` is int4 (orders.ts) and `voidTabLine`/`markLineServed`/
+ * `unmarkLineServed` bind it parameterised, so a non-numeric value (`NaN`) or a fractional one is
+ * refused before any query, and an integer ABOVE int4's max (which clears `Number.isInteger`) is too —
+ * un-screened it would reach `where line_no = $n` and raise `22003` (out of range), a non-AppError the
+ * boundary turns into an opaque `server.internal` 500. A line number that cannot exist names no line,
+ * so it is refused as `tab.line_not_found` (404) — the honest 404 an absent line gets, exactly as the
+ * verbs themselves throw for an in-range `line_no` matching nothing. `tabId` travels for the same
+ * fail-closed error shape the void-line route carries.
+ */
+function requireLineNo(tabId: string, raw: string): number {
+  const lineNo = Number(raw);
+  if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+  return lineNo;
 }
 
 /**
@@ -617,12 +654,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Create a dining table. SESSION-GUARDED. `createTable` throws table.label_taken (→ 409) on a
-  // duplicate label. The client sends { label, zone?, capacity? }.
+  // duplicate label, or zone.not_found (→ 404) when `zoneId` names no floor_zones row. The client
+  // sends { label, zoneId?, capacity? }.
   app.post("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const body = await c.req.json<{ label: string; zone?: string; capacity?: number }>();
+      const body = await c.req.json<{ label: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
+      // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
+      // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
+      // `zone.not_found` (the composite FK's 23503, `isZoneFkViolation`); a MALFORMED one un-screened
+      // reaches the `zone_id` uuid column and raises `22P02` → an opaque `server.internal` 500, so it
+      // gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
+      // table and is left alone.
+      if (body.zoneId !== undefined && !isUuid(body.zoneId))
+        throw new AppError("zone.not_found", { zoneId: body.zoneId });
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createTable(tx, deps.cfg, body);
@@ -643,7 +689,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The occupancy read-model (design §4). SESSION-GUARDED.
+  // The occupancy read-model (design §4). SESSION-GUARDED. Task 4 extended `listTablesWithState` so
+  // each row now carries `zoneId` (the table's floor zone) and `pendingToServe` (its open tab's lines
+  // still to serve); this route returns that shape DIRECTLY, so both flow through unchanged.
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -655,15 +703,52 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Edit a table (label/zone/capacity). SESSION-GUARDED. A malformed :id is screened to
-  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken.
+  // The venue's active floor-plan zones (FP-1, design §4). SESSION-GUARDED; RLS + the location filter
+  // scope `listZones` to this till's venue, ordered by `display_order`. LIST-ONLY: zone CRUD is the
+  // management API's (`POST/PATCH/DELETE /management-api/zones`, Task 5), so this surface throws none
+  // of the create-side codes (`zone.name_taken`) — the till only reads zones to render the live floor.
+  app.get("/api/zones", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const zones = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listZones(tx, deps.cfg);
+      });
+      return c.json(zones);
+    }),
+  );
+
+  // The venue's ACTIVE service statuses (FP-1, TS-2), for the table-order screen's Estado picker.
+  // SESSION-GUARDED (operator PIN, NOT the manager-only `listStatuses`): `requireSession` runs FIRST, and
+  // RLS scopes `listServiceStatuses` to this till's tenant. LIST-ONLY, active-only (a deactivated status
+  // can't be applied); status CRUD is the management API's, so this surface throws no domain code.
+  app.get("/api/statuses", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const statuses = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listServiceStatuses(tx);
+      });
+      return c.json(statuses);
+    }),
+  );
+
+  // Edit a table (label/zoneId/capacity). SESSION-GUARDED. A malformed :id is screened to
+  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken,
+  // or zone.not_found (→ 404) when `zoneId` names no floor_zones row.
   app.patch("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ label?: string; zone?: string; capacity?: number }>();
+      const body = await c.req.json<{ label?: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
+      // Screen a present `zoneId` as a UUID BEFORE the DB touch — same as the create route above and the
+      // `:id` screen on this route: a malformed zoneId un-screened reaches the `zone_id` uuid column →
+      // `22P02` → opaque 500, so it gets the SAME `zone.not_found` a well-formed-but-missing one does. An
+      // ABSENT zoneId is left alone (an unassigned table, legitimate).
+      if (body.zoneId !== undefined && !isUuid(body.zoneId))
+        throw new AppError("zone.not_found", { zoneId: body.zoneId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await updateTable(tx, deps.cfg, id, body);
@@ -719,28 +804,76 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a :lineNo that is
-  // not a valid int4 line number → tab.line_not_found (it names no line). The upper bound is not
-  // cosmetic: `line_no` is int4 (orders.ts) and `voidTabLine` binds it parameterised, so an integer
-  // ABOVE int4's max (`9999999999`) — one that clears `Number.isInteger` — would reach the
-  // `where line_no = $n` delete (once `voidTabLine`'s `lockOpenTab` confirms an open tab) and PostgreSQL
-  // would raise `22003` (out of range for integer), a non-AppError the boundary turns into an opaque
-  // `server.internal` 500, the exact class the `:id` screen above exists to prevent. (A non-numeric
-  // :lineNo becomes `NaN` here and is caught by `Number.isInteger` before any query, so `22P02` is not
-  // reachable on this param.) Screening the whole out-of-range set here refuses it as
-  // `tab.line_not_found` (404): a line number that cannot exist names no line, the same shape `abc`/
-  // `1.5` already resolve to. `voidTabLine` still throws tab.not_open / tab.line_not_found for the
-  // in-range cases it reaches.
+  // not a valid int4 line number → tab.line_not_found (it names no line) — the SAME `requireLineNo`
+  // screen the served POST/DELETE routes use (see its doc for why the int4 upper bound is not cosmetic:
+  // `voidTabLine` binds `line_no` parameterised, so an out-of-range integer un-screened would reach the
+  // `where line_no = $n` delete and raise `22003` → an opaque `server.internal` 500). `voidTabLine`
+  // still throws tab.not_open / tab.line_not_found for the in-range cases it reaches.
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const lineNo = Number(c.req.param("lineNo"));
-      if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647)
-        throw new AppError("tab.line_not_found", { tabId: id, lineNo });
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Read ONE open tab's lines for the table-order screen (design §3b, FP-1) — per line: `lineNo`,
+  // `productId`, `quantity`, the LOCKED gross unit price (`unitPriceGross`) and the `servedAt` marker.
+  // SESSION-GUARDED. A READ, so no FOR UPDATE lock (`readTabLines` uses `assertTabOpen`, not
+  // `lockOpenTab`). Malformed :id → `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
+  // screen the served routes use; `readTabLines` throws `tab.not_open` for a non-open/absent tab. Returns
+  // `TabLine[]`. A tab does NOT re-price — the STORED locked gross rides back verbatim (see `readTabLines`).
+  app.get("/api/working-orders/:id/lines", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lines = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readTabLines(tx, deps.cfg, id);
+      });
+      return c.json(lines);
+    }),
+  );
+
+  // Mark ONE line of an open tab as DELIVERED — `served_at = now()` (design §3b, FP-1), the live floor's
+  // "this went out" tap. SESSION-GUARDED; it is an OPERATIONAL verb a logged-in runner uses like ringing
+  // a sale, gated by the session (`requireSession`), NOT by a permission. `served_at` is a PRE-FISCAL
+  // operational field (design H2) — it never enters `registros`/`computeHuella`/`recordSale`, so this is
+  // a floor-ops route with no fiscal path. The `:id`/`:lineNo` screens are the SAME as the sibling
+  // void-line DELETE above (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
+  // `tab.line_not_found` on a non-int4/out-of-range one), so a bad param is a clean 4xx, never a
+  // `22P02`/`22003` 500. `markLineServed` still throws `tab.not_open` (a non-open/absent/foreign tab a
+  // table points at) / `tab.line_not_found` (an in-range line matching nothing) for the cases it reaches.
+  app.post("/api/working-orders/:id/lines/:lineNo/served", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await markLineServed(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Clear ONE line's delivered marker — `served_at = NULL` (the inverse of the POST above, for a
+  // mis-tap). SESSION-GUARDED, same `:id`/`:lineNo` screens, same PRE-FISCAL note; `unmarkLineServed`
+  // throws the same `tab.not_open`/`tab.line_not_found` guards.
+  app.delete("/api/working-orders/:id/lines/:lineNo/served", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await unmarkLineServed(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
     }),

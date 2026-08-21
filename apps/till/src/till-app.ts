@@ -11,14 +11,20 @@ import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
+import "./screens/till-floor-screen.js";
+import "./screens/till-table-order-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type {
+  FloorZone,
   HeldOrderSummary,
   OrderFlow,
   PayOutcome,
   PrepQueueEntry,
   PrepState,
   StaffMember,
+  TabLine,
+  TableServiceStatus,
+  TableState,
   TillInfo,
   TillProduct,
   TillSaleResult,
@@ -33,8 +39,12 @@ import type {
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
 
-/** The faces of the till: sign in, ring up, print, and the staff schedule. One at a time. */
-type Screen = "lock" | "counter" | "ticket" | "schedule";
+/**
+ * The faces of the till: sign in, ring up, print, the staff schedule, and (FP-1) the live floor and the
+ * per-table ordering screen. One at a time. `"table-order"` is added here by Task 8 so `#renderScreen`
+ * stays exhaustive (Ruling FP-D) — it renders a placeholder until Task 9 supplies `<till-table-order-screen>`.
+ */
+type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order";
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -156,6 +166,40 @@ export class TillApp extends LitElement {
    * parked orders, including ones parked on a different register.
    */
   @state() private heldOrders: HeldOrderSummary[] = [];
+  /** The venue's active floor-plan zones (FP-1), loaded on entering the floor screen and handed to it.
+   * Owned and refreshed by the app, like {@link heldOrders}. */
+  @state() private zones: FloorZone[] = [];
+  /** The live-floor occupancy read-model (FP-1), loaded on entering the floor screen and handed to it.
+   * Owned and refreshed by the app, like {@link heldOrders}. */
+  @state() private tables: TableState[] = [];
+  /**
+   * The venue's ACTIVE service statuses (FP-1, TS-2) — the catalogue the table-order screen's Estado
+   * picker offers, loaded from `GET /api/statuses` on entering the floor and threaded to the screen.
+   * The FULL active set (not derived from which statuses happen to be applied to a table), so a
+   * configured-but-never-yet-applied status can still be picked. Owned and refreshed by the app.
+   */
+  @state() private statuses: TableServiceStatus[] = [];
+  /**
+   * The working-order id of the tab the operator just opened or resumed from the floor (FP-1) — the
+   * `orderId` Task 9's table-ordering screen reads. Set by {@link TillApp.#onOpenTable}: `openTab`'s new
+   * id for a free table, or the read-model's {@link TableState.tabId} for an occupied one. A tab is a
+   * PRE-FISCAL working order (design H2) — opening one files no sale/registro/huella.
+   */
+  @state() private activeTabId?: string;
+  /**
+   * The TABLE id of the tab the operator opened from the floor (FP-1, Ruling FP-F). DISTINCT from
+   * {@link activeTabId} (the tab's working-order id): the table-order screen's `set-status` is keyed by
+   * TABLE id, not order id, so `#onSetStatus` needs this. Set by {@link TillApp.#onOpenTable} from the
+   * SAME `open-table` event that resolves {@link activeTabId}.
+   */
+  @state() private activeTableId?: string;
+  /**
+   * The open tab's lines (FP-1) — locked add-time prices + per-line served markers, from `getTabLines`.
+   * Owned and refreshed by the app (loaded on entering the table-order screen and re-read after every
+   * round/serve), handed to `till-table-order-screen` which renders its drawer/total/badge from them. A
+   * tab does NOT re-price (design H2), so these are the authoritative locked figures, never recomputed.
+   */
+  @state() private tabLines: TabLine[] = [];
   /**
    * The location's pay-timing mode (7c prepare & collect, design §3), read once from `GET /api/till`
    * on boot (see `#boot`) — BEFORE login, since the counter needs it the moment it first renders.
@@ -755,7 +799,154 @@ export class TillApp extends LitElement {
     this.screen = "schedule";
   }
 
-  /** Return from the schedule screen to the counter, basket intact. */
+  /**
+   * Show the live-floor screen (FP-1), loading the venue's zones and the live occupancy read-model first
+   * so the floor renders populated. Basket-preserving like the schedule nav (the basket is till-owned).
+   * Mirrors {@link TillApp.#onShowSchedule} plus a data load. A failed load is SWALLOWED — leaving the
+   * last-known (or empty) floor — rather than blocking the operator, the same degrade-gracefully shape
+   * {@link TillApp.#onLoggedIn} uses for the staff roster; the floor touches no fiscal path (design H2),
+   * so an empty floor is safe. Only writes reactive state, so no `isConnected` guard is needed (the app's
+   * DISCONNECT SAFETY note).
+   */
+  async #onShowFloor(): Promise<void> {
+    this.errorKey = undefined;
+    try {
+      const [tables, zones, statuses] = await Promise.all([
+        this.api.getTablesState(),
+        this.api.listZones(),
+        this.api.listStatuses(),
+      ]);
+      this.tables = tables;
+      this.zones = zones;
+      // The Estado picker's catalogue (FP-1) — loaded here so the table-order screen (reached from the
+      // floor) has the full ACTIVE status set to offer, including statuses applied to no table yet.
+      this.statuses = statuses;
+    } catch {
+      // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
+    }
+    this.screen = "floor";
+  }
+
+  /**
+   * The floor screen asked to open (or resume) a table's tab (FP-1). A FREE table opens a fresh tab via
+   * `openTab` — a PRE-FISCAL working order (design H2), never a sale/registro/huella — and the app
+   * remembers its new working-order id; an OCCUPIED table already has one, resolved from the read-model
+   * ({@link TableState.tabId}, present iff `hasOpenTab`). Either way the app moves to the table-ordering
+   * screen, which reads {@link activeTabId} (Task 9). Awaits `openTab` on the happy path like
+   * {@link TillApp.#onLoggedIn}'s `listProducts`.
+   */
+  async #onOpenTable(event: Event): Promise<void> {
+    const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)
+      .detail;
+    this.errorKey = undefined;
+    // `set-status` is keyed by TABLE id (Ruling FP-F), so remember it from the SAME event that resolves
+    // the tab's working-order id — `#onSetStatus` reads {@link activeTableId}, the pay/round/serve paths
+    // read {@link activeTabId}.
+    this.activeTableId = tableId;
+    if (hasOpenTab) {
+      this.activeTabId = this.tables.find((table) => table.id === tableId)?.tabId;
+    } else {
+      const { tabId } = await this.api.openTab(tableId);
+      this.activeTabId = tabId;
+    }
+    // Load the tab's lines so the table-order screen renders populated. A failed read degrades to an
+    // empty tab (see {@link #loadTabLines}) rather than blocking the transition.
+    await this.#loadTabLines();
+    this.screen = "table-order";
+  }
+
+  /**
+   * (Re)load the active tab's lines for the table-order screen (FP-1). Called on entering the screen and
+   * after every round/serve write. A read failure — or no resolved tab id — leaves an EMPTY tab rather
+   * than blocking the operator (the floor touches no fiscal path, design H2; an empty tab is safe), the
+   * same degrade-gracefully shape {@link #onShowFloor} uses. Only writes reactive state (no guard).
+   */
+  async #loadTabLines(): Promise<void> {
+    if (this.activeTabId === undefined) {
+      this.tabLines = [];
+      return;
+    }
+    try {
+      this.tabLines = await this.api.getTabLines(this.activeTabId);
+    } catch {
+      this.tabLines = [];
+    }
+  }
+
+  /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. A failed
+   * append is non-fatal — surface a banner, leave the tab as it was. */
+  async #onSendRound(event: Event): Promise<void> {
+    const { lines } = (event as CustomEvent<{ lines: { productId: string; quantity: string }[] }>)
+      .detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.addTabRound(this.activeTabId, lines);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Mark one tab line delivered (FP-1) then reload the drawer. `served_at` is a PRE-FISCAL operational
+   * marker (design H2). A failed mark is non-fatal. */
+  async #onServeLine(event: Event): Promise<void> {
+    const { lineNo } = (event as CustomEvent<{ lineNo: number }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.markLineServed(this.activeTabId, lineNo);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Set (or clear) the table's manual service status (FP-1, TS-2) — keyed by {@link activeTableId}, not
+   * the tab's order id. A failed write is non-fatal. */
+  async #onSetStatus(event: Event): Promise<void> {
+    const { statusId } = (event as CustomEvent<{ statusId: string | null }>).detail;
+    if (this.activeTableId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.setTableStatus(this.activeTableId, statusId);
+    } catch {
+      this.errorKey = "table.error";
+    }
+  }
+
+  /**
+   * Settle the WHOLE tab (FP-1, H2-critical). The tab is a PERSISTED OPEN working order, so the EXISTING
+   * `recordSale` verb files its STORED LOCKED lines and IGNORES the sent basket — `payWorkingOrder`'s
+   * open-order branch (`apps/server/src/till-sale.ts:338-343`): "the browser sends none; the persisted
+   * `working_order_lines` are the authoritative composition". So this sends `[]` (that documented shape;
+   * the empty-basket guard is walk-up-only, `:329`) and, crucially, does NOT run `#syncIfDirty` — a
+   * sync/`updateWorkingOrder` would RE-PRICE and destroy the tab's add-time locks. No new fiscal verb,
+   * no re-price. Same single-flight (`submitting`, the double-file safety), success→ticket and
+   * error→banner shape as {@link #onConfirmPayment}; the tab-pay tender arrives as `pay-tab` (the screen
+   * re-emits its embedded `tender-pay`'s `confirm-payment`, so this never collides with the counter's own
+   * `#onConfirmPayment`).
+   */
+  async #onPayTab(event: Event): Promise<void> {
+    if (this.submitting || this.activeTabId === undefined) return;
+    this.submitting = true;
+    const id = this.activeTabId;
+    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    this.errorKey = undefined;
+    try {
+      this.result = await this.api.recordSale([], tender, id);
+      this.screen = "ticket";
+    } catch {
+      this.errorKey = "sale.error";
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). */
   #onBackToCounter(): void {
     this.errorKey = undefined;
     this.screen = "counter";
@@ -805,6 +996,13 @@ export class TillApp extends LitElement {
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
         @show-schedule=${() => this.#onShowSchedule()}
+        @show-floor=${() => void this.#onShowFloor()}
+        @open-table=${(event: Event) => void this.#onOpenTable(event)}
+        @send-round=${(event: Event) => void this.#onSendRound(event)}
+        @serve-line=${(event: Event) => void this.#onServeLine(event)}
+        @set-status=${(event: Event) => void this.#onSetStatus(event)}
+        @pay-tab=${(event: Event) => void this.#onPayTab(event)}
+        @back-to-floor=${() => void this.#onShowFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
         @logout=${() => void this.#onLogout()}
       >
@@ -847,6 +1045,23 @@ export class TillApp extends LitElement {
           .staff=${this.staff}
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
+      case "floor":
+        return html`<till-floor-screen
+          .zones=${this.zones}
+          .tables=${this.tables}
+        ></till-floor-screen>`;
+      // FP-1 (Ruling FP-D): the per-table ordering screen. It renders from the app-owned tab lines
+      // (loaded via `getTabLines`, reloaded after each round/serve) and emits `send-round`/`serve-line`/
+      // `pay-tab`/`set-status`/`back-to-floor`, wired on the app wrapper above. `orderId` rides through
+      // (the tab's working-order id) for parity with the placeholder it replaces; the app owns the writes.
+      case "table-order":
+        return html`<till-table-order-screen
+          .lines=${this.tabLines}
+          .products=${this.products}
+          .statuses=${this.statuses}
+          .orderId=${this.activeTabId}
+          .busy=${this.submitting}
+        ></till-table-order-screen>`;
     }
   }
 }

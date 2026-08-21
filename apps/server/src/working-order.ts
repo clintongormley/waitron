@@ -550,6 +550,71 @@ export async function voidTabLine(
 }
 
 /**
+ * Set (or clear) ONE line's `served_at` on an OPEN tab — the shared body of {@link markLineServed} and
+ * {@link unmarkLineServed}. {@link lockOpenTab} locks the tab row `FOR UPDATE` and confirms it is an
+ * open tab a `dining_tables.tab_id` points at (else `tab.not_open`), then a single conditional UPDATE
+ * writes the line: `served ? now() : null`. `now()` is the DATABASE clock (the venue's server time),
+ * not a JS instant — the served marker is a floor-UI signal, so the write is stamped where every other
+ * timestamp on this row is. A 0-row UPDATE (no such `line_no` on the tab) throws `tab.line_not_found`,
+ * exactly as {@link voidTabLine}'s delete does.
+ *
+ * PRE-FISCAL (design H2, ruling R4): `served_at` is written only while the parent order is `open` and
+ * is NEVER read into a filed record — the pay path rebuilds `sale_lines` from the locked price snapshot
+ * (`priceLockedLines`), never this column, so this touches nothing filed. The
+ * `working_order_lines_require_open_parent` trigger is the DB backstop that a served write cannot reach
+ * a non-open parent even if this app guard were bypassed.
+ */
+async function setLineServed(
+  tx: Transaction,
+  tabId: string,
+  lineNo: number,
+  served: boolean,
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  const updated = await tx
+    .update(workingOrderLines)
+    .set({ servedAt: served ? sql`now()` : null })
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
+    .returning({ lineNo: workingOrderLines.lineNo });
+  if (updated.length === 0) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+}
+
+/**
+ * Mark ONE line of an OPEN tab as delivered — `served_at = now()` (design §3b, FP-1). An OPERATIONAL
+ * verb a logged-in runner uses like ringing a sale, so it is gated by the operator SESSION at the route
+ * (`requireSession`, Task 6), NOT by a permission. `tab.not_open` if the order is not an open tab a
+ * table points at (settled/abandoned, a walk-up, or absent/foreign — RLS-hidden); `tab.line_not_found`
+ * if the `line_no` matches nothing on it. See {@link setLineServed} for the shared body and the H2
+ * pre-fiscal note. `_cfg` is unused (the write is by tab id + line no, RLS-scoped) but kept for the
+ * uniform `(tx, cfg, …)` tab-verb signature the route calls, underscore-prefixed the way
+ * {@link voidTabLine} keeps it.
+ */
+export async function markLineServed(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  lineNo: number,
+): Promise<void> {
+  await setLineServed(tx, tabId, lineNo, true);
+}
+
+/**
+ * Clear ONE line's delivered marker on an OPEN tab — `served_at = NULL` (the inverse of
+ * {@link markLineServed}, for a mis-tap). Same session gating, same `tab.not_open`/`tab.line_not_found`
+ * guards, same shared body and H2 pre-fiscal note (see {@link setLineServed}).
+ */
+export async function unmarkLineServed(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  lineNo: number,
+): Promise<void> {
+  await setLineServed(tx, tabId, lineNo, false);
+}
+
+/**
  * Move working-order lines from one OPEN tab to another (design §3) — the shared primitive `mergeTabs`
  * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
  * avoid a TS-4 refactor. Reads the named lines (default all), APPENDS them onto `toTab` at the next
@@ -673,6 +738,56 @@ async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
   if (tab === undefined || tab.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
   }
+}
+
+/** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
+ *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
+ *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
+ *  `productId` only — no product name, mirroring `HeldOrder`: the screen resolves names from its own
+ *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
+export interface TabLine {
+  lineNo: number;
+  productId: string;
+  quantity: string;
+  unitPriceGross: string;
+  servedAt: string | null;
+}
+
+/**
+ * Read one OPEN tab's lines for the table-order screen (FP-1, design §3b), in `line_no` order — each
+ * line's `line_no`, `product_id`, `quantity`, its LOCKED gross unit price (`unit_price_gross`) and its
+ * `served_at` marker. A dedicated read, distinct from `getHeldOrder`/`HeldOrder` (which returns
+ * `product_id` + `quantity` only, for a basket rebuild that RE-prices): a tab does NOT re-price, so this
+ * MUST return the STORED `unit_price_gross` the line locked at add-time (`addTabRound`/`openTab` via
+ * `priceOrderLines`), never a catalogue recompute — a re-price would misreport a locked tab. Names no
+ * product (the screen resolves names from its own catalogue prop), mirroring `HeldOrder`'s productId-only
+ * philosophy.
+ *
+ * Gated by {@link assertTabOpen} (an absent or non-`open` order → `tab.not_open`), the SAME unlocked
+ * status read `moveTab`/`joinTable` use — deliberately NOT `lockOpenTab`: this is a READ, so it takes no
+ * `FOR UPDATE` write lock and needs no `dining_tables` back-pointer check. RLS confines the tenant (the
+ * read runs as `app_user` under `withTenant`); `_cfg` is unused — the read is by tab id, RLS-scoped —
+ * but kept for the uniform `(tx, cfg, …)` tab-verb signature the route calls, underscore-prefixed the way
+ * {@link voidTabLine}/{@link markLineServed} keep it. PRE-FISCAL (design H2, ruling R4): `served_at` is an
+ * operational floor field never read into a filed record; this touches nothing fiscal.
+ */
+export async function readTabLines(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+): Promise<TabLine[]> {
+  await assertTabOpen(tx, tabId);
+  return tx
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      servedAt: workingOrderLines.servedAt,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
 }
 
 /**
@@ -1867,7 +1982,9 @@ export async function listPrepQueue(
 export interface TableState {
   id: string;
   label: string;
-  zone: string | null;
+  /** The `floor_zones` row this table sits in (FP-1), or null — the successor to the former free-text
+   *  `zone` string (a composite FK to `floor_zones`, not an arbitrary label). */
+  zoneId: string | null;
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
@@ -1876,6 +1993,11 @@ export interface TableState {
   /** The open tab's gross draft total (sum of `line_total`), numeric(12,2) as text — present iff a tab. */
   tabTotal?: string;
   pendingDeliveries: number;
+  /** Count of the open tab's lines STILL to serve (`working_order_lines` with `served_at IS NULL`), for
+   *  the floor screen's "N still to serve" badge (FP-1). `0` for a free table (no open tab) — the
+   *  LEFT-join branch. DISTINCT from `pendingDeliveries` (uncollected counter deliveries to this table);
+   *  both are kept. */
+  pendingToServe: number;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -1902,27 +2024,30 @@ export async function listTablesWithState(
   const result = await tx.execute<{
     id: string;
     label: string;
-    zone: string | null;
+    zone_id: string | null;
     capacity: number | null;
     tab_id: string | null;
     tab_line_count: number;
     tab_total: string | null;
+    pending_to_serve: number;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
     status_color: string | null;
   }>(sql`
     select
-      dt.id, dt.label, dt.zone, dt.capacity,
+      dt.id, dt.label, dt.zone_id, dt.capacity,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
+      coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
     left join lateral (
       select wo.id,
              count(wol.id)::int as line_count,
+             (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
              coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
       from working_orders wo
       left join working_order_lines wol
@@ -1954,10 +2079,11 @@ export async function listTablesWithState(
     return {
       id: r.id,
       label: r.label,
-      zone: r.zone,
+      zoneId: r.zone_id,
       capacity: r.capacity,
       state,
       hasOpenTab,
+      pendingToServe: Number(r.pending_to_serve),
       pendingDeliveries,
       status:
         r.status_id !== null

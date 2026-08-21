@@ -4,16 +4,52 @@ import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
-import { diningTables, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
+import { diningTables, floorZones, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
+
+const FOREIGN_KEY_VIOLATION = "23503";
+const ZONE_FK = "dining_tables_zone_fk";
+
+/**
+ * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
+ * naming no `floor_zones` row for this tenant (a missing zone, or another tenant's, which the
+ * tenant-consistent composite FK rejects too)? Walks the cause chain because Drizzle wraps every
+ * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
+ * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — verified
+ * against this file's PGlite suite, where the 23503 arrives at depth 1 with `constraint =
+ * "dining_tables_zone_fk"`. Stops at a fixed depth so a self-referential `cause` cannot spin forever.
+ * Reads the CONSTRAINT NAME, not just the 23503 code, so the sibling `dining_tables_location_fk` /
+ * `dining_tables_status_fk` violations are deliberately NOT matched — a bad location or status is not
+ * a zone fault and stays a raw driver error. Mirrors `@waitron/db`'s `isUniqueViolation` and
+ * `@waitron/reporting`'s `isBusinessDayConflict` shape (the latter extends the same walk with a
+ * constraint check for the identical reason). Exported for the crafted-error unit tests.
+ */
+export function isZoneFkViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    if (
+      typeof current === "object" &&
+      (current as { code?: unknown }).code === FOREIGN_KEY_VIOLATION &&
+      (current as { constraint?: unknown }).constraint === ZONE_FK
+    ) {
+      return true;
+    }
+    const next = (current as { cause?: unknown }).cause;
+    if (next === current) return false;
+    current = next;
+  }
+  return false;
+}
 
 /** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer
  *  is an INTERNAL link (design §2b), not part of the CRUD surface — occupancy exposes it, not this. */
 export interface DiningTable {
   id: string;
   label: string;
-  zone: string | null;
+  /** The `floor_zones` row this table sits in (FP-1), or null. The successor to the former free-text
+   *  `zone` string — a composite FK (`dining_tables_zone_fk`), not an arbitrary label. */
+  zoneId: string | null;
   capacity: number | null;
   active: boolean;
   createdAt: string;
@@ -23,12 +59,15 @@ export interface DiningTable {
  * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
  * CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `table.label_taken` rather than the raw 23505.
+ * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
+ * (or another tenant's) trips the composite `dining_tables_zone_fk` (23503) and is surfaced as
+ * `zone.not_found` — the location FK is a 23503 too, so the check reads the CONSTRAINT NAME
+ * (`isZoneFkViolation`) rather than the bare code.
  */
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
-  input: { label: string; zone?: string; capacity?: number },
+  input: { label: string; zoneId?: string; capacity?: number },
 ): Promise<{ id: string }> {
   try {
     const [row] = await tx
@@ -37,7 +76,7 @@ export async function createTable(
         tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         label: input.label,
-        zone: input.zone ?? null,
+        zoneId: input.zoneId ?? null,
         capacity: input.capacity ?? null,
       })
       .returning({ id: diningTables.id });
@@ -45,6 +84,10 @@ export async function createTable(
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AppError("table.label_taken", { label: input.label });
+    }
+    if (isZoneFkViolation(error)) {
+      // The zone FK only fires when a non-null `zoneId` was supplied, so it is defined here.
+      throw new AppError("zone.not_found", { zoneId: input.zoneId! });
     }
     throw error;
   }
@@ -57,7 +100,7 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
     .select({
       id: diningTables.id,
       label: diningTables.label,
-      zone: diningTables.zone,
+      zoneId: diningTables.zoneId,
       capacity: diningTables.capacity,
       active: diningTables.active,
       createdAt: diningTables.createdAt,
@@ -68,9 +111,11 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
 }
 
 /**
- * Edit a table's `label`/`zone`/`capacity` (any subset). An absent id (or another tenant's, RLS-hidden)
- * throws `table.not_found`; a label collision throws `table.label_taken`. Reactivate is `updateTable`-
- * shaped and kept trivial — this task deactivates via {@link deactivateTable}.
+ * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id (or another tenant's, RLS-hidden)
+ * throws `table.not_found`; a label collision throws `table.label_taken`; a `zoneId` naming no
+ * `floor_zones` row (or another tenant's) throws `zone.not_found` (the composite `dining_tables_zone_fk`,
+ * `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task deactivates via
+ * {@link deactivateTable}.
  */
 export async function updateTable(
   tx: Transaction,
@@ -78,11 +123,11 @@ export async function updateTable(
   // scope, so the config is unused here (repo idiom for an interface-mandated unused param).
   _cfg: TillConfig,
   id: string,
-  input: { label?: string; zone?: string; capacity?: number },
+  input: { label?: string; zoneId?: string; capacity?: number },
 ): Promise<void> {
-  const patch: { label?: string; zone?: string | null; capacity?: number | null } = {};
+  const patch: { label?: string; zoneId?: string | null; capacity?: number | null } = {};
   if (input.label !== undefined) patch.label = input.label;
-  if (input.zone !== undefined) patch.zone = input.zone;
+  if (input.zoneId !== undefined) patch.zoneId = input.zoneId;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
 
   let updated: { id: string }[];
@@ -96,6 +141,10 @@ export async function updateTable(
     if (isUniqueViolation(error)) {
       // Only `label` participates in the unique, so it was necessarily supplied when this fires.
       throw new AppError("table.label_taken", { label: input.label! });
+    }
+    if (isZoneFkViolation(error)) {
+      // The zone FK only fires when a non-null `zoneId` was supplied, so it is defined here.
+      throw new AppError("zone.not_found", { zoneId: input.zoneId! });
     }
     throw error;
   }
@@ -119,6 +168,118 @@ export async function deactivateTable(
     .returning({ id: diningTables.id });
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId: id });
+  }
+}
+
+/** A floor-plan zone (FP-1) as the config CRUD surface returns it — the authorable successor to the
+ *  former free-text `dining_tables.zone`. `createdAt` is INTERNAL, not part of this surface (the same
+ *  choice {@link DiningTable}'s `tab_id` back-pointer makes). */
+export interface FloorZone {
+  id: string;
+  name: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/**
+ * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
+ * the CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, name)`
+ * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
+ * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
+ * `table.label_taken` with.
+ */
+export async function createZone(
+  tx: Transaction,
+  cfg: TillConfig,
+  input: { name: string; displayOrder?: number },
+): Promise<{ id: string }> {
+  try {
+    const [row] = await tx
+      .insert(floorZones)
+      .values({
+        tenantId: cfg.tenantId,
+        locationId: cfg.locationId,
+        name: input.name,
+        displayOrder: input.displayOrder ?? 0,
+      })
+      .returning({ id: floorZones.id });
+    return { id: row!.id };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AppError("zone.name_taken", { name: input.name });
+    }
+    throw error;
+  }
+}
+
+/** The venue's ACTIVE zones, by `display_order`. RLS confines the read to the tenant; the location
+ *  filter narrows to this till's venue. */
+export async function listZones(tx: Transaction, cfg: TillConfig): Promise<FloorZone[]> {
+  return tx
+    .select({
+      id: floorZones.id,
+      name: floorZones.name,
+      displayOrder: floorZones.displayOrder,
+      active: floorZones.active,
+    })
+    .from(floorZones)
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .orderBy(floorZones.displayOrder);
+}
+
+/**
+ * Edit a zone's `name`/`displayOrder`/`active` (any subset). An absent id (or another tenant's,
+ * RLS-hidden) throws `zone.not_found`; a name collision throws `zone.name_taken`. Reactivate is
+ * `updateZone({ active: true })` — the same `update`-shaped surface {@link updateTable} uses, so this
+ * task deactivates via {@link deactivateZone} and never hard-deletes.
+ */
+export async function updateZone(
+  tx: Transaction,
+  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
+  // scope, so the config is unused here (repo idiom for an interface-mandated unused param).
+  _cfg: TillConfig,
+  id: string,
+  patch: { name?: string; displayOrder?: number; active?: boolean },
+): Promise<void> {
+  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  if (patch.name !== undefined) set.name = patch.name;
+  if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
+  if (patch.active !== undefined) set.active = patch.active;
+
+  let updated: { id: string }[];
+  try {
+    updated = await tx
+      .update(floorZones)
+      .set(set)
+      .where(eq(floorZones.id, id))
+      .returning({ id: floorZones.id });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      // Only `name` participates in the unique, so it was necessarily supplied when this fires.
+      throw new AppError("zone.name_taken", { name: patch.name! });
+    }
+    throw error;
+  }
+  if (updated.length === 0) {
+    throw new AppError("zone.not_found", { zoneId: id });
+  }
+}
+
+/** Deactivate a zone (`active = false`) — never a hard delete (a `dining_tables.zone_id` may reference
+ *  it; app_user holds no DELETE on `floor_zones`). An absent id throws `zone.not_found`. */
+export async function deactivateZone(
+  tx: Transaction,
+  // Unused here for the same reason as `updateZone` — kept for the uniform verb surface.
+  _cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  const updated = await tx
+    .update(floorZones)
+    .set({ active: false })
+    .where(eq(floorZones.id, id))
+    .returning({ id: floorZones.id });
+  if (updated.length === 0) {
+    throw new AppError("zone.not_found", { zoneId: id });
   }
 }
 
@@ -189,6 +350,37 @@ export async function createStatus(
     }
     throw error;
   }
+}
+
+/** A pickable ACTIVE service status for the till's Estado picker (FP-1) — the slim `{ id, label, color }`
+ *  the floor-plan picker needs, DISTINCT from the config-CRUD {@link ServiceStatus} (which also carries
+ *  `displayOrder`/`active`/`createdAt` for the editor). */
+export interface ServiceStatusOption {
+  id: string;
+  label: string;
+  color: string;
+}
+
+/**
+ * The tenant's ACTIVE service statuses as pickable options for the till's Estado picker (FP-1) —
+ * `{ id, label, color }` only, ordered by `display_order` then `label`. Deactivated statuses are EXCLUDED
+ * (`active = true`): a status the operator cannot apply (`setTableStatus` rejects `status.inactive`) must
+ * not be offered. SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only
+ * {@link listStatuses}: an operator holds a till session, not a management one, so it takes no
+ * `managementSessionId`. Takes NO `cfg`: the statuses table is tenant-wide with no location column, so
+ * RLS (`asAppUser` under `withTenant`) is the whole scope — there is nothing to narrow by, unlike
+ * {@link listZones}'s location filter.
+ */
+export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
+  return tx
+    .select({
+      id: tableServiceStatuses.id,
+      label: tableServiceStatuses.label,
+      color: tableServiceStatuses.color,
+    })
+    .from(tableServiceStatuses)
+    .where(eq(tableServiceStatuses.active, true))
+    .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
 }
 
 /**

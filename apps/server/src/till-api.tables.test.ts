@@ -40,6 +40,10 @@ let ana: { id: string };
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
 let productId: string;
+// A real `floor_zones` row in the counter location — a table's `zoneId` is now a composite FK to
+// `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
+// CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
+let seededZoneId: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -83,6 +87,10 @@ const suite = usePgliteDb({
       return p;
     });
     productId = product.id;
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${loc.rows[0]!.id}, 'Terraza') returning id`);
+    seededZoneId = zone.rows[0]!.id;
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -189,7 +197,7 @@ describe("table + tab routes", () => {
   it("POST /api/tables creates and GET /api/tables lists it", async () => {
     const create = await request("/api/tables", {
       method: "POST",
-      body: JSON.stringify({ label: "12", zone: "terrace", capacity: 4 }),
+      body: JSON.stringify({ label: "12", zoneId: seededZoneId, capacity: 4 }),
     });
     expect(create.status).toBe(200);
     const { id } = (await create.json()) as { id: string };
@@ -197,7 +205,36 @@ describe("table + tab routes", () => {
     // Membership, not an exact one-element array: the suite's PGlite db persists across tests, so an
     // exact-list assertion would be order-reliant (§4). `.toContainEqual` holds no matter what other
     // table-creating tests have run.
-    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", active: true }));
+    expect(list).toContainEqual(
+      expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
+    );
+  });
+
+  it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
+    // The table create route now forwards `zoneId` to `createTable`; one naming no `floor_zones` row
+    // trips the composite `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
+    // (404 via the STATUS map) rather than an opaque 500. A real zoneId is proven by the create test
+    // above; this is its negative counterpart.
+    const res = await request("/api/tables", {
+      method: "POST",
+      body: JSON.stringify({ label: "orphan-zone", zoneId: randomUUID() }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
+  it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // A non-UUID `zoneId` string is screened to the domain `zone.not_found` (→ 404) BEFORE any DB work —
+    // the SAME code a well-formed-but-missing zoneId gets (the test above), so a bad zone reads the same
+    // whether it is malformed or merely absent. Without the `isUuid` screen the string reaches the
+    // `zone_id` uuid column and PostgreSQL raises `22P02 (invalid_text_representation)`, a non-AppError the
+    // boundary turns into an opaque `server.internal` 500 — the prove-by-deletion (drop the screen → 500).
+    const res = await request("/api/tables", {
+      method: "POST",
+      body: JSON.stringify({ label: "bad-zone", zoneId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
   it("POST /api/tables with a duplicate label → 409 table.label_taken", async () => {
@@ -250,11 +287,31 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("PATCH /api/tables/:id edits a real table (label/zone/capacity) and returns an empty 200", async () => {
+  it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // The twin of the malformed-:id screen above, one field over: a present-but-non-UUID `zoneId` in the
+    // body is screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-
+    // missing zoneId gets. Without the screen the string reaches the `zone_id` uuid column → `22P02` →
+    // opaque `server.internal` 500 (the prove-by-deletion). A real table id is used so the id screen passes
+    // and the zoneId screen is what fires.
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
-        body: JSON.stringify({ label: "20", zone: "bar", capacity: 2 }),
+        body: JSON.stringify({ label: "bad-zone-patch" }),
+      })
+    ).json()) as { id: string };
+    const res = await request(`/api/tables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ zoneId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
+  it("PATCH /api/tables/:id edits a real table (label/zoneId/capacity) and returns an empty 200", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "20", zoneId: seededZoneId, capacity: 2 }),
       })
     ).json()) as { id: string };
 
@@ -268,10 +325,14 @@ describe("table + tab routes", () => {
     const list = (await (await request("/api/tables")).json()) as {
       id: string;
       label: string;
-      zone: string | null;
+      zoneId: string | null;
       capacity: number | null;
     }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({ label: "20A", zone: "bar", capacity: 6 });
+    expect(list.find((t) => t.id === id)).toMatchObject({
+      label: "20A",
+      zoneId: seededZoneId,
+      capacity: 6,
+    });
   });
 
   it("DELETE /api/tables/:id deactivates a real table (it leaves the active list)", async () => {
@@ -350,6 +411,50 @@ describe("table + tab routes", () => {
       tabLineCount?: number;
     }[];
     expect(state.find((t) => t.id === id)).toMatchObject({ state: "open-tab", tabLineCount: 1 });
+  });
+
+  it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
+    const { id } = (await (
+      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "9" }) })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+      })
+    ).json()) as { tabId: string };
+    // A second round so there are two lines, then serve line 1 (the two floor states the screen renders).
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ productId, quantity: "2" }] }),
+    });
+    await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
+
+    const res = await request(`/api/working-orders/${tabId}/lines`);
+    expect(res.status).toBe(200);
+    const lines = (await res.json()) as {
+      lineNo: number;
+      productId: string;
+      quantity: string;
+      unitPriceGross: string;
+      servedAt: string | null;
+    }[];
+    expect(lines).toHaveLength(2);
+    // Seeded product is 1.50; the locked gross unit rides back verbatim, quantity at numeric(_,3).
+    expect(lines[0]).toMatchObject({
+      lineNo: 1,
+      productId,
+      quantity: "1.000",
+      unitPriceGross: "1.50",
+    });
+    expect(lines[0]!.servedAt).not.toBeNull();
+    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "2.000", servedAt: null });
+  });
+
+  it("a malformed :id on the lines read route → 409 tab.not_open (not a 500)", async () => {
+    const res = await request("/api/working-orders/not-a-uuid/lines");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
   });
 
   it("a malformed :id on the round route → 409 tab.not_open (not a 500)", async () => {
@@ -437,6 +542,7 @@ describe("table + tab routes", () => {
         headers: json,
         body: JSON.stringify({ lines: [] }),
       }),
+      noAuth.request(`/api/working-orders/${id}/lines`),
       noAuth.request(`/api/working-orders/${id}/lines/1`, { method: "DELETE" }),
     ];
     for (const res of await Promise.all(cases)) {

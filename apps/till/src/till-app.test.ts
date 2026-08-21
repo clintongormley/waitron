@@ -6,13 +6,18 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
+import type { TillFloorScreen } from "./screens/till-floor-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
 import { LAYOUT_A, type LayoutDef } from "./layout.js";
 import type {
+  FloorZone,
   HeldOrderSummary,
   PayOutcome,
+  TabLine,
+  TableState,
   TillApi,
   TillProduct,
   TillSaleResult,
@@ -46,6 +51,35 @@ const heldSummary: HeldOrderSummary = {
   itemCount: 2,
   total: "3.00",
   openedAt: "2026-08-05T10:00:00.000Z",
+};
+
+const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+
+const freeTable: TableState = {
+  id: "t1",
+  label: "1",
+  zoneId: "z1",
+  capacity: 4,
+  state: "free",
+  hasOpenTab: false,
+  pendingDeliveries: 0,
+  pendingToServe: 0,
+  status: null,
+};
+
+const openTable: TableState = {
+  id: "t2",
+  label: "2",
+  zoneId: "z1",
+  capacity: 4,
+  state: "open-tab",
+  hasOpenTab: true,
+  tabId: "wo-7",
+  tabLineCount: 2,
+  tabTotal: "12.00",
+  pendingDeliveries: 0,
+  pendingToServe: 1,
+  status: null,
 };
 
 const saleResult: TillSaleResult = {
@@ -120,6 +154,17 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     advancePrep: vi.fn().mockResolvedValue(undefined),
     listPrepQueue: vi.fn().mockResolvedValue([]),
+    // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
+    getTablesState: vi.fn().mockResolvedValue([]),
+    listZones: vi.fn().mockResolvedValue([]),
+    openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
+    // FP-1 table-order screen: the app loads the tab's lines on entering it and writes rounds/serve/
+    // status from its events. Each defaults to a resolved value; a test overrides any with its own fn.
+    getTabLines: vi.fn().mockResolvedValue([]),
+    addTabRound: vi.fn().mockResolvedValue(undefined),
+    markLineServed: vi.fn().mockResolvedValue(undefined),
+    setTableStatus: vi.fn().mockResolvedValue(undefined),
+    listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -137,6 +182,9 @@ const counter = (el: TillApp) =>
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
+const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+const tableOrder = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
 const tenderPay = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
@@ -156,6 +204,17 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana" });
   await flush(el);
   return counter(el)!;
+}
+
+/** Boots, logs in, opens the floor, then opens `table`'s tab — leaving the app on the table-order
+ * screen (FP-1). The app must be mounted with `getTablesState` returning `table` so the floor has it. */
+async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOrderScreen> {
+  await toCounter(el);
+  emit(counter(el)!, "show-floor");
+  await flush(el);
+  emit(floor(el)!, "open-table", { tableId: table.id, hasOpenTab: table.hasOpenTab });
+  await flush(el);
+  return tableOrder(el)!;
 }
 
 let currentApi: TillApi;
@@ -1058,6 +1117,309 @@ describe("till-app", () => {
     // The load-bearing assertion: the basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  describe("live floor (FP-1)", () => {
+    it("show-floor loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "show-floor");
+      await flush(el);
+
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(currentApi.getTablesState).toHaveBeenCalledOnce();
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
+      // The loaded zones + tables reach the floor screen.
+      expect(floor(el)!.zones).toEqual([floorZone]);
+      expect(floor(el)!.tables).toEqual([freeTable]);
+      // Basket-preserving like the schedule nav: the half-built order survives the round trip.
+      expect(store.lines).toHaveLength(1);
+    });
+
+    it("show-floor degrades to an empty floor when the occupancy load fails (never blocks)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "show-floor");
+      await flush(el);
+
+      // A failed read shows the floor anyway (degrade gracefully), with tables left at their default.
+      expect(floor(el)).not.toBeNull();
+      expect(floor(el)!.tables).toEqual([]);
+    });
+
+    it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
+      const openTab = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t1", hasOpenTab: false });
+      await flush(el);
+
+      // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
+      expect(openTab).toHaveBeenCalledWith("t1");
+      expect(floor(el)).toBeNull();
+      // The real table-order screen (Ruling FP-D) now holds the slot, pointed at the freshly-opened tab
+      // id (the app stored `openTab`'s new id in activeTabId and threads it through as `.orderId`).
+      const screen = tableOrder(el);
+      expect(screen).not.toBeNull();
+      expect(screen!.orderId).toBe("wo-new");
+    });
+
+    it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
+      const openTab = vi.fn();
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([openTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      await flush(el);
+
+      // An occupied table already has a tab — no fresh openTab, just the transition. The screen points
+      // at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
+      expect(openTab).not.toHaveBeenCalled();
+      expect(floor(el)).toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+    });
+
+    it("open-table on an occupied table missing from the read-model transitions with no order id", async () => {
+      const openTab = vi.fn();
+      const { el } = await mountApp({
+        // The read-model is empty, so the tapped table can't be resolved to a tab id.
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      await flush(el);
+
+      // A resume never opens a fresh tab; with no tab id resolved the screen carries none.
+      expect(openTab).not.toHaveBeenCalled();
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el)!.orderId).toBeUndefined();
+    });
+
+    it("back-to-counter returns from the floor to the counter, basket intact", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "show-floor");
+      await flush(el);
+      expect(floor(el)).not.toBeNull();
+
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+
+      expect(counter(el)).not.toBeNull();
+      expect(floor(el)).toBeNull();
+      expect(store.lines).toHaveLength(1);
+    });
+
+    describe("table-order screen (FP-1)", () => {
+      const tabLine: TabLine = {
+        lineNo: 1,
+        productId: "cafe",
+        quantity: "2.000",
+        unitPriceGross: "1.50",
+        servedAt: null,
+      };
+      it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        expect(getTabLines).toHaveBeenCalledWith("wo-7");
+        expect(screen.lines).toEqual([tabLine]);
+        expect(screen.products).toEqual([cafe]);
+      });
+
+      it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {
+        const catalogue = [
+          { id: "s1", label: "Reservada", color: "#cc0000" },
+          { id: "s2", label: "Cuenta pedida", color: "#0a8a0a" },
+        ];
+        const listStatuses = vi.fn().mockResolvedValue(catalogue);
+        const { el } = await mountApp({
+          // openTable carries `status: null`, so a list DERIVED from the occupancy read-model would be
+          // empty — the picker must be fed the loaded catalogue (incl. a status applied to no table).
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          listStatuses,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(listStatuses).toHaveBeenCalled();
+        expect(screen.statuses).toEqual(catalogue);
+      });
+
+      it("send-round appends the round to the tab then reloads its lines", async () => {
+        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          addTabRound,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "send-round", { lines: [{ productId: "cafe", quantity: "1" }] });
+        await flush(el);
+
+        // Appended to the tab's own working order, then re-read so the drawer reflects the new round.
+        expect(addTabRound).toHaveBeenCalledWith("wo-7", [{ productId: "cafe", quantity: "1" }]);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("serve-line marks the line served then reloads its lines", async () => {
+        const markLineServed = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          markLineServed,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "serve-line", { lineNo: 1 });
+        await flush(el);
+
+        expect(markLineServed).toHaveBeenCalledWith("wo-7", 1);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("a failed round/serve/status write surfaces a non-fatal error, leaving the screen up", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          addTabRound: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+          markLineServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+          setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        for (const [type, detail] of [
+          ["send-round", { lines: [{ productId: "cafe", quantity: "1" }] }],
+          ["serve-line", { lineNo: 1 }],
+          ["set-status", { statusId: "s1" }],
+        ] as const) {
+          emit(screen, type, detail);
+          await flush(el);
+          // Non-fatal: the operator stays on the table-order screen and sees the generic banner.
+          expect(tableOrder(el)).not.toBeNull();
+          expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        }
+      });
+
+      it("set-status sets the table's manual status keyed by TABLE id (not the tab's order id)", async () => {
+        const setTableStatus = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          setTableStatus,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "set-status", { statusId: "s1" });
+        await flush(el);
+
+        // Keyed by the TABLE id "t2" (Ruling FP-F), never the tab's order id "wo-7".
+        expect(setTableStatus).toHaveBeenCalledWith("t2", "s1");
+      });
+
+      it("pay-tab settles the WHOLE tab via recordSale with the tab id and NO re-price, then shows the ticket", async () => {
+        const recordSale = vi.fn().mockResolvedValue(saleResult);
+        const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          recordSale,
+          updateWorkingOrder,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "pay-tab", { method: "cash", amount: "10.00" });
+        await flush(el);
+
+        // The server files the tab's STORED locked lines and ignores the sent basket, so we send `[]`
+        // (the documented shape) tagged with the tab's order id — and crucially NEVER #syncIfDirty →
+        // updateWorkingOrder, which would re-price and destroy the tab's locks (H2).
+        expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "10.00" }, "wo-7");
+        expect(updateWorkingOrder).not.toHaveBeenCalled();
+        expect(ticket(el)).not.toBeNull();
+      });
+
+      it("a failed tab pay keeps the operator on the screen with a non-fatal error", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          recordSale: vi.fn().mockRejectedValue({ code: "sale.rejected" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "pay-tab", { method: "cash", amount: "10.00" });
+        await flush(el);
+
+        expect(ticket(el)).toBeNull();
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("sale.error"));
+      });
+
+      it("back-to-floor reloads the occupancy read-model and returns to the floor", async () => {
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const listZones = vi.fn().mockResolvedValue([floorZone]);
+        const { el } = await mountApp({ getTablesState, listZones });
+        const screen = await toTableOrder(el, openTable);
+        // One load on entering the floor before opening the tab.
+        expect(getTablesState).toHaveBeenCalledTimes(1);
+
+        emit(screen, "back-to-floor");
+        await flush(el);
+
+        // A fresh occupancy read (a just-paid table shows free) and the floor is shown again.
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+        expect(listZones).toHaveBeenCalledTimes(2);
+        expect(floor(el)).not.toBeNull();
+        expect(tableOrder(el)).toBeNull();
+      });
+    });
   });
 
   it("a failed recordSale keeps the counter and the basket, showing a non-fatal error", async () => {

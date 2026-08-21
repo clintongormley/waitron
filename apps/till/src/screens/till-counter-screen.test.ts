@@ -206,6 +206,17 @@ describe("till-counter-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("labels and emits a composed, bubbling show-floor event when Sala is tapped (FP-1)", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("wt-button.floor")!.textContent).toContain(t("floor.open"));
+    let captured: Event | undefined;
+    el.addEventListener("show-floor", (event) => (captured = event));
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.floor")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
   it("labels the Allergens control with the localised action and shows the sale body by default", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(

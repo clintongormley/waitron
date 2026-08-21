@@ -1017,3 +1017,165 @@ describe("DashboardApi — ingredients + product recipe", () => {
     });
   });
 });
+
+describe("DashboardApi — floor plan (zones + tables)", () => {
+  // The eight per-item verbs the floor-plan config screen drives (FP-1's /management-api/zones +
+  // /management-api/tables routes, till.configure-gated). Mirrors the service-status method tests:
+  // GET decodes a list, POST returns the minted id (201), PATCH/DELETE resolve undefined on an
+  // empty 204. Paths/bodies asserted against apps/server/src/management-api.ts.
+
+  it("listZones GETs /management-api/zones with credentials", async () => {
+    const rows = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listZones()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createZone POSTs { name } and returns the id (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z1" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createZone({ name: "Comedor" })).toEqual({ id: "z1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Comedor" }),
+    });
+  });
+
+  it("createZone can carry an optional displayOrder", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z2" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createZone({ name: "Terraza", displayOrder: 3 })).toEqual({ id: "z2" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Terraza", displayOrder: 3 }),
+    });
+  });
+
+  it("updateZone PATCHes the addressed zone's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateZone("z1", { name: "Salón", displayOrder: 2 })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Salón", displayOrder: 2 }),
+    });
+  });
+
+  it("deactivateZone DELETEs the zone and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deactivateZone("z1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("createZone rejects with { code } on a non-2xx (name already taken)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "zone.name_taken" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createZone({ name: "Comedor" })).rejects.toMatchObject({
+      code: "zone.name_taken",
+    });
+  });
+
+  it("listTables GETs /management-api/tables with credentials", async () => {
+    const rows = [
+      {
+        id: "t1",
+        label: "4",
+        zoneId: "z1",
+        capacity: 2,
+        active: true,
+        createdAt: "2026-08-17T00:00:00Z",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listTables()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createTable POSTs { label } and returns the id (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "t1" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createTable({ label: "4" })).toEqual({ id: "t1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "4" }),
+    });
+  });
+
+  it("createTable can carry optional capacity + zoneId", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "t2" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createTable({ label: "5", capacity: 4, zoneId: "z1" })).toEqual({ id: "t2" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "5", capacity: 4, zoneId: "z1" }),
+    });
+  });
+
+  it("updateTable PATCHes only the zoneId when assigning a table's zone (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateTable("t1", { zoneId: "z1" })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ zoneId: "z1" }),
+    });
+  });
+
+  it("updateTable PATCHes the label + capacity slice", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateTable("t1", { label: "6", capacity: 4 })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "6", capacity: 4 }),
+    });
+  });
+
+  it("deactivateTable DELETEs the table and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deactivateTable("t1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("createTable rejects with { code } on a non-2xx (label already taken)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "table.label_taken" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createTable({ label: "4" })).rejects.toMatchObject({
+      code: "table.label_taken",
+    });
+  });
+});

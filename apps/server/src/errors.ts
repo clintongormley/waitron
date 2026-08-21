@@ -484,6 +484,30 @@ declare module "@waitron/shared" {
      */
     "status.label_taken": { label: string };
     /**
+     * No such floor-plan zone (FP-1) for this tenant. `zoneId` is a caller-supplied uuid the
+     * dashboard already holds, not a secret — an id that matches nothing is unactionable if
+     * withheld (the rule `tenant.not_found`'s note gives). Qualified `zoneId` to match the
+     * domain-record not_found family (`table.not_found`'s `tableId`, `status.not_found`'s
+     * `statusId`). `zone.*` names the DOMAIN CONCEPT, never the throwing package
+     * (`tenant.not_found`'s note). An absent id, or another tenant's zone (RLS hides it), both
+     * report THIS one code — the same fail-closed shape `table.not_found`/`status.not_found` use.
+     * Mapped to 404 by whichever route surface Task 3 wires the zone CRUD verbs into, matching
+     * `table.not_found`/`status.not_found`. A DEACTIVATED-but-real zone is a different fact,
+     * should Task 3 need one — `table.inactive`/`status.inactive`'s shape, not this code.
+     */
+    "zone.not_found": { zoneId: string };
+    /**
+     * A floor-plan zone (FP-1) name already exists in this venue — the
+     * `(tenant_id, location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
+     * insert/update. `name` is the operator-supplied human label ("Comedor", "Terraza"), not a
+     * secret, so echoing it is what makes the error actionable — the same shape `table.label_taken`'s
+     * `label` and `status.label_taken`'s `label` use, renamed here to match the column
+     * `floor_zones.name` actually carries. `zone.*`, not `server.*`, for the reason
+     * `tenant.not_found`'s note gives. Mapped to 409 by whichever route surface Task 3 wires the
+     * zone CRUD verbs into, matching `table.label_taken`/`status.label_taken`.
+     */
+    "zone.name_taken": { name: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff

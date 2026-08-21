@@ -117,6 +117,36 @@ export const en = {
   "schedule.status.accepted": "Accepted",
   "schedule.status.approved": "Approved",
   "schedule.status.rejected": "Rejected",
+  // Live floor (FP-1) — the till floor screen's chrome + occupancy copy. `t()` takes no params, so a
+  // count-bearing label is rendered as `${n} ${t(key)}` (the value + the suffix word), which is why
+  // these are suffix words rather than whole sentences. `floor.open` is the counter's nav control
+  // (mirrors `schedule.open`); `floor.title` names the screen itself.
+  "floor.open": "Floor",
+  "floor.title": "Floor",
+  "floor.back": "Back to counter",
+  "floor.zones": "Zones",
+  "floor.no_zone": "No zone",
+  "floor.capacity": "pax",
+  "floor.to_serve": "to serve",
+  "floor.line_count": "items",
+  "floor.pending_delivery": "to deliver",
+  "floor.free": "Free",
+  // Table-ordering screen (FP-1) — one open table's tab: the round bar, the pull-out tab drawer, and
+  // its actions. `table.open_drawer` names the badged drawer handle; `table.pay_title`/`action.pay` both
+  // render "Cobrar" (the reused tender-pay's own Pay button carries the tender). Spanish per design §5b.
+  "table.title": "Table order",
+  "table.back": "Back to floor",
+  "table.open_drawer": "Tab",
+  "table.send_round": "Send round",
+  "table.pending_title": "To serve",
+  "table.served_title": "Served",
+  "table.none_pending": "Nothing to serve",
+  "table.none_served": "Nothing served yet",
+  "table.serve": "Mark served",
+  "table.pay_title": "Charge",
+  "table.status_title": "Status",
+  "table.status_clear": "No status",
+  "table.move_split": "Move · Split",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -126,6 +156,8 @@ export const en = {
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
   "prep.advance_error": "Could not update the order's status, try again",
+  // Table-ordering (FP-1): a failed round/serve/status write is non-fatal — the operator retries.
+  "table.error": "Could not update the table, try again",
   // Boot: `getTill` failed — the server unreachable, or a non-2xx `{ code }` (e.g. `server.internal`).
   // Unlike the retryable errors above, the only recovery is a page reload — `#boot` runs once from
   // `firstUpdated` with no in-UI retry — so the copy says "reload", not "try again", and stays neutral
@@ -226,6 +258,29 @@ export const es: Record<StringKey, string> = {
   "schedule.status.accepted": "Aceptado",
   "schedule.status.approved": "Aprobado",
   "schedule.status.rejected": "Rechazado",
+  "floor.open": "Sala",
+  "floor.title": "Sala",
+  "floor.back": "Volver a la caja",
+  "floor.zones": "Zonas",
+  "floor.no_zone": "Sin zona",
+  "floor.capacity": "pax",
+  "floor.to_serve": "por servir",
+  "floor.line_count": "art.",
+  "floor.pending_delivery": "por entregar",
+  "floor.free": "Libre",
+  "table.title": "Comanda",
+  "table.back": "Volver a la sala",
+  "table.open_drawer": "Cuenta",
+  "table.send_round": "Enviar ronda",
+  "table.pending_title": "Pendiente de servir",
+  "table.served_title": "Servido",
+  "table.none_pending": "Nada por servir",
+  "table.none_served": "Nada servido todavía",
+  "table.serve": "Marcar servido",
+  "table.pay_title": "Cobrar",
+  "table.status_title": "Estado",
+  "table.status_clear": "Sin estado",
+  "table.move_split": "Mover · Dividir",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -234,6 +289,7 @@ export const es: Record<StringKey, string> = {
   "held.stale": "Ese pedido ya no está disponible",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "prep.advance_error": "No se pudo actualizar el estado del pedido, inténtalo de nuevo",
+  "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
 };
 

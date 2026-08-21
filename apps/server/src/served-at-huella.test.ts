@@ -1,0 +1,296 @@
+import { beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { asAppUser, withTenant, workingOrderLines } from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
+import { VerifactuBackend, registerSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { hashPassword, hashPin } from "@waitron/identity";
+import { applyVenue, planVenue } from "@waitron/provisioning";
+import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
+import { deploymentEnvironment } from "./config.js";
+import type { TillConfig } from "./till-config.js";
+import { createTable } from "./tables.js";
+import { markLineServed, openTab } from "./working-order.js";
+import { payWorkingOrder } from "./till-sale.js";
+import "./errors.js";
+
+// FP-1's single most important test — the fiscal firewall (spec §4 / CLAUDE.md §5). `served_at` is a
+// `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's STORED
+// locked lines (`priceStoredOrder` reads product/quantity/unit_price_gross, not `served_at`), so
+// whether a line was served can never reach `computeHuella`. This proves that BEHAVIOURALLY, at the
+// pay-path layer where `served_at` actually exists (the structural half — that no fiscal source even
+// names the field — is the commit body's grep). Two tabs built from the IDENTICAL basket, one with
+// every line served and one with none, must file registros with the IDENTICAL huella.
+//
+// Real Postgres, not PGlite: a genuine chained fiscal record filed by the app role through the real
+// pay path, the same reason `till-sale.test.ts` uses `useTemplateDb`. The huella comparison itself is
+// deterministic either way; the value is a stronger end-to-end receipt.
+const LOCALE = "es-ES";
+
+const suite = useTemplateDb({ template: "manifest" });
+
+let backend: FiscalBackend;
+let clock: TrustedClock;
+
+/**
+ * A clock FROZEN at one instant, so both pays stamp the SAME `issued_at` — and therefore the SAME
+ * `FechaExpedicionFactura` and `FechaHoraHusoGenRegistro` reach `computeHuella`. This eliminates the
+ * §1 confound: two real pays file at different wall-clock instants, so without a frozen clock their
+ * huellas would differ for a reason that has nothing to do with `served_at`. Same shape as
+ * `till-sale.test.ts`'s `systemClock`, but the instant is a CONSTANT rather than `new Date()`.
+ * `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`.
+ */
+const FROZEN_INSTANT = new Date("2026-07-20T17:20:30.000Z");
+function frozenClock(): TrustedClock {
+  return {
+    now: () => ({
+      instant: FROZEN_INSTANT,
+      offsetMinutes: 120,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("served-at-huella.test: anchor() is not used by recordSale");
+    },
+    currentAnchor: () => null,
+  };
+}
+
+// A fresh, unique NIF per test. The clone this suite runs against is its own database (useTemplateDb
+// clones per file), so this never collides with any other suite; the counter keeps repeated tests in
+// THIS file order-independent.
+let nifCounter = 0;
+function nextNif(): string {
+  nifCounter += 1;
+  return `${String(80_000_000 + nifCounter).padStart(8, "0")}K`;
+}
+
+function venueRequest(nif: string): VenueRequest {
+  return {
+    country: "ES",
+    taxId: nif,
+    legalName: "Deli Test SL",
+    location: {
+      name: "Sala principal",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
+    },
+    tillName: "Caja 1",
+    seriesCode: "A",
+    rectificativeSeriesCode: "R",
+    admin: {
+      displayName: "Administradora",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword("dashPass123"),
+    },
+  };
+}
+
+function tillConfigFromVenue(venue: VenueResult): TillConfig {
+  return {
+    tenantId: brandTenantId(venue.tenantId),
+    tillId: brandTillId(venue.tillId),
+    nodeId: brandNodeId(venue.nodeId),
+    // planVenue emits the standard series first, then the rectificative one.
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
+    locationId: brandLocationId(venue.locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+}
+
+interface Shop {
+  cfg: TillConfig;
+  aguaId: string;
+  cafeId: string;
+  tableId: string;
+}
+
+/**
+ * Provision a shop under its OWN fresh tenant, RE-REGISTER its node's SIF under the SHARED emisor NIF,
+ * seed an IDENTICAL two-product catalogue, and create one dining table.
+ *
+ * TWO SEPARATE tenants are deliberate. `registros_identidad_uq` is PER TENANT on (id_emisor_factura,
+ * num_serie_factura, fecha_expedicion_factura, tipo_registro): two records sharing that AEAT identity
+ * inside one tenant are a duplicate (AEAT error 3000) and collide. But the huella hashes exactly those
+ * identity fields, so the two records this test compares MUST share them — so each goes in its OWN
+ * tenant, where identidad_uq (tenant-scoped) never fires. The SHARED emisor NIF then keeps
+ * `IDEmisorFactura` — the one hashed identity field a fresh tenant would otherwise vary — identical.
+ * This mirrors verify.test.ts's entorno test, which likewise uses a fresh tenant per record while
+ * pinning IDEmisorFactura to one constant (there via `altaFor`'s hardcoded TEST_NIF).
+ *
+ * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under `emisorNif`
+ * (registerSif revokes the old identity, mints a fresh installation number, and resets the chain to
+ * empty) is what makes both shops file under one obligado NIF while each starts a first record. The
+ * NumeroInstalacion differs between the two shops (a per-NIF counter) but is not hashed. Run as the
+ * owner under the tenant GUC — exactly how applyVenue itself runs registerSif (no asAppUser).
+ */
+async function seedShop(emisorNif: string): Promise<Shop> {
+  const venue = await applyVenue(planVenue(venueRequest(nextNif())), { db: suite.admin });
+  const cfg = tillConfigFromVenue(venue);
+  await withTenant(suite.admin, cfg.tenantId, (tx) =>
+    registerSif(tx, {
+      tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
+      nif: emisorNif,
+      idSistemaInformatico: "W1",
+    }),
+  );
+  const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const agua = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      descriptions: { [LOCALE]: "Agua mineral" },
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    const cafe = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      descriptions: { [LOCALE]: "Café solo" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+    });
+    await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
+    const table = await createTable(tx, cfg, { label: "T1" });
+    return { aguaId: agua.id, cafeId: cafe.id, tableId: table.id };
+  });
+  return { cfg, ...seeded };
+}
+
+/**
+ * Open the identical two-line tab, optionally serve EVERY line, then pay it through the real pay path
+ * with the FROZEN clock, returning the filed registro's huella. `payWorkingOrder` establishes its own
+ * `withTenant`/`asAppUser`, files from the tab's STORED locked lines, and chains registro #1 on this
+ * shop's node — asserted here to be exactly one row at secuencia 1, so the huella is genuinely that of
+ * a first record.
+ */
+async function openServeAndPay(
+  shop: Shop,
+  serveEveryLine: boolean,
+): Promise<{ tabId: string; huella: string }> {
+  const { cfg, aguaId, cafeId, tableId } = shop;
+  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return openTab(tx, cfg, {
+      tableId,
+      lines: [
+        { productId: aguaId, quantity: "1" },
+        { productId: cafeId, quantity: "1" },
+      ],
+    });
+  });
+
+  if (serveEveryLine) {
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await markLineServed(tx, cfg, tabId, 1);
+      await markLineServed(tx, cfg, tabId, 2);
+    });
+  }
+
+  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    id: tabId,
+    lines: [],
+    tender: { method: "cash", amount: "10.00" },
+  });
+
+  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows[0]!.secuencia).toBe(1);
+    return rows[0]!.huella;
+  });
+  return { tabId, huella };
+}
+
+/** `served_at` per line, in line_no order — the field this test differs between the two tabs. */
+async function servedAtByLine(cfg: TillConfig, tabId: string): Promise<(string | null)[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    return rows.map((r) => r.servedAt);
+  });
+}
+
+beforeAll(() => {
+  clock = frozenClock();
+  backend = new VerifactuBackend({
+    clock,
+    db: suite.admin,
+    environment: deploymentEnvironment(process.env),
+    deploymentEnvironment: deploymentEnvironment(process.env),
+    resolveClient: () =>
+      Promise.reject(new Error("served-at-huella.test: resolveClient must never be called")),
+  });
+});
+
+describe("served_at is not part of the huella", () => {
+  it("files an IDENTICAL huella whether every line was served or none — served_at never enters the fiscal record", async () => {
+    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
+    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // (frozen) clock all fixed, `served_at` is the ONLY thing that differs between the two filings.
+    const emisorNif = nextNif();
+    const shopServed = await seedShop(emisorNif);
+    const shopUnserved = await seedShop(emisorNif);
+
+    const served = await openServeAndPay(shopServed, true); // every line served
+    const unserved = await openServeAndPay(shopUnserved, false); // no line served
+
+    // The invariant. A FAILURE here means `served_at` leaked into the filed record (CLAUDE.md §5:
+    // our own metadata must never enter computeHuella) — STOP and report, do NOT adjust the test.
+    expect(served.huella).toBe(unserved.huella);
+    // Not a trivial pass: a real uppercase-hex SHA-256 digest, so "both null/empty → equal" cannot
+    // masquerade as the invariant holding.
+    expect(served.huella).toMatch(/^[0-9A-F]{64}$/);
+
+    // Self-check (mirrors verify.test.ts's entorno test): confirm the two tabs GENUINELY differ in
+    // `served_at`. Every line of the served tab carries a timestamp; every line of the unserved tab is
+    // NULL. Without this, a silent break in the serve plumbing would leave BOTH tabs unserved and this
+    // test would pass while differing nothing — no longer testing what its name claims.
+    const servedTimes = await servedAtByLine(shopServed.cfg, served.tabId);
+    const unservedTimes = await servedAtByLine(shopUnserved.cfg, unserved.tabId);
+    expect(servedTimes).toHaveLength(2);
+    expect(servedTimes.every((t) => t !== null)).toBe(true);
+    expect(unservedTimes).toHaveLength(2);
+    expect(unservedTimes.every((t) => t === null)).toBe(true);
+  });
+});

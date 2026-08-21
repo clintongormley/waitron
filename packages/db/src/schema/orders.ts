@@ -171,6 +171,12 @@ export const workingOrderLines = pgTable(
     // value is frozen onto the line so a stale catalogue is a freshness problem, never a
     // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
     category: text("category"),
+    // When this line was marked served on the live floor (FP-1). Nullable — NULL until a runner marks
+    // it delivered; a coursing/served-state signal for the floor UI only. Additive nullable column;
+    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide,
+    // RLS row-level). NON-FISCAL: never read into a filed record — the pay path rebuilds filed
+    // sale_lines from the locked price snapshot, not from this column (design H2).
+    servedAt: timestamp("served_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     // Composite FK: a line cannot point at an order belonging to another
