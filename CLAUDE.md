@@ -167,16 +167,21 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   gap — `.husky/pre-push` has run `test:coverage` since `feat/scoped-pre-push-hook`, which is what
   closed it — but the hook narrows to the changed packages and their dependents, so its green is
   evidence about those and not about the workspace. There is no `test` job to name any more:
-  `.github/workflows/ci.yml` splits it into `test-heavy` (`packages/db` alone) and `test-light`
-  (everything else, `--no-sort`).
+  `.github/workflows/ci.yml` splits it across per-package and grouped shards — `test-heavy`
+  (`packages/db`), `test-server` (`apps/server`), `test-fiscal-verifactu`, the three browser shards
+  (`test-ui`/`test-till`/`test-dashboard`), and `test-light-a`/`test-light-b` (everything else, split
+  in two by measured duration, `--no-sort`). Each maxForks:4 suite (db, apps/server, fiscal-verifactu)
+  gets a runner of its own because it wants all four cores; see `OWN_SHARD_PACKAGES` and the two
+  `LIGHT_*_PACKAGES` bins in `scripts/changed-scope.mjs`.
 - **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
-  outright when every changed path is documentation, and on a pull request narrows the two test
+  outright when every changed path is documentation, and on a pull request narrows the test
   shards and both mutation jobs to the changed packages and their dependents. A merge to `main` runs
   the full unfiltered suite **whenever anything but documentation changed**, and that run is what
   verifies the narrowing was right — a documentation-only merge skips there too, which is the whole
   point of the two decisions being separate. So a green pull
   request is evidence about the packages that RAN — read the `changes` job's log for its `code`,
-  `scope` and `packages` outputs and its per-job `heavy` / `light` / `verifactu` / `shared` gates
+  `scope` and `packages` outputs and its per-job gates (`heavy`, `server`, `fiscal_verifactu`,
+  `light_a`, `light_b`, `verifactu`, `shared`, and the browser gates)
   before treating it as evidence about the workspace. Design:
   `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`. Since 2026-08-01 the `changes` job and
   the pre-push hook resolve that scope with the SAME script (`scripts/changed-packages.mjs`); before

@@ -2,7 +2,13 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { OWN_SHARD_PACKAGES, PACKAGES_WITHOUT_TESTS, SCOPE_GATES } from "./changed-scope.mjs";
+import {
+  LIGHT_A_PACKAGES,
+  LIGHT_B_PACKAGES,
+  OWN_SHARD_PACKAGES,
+  PACKAGES_WITHOUT_TESTS,
+  SCOPE_GATES,
+} from "./changed-scope.mjs";
 
 // Two properties of .github/workflows/ci.yml that nothing else can check, both of them invisible
 // until the day they are wrong:
@@ -269,17 +275,23 @@ describe("the test shards", () => {
     );
   });
 
-  // OWN_SHARD_PACKAGES is what the `light` gate subtracts, and ci.yml's `--filter "!…"` arguments
-  // are what test-light really subtracts. They are written in two files and nothing but this makes
-  // them agree — the drift being invisible: a package removed from one and not the other either
-  // stops being tested or gets a job that selects nothing.
-  it("subtract from test-light exactly the packages that have a shard of their own", () => {
-    const excluded = shards
-      .flatMap((shard) => shard.filters)
-      .filter((filter) => filter.startsWith("!"))
-      .map((filter) => filter.slice(1));
+  // The two light shards partition the non-own-shard packages: each subtracts its bin's COMPLEMENT
+  // — every package in OWN_SHARD_PACKAGES plus every package in the OTHER bin — so what it selects is
+  // its own bin. Written as literal `!` filters in ci.yml and as the bin lists in changed-scope.mjs,
+  // and nothing but this makes them agree. The drift is invisible: a package in neither exclusion
+  // set runs in BOTH shards, and one in both exclusion sets stops being tested.
+  it("subtract from each light shard exactly the own-shard packages and the other bin", () => {
+    const excludedBy = (id) => {
+      const shard = shards.find((candidate) => candidate.id === id);
+      expect(shard, `ci.yml has no ${id} shard`).toBeDefined();
+      return shard.filters
+        .filter((filter) => filter.startsWith("!"))
+        .map((filter) => filter.slice(1))
+        .sort();
+    };
 
-    expect(excluded.sort()).toEqual([...OWN_SHARD_PACKAGES].sort());
+    expect(excludedBy("test-light-a")).toEqual([...OWN_SHARD_PACKAGES, ...LIGHT_B_PACKAGES].sort());
+    expect(excludedBy("test-light-b")).toEqual([...OWN_SHARD_PACKAGES, ...LIGHT_A_PACKAGES].sort());
   });
 
   it("give each of those packages a shard that selects it and nothing else", () => {
