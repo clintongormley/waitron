@@ -1178,4 +1178,72 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
       code: "table.label_taken",
     });
   });
+
+  // FP-2 spatial placement: the management placement routes (Task 3, authorizeManager-gated) the Plano
+  // editor drives. PUT sends the four placement columns + the target zone; DELETE un-places. Both answer
+  // an empty 204 → void. Paths/bodies asserted against apps/server/src/management-api.ts.
+
+  it("setTablePlacement PUTs the placement body to the table's placement route (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const placement = {
+      posX: 200,
+      posY: 300,
+      shape: "rect" as const,
+      rotation: 90,
+      zoneId: "z1",
+    };
+    await expect(api.setTablePlacement("t1", placement)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1/placement", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(placement),
+    });
+  });
+
+  it("setTablePlacement carries a null zoneId for a still-zoneless table", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const placement = {
+      posX: 500,
+      posY: 500,
+      shape: "round" as const,
+      rotation: 0,
+      zoneId: null,
+    };
+    await api.setTablePlacement("t1", placement);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1/placement", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(placement),
+    });
+  });
+
+  it("setTablePlacement rejects with { code } on a non-2xx (placement.invalid)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "placement.invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.setTablePlacement("t1", {
+        posX: 5000,
+        posY: 0,
+        shape: "round",
+        rotation: 0,
+        zoneId: "z1",
+      }),
+    ).rejects.toMatchObject({ code: "placement.invalid" });
+  });
+
+  it("clearPlacement DELETEs the table's placement route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.clearPlacement("t1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables/t1/placement", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
 });

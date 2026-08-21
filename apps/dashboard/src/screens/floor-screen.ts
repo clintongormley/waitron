@@ -1,12 +1,17 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+// `baseStyles` also loads the `@waitron/ui` barrel, which self-registers `<wt-floor-canvas>` and
+// `<wt-table-token>` — the FP-2 shared components the Plano tab consumes by tag. `GRID_STEP` /
+// `clampPermille` size the tap-to-place default slot; the type-only imports carry the canvas's
+// copy / table / placement-event shapes.
+import { GRID_STEP, baseStyles, clampPermille } from "@waitron/ui";
+import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
+import type { DashboardApi, DashboardTable, FloorZone, TableShape } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
 /** A floor zone the editor holds in local, editable state (a defensive copy of the loaded FloorZone). */
@@ -17,12 +22,18 @@ interface EditableZone {
 }
 
 /** A dining table the editor holds in local, editable state. `capacity`/`zoneId` stay nullable — a
- * table may sit in no zone and carry no seat count. */
+ * table may sit in no zone and carry no seat count. The FP-2 placement fields are `null` when the table
+ * is UNPLACED (it sits in the Plano tab's tray until tap-to-placed); a placed table carries its canvas
+ * coordinates + shape + rotation and draws on the `wt-floor-canvas`. */
 interface EditableTable {
   id: string;
   label: string;
   capacity: number | null;
   zoneId: string | null;
+  posX: number | null;
+  posY: number | null;
+  shape: TableShape | null;
+  rotation: number | null;
 }
 
 /**
@@ -117,6 +128,46 @@ export class FloorScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      /* The top-level tab strip (Zonas y mesas | Plano) and, within Plano, the per-zone sub-tabs. */
+      .tabs,
+      .zone-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-4);
+      }
+      /* The Plano tab: the canvas with its unplaced-tables tray stacked beneath it. */
+      .plano,
+      .map {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+      .tray {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2);
+        border: 1px dashed var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .tray-label {
+        width: 100%;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      /* The tray token is the tappable element; the shared <wt-table-token> inside carries the visual. */
+      .tray-item {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
     `,
   ];
 
@@ -130,6 +181,12 @@ export class FloorScreen extends LitElement {
   @state() private newZone = "";
   @state() private newTable = "";
   @state() private errorKey: string | null = null;
+  // FP-2 editor: which top-level tab shows — the FP-1 config panels (Zonas/Mesas) or the Plano canvas.
+  // Config is the default, so the FP-1 behaviour is untouched until a manager opens Plano.
+  @state() private activeTab: "config" | "plano" = "config";
+  // Within Plano, which zone sub-tab is active: a zone id, `null` for the "Sin zona" tab, or `undefined`
+  // before a pick (→ the first tab). Kept distinct from a zone id so the default tracks the tab order.
+  @state() private activeZone: string | null | undefined = undefined;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -152,6 +209,10 @@ export class FloorScreen extends LitElement {
         label: t.label,
         capacity: t.capacity,
         zoneId: t.zoneId,
+        posX: t.posX ?? null,
+        posY: t.posY ?? null,
+        shape: t.shape ?? null,
+        rotation: t.rotation ?? null,
       }));
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -405,9 +466,173 @@ export class FloorScreen extends LitElement {
     </li>`;
   }
 
-  override render(): TemplateResult {
+  // ── Plano (FP-2 spatial floor-plan editor) ────────────────────────────────────────────────────────
+  // The same `wt-floor-canvas` (Task 5) the till uses, here ALWAYS in edit mode: the dashboard is
+  // manager-only (a management session gates the whole screen and the routes re-check), so there is no
+  // operator-role gate — unlike the till, which gates its "Editar plano" toggle on `canEdit`. Placement
+  // is persisted through the MANAGEMENT route (`setTablePlacement`/`clearPlacement`, Task 3) and each
+  // write RELOADS both lists, the same idiom the config panels use. A rejected write becomes the
+  // `errorKey` banner (a `placement.invalid` mapped to localised copy) rather than being swallowed — the
+  // dashboard SURFACES the fault, where the till reconciles silently.
+
+  /** Persist a canvas placement edit (`placement-change`) via the management route, then reload. A
+   * rejection (e.g. `placement.invalid`, `zone.not_found`) becomes the `errorKey` banner. */
+  async #setPlacement(detail: PlacementChange): Promise<void> {
+    this.errorKey = null;
+    const { tableId, posX, posY, shape, rotation, zoneId } = detail;
+    try {
+      await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
+      await this.#load();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  #onPlacementChange(event: Event): void {
+    event.stopPropagation();
+    void this.#setPlacement((event as CustomEvent<PlacementChange>).detail);
+  }
+
+  /** Un-place a table (the canvas's `placement-clear`) via the management route, then reload. */
+  async #clearTablePlacement(tableId: string): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.clearPlacement(tableId);
+      await this.#load();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  #onPlacementClear(event: Event): void {
+    event.stopPropagation();
+    void this.#clearTablePlacement((event as CustomEvent<PlacementClear>).detail.tableId);
+  }
+
+  /**
+   * Tap-to-place (the owner's chosen UX — no drag-onto-canvas, same as the till's `#placeFromTray`):
+   * give an unplaced tray table a DEFAULT position through the management route, then reload so it
+   * appears on the canvas for the manager to reposition with the canvas's own drag/keyboard controls.
+   * The slot is the centre nudged right by 50‰ per already-placed table (clamped into range) so
+   * successive placements don't stack exactly; `shape` defaults to `round`, `rotation` to 0, and `zoneId`
+   * is the table's own zone. A rejected write surfaces the `errorKey` banner via {@link #setPlacement}.
+   */
+  async #placeFromTray(tbl: EditableTable, placedCount: number): Promise<void> {
+    const posX = clampPermille(500 + placedCount * GRID_STEP);
+    await this.#setPlacement({
+      tableId: tbl.id,
+      posX,
+      posY: 500,
+      shape: tbl.shape ?? "round",
+      rotation: tbl.rotation ?? 0,
+      zoneId: tbl.zoneId,
+    });
+  }
+
+  /** Map an editable table to the shared canvas/token's {@link FloorTable} shape. The dashboard editor
+   * has no live occupancy read-model, so `state`/`pendingToServe`/`tabTotal`/`status` are the neutral
+   * "free" defaults — the token renders just the label + covers. Unplaced tables (null coords) default
+   * to 0 for the required fields the token ignores in the tray. */
+  #toFloorTable(tbl: EditableTable): FloorTable {
+    return {
+      id: tbl.id,
+      label: tbl.label,
+      capacity: tbl.capacity,
+      posX: tbl.posX ?? 0,
+      posY: tbl.posY ?? 0,
+      shape: tbl.shape,
+      rotation: tbl.rotation,
+      zoneId: tbl.zoneId,
+      state: "free",
+      tabTotal: null,
+      pendingToServe: 0,
+      status: null,
+    };
+  }
+
+  /** The dashboard's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words).
+   * Only the overridden keys are supplied; the canvas fills the rest from its English defaults. */
+  #canvasCopy(): Partial<FloorCanvasCopy> {
+    return {
+      floor: t("floor.title"),
+      covers: t("floor.covers"),
+      toServe: t("floor.to_serve"),
+      zone: t("floor.table_zone"),
+      rotate: t("floor.rotate"),
+      remove: t("floor.remove"),
+      shape: t("floor.shape"),
+      shapeRound: t("floor.shape_round"),
+      shapeSquare: t("floor.shape_square"),
+      shapeRect: t("floor.shape_rect"),
+    };
+  }
+
+  /** Whether a table belongs under the "Sin zona" sub-tab: it has NO zone, OR its zone is not among the
+   * active ones (a table can point at a deactivated zone — `deactivateZone` never nulls a table's
+   * `zoneId` — and without catching it here that table would match no sub-tab and vanish). Mirrors the
+   * till's `#isZoneless`. */
+  #isZoneless(tbl: EditableTable, knownZoneIds: Set<string>): boolean {
+    return tbl.zoneId === null || !knownZoneIds.has(tbl.zoneId);
+  }
+
+  /** The Plano sub-tabs: the active zones by `displayOrder`, plus a "Sin zona" tab iff some table is
+   * zoneless or points at a deactivated zone. */
+  #zoneTabs(knownZoneIds: Set<string>): { key: string | null; name: string }[] {
+    const zoneTabs = [...this.zones]
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((z) => ({ key: z.id as string | null, name: z.name }));
+    const hasZoneless = this.tables.some((tbl) => this.#isZoneless(tbl, knownZoneIds));
+    return hasZoneless ? [...zoneTabs, { key: null, name: t("floor.zoneless") }] : zoneTabs;
+  }
+
+  /** The active sub-tab's key: the manager's pick, or the first tab when none has been made. Called only
+   * with a non-empty `tabs`. */
+  #activeZoneKey(tabs: { key: string | null }[]): string | null {
+    return this.activeZone === undefined ? tabs[0]!.key : this.activeZone;
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────────────────────────────
+
+  #topTab(key: "config" | "plano", label: string): TemplateResult {
+    return html`<wt-button
+      class="tab"
+      data-tab=${key}
+      variant=${this.activeTab === key ? "primary" : "secondary"}
+      @click=${() => (this.activeTab = key)}
+      >${label}</wt-button
+    >`;
+  }
+
+  #zoneTab(
+    tab: { key: string | null; name: string },
+    activeKey: string | null | undefined,
+  ): TemplateResult {
+    return html`<wt-button
+      class="zone-tab"
+      data-zone=${tab.key ?? "none"}
+      variant=${tab.key === activeKey ? "primary" : "secondary"}
+      @click=${() => (this.activeZone = tab.key)}
+      >${tab.name}</wt-button
+    >`;
+  }
+
+  /** One unplaced table in the tray: a tappable button wrapping the shared `<wt-table-token>` (the same
+   * token the canvas draws, so the tray can never drift from it). A tap PLACES it (tap-to-place). */
+  #trayItem(tbl: EditableTable, placedCount: number): TemplateResult {
+    return html`<button
+      class="tray-item"
+      data-tray-table=${tbl.id}
+      @click=${() => void this.#placeFromTray(tbl, placedCount)}
+    >
+      <wt-table-token
+        .table=${this.#toFloorTable(tbl)}
+        .labels=${{ covers: t("floor.covers"), toServe: t("floor.to_serve") }}
+      ></wt-table-token>
+    </button>`;
+  }
+
+  #renderConfig(): TemplateResult {
     return html`
-      <h1 class="title">${t("floor.title")}</h1>
       <div class="panels">
         <section class="panel" data-test="zones-panel">
           <h2 class="panel-title">${t("floor.zones_title")}</h2>
@@ -453,7 +678,61 @@ export class FloorScreen extends LitElement {
           </div>
         </section>
       </div>
+    `;
+  }
 
+  /** The Plano tab: per-zone sub-tabs, then the editable canvas drawing that zone's PLACED tables with
+   * its UNPLACED tables in a tray beneath (tap-to-place). */
+  #renderPlano(): TemplateResult {
+    const knownZoneIds = new Set(this.zones.map((z) => z.id));
+    const tabs = this.#zoneTabs(knownZoneIds);
+    const activeKey = tabs.length === 0 ? undefined : this.#activeZoneKey(tabs);
+    // The "Sin zona" tab (activeKey === null) gathers the zoneless AND deactivated-zone tables; a real
+    // zone tab shows exactly its own tables. When there are no tabs at all (no zones, no tables) nothing
+    // is visible and the canvas draws empty.
+    const visible = this.tables.filter((tbl) =>
+      activeKey === null ? this.#isZoneless(tbl, knownZoneIds) : tbl.zoneId === activeKey,
+    );
+    const placed = visible.filter((tbl) => tbl.posX != null);
+    const unplaced = visible.filter((tbl) => tbl.posX == null);
+    return html`
+      <div class="plano">
+        ${
+          tabs.length > 0
+            ? html`<nav class="zone-tabs" aria-label=${t("floor.tables_title")}>
+                ${tabs.map((tab) => this.#zoneTab(tab, activeKey))}
+              </nav>`
+            : nothing
+        }
+        <div class="map">
+          <wt-floor-canvas
+            .tables=${placed.map((tbl) => this.#toFloorTable(tbl))}
+            .editable=${true}
+            .copy=${this.#canvasCopy()}
+            @placement-change=${(e: Event) => this.#onPlacementChange(e)}
+            @placement-clear=${(e: Event) => this.#onPlacementClear(e)}
+          ></wt-floor-canvas>
+          ${
+            unplaced.length > 0
+              ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
+                  <span class="tray-label">${t("floor.unplaced")}</span>
+                  ${unplaced.map((tbl) => this.#trayItem(tbl, placed.length))}
+                </div>`
+              : nothing
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  override render(): TemplateResult {
+    return html`
+      <h1 class="title">${t("floor.title")}</h1>
+      <nav class="tabs" aria-label=${t("floor.title")}>
+        ${this.#topTab("config", t("floor.tab_config"))}
+        ${this.#topTab("plano", t("floor.tab_plano"))}
+      </nav>
+      ${this.activeTab === "config" ? this.#renderConfig() : this.#renderPlano()}
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }
