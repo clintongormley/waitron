@@ -20,6 +20,15 @@ import { catalogues } from "./catalogue.js";
 export const orderFlow = pgEnum("order_flow", ["prepay", "invoice_first", "ticket_then_pay"]);
 
 /**
+ * The per-venue KDS bump mode (KDS-1, §2e). `line` (default): the per-line ticket-item state is the
+ * only source of truth, each line bumped on its own. `ticket`: the display additionally offers a
+ * whole-ticket bump that advances every one of an order's lines at a station together. Governs ONLY
+ * that display convenience — the per-line state is always the truth. A pgEnum on `locations`, matching
+ * `order_flow`'s precedent on the same table (one declaration yields both the union and the constraint).
+ */
+export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
+
+/**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
@@ -92,6 +101,10 @@ export const locations = pgTable(
     // no fiscal doc, pay+issue at collect. DEFAULT 'prepay' so existing location fixtures stay inert.
     // No config-authoring UI in this slice (set at provisioning, like the layout editor).
     orderFlow: orderFlow("order_flow").notNull().default("prepay"),
+    // The per-venue KDS bump mode (KDS-1, §2e): `line` (default) = per-line bump only; `ticket` = the
+    // display also offers a whole-ticket bump. NOT NULL DEFAULT 'line' so existing location fixtures
+    // stay inert, exactly as `order_flow` above defaults. Governs only the display convenience.
+    bumpMode: bumpMode("bump_mode").notNull().default("line"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
     // each other; the cycle is harmless because every cross-module reference is a lazy
