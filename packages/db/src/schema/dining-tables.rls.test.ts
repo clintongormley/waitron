@@ -1,10 +1,11 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database, Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
+import { diningTables } from "./dining-tables.js";
 import { locations, tenants } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -82,6 +83,29 @@ describe("dining_tables schema (RLS + grants)", () => {
         .then((r) => r.rows),
     );
     expect(row!.capacity).toBe(4);
+  });
+
+  it("exposes placement columns to app_user under the tenant policy", async () => {
+    // FP-2 adds four nullable placement columns (pos_x, pos_y, shape, rotation) to dining_tables.
+    // Being additive columns on an existing FORCE-RLS table, they inherit the table-wide UPDATE/SELECT
+    // grant and the row-level tenant policy with no new migration — this asserts that inheritance:
+    // app_user, scoped to its own tenant, can write and read them back. The drizzle query builder
+    // (rather than raw SQL) also exercises the schema mapping posX→"pos_x" and the enum/smallint
+    // decoding. Proven a real RLS test by deletion: reading under the WRONG tenant (TENANT_B) makes
+    // app_user see zero of A's rows, so `row` is undefined and the toMatchObject below throws — the
+    // tenant predicate, not mere table access, is what exposes the row. (Dropping asAppUser does NOT
+    // prove it: `suite.admin` is a superuser and bypasses FORCE RLS, so the read would still succeed.)
+    const id = await seedTable(TENANT_A, LOCATION_A, "T-placement");
+    await asApp(TENANT_A, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ posX: 500, posY: 250, shape: "square", rotation: 15 })
+        .where(eq(diningTables.id, id)),
+    );
+    const [row] = await asApp(TENANT_A, (tx) =>
+      tx.select().from(diningTables).where(eq(diningTables.id, id)),
+    );
+    expect(row).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15 });
   });
 
   it("app_user has no DELETE on dining_tables (deactivate, never delete)", async () => {

@@ -372,6 +372,13 @@
       "when": 1787254764764,
       "tag": "0052_floor_plan_fp1_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1787315398830,
+      "tag": "0053_white_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }
