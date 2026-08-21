@@ -48,7 +48,7 @@ describe("till-floor-screen", () => {
     expect(customElements.get("till-floor-screen")).toBe(TillFloorScreen);
   });
 
-  it("groups tables by zone and shows occupancy + por-servir badges", async () => {
+  it("groups tables by zone and shows occupancy + to-serve badges", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
       tables: [
@@ -70,7 +70,7 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.textContent).toContain("Comedor");
     expect(el.shadowRoot!.textContent).toContain("47.50");
     // The "N still to serve" badge carries the pendingToServe count.
-    expect(el.shadowRoot!.querySelector("[data-por-servir]")!.textContent).toContain("2");
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("2");
   });
 
   it("emits open-table with hasOpenTab:false when a free table is tapped", async () => {
@@ -112,7 +112,7 @@ describe("till-floor-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("renders a free table as available (Libre), with no tab total and no por-servir badge", async () => {
+  it("renders a free table as available (Libre), with no tab total and no to-serve badge", async () => {
     const { el } = await mount({
       tables: [
         table({ id: "t1", label: "5", state: "free", hasOpenTab: false, pendingToServe: 0 }),
@@ -121,7 +121,7 @@ describe("till-floor-screen", () => {
     const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
     expect(card.textContent).toContain("Libre");
     // A free table carries no open-tab total and no "to serve" badge.
-    expect(el.shadowRoot!.querySelector("[data-por-servir]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")).toBeNull();
   });
 
   it("renders a delivery-pending table with its pending-deliveries count", async () => {

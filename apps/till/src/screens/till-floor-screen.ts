@@ -152,7 +152,7 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .badge.por-servir {
+      .badge.to-serve {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
       }
@@ -297,7 +297,7 @@ export class TillFloorScreen extends LitElement {
       <span class="badges">
         ${
           table.pendingToServe > 0
-            ? html`<span class="badge por-servir" data-por-servir
+            ? html`<span class="badge to-serve" data-to-serve
                 >${table.pendingToServe} ${t("floor.to_serve")}</span
               >`
             : nothing
