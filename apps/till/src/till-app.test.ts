@@ -210,9 +210,10 @@ function emit(source: Element, type: string, detail?: unknown): void {
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  // Log in as a STAFF operator by default (the common case) — the FP-2 role tests below drive a
-  // manager explicitly. The role rides the `logged-in` event exactly as the lock screen sends it.
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", role: "staff" });
+  // Log in as a NON-configuring operator by default (the common case) — the FP-2 capability tests below
+  // drive a configuring one explicitly. `canConfigureTill` rides the `logged-in` event exactly as the
+  // lock screen sends it (the server computes it from the operator's role).
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
   await flush(el);
   return counter(el)!;
 }
@@ -1185,14 +1186,18 @@ describe("till-app", () => {
       expect(floor(el)!.canEdit).toBe(false);
     });
 
-    it("a MANAGER login lights up the on-till floor editor (Editar plano), end-to-end", async () => {
+    it("a login WITH the till.configure capability lights up the on-till floor editor, end-to-end", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await flush(el);
-      // The lock screen sends the session role; a manager holds `till.configure`.
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Marta", role: "manager" });
+      // The lock screen sends the server-computed capability; a manager holds `till.configure`.
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Marta",
+        canConfigureTill: true,
+      });
       await flush(el);
       emit(counter(el)!, "show-floor");
       await flush(el);
@@ -1205,20 +1210,20 @@ describe("till-app", () => {
       await flush(el);
       emit(counter(el)!, "logout");
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", role: "staff" });
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", canConfigureTill: false });
       await flush(el);
       emit(counter(el)!, "show-floor");
       await flush(el);
       expect(floor(el)!.canEdit).toBe(false);
     });
 
-    it("a STAFF login keeps the on-till floor editor hidden, end-to-end", async () => {
+    it("a login WITHOUT the till.configure capability keeps the on-till floor editor hidden, end-to-end", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", role: "staff" });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
       emit(counter(el)!, "show-floor");
       await flush(el);
@@ -1227,7 +1232,7 @@ describe("till-app", () => {
       expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
     });
 
-    it("floor-refresh re-reads the tables + zones after an on-till placement write (FP-2)", async () => {
+    it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -1242,9 +1247,10 @@ describe("till-app", () => {
       emit(floor(el)!, "floor-refresh");
       await flush(el);
 
-      // The refresh re-read both (twice total) so the map reflects the just-persisted placement.
+      // The refresh re-read the TABLES (twice total) so the map reflects the just-persisted placement —
+      // but NOT the zones: a placement write cannot change the zone list, so re-fetching it is waste.
       expect(currentApi.getTablesState).toHaveBeenCalledTimes(2);
-      expect(currentApi.listZones).toHaveBeenCalledTimes(2);
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
     });
 
     it("floor-refresh degrades gracefully when the re-read fails (keeps the last-known floor)", async () => {

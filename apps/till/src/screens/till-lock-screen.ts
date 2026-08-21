@@ -4,19 +4,20 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
-import type { OperatorRole, StaffMember, TillApi } from "../api/client.js";
+import type { StaffMember, TillApi } from "../api/client.js";
 
 /**
  * The `logged-in` event payload: the server-confirmed `personId`, the operator's `displayName`, and
- * their `role`. The name rides along because the screen already holds it (the roster entry the operator
- * picked), so the parent (`till-app`) can label the counter header without a second `listStaff`
- * round-trip; the `role` comes from the `POST /api/session` response so the app can gate manager-only
- * affordances (FP-2's on-till "Editar plano") without another round-trip either.
+ * the server-computed `canConfigureTill` capability. The name rides along because the screen already
+ * holds it (the roster entry the operator picked), so the parent (`till-app`) can label the counter
+ * header without a second `listStaff` round-trip; `canConfigureTill` comes from the `POST /api/session`
+ * response so the app can gate manager-only affordances (FP-2's on-till "Editar plano") without another
+ * round-trip either — and without the client re-deriving it from a role (which would drift).
  */
 export interface LoggedInDetail {
   personId: string;
   displayName: string;
-  role: OperatorRole;
+  canConfigureTill: boolean;
 }
 
 /**
@@ -175,11 +176,11 @@ export class TillLockScreen extends LitElement {
     const person = this.selected;
     if (person === undefined || this.pin === "") return;
     try {
-      const { personId, role } = await this.api.login(person.personId, this.pin);
+      const { personId, canConfigureTill } = await this.api.login(person.personId, this.pin);
       if (!this.isConnected) return;
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
-          detail: { personId, displayName: person.displayName, role },
+          detail: { personId, displayName: person.displayName, canConfigureTill },
           bubbles: true,
           composed: true,
         }),

@@ -232,9 +232,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    // The response carries the operator's OWN role (Ana is `staff`) so the till can gate manager-only
-    // affordances client-side; the on-till placement route (Task 4) still re-checks the gate.
-    expect(await res.json()).toEqual({ personId: ana.id, role: "staff" });
+    // The response carries the server-computed `canConfigureTill` capability so the till can gate
+    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `till.configure`, so it is
+    // false. The on-till placement route (Task 4) still re-checks the gate server-side.
+    expect(await res.json()).toEqual({ personId: ana.id, canConfigureTill: false });
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -255,10 +256,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(rows.rows).toEqual([{ ended: true }]);
   });
 
-  it("POST carries a MANAGER operator's role in the session response (not hardcoded to staff)", async () => {
-    // Seed + log in a manager to prove the response reflects the person's ACTUAL role — a mutant that
-    // hardcoded "staff" (or dropped the field) fails here. Cleaned up so the roster's exact ordering
-    // assertions elsewhere stay untouched.
+  it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {
+    // Seed + log in a manager to prove `canConfigureTill` reflects the person's ACTUAL role, not a
+    // hardcoded value — a mutant that hardcoded `false` (or dropped the field) fails here, while the
+    // staff case above (canConfigureTill: false) kills a mutant that hardcoded `true`. A manager holds
+    // `till.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const mgr = await suite.db.execute<{ id: string }>(sql`
@@ -272,7 +274,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: managerId, role: "manager" });
+    expect(await res.json()).toEqual({ personId: managerId, canConfigureTill: true });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);

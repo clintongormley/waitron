@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { authorize, endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
+import {
+  authorize,
+  endSession,
+  listActiveStaff,
+  loginWithPin,
+  roleHasPermission,
+} from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { getLayout } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -287,11 +293,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
       });
       setSessionCookie(c, session.id, deps.secureCookies);
-      // Surface the operator's OWN role so the till can gate its manager-only affordances (FP-2's
-      // on-till "Editar plano"). Convenience only — every server gate re-derives the role from the
-      // session and re-checks the permission via `authorize` (e.g. the placement route below), so a
-      // tampered client value grants nothing.
-      return c.json({ personId: session.personId, role: session.role });
+      // Surface the derived CAPABILITY the till needs — whether this operator may configure the till
+      // (FP-2's on-till "Editar plano") — computed server-side from the session's role via the identity
+      // package's own `roleHasPermission`, never mirrored as a role→permission map on the client (which
+      // would silently drift from `permissions.ts`). Convenience only: every server gate re-derives the
+      // role from the session and re-checks the permission via `authorize` (e.g. the placement route
+      // below), so a tampered client value grants nothing.
+      const canConfigureTill = roleHasPermission(session.role, "till.configure");
+      return c.json({ personId: session.personId, canConfigureTill });
     }),
   );
 

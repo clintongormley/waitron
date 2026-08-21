@@ -47,14 +47,6 @@ import type {
 type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order";
 
 /**
- * The operator roles that hold `till.configure` — manager + admin, mirroring
- * `packages/identity/src/permissions.ts` (supervisor and staff do NOT). This is the CLIENT-side gate for
- * the on-till "Editar plano" affordance only; the on-till placement route re-derives the role from the
- * session and re-checks the permission server-side (FP-2 Task 4), so this hiding is convenience.
- */
-const ROLES_WITH_TILL_CONFIGURE: ReadonlySet<string> = new Set(["manager", "admin"]);
-
-/**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
  * quantity at numeric(_,3) scale, so an EACH product's whole count arrives as "2.000" — which the
  * basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so an
@@ -186,9 +178,10 @@ export class TillApp extends LitElement {
    * "Editar plano" toggle. Client hiding is convenience only; the on-till placement route re-checks the
    * gate server-side (FP-2 Task 4).
    *
-   * Computed at login from the session's `role` ({@link #onLoggedIn}, mirroring the server's
-   * `till.configure` = manager + admin — `packages/identity/src/permissions.ts`), and reset to `false`
-   * on logout so the next operator starts un-privileged until their own login recomputes it.
+   * Set at login from the session's SERVER-COMPUTED `canConfigureTill` capability ({@link #onLoggedIn}),
+   * so the client never re-derives it from a role (which would drift from the server's
+   * `roleHasPermission`), and reset to `false` on logout so the next operator starts un-privileged until
+   * their own login re-supplies it.
    */
   @state() private canEdit = false;
   /**
@@ -373,14 +366,15 @@ export class TillApp extends LitElement {
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
    * and (Modes I/T) the prep queue, then load the colleague roster for the schedule screen. */
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, role } = (event as CustomEvent<LoggedInDetail>).detail;
+    const { personId, displayName, canConfigureTill } = (event as CustomEvent<LoggedInDetail>)
+      .detail;
     const products = await this.api.listProducts();
     this.products = products;
     this.operatorName = displayName;
     this.operatorPersonId = personId;
-    // FP-2: gate the on-till floor editor on the operator's own role (manager/admin hold
-    // `till.configure`). Convenience only — the placement route re-checks server-side.
-    this.canEdit = ROLES_WITH_TILL_CONFIGURE.has(role);
+    // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
+    // in the session response. Convenience only — the placement route re-checks server-side.
+    this.canEdit = canConfigureTill;
     this.errorKey = undefined;
     this.screen = "counter";
     await this.#refreshHeldOrders();
@@ -851,17 +845,18 @@ export class TillApp extends LitElement {
 
   /**
    * Re-read the floor after the floor screen persisted a spatial placement change (FP-2) — it emits
-   * `floor-refresh` once its on-till `setTablePlacement` / `clearPlacement` write lands. Re-loads the
-   * tables (whose placement columns changed) and the zones (a placement can re-home a table), NOT the
-   * statuses (unchanged by a placement), then re-supplies them to the screen. Stays on the floor and,
-   * like {@link #onShowFloor}, swallows a failed read (degrade gracefully — the floor touches no fiscal
-   * path). Only writes reactive state, so no `isConnected` guard is needed (the DISCONNECT SAFETY note).
+   * `floor-refresh` once its on-till `setTablePlacement` / `clearPlacement` write lands. Re-loads only
+   * the TABLES (whose placement columns changed): a placement write only READS `floor_zones` (to
+   * validate the target zone is active) and never mutates them, so the zone LIST is guaranteed unchanged
+   * across an edit — `this.zones` (loaded on floor entry, {@link #onShowFloor}) is left as-is rather than
+   * re-fetched for a value that cannot have moved. Statuses are likewise unchanged by a placement. Stays
+   * on the floor and, like {@link #onShowFloor}, swallows a failed read (degrade gracefully — the floor
+   * touches no fiscal path). Only writes reactive state, so no `isConnected` guard is needed (the
+   * DISCONNECT SAFETY note).
    */
   async #refreshFloor(): Promise<void> {
     try {
-      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
-      this.tables = tables;
-      this.zones = zones;
+      this.tables = await this.api.getTablesState();
     } catch {
       // Non-fatal: leave the last-known floor in place (degrade gracefully).
     }

@@ -58,19 +58,16 @@ export interface StaffMember {
 }
 
 /**
- * One of the four operator roles (`persons.role`). A LOCAL union mirroring `@waitron/identity`'s
- * `PersonRoleValue` — deliberately NOT imported (the bundle-decoupling rule; a runtime import would
- * drag the identity barrel + `@waitron/db` into the browser bundle). The till reads it only to gate
- * manager-only affordances; the server re-checks every gate.
+ * `POST /api/session` success — who is now logged in, plus the SERVER-COMPUTED `canConfigureTill`
+ * capability (`roleHasPermission(role, "till.configure")`, resolved server-side from the session's
+ * role). The till reads it to gate manager-only affordances (FP-2's on-till "Editar plano") without
+ * mirroring the role→permission map on the client, where it would silently drift from `permissions.ts`.
+ * Convenience only — the on-till placement route re-checks `till.configure` server-side
+ * (`apps/server/src/till-api.ts`), so a tampered client value grants nothing.
  */
-export type OperatorRole = "staff" | "supervisor" | "manager" | "admin";
-
-/** `POST /api/session` success — who is now logged in, and their role. `role` lets the till gate
- * manager-only affordances (FP-2's on-till "Editar plano"); it is convenience only — the on-till
- * placement route re-checks `till.configure` server-side (`apps/server/src/till-api.ts`). */
 export interface SessionResult {
   personId: string;
-  role: OperatorRole;
+  canConfigureTill: boolean;
 }
 
 /** One VAT band on a ticket: a rate and its taxable base + tax, as decimal strings. */

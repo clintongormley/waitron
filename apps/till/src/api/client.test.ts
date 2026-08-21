@@ -131,8 +131,10 @@ describe("TillApi", () => {
     });
   });
 
-  it("login POSTs the credentials and returns the person id + the operator's role", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ personId: "u1", role: "manager" }));
+  it("login POSTs the credentials and returns the person id + the till.configure capability", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ personId: "u1", canConfigureTill: true }));
     const api = new TillApi("", fetchStub);
 
     const r = await api.login("u1", "1234");
@@ -147,8 +149,9 @@ describe("TillApi", () => {
       }),
     );
     expect(r.personId).toBe("u1");
-    // The role rides the response so the till can gate manager-only affordances (FP-2 Editar plano).
-    expect(r.role).toBe("manager");
+    // The server-computed capability rides the response so the till can gate manager-only affordances
+    // (FP-2 Editar plano) without mirroring the role→permission map on the client.
+    expect(r.canConfigureTill).toBe(true);
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
