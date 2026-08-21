@@ -91,10 +91,12 @@ describe("dining_tables schema (RLS + grants)", () => {
     // grant and the row-level tenant policy with no new migration — this asserts that inheritance:
     // app_user, scoped to its own tenant, can write and read them back. The drizzle query builder
     // (rather than raw SQL) also exercises the schema mapping posX→"pos_x" and the enum/smallint
-    // decoding. Proven a real RLS test by deletion: reading under the WRONG tenant (TENANT_B) makes
-    // app_user see zero of A's rows, so `row` is undefined and the toMatchObject below throws — the
-    // tenant predicate, not mere table access, is what exposes the row. (Dropping asAppUser does NOT
-    // prove it: `suite.admin` is a superuser and bypasses FORCE RLS, so the read would still succeed.)
+    // decoding. This test does NOT re-prove tenant ISOLATION and does not need to: RLS is row-level,
+    // so these additive columns are covered automatically by the table-wide policy — which IS proven
+    // by deletion in the `tenant isolation is the policy PREDICATE's doing` case below (it weakens the
+    // predicate in a rolled-back tx and shows TENANT_B then leaks A's row; a plain asAppUser drop would
+    // NOT prove it, as `suite.admin` is a superuser that bypasses FORCE RLS). Here we only confirm the
+    // four new columns are reachable under the REAL policy: a write + read-back within TENANT_A.
     const id = await seedTable(TENANT_A, LOCATION_A, "T-placement");
     await asApp(TENANT_A, (tx) =>
       tx

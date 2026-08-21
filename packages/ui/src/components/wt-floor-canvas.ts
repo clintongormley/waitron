@@ -77,8 +77,10 @@ interface TableHandlers {
  * (3:2) canvas at its `posX`/`posY` permille coordinates, each rendered with the shared
  * `<wt-table-token>` so the map and the till's list card can never drift; tapping a table asks the app
  * to open its tab (`open-table`). In EDIT mode (`.editable`) a table can be dragged (snapping to a 50‰
- * grid when `.gridSnap`), reshaped from a palette, rotated in 15° detents, re-homed to a zone, or
- * cleared from the plan; every gesture emits `placement-change` (or `placement-clear`). Tables stay
+ * grid when `.gridSnap`), reshaped from a palette, rotated in 15° detents, re-homed to another zone
+ * by id (the inspector emits the target `zoneId`; a name-based picker is a consuming app's job — no
+ * `.zones` prop is supplied yet), or cleared from the plan; every gesture emits `placement-change`
+ * (or `placement-clear`). Tables stay
  * keyboard-reachable — each is a real `<button>`, and the arrow keys nudge the focused one.
  *
  * The component is CONTROLLED: it never mutates `.tables`, it only reports the intent. The parent owns
