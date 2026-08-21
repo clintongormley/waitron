@@ -931,31 +931,56 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
   // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a
   // rejected operator performs no write (proven by-deletion in the suite — dropping the `authorize` call
-  // flips the staff case to a 204). The `:id`/`zoneId` isUuid screens run FIRST (before the tx), each a
-  // pure shape check refusing a malformed value with the SAME domain code the sibling table routes use —
-  // `table.not_found`/`zone.not_found` (404) — rather than the 22P02→500 the raw value would raise; the
-  // verb owns the placement VALUE validation (`placement.invalid`) and the live-table/live-zone reads.
-  // Returns 204 (the management-api placement sibling's convention).
+  // flips the staff case to a 204). The `:id` isUuid screen runs FIRST (before the tx), refusing a
+  // malformed value with the SAME domain code the sibling table routes use — `table.not_found` (404) —
+  // rather than the 22P02→500 the raw value would raise. The body-shape screen mirrors the
+  // `management-api.ts` placement sibling exactly: a non-object body → `management.request_invalid`
+  // naming "body", each MISSING or wrong-TYPE field → the same code naming THAT field, and a
+  // string-typed but MALFORMED `zoneId` → `zone.not_found` (the sibling POST/PATCH `/api/tables`
+  // convention, one field over — un-screened it reaches the `floor_zones.id` uuid column in
+  // `setTablePlacement` → 22P02 → opaque 500). The verb owns the placement VALUE validation
+  // (`placement.invalid`) and the live-table/live-zone reads. Returns 204 (the management-api
+  // placement sibling's convention).
   app.put("/api/tables/:id/placement", (c) =>
     run(c, log, async () => {
       const { sessionId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{
-        zoneId: string;
-        posX: number;
-        posY: number;
-        shape: FloorTableShape;
-        rotation: number;
-      }>();
-      // A string-typed but malformed zoneId un-screened reaches the `floor_zones.id` uuid column in
-      // `setTablePlacement` → 22P02 → opaque 500, so it gets the SAME `zone.not_found` a
-      // well-formed-but-missing zone does (the sibling `POST`/`PATCH /api/tables` screen, one field over).
+      const body =
+        (await c.req.json<{
+          zoneId?: unknown;
+          posX?: unknown;
+          posY?: unknown;
+          shape?: unknown;
+          rotation?: unknown;
+        }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.zoneId !== "string")
+        throw new AppError("management.request_invalid", { field: "zoneId" });
+      // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
+      // verb reads `floor_zones … where id = ${zoneId}`, so an un-screened non-UUID reaches the `uuid`
+      // column → 22P02 → opaque 500. Give it the SAME zone.not_found a well-formed-but-missing one gets.
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
+      if (typeof body.posX !== "number")
+        throw new AppError("management.request_invalid", { field: "posX" });
+      if (typeof body.posY !== "number")
+        throw new AppError("management.request_invalid", { field: "posY" });
+      if (typeof body.shape !== "string")
+        throw new AppError("management.request_invalid", { field: "shape" });
+      if (typeof body.rotation !== "number")
+        throw new AppError("management.request_invalid", { field: "rotation" });
+      // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
+      // `withTenant` closure — a captured property resets to its declared type). `shape` is cast to
+      // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
+      // asserts nothing the verb does not check.
+      const { zoneId, posX, posY, rotation } = body;
+      const shape = body.shape as FloorTableShape;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await authorize(tx, { sessionId, permission: "till.configure" });
-        await setTablePlacement(tx, deps.cfg, id, body);
+        await setTablePlacement(tx, deps.cfg, id, { zoneId, posX, posY, shape, rotation });
       });
       return c.body(null, 204);
     }),

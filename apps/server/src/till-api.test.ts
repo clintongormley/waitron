@@ -1634,6 +1634,60 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
     });
   });
 
+  it("PUT body screens: non-string zoneId; non-number posX/posY/rotation; non-string shape (mirrors management-api)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    // A well-formed but non-existent table id: every case here is refused by the body-shape ladder
+    // BEFORE `setTablePlacement` runs, so no live table row is needed (mirrors management-api.test.ts's
+    // "PUT body screens" case, which uses the same trick for the same reason).
+    const id = randomUUID();
+
+    // A `null` body coerces to `{}` (`?? {}`), then the first field screen fires (field "body" is only
+    // for a non-object TRUTHY body such as an array) — the same null-body discipline the management-api
+    // sibling follows, and the only case that exercises the `?? {}` fallback itself.
+    const nullBody = await app.request(`/api/tables/${id}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "null",
+    });
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "zoneId" } },
+    });
+
+    // An array body fails the `typeof body !== "object" || body === null || Array.isArray(body)` guard
+    // itself (an array IS typeof "object" in JS), naming "body" rather than a field — the one case the
+    // per-field table below cannot reach.
+    const arrayBody = await app.request(`/api/tables/${id}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "[]",
+    });
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+
+    const cases: readonly [string, Record<string, unknown>][] = [
+      ["zoneId", { ...place(), zoneId: 123 }],
+      ["posX", { ...place(), posX: "500" }],
+      ["posY", { ...place(), posY: "250" }],
+      ["shape", { ...place(), shape: 1 }],
+      ["rotation", { ...place(), rotation: "0" }],
+    ];
+    for (const [field, body] of cases) {
+      const res = await app.request(`/api/tables/${id}/placement`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: managerCookie },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
   it("a placement VALUE fault surfaces the verb's placement.invalid as 400 through the till route", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
