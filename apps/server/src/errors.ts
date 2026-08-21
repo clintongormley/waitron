@@ -508,6 +508,27 @@ declare module "@waitron/shared" {
      */
     "zone.name_taken": { name: string };
     /**
+     * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
+     * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
+     * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this
+     * code — those are checked first and surface `table.not_found`/`zone.not_found`.
+     *
+     * `field` carries the offending field NAME only — `"posX"`/`"posY"`/`"shape"`/`"rotation"` — and
+     * NEVER the value behind it. An out-of-range coordinate is not itself a secret, but this file's
+     * no-leak discipline is uniform (echo names, never values — `management.request_invalid`,
+     * `server.till_config_missing`) precisely so no field becomes the exception where a value leaks
+     * (CLAUDE.md §1).
+     *
+     * `placement.*` names the DOMAIN CONCEPT (a table's spatial placement), never the throwing
+     * package (the rule `tenant.not_found`'s note gives); venue layout only, nowhere near the fiscal
+     * huella. A request-shape fault → HTTP 400: it is not listed in either route `STATUS` map yet
+     * (the route wiring is a later FP-2 task), and 400 is the DEFAULT a registered code takes when
+     * absent from a map (`till-api.ts`'s `STATUS` note), so the mapping already holds; the route task
+     * will list it explicitly beside `management.request_invalid` when it wires the placement routes.
+     * Never renamed once shipped.
+     */
+    "placement.invalid": { field: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff

@@ -25,3 +25,17 @@ describe("the zone error codes carry their declared params", () => {
     expect(error.params).toEqual({ name: "Terraza" });
   });
 });
+
+// FP-2 spatial floor plan (Task 2). `placement.invalid` is the field-validation code
+// `setTablePlacement` throws for an out-of-range coordinate/rotation or a bad shape. As with the zone
+// codes above, this only proves it is registered with the right param SHAPE — the construction
+// typechecks solely because errors.ts's `declare module` augmentation is loaded (the side-effect
+// import above). Crucially it pins the NO-LEAK discipline (CLAUDE.md §1): the param carries the field
+// NAME only, never the offending value.
+describe("the placement error code carries its declared params", () => {
+  it("constructs placement.invalid naming the offending field, never the value", () => {
+    const error = new AppError("placement.invalid", { field: "posX" });
+    expect(error.code).toBe("placement.invalid");
+    expect(error.params).toEqual({ field: "posX" });
+  });
+});

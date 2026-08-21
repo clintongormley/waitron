@@ -4,12 +4,43 @@ import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
-import { diningTables, floorZones, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
+import {
+  diningTables,
+  floorTableShape,
+  floorZones,
+  isUniqueViolation,
+  tableServiceStatuses,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 const FOREIGN_KEY_VIOLATION = "23503";
 const ZONE_FK = "dining_tables_zone_fk";
+
+/**
+ * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
+ * enum rather than hand-re-declared as a string union — so this and the DB stay in lockstep if a
+ * member is ever added/removed (the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow`
+ * and `working-order.ts`'s `PrepState` use). `working-order.ts`'s `TableState` imports this for the
+ * read side, so the write verb and the read model share one source of truth.
+ */
+export type FloorTableShape = (typeof floorTableShape.enumValues)[number];
+
+/** The inclusive canvas-coordinate bound (design §placement: `pos_x`/`pos_y` are 0..1000). */
+const COORD_MAX = 1000;
+/** The inclusive rotation bound in degrees (design §placement: `rotation` is 0..359). */
+const ROTATION_MAX = 359;
+
+/**
+ * Refuse a placement number that is not an integer in `[0, max]`, naming the FIELD (never the value —
+ * the no-leak discipline `placement.invalid` documents). Shared by `posX`/`posY`/`rotation` so the
+ * three field guards read and reject identically.
+ */
+function requirePlacementInt(value: number, max: number, field: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > max) {
+    throw new AppError("placement.invalid", { field });
+  }
+}
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
@@ -168,6 +199,85 @@ export async function deactivateTable(
     .returning({ id: diningTables.id });
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId: id });
+  }
+}
+
+/**
+ * Place a table on the FP-2 spatial floor plan (design §placement): write its zone + canvas
+ * coordinates + shape + rotation. Runs on the CALLER's transaction under its tenant/app_user scope.
+ * Validates IN ORDER, each with its own precise code:
+ *  1. the table is ACTIVE (an absent, deactivated, or foreign/RLS-hidden row → `table.not_found`, the
+ *     same "must be active" shape {@link setTableStatus} enforces);
+ *  2. the `zoneId` is a LIVE zone — present AND `active` for this tenant (else `zone.not_found`; an
+ *     inactive/absent/foreign zone folds into the one code, matching the spec's "a live zone"). The
+ *     `dining_tables_zone_fk` {@link createTable}/{@link updateTable} lean on cannot see `active`, so
+ *     this is an explicit read rather than a caught FK violation;
+ *  3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation` integer
+ *     in `0..359` — each failure is `placement.invalid` naming THAT field, never the value.
+ * Steps 1–2 are ONE round trip (two scalar subqueries, NULL when no row matches), the shape
+ * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`.
+ */
+export async function setTablePlacement(
+  tx: Transaction,
+  // Unused here for the same reason as {@link updateTable}/{@link setTableStatus} — this by-id verb
+  // relies on RLS for the tenant scope, so the config is kept only for the uniform `(tx, cfg, …)` surface.
+  _cfg: TillConfig,
+  tableId: string,
+  p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
+): Promise<void> {
+  // One round trip: the table's `active` flag and the target zone's `active` flag, each NULL when no
+  // row matches (RLS confines both reads to this tenant). NULL-or-false distinguishes missing from
+  // inactive but both map to the one code here — a placement needs a live table AND a live zone.
+  const { rows } = await tx.execute<{
+    table_active: boolean | null;
+    zone_active: boolean | null;
+  }>(
+    sql`select
+      (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active,
+      (select ${floorZones.active} from ${floorZones} where ${floorZones.id} = ${p.zoneId}) as zone_active`,
+  );
+  const row = rows[0]!;
+  if (!row.table_active) {
+    throw new AppError("table.not_found", { tableId });
+  }
+  if (!row.zone_active) {
+    throw new AppError("zone.not_found", { zoneId: p.zoneId });
+  }
+
+  requirePlacementInt(p.posX, COORD_MAX, "posX");
+  requirePlacementInt(p.posY, COORD_MAX, "posY");
+  if (!floorTableShape.enumValues.includes(p.shape)) {
+    throw new AppError("placement.invalid", { field: "shape" });
+  }
+  requirePlacementInt(p.rotation, ROTATION_MAX, "rotation");
+
+  await tx
+    .update(diningTables)
+    .set({ zoneId: p.zoneId, posX: p.posX, posY: p.posY, shape: p.shape, rotation: p.rotation })
+    .where(eq(diningTables.id, tableId));
+}
+
+/**
+ * Remove a table from the floor plan: NULL the four placement columns (`pos_x`/`pos_y`/`shape`/
+ * `rotation`). `zone_id` is left AS-IS — it is an FP-1 assignment, not one of the four placement
+ * columns, and a table may belong to a zone without being spatially placed. An absent id (or another
+ * tenant's, RLS-hidden) throws `table.not_found`, the by-id shape {@link updateTable}/
+ * {@link deactivateTable} use. No `active` check — like those two, `clearPlacement` operates on the
+ * row by id regardless of its `active` flag.
+ */
+export async function clearPlacement(
+  tx: Transaction,
+  // Unused for the same reason as {@link setTablePlacement} — kept for the uniform verb surface.
+  _cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const updated = await tx
+    .update(diningTables)
+    .set({ posX: null, posY: null, shape: null, rotation: null })
+    .where(eq(diningTables.id, tableId))
+    .returning({ id: diningTables.id });
+  if (updated.length === 0) {
+    throw new AppError("table.not_found", { tableId });
   }
 }
 
