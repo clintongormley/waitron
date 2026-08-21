@@ -106,3 +106,109 @@ export function snapRotation(deg: number): number {
 export function clampPermille(value: number): number {
   return Math.min(1000, Math.max(0, value));
 }
+
+/**
+ * The tap-to-place slot for an unplaced tray table: the canvas centre (`500,500`) nudged right by one
+ * {@link GRID_STEP} per already-placed table so successive placements don't stack exactly, clamped into
+ * range. Shared by the till's and dashboard's `#placeFromTray`, which supply the count of tables already
+ * placed in the active zone.
+ */
+export function defaultTraySlot(placedCount: number): { posX: number; posY: number } {
+  return { posX: clampPermille(500 + placedCount * GRID_STEP), posY: 500 };
+}
+
+/**
+ * Whether a table belongs under the "no zone" tab: it has NO zone (`zoneId === null`), OR its zone is
+ * not among the currently-active ones. The second case matters because a soft `deactivateZone` never
+ * nulls a table's `zoneId`, so a table can point at a zone missing from the active set; without catching
+ * it here that table would match no tab and vanish. Duck-typed on `{ zoneId }` so no app type is needed.
+ */
+export function isTableZoneless(
+  table: { zoneId: string | null },
+  knownZoneIds: ReadonlySet<string>,
+): boolean {
+  return table.zoneId === null || !knownZoneIds.has(table.zoneId);
+}
+
+/** One zone tab: a zone id (or `null` for the trailing "no zone" tab) and the label to show for it. */
+export interface ZoneTab {
+  key: string | null;
+  name: string;
+}
+
+/**
+ * The zone tabs for a floor view: the active zones sorted by `displayOrder` (mapped to `{ key, name }`),
+ * plus a trailing "no zone" tab — key `null`, carrying `noZoneLabel` — iff some table is zoneless or
+ * points at a deactivated zone (see {@link isTableZoneless}). Duck-typed on the minimal zone/table
+ * shapes, so no app API type is needed. The screen owns the (localised, Spanish) `noZoneLabel`.
+ */
+export function buildZoneTabs(
+  zones: readonly { id: string; name: string; displayOrder: number }[],
+  tables: readonly { zoneId: string | null }[],
+  noZoneLabel: string,
+): ZoneTab[] {
+  const knownZoneIds = new Set(zones.map((z) => z.id));
+  const zoneTabs: ZoneTab[] = [...zones]
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((z) => ({ key: z.id as string | null, name: z.name }));
+  const hasZoneless = tables.some((table) => isTableZoneless(table, knownZoneIds));
+  return hasZoneless ? [...zoneTabs, { key: null, name: noZoneLabel }] : zoneTabs;
+}
+
+/**
+ * The active tab's key: an explicit `requested` pick wins (a zone id, or `null` for the no-zone tab);
+ * `undefined` (nothing picked yet) falls back to the FIRST tab's key, or `undefined` when there are no
+ * tabs at all. Kept distinct from a zone id so the default tracks the current tab order.
+ */
+export function resolveActiveTabKey(
+  requested: string | null | undefined,
+  tabs: readonly ZoneTab[],
+): string | null | undefined {
+  return requested === undefined ? tabs[0]?.key : requested;
+}
+
+/** A table's spatial placement as either screen holds it — the input half of {@link toFloorTable}. */
+export interface FloorPlacementInput {
+  id: string;
+  label: string;
+  capacity?: number | null;
+  posX: number | null;
+  posY: number | null;
+  shape?: TableShape | null;
+  rotation?: number | null;
+  zoneId?: string | null;
+}
+
+/** A table's occupancy read-model fields — the other input half of {@link toFloorTable}. */
+export interface FloorOccupancyInput {
+  state: TableOccupancyState;
+  tabTotal?: string | null;
+  pendingToServe: number;
+  status?: TableServiceStatus | null;
+}
+
+/**
+ * Map a table's placement + occupancy to the shared canvas/token {@link FloorTable} shape. The placement
+ * half is identical on both screens (null coordinates default to 0, which the token ignores for an
+ * unplaced tray table); the occupancy half is supplied separately — the till passes its live read-model,
+ * the dashboard the neutral `free`/`null`/`0`/`null` (it has no occupancy). Shared by both `#toFloorTable`.
+ */
+export function toFloorTable(
+  placement: FloorPlacementInput,
+  occupancy: FloorOccupancyInput,
+): FloorTable {
+  return {
+    id: placement.id,
+    label: placement.label,
+    capacity: placement.capacity,
+    posX: placement.posX ?? 0,
+    posY: placement.posY ?? 0,
+    shape: placement.shape,
+    rotation: placement.rotation,
+    zoneId: placement.zoneId,
+    state: occupancy.state,
+    tabTotal: occupancy.tabTotal ?? null,
+    pendingToServe: occupancy.pendingToServe,
+    status: occupancy.status,
+  };
+}

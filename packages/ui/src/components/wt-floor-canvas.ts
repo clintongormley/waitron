@@ -65,6 +65,13 @@ interface DragState {
   moved: boolean;
 }
 
+/** The three per-table event handlers a token binds. Memoised (see {@link WtFloorCanvas.#handlersOf}). */
+interface TableHandlers {
+  tap: () => void;
+  down: (e: PointerEvent) => void;
+  key: (e: KeyboardEvent) => void;
+}
+
 /**
  * The shared spatial floor plan (FP-2). In VIEW mode it lays every placed table out on a fixed-aspect
  * (3:2) canvas at its `posX`/`posY` permille coordinates, each rendered with the shared
@@ -231,6 +238,19 @@ export class WtFloorCanvas extends LitElement {
 
   #drag: DragState | null = null;
 
+  /**
+   * Per-table event handlers, memoised so their identity is STABLE across a re-render that changes only
+   * `draft` — and during a drag `#onPointerMove` writes `draft` on every pointermove, re-rendering every
+   * token. Lit rebinds a `@click`/`@pointerdown`/`@keydown` listener only when its reference changes, so
+   * stable handlers stop O(N) listener teardown/rebind on every token at pointer frame-rate. The map is
+   * rebuilt only when the `this.tables` REFERENCE changes (a parent re-feed after persisting an edit) —
+   * never on a `draft`/`selectedId` change — which is exactly when Lit itself re-reads `.tables`, so the
+   * captured `table` is always the current element. Behaviour is unchanged; only listener identity is.
+   */
+  #tableHandlers = new Map<string, TableHandlers>();
+  /** The `this.tables` reference the memo was built for; a change triggers a rebuild in {@link #handlersOf}. */
+  #handlersFor: readonly FloorTable[] | null = null;
+
   get #copy(): FloorCanvasCopy {
     return { ...DEFAULT_COPY, ...this.copy };
   }
@@ -254,6 +274,26 @@ export class WtFloorCanvas extends LitElement {
     `;
   }
 
+  /**
+   * The stable per-table handlers for `t`, rebuilding the whole memo when the `this.tables` reference
+   * has changed since the last build (see {@link #tableHandlers}). Called from {@link #renderTable}, which
+   * only ever passes a current `this.tables` element, so the lookup always hits.
+   */
+  #handlersOf(t: FloorTable): TableHandlers {
+    if (this.#handlersFor !== this.tables) {
+      this.#tableHandlers.clear();
+      for (const table of this.tables) {
+        this.#tableHandlers.set(table.id, {
+          tap: () => this.#onTap(table),
+          down: (e: PointerEvent) => this.#onPointerDown(e, table),
+          key: (e: KeyboardEvent) => this.#onKeyDown(e, table),
+        });
+      }
+      this.#handlersFor = this.tables;
+    }
+    return this.#tableHandlers.get(t.id)!;
+  }
+
   #renderTable(t: FloorTable, copy: FloorCanvasCopy): TemplateResult {
     const pos = this.draft?.id === t.id ? this.draft : { posX: t.posX, posY: t.posY };
     const style = styleMap({
@@ -261,6 +301,7 @@ export class WtFloorCanvas extends LitElement {
       top: `${pos.posY / 10}%`,
       transform: `translate(-50%, -50%) rotate(${t.rotation ?? 0}deg)`,
     });
+    const handlers = this.#handlersOf(t);
     // No aria-label: an aria-label would OVERRIDE the descendant content per the accessible-name
     // algorithm, flattening every table to a bare label and erasing the occupancy state a sighted user
     // reads from colour/total/badges. Matching FP-1's card button (which carries none), the button's
@@ -273,9 +314,9 @@ export class WtFloorCanvas extends LitElement {
         data-table=${t.id}
         data-size=${sizeForCapacity(t.capacity)}
         style=${style}
-        @click=${() => this.#onTap(t)}
-        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t)}
-        @keydown=${(e: KeyboardEvent) => this.#onKeyDown(e, t)}
+        @click=${handlers.tap}
+        @pointerdown=${handlers.down}
+        @keydown=${handlers.key}
       >
         <wt-table-token
           .table=${t}

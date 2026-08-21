@@ -1,5 +1,5 @@
 export { applyTokens } from "./tokens/index.js";
-export { baseStyles, disabledStyles } from "./base-styles.js";
+export { baseStyles, disabledStyles, floorTrayStyles } from "./base-styles.js";
 export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
 export { WtButton } from "./components/wt-button.js";
 export type { WtButtonVariant, WtButtonSize } from "./components/wt-button.js";
@@ -17,12 +17,19 @@ export {
   FLOOR_ASPECT,
   GRID_STEP,
   ROTATION_STEP,
+  buildZoneTabs,
   clampPermille,
+  defaultTraySlot,
+  isTableZoneless,
+  resolveActiveTabKey,
   sizeForCapacity,
   snapRotation,
   snapToGrid,
+  toFloorTable,
 } from "./floor.js";
 export type {
+  FloorOccupancyInput,
+  FloorPlacementInput,
   FloorTable,
   Placement,
   PlacementChange,
@@ -30,4 +37,5 @@ export type {
   TableOccupancyState,
   TableServiceStatus,
   TableShape,
+  ZoneTab,
 } from "./floor.js";
