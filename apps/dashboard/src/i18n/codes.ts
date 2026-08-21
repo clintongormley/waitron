@@ -90,6 +90,25 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That status is deactivated",
     es: "Ese estado está desactivado",
   },
+  // Floor-plan zone + table configuration (apps/server/src/tables.ts, FP-1). The Sala editor's
+  // per-item mutations reject with these when a zone name / table label collides, or when a zone or
+  // table (or a `zoneId` naming no zone) can no longer be found.
+  "zone.name_taken": {
+    en: "A zone with that name already exists",
+    es: "Ya existe una zona con ese nombre",
+  },
+  "zone.not_found": {
+    en: "That zone no longer exists",
+    es: "Esa zona ya no existe",
+  },
+  "table.label_taken": {
+    en: "A table with that name already exists",
+    es: "Ya existe una mesa con ese nombre",
+  },
+  "table.not_found": {
+    en: "That table no longer exists",
+    es: "Esa mesa ya no existe",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",
