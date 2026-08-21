@@ -22,7 +22,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
 import { markLineServed, openTab } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
@@ -292,5 +292,92 @@ describe("served_at is not part of the huella", () => {
     expect(servedTimes.every((t) => t !== null)).toBe(true);
     expect(unservedTimes).toHaveLength(2);
     expect(unservedTimes.every((t) => t === null)).toBe(true);
+  });
+});
+
+/**
+ * Place this shop's table on the FP-2 floor-plan canvas: create a live zone (`setTablePlacement`
+ * requires one — a placement needs a live table AND a live zone) and write real canvas coordinates,
+ * shape and rotation. The values are concrete and non-trivial so the self-check below can pin them.
+ */
+async function placeTable(shop: Shop): Promise<void> {
+  await withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
+    await setTablePlacement(tx, shop.cfg, shop.tableId, {
+      zoneId: zone.id,
+      posX: 500,
+      posY: 250,
+      shape: "square",
+      rotation: 15,
+    });
+  });
+}
+
+/** A table's four FP-2 placement columns — `null` on every one for an unplaced walk-up table. */
+interface Placement {
+  posX: number | null;
+  posY: number | null;
+  shape: string | null;
+  rotation: number | null;
+}
+
+/** This shop's table's placement, read back through the real `listTables` projection (the Task-7b
+ *  read side). */
+async function placementOf(shop: Shop): Promise<Placement> {
+  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const table = (await listTables(tx, shop.cfg)).find((t) => t.id === shop.tableId);
+    expect(table).toBeDefined();
+    return {
+      posX: table!.posX,
+      posY: table!.posY,
+      shape: table!.shape,
+      rotation: table!.rotation,
+    };
+  });
+}
+
+// FP-2's fiscal firewall (spec §4 / CLAUDE.md §5). Placement (`pos_x`/`pos_y`/`shape`/`rotation`)
+// lives on `dining_tables`, which the pay path never reads — `payWorkingOrder` files from the tab's
+// STORED locked lines, and no fiscal source (`record-sale.ts`, `backend.ts`, `registro-row.ts`) even
+// names a placement column (the structural half — see the commit body's grep). This proves the same
+// BEHAVIOURALLY: two shops file the IDENTICAL basket, one from a table PLACED on the floor plan and
+// one from an unplaced walk-up, and must file registros with the IDENTICAL huella. Placement sits on
+// `dining_tables` — structurally even further from the huella than `served_at` (a working_order_lines
+// field) was.
+describe("table placement is not part of the huella", () => {
+  it("files an IDENTICAL huella whether the table is placed on the floor plan or a walk-up — placement never enters the fiscal record", async () => {
+    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
+    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // (frozen) clock all fixed, table PLACEMENT is the ONLY thing that differs between the two filings.
+    const emisorNif = nextNif();
+    const shopPlaced = await seedShop(emisorNif);
+    const shopWalkup = await seedShop(emisorNif);
+
+    // Place shopPlaced's table on the canvas; shopWalkup's table stays unplaced (a walk-up).
+    await placeTable(shopPlaced);
+
+    // Neither line served on either tab — serving is irrelevant to this test and kept CONSTANT so it
+    // cannot confound; PLACEMENT is the sole difference.
+    const placed = await openServeAndPay(shopPlaced, false);
+    const walkup = await openServeAndPay(shopWalkup, false);
+
+    // The invariant. A FAILURE here means a placement field leaked into the filed record (CLAUDE.md
+    // §5: our own metadata must never enter computeHuella) — STOP and report, do NOT adjust the test.
+    expect(placed.huella).toBe(walkup.huella);
+    // Not a trivial pass: a real uppercase-hex SHA-256 digest, so "both null/empty → equal" cannot
+    // masquerade as the invariant holding.
+    expect(placed.huella).toMatch(/^[0-9A-F]{64}$/);
+
+    // Self-check (§1: a measurement where both answers look alike measures nothing). Confirm the two
+    // tables GENUINELY differ in placement: the placed table carries the exact coordinates/shape/
+    // rotation just written; the walk-up table is unplaced (all four columns NULL). Without this, a
+    // silent break in the placement plumbing would leave BOTH tables unplaced and this test would pass
+    // while differing nothing — no longer testing what its name claims.
+    const placedPlacement = await placementOf(shopPlaced);
+    const walkupPlacement = await placementOf(shopWalkup);
+    expect(placedPlacement).toEqual({ posX: 500, posY: 250, shape: "square", rotation: 15 });
+    expect(walkupPlacement).toEqual({ posX: null, posY: null, shape: null, rotation: null });
   });
 });

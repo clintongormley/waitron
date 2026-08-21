@@ -100,7 +100,13 @@ describe("table CRUD", () => {
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "4", capacity: 4 }));
     await asApp(cfg, (tx) =>
-      setTablePlacement(tx, cfg, id, { zoneId, posX: 500, posY: 250, shape: "square", rotation: 15 }),
+      setTablePlacement(tx, cfg, id, {
+        zoneId,
+        posX: 500,
+        posY: 250,
+        shape: "square",
+        rotation: 15,
+      }),
     );
     const placed = (await asApp(cfg, (tx) => listTables(tx, cfg))).find((t) => t.id === id)!;
     expect(placed).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15, zoneId });
