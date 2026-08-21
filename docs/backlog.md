@@ -1485,6 +1485,11 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     — each doc-commented and unit-tested, but the table-order drawer dispatches only `serve-line` (mark), never an
     un-serve. So a line ticked served by mistake can't be un-ticked from the UI. The plumbing is deliberate + tested
     (kept, not dropped, in the finish-branch simplify pass); the follow-up is a tick-to-untick control on a served line.
+  - **The counter/floor header overflows a phone-width viewport (≤~400px).** FP-1 added the "Sala" nav button
+    to the already-busy, non-wrapping counter header (brand + operator + allergens + schedule + floor + logout);
+    at phone widths the controls run off-screen. The till targets tablet/terminal widths, so this is a
+    responsive-layout decision (does the till support phones?), not a bug — surfaced while fixing an a11y
+    off-viewport artefact. If narrow-screen support is intended, wrap or overflow-menu the header.
   - **`parseCapacity` (management-api) and `requireCapacity` (till-api) duplicate the int4 capacity check.** Same
     `Number.isInteger && >=0 && <=2147483647 → management.request_invalid` rule in two files; the duplication is
     cross-referenced in `parseCapacity`'s own doc but not extracted (deliberately left in the simplify pass — a shared
