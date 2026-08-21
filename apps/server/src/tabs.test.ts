@@ -27,6 +27,8 @@ import type { TillConfig } from "./till-config.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
+  createOpenOrder,
+  fireLines,
   listTablesWithState,
   markLineServed,
   openTab,
@@ -56,6 +58,11 @@ async function setupVenue(): Promise<Seeded> {
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
+  // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
+  // superuser here, as the surrounding venue rows are (RLS bypassed in this pure setup).
+  await db.execute(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, is_default)
+    values (${tenantId}, ${locationId}, 'Cocina', true)`);
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
@@ -103,6 +110,31 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
     await asAppUser(tx);
     return fn(tx);
   });
+}
+
+/** A PLACED counter delivery to `tableId`, FIRED to the kitchen (one ticket item), not yet collected —
+ *  the KDS-1 successor to the old "delivery with an uncollected order_prep row". Created OPEN (so the line
+ *  insert satisfies `require_open_parent`), fired via the real resolver into a `ticket_items` row at the
+ *  venue's default station, then transitioned open → placed (the Mode-T counter path: a placed delivery is
+ *  in the kitchen awaiting collection). Returns its id so a test can COLLECT it via the legal placed →
+ *  settled + `collected_at` transition (a settled → settled update is rejected by `enforce_transition`, so
+ *  `collected_at` is set AS the order settles, mirroring the real collectOrder Task 6 wires). An instant
+ *  handover with NO ticket item leaves no occupancy — the `EXISTS(ticket_items)` branch of
+ *  `listTablesWithState`'s pending-deliveries count. */
+async function seedFiredDelivery(cfg: TillConfig, cafeId: string, tableId: string): Promise<string> {
+  const id = randomUUID();
+  await asApp(cfg, async (tx) => {
+    await createOpenOrder(tx, cfg, id, [{ productId: cafeId, quantity: "1" }], null, {
+      deliveryTableId: tableId,
+    });
+    const lines = await tx
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await fireLines(tx, cfg, id, lines);
+    await tx.execute(sql`update working_orders set status = 'placed' where id = ${id}`);
+  });
+  return id;
 }
 
 /** The dining table's current tab_id — owner read (bypasses RLS). */
@@ -496,17 +528,11 @@ describe("listTablesWithState (occupancy)", () => {
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false });
   });
 
-  it("shows delivery-pending while a delivery's prep is uncollected, and free once collected", async () => {
-    const { cfg, tableId } = await setupVenue();
-    // A settled counter delivery to the table, with an uncollected prep row (queued).
-    const orderId = randomUUID();
-    await db.execute(sql`
-      insert into working_orders (id, tenant_id, till_id, node_id, order_number, status, settled_at, delivery_table_id)
-      values (${orderId}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 500, 'settled', now(), ${tableId})`);
-    await asApp(cfg, (tx) =>
-      tx.execute(sql`insert into order_prep (tenant_id, working_order_id, node_id, state)
-        values (${cfg.tenantId}, ${orderId}, ${cfg.nodeId}, 'queued')`),
-    );
+  it("shows delivery-pending while a fired delivery is uncollected, and free once collected", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    // A settled counter delivery FIRED to the kitchen (a ticket item), not yet collected — the KDS-1
+    // successor to the old uncollected order_prep row.
+    const orderId = await seedFiredDelivery(cfg, cafeId, tableId);
 
     const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(pending[0]).toMatchObject({
@@ -515,10 +541,11 @@ describe("listTablesWithState (occupancy)", () => {
       pendingDeliveries: 1,
     });
 
-    // Collected → no lingering occupancy.
+    // Collected → the Mode-T collect transition placed → settled sets `working_orders.collected_at` (the
+    // §3e successor to order_prep's `collected` state); no lingering occupancy.
     await asApp(cfg, (tx) =>
       tx.execute(
-        sql`update order_prep set state = 'collected', collected_at = now() where working_order_id = ${orderId}`,
+        sql`update working_orders set status = 'settled', settled_at = now(), collected_at = now() where id = ${orderId}`,
       ),
     );
     const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
@@ -569,14 +596,9 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    const orderId = randomUUID();
-    await db.execute(sql`
-      insert into working_orders (id, tenant_id, till_id, node_id, order_number, status, settled_at, delivery_table_id)
-      values (${orderId}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 501, 'settled', now(), ${tableId})`);
-    await asApp(cfg, (tx) =>
-      tx.execute(sql`insert into order_prep (tenant_id, working_order_id, node_id, state)
-        values (${cfg.tenantId}, ${orderId}, ${cfg.nodeId}, 'preparing')`),
-    );
+    // A fired, uncollected counter delivery to the SAME table — pendingDeliveries counts it, but the open
+    // tab dominates the rolled-up state.
+    await seedFiredDelivery(cfg, cafeId, tableId);
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });

@@ -1950,8 +1950,13 @@ export interface TableState {
  * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
  * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
  * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
- * `delivery_table_id` = this table whose `order_prep` state is not yet `collected` and whose order is not
- * `abandoned`). A non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
+ * `delivery_table_id` = this table that were FIRED to the kitchen — a `ticket_items` row exists — and are
+ * not yet collected (`working_orders.collected_at IS NULL`) nor `abandoned`). This is the KDS-1 successor
+ * to the dropped `order_prep` join (§2d/§3e): `EXISTS(ticket_items)` replaces "has a prep row" and
+ * `collected_at` replaces `order_prep.state = 'collected'`, so an instant handover that was never fired
+ * (no ticket item — e.g. a walk-up counter delivery) leaves no lingering occupancy, exactly as a
+ * no-prep-row handover did. Task 6 wires the collect flow to SET `collected_at`; this read only consumes
+ * it (nothing sets it yet, so a fired delivery stays pending until Task 6 lands — acceptable pre-production).
  *
  * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
  * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
@@ -2005,9 +2010,12 @@ export async function listTablesWithState(
     left join lateral (
       select count(*)::int as pending
       from working_orders d
-      join order_prep op on op.tenant_id = d.tenant_id and op.working_order_id = d.id
       where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
-        and d.status <> 'abandoned' and op.state <> 'collected'
+        and d.status <> 'abandoned' and d.collected_at is null
+        and exists (
+          select 1 from ticket_items ti
+          where ti.tenant_id = d.tenant_id and ti.working_order_id = d.id
+        )
     ) del on true
     left join table_service_statuses tss
       on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id

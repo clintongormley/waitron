@@ -72,6 +72,11 @@ const suite = usePgliteDb({
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+    // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
+    // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are (RLS bypassed).
+    await db.execute(sql`
+      insert into kitchen_stations (tenant_id, location_id, name, is_default)
+      values (${tenantId}, ${loc.rows[0]!.id}, 'Cocina', true)`);
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
