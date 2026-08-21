@@ -409,9 +409,9 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
     not a two-tenant test); the counter-delivery bad-id pre-check is existence-only (a sale can be tagged for a
     *deactivated* table — benign, non-fiscal); a `"W1"` (`WAITRON_ID_SISTEMA`) literal is inlined in a test.
 - **Floor plan (sub-project 11)** — a layout editor **with live occupancy** (table state tied to
-  orders), not a standalone layout. **FP-1 DESIGNED + PLANNED 2026-08-17** — brainstormed with the
-  owner (visual companion), decomposed **operable-first into two slices**: **FP-1** (this) makes table
-  service usable front-of-house — `floor_zones` config, a per-line `served_at` delivery ack, occupancy
+  orders), not a standalone layout. **FP-1 DESIGNED + PLANNED 2026-08-17, BUILT 2026-08-21** —
+  brainstormed with the owner (visual companion), decomposed **operable-first into two slices**: **FP-1**
+  (this, now BUILT) makes table service usable front-of-house — `floor_zones` config, a per-line `served_at` delivery ack, occupancy
   read extended with zone + `pendingToServe`, a till **live-floor screen** (occupancy-coloured cards
   grouped by zone) + a **table-ordering screen** (full-width grid + current-round bar + badged pull-out
   tab drawer), and a dashboard **Sala** config editor; the live floor renders as **cards, not a spatial
@@ -422,8 +422,22 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   — the latter **manager-on-till** (the operator's own `till.configure` role, the first till route to
   call `authorize()`; supervisor-PIN override deferred). Both FP slices are non-fiscal (pay path
   unchanged; neither `served_at` nor any placement field enters the huella). Specs + plans in
-  `docs/superpowers/{specs,plans}/2026-08-17-floor-plan-fp{1,2}*`. **TS-1 + TS-2 have now landed (#97, #103), so
-  FP-1 is unblocked** (FP-1 is their UI; FP-2 builds on FP-1) — FP-1 before FP-2.
+  `docs/superpowers/{specs,plans}/2026-08-17-floor-plan-fp{1,2}*`. **FP-1 is now BUILT** (TS-1 + TS-2
+  landed as #97/#103 unblocked it): the operable live floor — migrations **0051** (`floor_zones` table,
+  per-line `working_order_lines.served_at`, `dining_tables.zone_id`) + **0052** (`floor_zones` FORCE RLS +
+  tenant-isolation policy + grants), zone/table config verbs, the till **live-floor** screen (occupancy
+  cards grouped by zone) + **table-ordering** screen (round bar + pull-out tab drawer) + session-gated
+  status catalogue, and the dashboard **floor-config** editor. **The fiscal firewall is proven, not
+  asserted (H2):** an `apps/server` pay-path test files two tabs — every line served vs none — under a
+  **frozen clock**, as first records sharing one emisor NIF (two tenants → no `registros_identidad_uq`
+  clash), and asserts an **identical huella** with a served-vs-null self-check, so `served_at` never
+  reaches `computeHuella`; the structural half is a zero-hit fiscal-boundary grep over
+  `record-sale.ts`/`backend.ts`. Full guard sweep green — `inmutabilidad` shows `floor_zones`
+  relforcerowsecurity = true, db/server `test:coverage`, the root tree-wide guards, and
+  lint/typecheck/format all pass; no pinned list (manifest / `GENERIC_PACKAGES` / `vocabulary-scope`)
+  changed. Deferred follow-ups under *Debt* → floor plan FP-1. **FP-2 (spatial canvas + drag-drop edit
+  mode) remains DESIGNED + PLANNED, not built** — FP-1 before FP-2. (Built subagent-driven TDD; the
+  shipped `#NNN` row is added at land.)
 - **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
   station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
   **KDS-1 DESIGNED + PLANNED 2026-08-17** — brainstormed with the owner (visual companion), full scope
@@ -1432,6 +1446,37 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     the loop-based primitive would make **transfer-vs-merge provably deadlock-safe** (today the docstring honestly scopes
     it as reasoned-safe-but-not-proven) and remove the JS-`.sort()`-vs-uuid-byte-order justification. Non-fiscal,
     retryable if it ever fired; a self-contained refactor of the (landed) TS-3 locking.
+- **Floor plan FP-1 follow-ups (sub-project 11). None blocking; surfaced during the build + the fiscal-firewall/guards task.**
+  - **Live elapsed-time + live occupancy on the floor (one follow-up).** `working_orders.opened_at` EXISTS
+    (`orders.ts:88`, `not null default now()`) but `listTablesWithState`'s `TableState` does not surface it, and the
+    till floor loads occupancy **once** (no live refresh). So "how long has this tab been open" and "keep the floor
+    current" are the same job: surface the column on the state read **and** add a refresh mechanism (poll or push).
+    Additive, **no migration**.
+  - **Weight-priced items can't be added to a tab round yet.** The reused `product-grid` emits `product-selected`
+    for weight tiles, but the table-ordering **round bar has no weigh keypad**, so only each-priced products reach a
+    round (weight work is unreachable from the round bar). A round-bar weigh flow is the follow-up (each-priced rounds
+    work today).
+  - **No way to clear a table's zone (un-assign to "no zone").** `updateTable`'s input is `{ zoneId?: string }` with
+    no `null`, so a table can be **re**assigned between zones but never returned to unzoned. Needs a `zoneId: null`
+    path through the verb + the `/management-api/tables/:id` PATCH + the dashboard select. Pairs with the deactivated-zone
+    select item below.
+  - **`isZoneFkViolation` is a 4th copy of the PG constraint-name error-walk** (`.constraint === X` climbing `.cause`,
+    beside `isUniqueViolation` and the reporting `BUSINESS_DAY_KEY` walk). The repo's accepted pattern; a shared
+    constraint-name matcher is the consolidation follow-up, not an autonomous refactor.
+  - **`floor_zones_name_key` drops the location segment** vs the sibling unique naming (a per-`(tenant, location, name)`
+    index named without `location`). Pre-production naming nit — an index rename is free before go-live (§ error/name
+    conventions), permanent after.
+  - **Table-order "Hold" is swallowed, not hidden.** The reused ordering surface keeps a Hold affordance that the
+    tab-round flow has no use for; it is a **tested, deliberate "reuse-don't-fork" tradeoff** (9b) rather than a bug —
+    noted here for completeness so a future reader does not "discover" it.
+  - **Dashboard floor-config zone `<select>` shows the wrong (first) zone for a table whose zone was DEACTIVATED.**
+    A table still pointing at a now-inactive zone has no matching `<option>`, so the native select falls back to its
+    first entry (mis-displaying the assignment). Same **deactivated-zone-with-assigned-tables** family the till floor
+    screen already handles (orphan-zone rescue); pairs with the "clear a table's zone" item above.
+  - **`english-only` guard does not cover `apps/*` identifiers.** It scans the generic packages' `src/`, but Spanish
+    identifiers in app UI — screen keys, i18n key namespaces, CSS classes, `data-*` attrs — slip through unchecked
+    (FP-1 shipped `sala`/`por-servir` identifiers, since renamed to `floor`/`to-serve`). Consider extending the guard
+    to app identifiers, or documenting the carve-out (`apps/*` is currently out of scope by a recorded decision).
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
