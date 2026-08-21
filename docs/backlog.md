@@ -1548,6 +1548,25 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     the till nor the dashboard editor wires — `.gridSnap` is never bound, so it is always off in the
     product. The simplify pass deliberately KEPT it (tested, coherent, not dead code) rather than delete
     it; the follow-up is to add a "snap to grid" toggle in the on-till / dashboard "Editar plano" chrome.
+  - **The FP-1 sibling table verbs are not location-scoped** (Copilot review of FP-2, git-blame-verified
+    pre-existing from FP-1 `a45c012`). FP-2's `setTablePlacement`/`clearPlacement` were fixed to scope every
+    read/write by `cfg.locationId` (matching the location-scoped `listTables` read and the management-api
+    doc that already claims the table verbs are "location-scoped"). But `updateTable`, `setTableStatus`, and
+    `deactivateTable` still scope by table `id` + tenant (RLS) only, so a same-tenant caller who knows a
+    UUID from another venue can edit/deactivate/re-home that venue's table (the UUID is not obtainable
+    through the location-scoped `listTables`, so exploitability is low; it's a defense-in-depth + doc-truth
+    gap). Fix them the same way in one focused change, and make the management-api doc claim true across the
+    whole surface. (Deliberately NOT folded into FP-2 — pre-existing, its own review/test surface.)
+  - **The "Editar plano" edit toggle exposes no pressed state** (Copilot review of FP-2, suppressed tier).
+    The on-till toggle flips `editing` but only changes the `wt-button` `variant`; the inner `<button>` gets
+    no `aria-pressed`, so assistive tech can't tell whether plan-editing is active. The clean fix threads a
+    pressed/`aria-pressed` prop through the shared `wt-button` primitive (so every toggle benefits), which is
+    why it's a follow-up rather than a one-line screen hack.
+  - **Placement write is a check-then-act TOCTOU** (Copilot review of FP-2, suppressed tier; low severity).
+    `setTablePlacement` reads table/zone liveness, then issues an unconditional `UPDATE`; a concurrent
+    deactivation between the two would let a placement land on a just-deactivated table/zone. Harmless today
+    (a deactivated table isn't shown), and the sibling verbs share the shape — fold the fix into the
+    location-scoping follow-up above by making the final `UPDATE`'s predicate carry the liveness check.
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
