@@ -63,6 +63,23 @@ export class WtTableToken extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
+      /* The stored table SHAPE renders distinctly through the corner radius — a round table reads as a
+         circular/stadium token, a square one as sharp corners, a rect one as the default rounded rect —
+         so the shape control is a live visual, not a dead enum. Token-driven (never a literal px/%) so
+         a deployment can retheme the radii. The base card rule above sets the rect default; these
+         shape classes override it. */
+      .card.shape-round {
+        border-radius: var(--wt-radius-full);
+      }
+
+      .card.shape-square {
+        border-radius: var(--wt-radius-sm);
+      }
+
+      .card.shape-rect {
+        border-radius: var(--wt-radius-md);
+      }
+
       .card-head {
         display: flex;
         align-items: baseline;
@@ -125,7 +142,7 @@ export class WtTableToken extends LitElement {
         display: inline-block;
         width: var(--wt-space-2);
         height: var(--wt-space-2);
-        border-radius: 50%;
+        border-radius: var(--wt-radius-full);
       }
     `,
   ];
@@ -140,8 +157,11 @@ export class WtTableToken extends LitElement {
     const t = this.table;
     // Nothing to draw until a table is assigned (a bare element mounted before its `.table` prop set).
     if (t == null) return nothing;
+    // The stored shape drives a distinct corner radius (see the `.shape-*` rules). An unplaced tray
+    // token carries no shape (`null`) and falls back to `rect` — the default rounded rect it drew
+    // before, so the tray is visually unchanged.
     return html`
-      <div class="card state-${t.state}">
+      <div class="card state-${t.state} shape-${t.shape ?? "rect"}">
         <span class="card-head">
           <span class="label">${t.label}</span>
           ${

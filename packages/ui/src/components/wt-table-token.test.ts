@@ -107,3 +107,26 @@ test("the state accent paints from the success token for a free table", async ()
   const card = el.shadowRoot!.querySelector(".card")!;
   expect(getComputedStyle(card).borderLeftColor).toBe("rgb(1, 2, 3)");
 });
+
+// The stored table shape must render DISTINCTLY (Copilot: round/square/rect changed the enum but nothing
+// visual — a dead control). Each shape maps to its own class and a distinct, token-driven corner radius.
+test("renders each table shape as a distinct class and corner radius", async () => {
+  const round = await mountToken(table({ shape: "round" }));
+  const square = await mountToken(table({ shape: "square" }));
+  const rect = await mountToken(table({ shape: "rect" }));
+  const cardOf = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>(".card")!;
+  expect(cardOf(round).classList.contains("shape-round")).toBe(true);
+  expect(cardOf(square).classList.contains("shape-square")).toBe(true);
+  expect(cardOf(rect).classList.contains("shape-rect")).toBe(true);
+  // The three classes resolve to three DIFFERENT radii (round = full/pill, square = sm, rect = md),
+  // proving the shape is a live visual and not just a class name.
+  const radiusOf = (el: HTMLElement) => getComputedStyle(cardOf(el)).borderTopLeftRadius;
+  expect(new Set([radiusOf(round), radiusOf(square), radiusOf(rect)]).size).toBe(3);
+});
+
+test("an unplaced (shapeless) token falls back to the rounded-rect shape", async () => {
+  // A tray token carries no shape (null); it keeps the default rounded rect it drew before, so the
+  // tray is visually unchanged by the shape work.
+  const bare = await mountToken(table({ shape: null }));
+  expect(bare.shadowRoot!.querySelector(".card")!.classList.contains("shape-rect")).toBe(true);
+});
