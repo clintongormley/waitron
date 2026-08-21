@@ -68,3 +68,18 @@ describe("the station error codes carry their declared params", () => {
     expect(error.params).toEqual({ locationId });
   });
 });
+
+// KDS-1 (Task 3) the per-line ticket-item advance surface. As with the blocks above, this only proves
+// the code is REGISTERED with the right param SHAPE — the construction typechecks solely because
+// errors.ts's `declare module` augmentation is loaded (the side-effect import above). The real thrower is
+// Task 4's `advanceTicketItem` (an illegal bump — a skip, a repeat, or backwards). `ticketItemId` names
+// the affected ticket item's own id, qualified like the domain-record family (`station.not_found`'s
+// `stationId`), NOT the order — a ticket item advances per line, so the id that failed IS the line's.
+describe("the ticket error code carries its declared params", () => {
+  it("constructs ticket.invalid_transition with the qualified ticketItemId", () => {
+    const ticketItemId = "44444444-4444-4444-4444-444444444444";
+    const error = new AppError("ticket.invalid_transition", { ticketItemId });
+    expect(error.code).toBe("ticket.invalid_transition");
+    expect(error.params).toEqual({ ticketItemId });
+  });
+});

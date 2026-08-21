@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import {
   AppError,
   compareDecimal,
@@ -19,12 +19,14 @@ import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
+  categories,
   diningTables,
   invoiceSeries,
   isUniqueViolation,
-  orderPrep,
-  prepState,
+  kitchenStations,
+  products,
   sales,
+  ticketItems,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -488,6 +490,83 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
 }
 
 /**
+ * Fire an order's (or a tab round's) lines to the kitchen (KDS-1 §3b): insert one `ticket_items` row
+ * per line, its station RESOLVED and SNAPSHOTTED at fire time. The shared primitive the three fire
+ * points funnel through — `placeOrder` (placing = firing for Modes I/T), `sendToPrep` (Mode P's
+ * pickup) and a tab's round-send ({@link addTabRound}) — so routing and the snapshot rule live in ONE
+ * place, replacing #63's single `order_prep` row per order with a per-line/per-station model.
+ *
+ * Each line resolves `product.station_id ?? category.station_id ?? the location's default station`
+ * (§2b): a per-product override wins over the product's category default, which wins over the venue's
+ * single `is_default` kitchen station. The resolved id is WRITTEN onto the ticket item, so re-pointing
+ * the product's or category's station later never moves an already-fired item — the load-bearing
+ * snapshot (`ticket_items.station_id`'s own schema comment). If a line resolves NEITHER a product- nor
+ * category-level route AND the venue has no default station, firing FAILS LOUD with
+ * `station.no_default` (§2b: a misconfiguration must not silently drop food from the kitchen), naming
+ * the venue so the operator can fix it.
+ *
+ * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
+ * denormalised grouping key; `working_order_line_id` is the fired line, whose `(tenant_id,
+ * working_order_line_id)` unique makes a double-fire collide (23505) rather than duplicate. The two
+ * catalogue reads (the venue default once, then all lines' product/category routes in one batched
+ * `inArray`) and the insert all run on the CALLER's transaction under its tenant/app_user scope. An
+ * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
+ */
+export async function fireLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lines: { id: string; productId: string }[],
+): Promise<void> {
+  if (lines.length === 0) {
+    return;
+  }
+  // The venue's single fallback station (its `is_default` row, if any) — read ONCE; each line falls to
+  // it when neither the product nor its category names a route.
+  const [fallback] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)));
+  const defaultStationId = fallback?.id ?? null;
+
+  // Every fired product's own override AND its category's default, in ONE batched read (no per-line
+  // round trip). Both `station_id`s are nullable; the LEFT JOIN yields a null category route for a
+  // product with no category. RLS confines both tables to the caller's tenant.
+  const productIds = [...new Set(lines.map((line) => line.productId))];
+  const routes = await tx
+    .select({
+      productId: products.id,
+      productStationId: products.stationId,
+      categoryStationId: categories.stationId,
+    })
+    .from(products)
+    .leftJoin(
+      categories,
+      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
+    )
+    .where(inArray(products.id, productIds));
+  const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
+
+  // Resolve + snapshot each line's station, refusing the whole fire if any line has nowhere to go.
+  const values: (typeof ticketItems.$inferInsert)[] = lines.map((line) => {
+    const route = routeByProduct.get(line.productId);
+    const stationId = route?.productStationId ?? route?.categoryStationId ?? defaultStationId;
+    if (stationId === null || stationId === undefined) {
+      throw new AppError("station.no_default", { locationId: cfg.locationId });
+    }
+    return {
+      tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
+      workingOrderId: orderId,
+      workingOrderLineId: line.id,
+      stationId,
+      state: "queued",
+    };
+  });
+  await tx.insert(ticketItems).values(values);
+}
+
+/**
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
  * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
  * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
@@ -521,7 +600,14 @@ export async function addTabRound(
   // maps to maxLineNo + i + 1.
   const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
-  await tx.insert(workingOrderLines).values(appended);
+  // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
+  // lines and send each to the kitchen as a ticket item. `returning` gives the minted line ids
+  // (`defaultRandom`) that `fireLines` snapshots the resolved station onto.
+  const appendedLines = await tx
+    .insert(workingOrderLines)
+    .values(appended)
+    .returning({ id: workingOrderLines.id, productId: workingOrderLines.productId });
+  await fireLines(tx, cfg, tabId, appendedLines);
 }
 
 /**
@@ -1557,7 +1643,7 @@ export interface PlaceOrderResult {
 /**
  * Place a working order (spec §3): `open → placed`, which FREEZES its composition and OPENS the
  * art. 29.2.j amendment log with an `order_placed` genesis entry — all in ONE `withTenant`/`asAppUser`
- * transaction, so the transition, the genesis amendment and the prep enqueue commit as one unit (or
+ * transaction, so the transition, the genesis amendment and the kitchen fire commit as one unit (or
  * roll back together, leaving the order open and un-logged).
  *
  * The freeze is FREE: once the row is `placed`, `working_orders_enforce_transition` rejects a
@@ -1675,16 +1761,17 @@ export async function placeOrder(
         eventOffsetMinutes: now.offsetMinutes,
       });
 
-      // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
-      // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
-      // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
-      // MUTABLE table rather than a `working_orders` column.
-      await tx.insert(orderPrep).values({
-        tenantId: cfg.tenantId,
-        workingOrderId: id,
-        nodeId: cfg.nodeId,
-        state: "queued",
-      });
+      // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per line, each routed to a
+      // station (product ?? category ?? default) SNAPSHOTTED at fire time, replacing #63's single
+      // `order_prep` row per order. Read the order's lines (id + product, in line order) and fire them;
+      // ticket items advance queued → preparing → ready freely even after the order is fiscally frozen,
+      // so they live in their own MUTABLE table, as `order_prep` did.
+      const firedLines = await tx
+        .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      await fireLines(tx, cfg, id, firedLines);
 
       return placeResult;
     },
@@ -1773,52 +1860,24 @@ export async function cancelPlacedOrder(
 }
 
 /**
- * The prep lifecycle (design §5), mirrored from `@waitron/db`'s `prepState` pgEnum via its own
- * `enumValues` — the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow` uses for the
- * identical reason, so the two can never drift. `send-to-prep` (= placing for Modes I/T, or
- * `sendToPrep` for Mode P, which never places) enqueues at `queued`; the cook advances
- * queued → preparing → ready → collected.
- */
-export type PrepState = (typeof prepState.enumValues)[number];
-
-/**
- * One row of the node-scoped prep-queue view (design §5): what a cook's screen shows for a single
- * order still ACTIVE in prep (not yet collected). `id` is the working order's own id — the prep
- * queue addresses orders the same way the held list does, so a route can chain straight from one to
- * the other. `queuedAt` is when the order FIRST entered prep (`order_prep.queued_at`, the column the
- * queue is ordered by), not when it reached its CURRENT `state`.
- */
-export interface PrepQueueEntry {
-  id: string;
-  orderNumber: number;
-  label: string | null;
-  state: PrepState;
-  queuedAt: string;
-}
-
-/**
- * Enqueue a SETTLED order into prep (design §5) — the Mode-P counterpart to `placeOrder`'s own
- * enqueue. Modes I/T enqueue `order_prep` at `queued` INSIDE `placeOrder` (open → placed), because
- * placing is where their order becomes an order of record. Mode P (prepay) never places at all — it
- * pays and issues at ORDER via `payWorkingOrder` (open → settled, no placed state) — so its order has
- * no `placeOrder` call to pick a prep row up from, and this is that pickup: called once the order is
- * already `settled`.
+ * Fire a SETTLED order's lines to the kitchen (KDS-1 §3b) — the Mode-P counterpart to `placeOrder`'s
+ * own fire. Modes I/T fire INSIDE `placeOrder` (open → placed), because placing is where their order
+ * becomes an order of record. Mode P (prepay) never places at all — it pays and issues at ORDER via
+ * `payWorkingOrder` (open → settled, no placed state) — so its order has no `placeOrder` call to fire
+ * from, and this is that pickup: called once the order is already `settled`.
  *
- * The order's status IS checked first, and enforced: an id naming NO working order (absent, or
- * another tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own
- * route, `placeOrder`, already enqueued its prep row at placing — sending it here too would be the
- * wrong path, not a legitimate double-enqueue), all refuse with the domain
- * `working_order.not_settled` (409) BEFORE any write — never a raw `order_prep_order_fk` violation
- * surfacing as an opaque 500 for a well-formed but wrong/absent id (fix round 1, review finding).
+ * The order's status IS checked first, and enforced: an id naming NO working order (absent, or another
+ * tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own route,
+ * `placeOrder`, already fired at placing — sending it here too would be the wrong path), all refuse with
+ * the domain `working_order.not_settled` (409) BEFORE any write.
  *
- * Only past that guard is it a plain INSERT, not a state-machine transition: `order_prep`'s PK is
- * `(tenant_id, working_order_id)` (one row per order), so a SECOND send-to-prep for an order already
- * sent (this same guard having passed both times) collides on it. Rather than let that surface as a
- * raw `23505`, it is caught and reported as the domain `order_prep.invalid_transition` — the same
- * code `advancePrep` uses for every other illegal prep MOVE (as opposed to the order-level
- * `not_settled` guard above, which is about the order's FISCAL eligibility to enter prep at all),
- * since "this order already has a prep record" is exactly as illegal a move as "the target isn't the
- * next state" (see that code's own note in `errors.ts`).
+ * Past that guard it fires the order's lines through the shared {@link fireLines} — one `ticket_items`
+ * row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time
+ * (§2b). A double send-to-prep re-fires already-fired lines and collides on `ticket_items`'
+ * `(tenant_id, working_order_line_id)` unique — the structural one-item-per-line guard; KDS-1 mints no
+ * domain code for that collision (spec §6 removes `order_prep.invalid_transition`'s throw sites with the
+ * rework and adds only `station.*` + the `ticket.invalid_transition` advance code), so the route rework
+ * (Task 7) owns any re-fire surface.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
@@ -1829,8 +1888,8 @@ export async function sendToPrep(
     await asAppUser(tx);
 
     // Only a SETTLED order is eligible — `settled` is terminal, so there is no race between this read
-    // and the insert below that could invalidate it. Absent, foreign (RLS-hidden), `open` and
-    // `placed` orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
+    // and the fire below that could invalidate it. Absent, foreign (RLS-hidden), `open` and `placed`
+    // orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -1839,142 +1898,15 @@ export async function sendToPrep(
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
 
-    try {
-      await tx.insert(orderPrep).values({
-        tenantId: cfg.tenantId,
-        workingOrderId: id,
-        nodeId: cfg.nodeId,
-        state: "queued",
-      });
-    } catch (error) {
-      if (!isUniqueViolation(error)) {
-        throw error;
-      }
-      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-    }
-  });
-}
-
-/**
- * Advance a working order's prep state one step (design §5): `queued → preparing → ready →
- * collected`. Each branch is a single conditional UPDATE — `set state = to, <to>_at = now() where
- * working_order_id = id and state = <the one legal predecessor of to>` — so the legality of the move
- * IS the write: a skip, a repeat, a jump backwards, or an absent/foreign prep row (RLS hides another
- * tenant's) all match no row, and the empty `returning` throws `order_prep.invalid_transition`. The
- * same fail-closed shape `abandonHeldOrder`'s conditional UPDATE uses for `working_orders`.
- *
- * `to = "queued"` is refused immediately, before any query: no prep state legally advances TO queued
- * (only `sendToPrep`'s INSERT reaches it), so that case throws the same domain code the empty-
- * `returning` branch would. The switch (rather than a table keyed by a computed column name) keeps
- * each branch's `.set()` call fully typed against Drizzle's inferred update shape.
- *
- * Advances freely regardless of the order's FISCAL status (open/placed/settled) — `order_prep` is a
- * separate MUTABLE table precisely so prep can progress on an already-`settled` Mode-P order without
- * touching the frozen `working_orders` row (design §5, "where prep state lives"). Node-scoping is not
- * needed here: the id addresses one prep row directly and RLS still confines it to the tenant,
- * mirroring `getHeldOrder`/`updateHeldOrder`'s by-id family.
- */
-export async function advancePrep(
-  deps: WorkingOrderDeps,
-  cfg: TillConfig,
-  id: string,
-  to: PrepState,
-): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-
-    let updated: { id: string }[];
-    switch (to) {
-      case "preparing":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, preparingAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "queued")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "ready":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, readyAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "preparing")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "collected":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, collectedAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "ready")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "queued":
-      default:
-        // No prep state advances TO queued — reaching it is `sendToPrep`'s job (an INSERT).
-        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-    }
-
-    if (updated.length === 0) {
-      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-    }
-  });
-}
-
-/**
- * The node-scoped prep-queue view (design §5): every ACTIVE (not yet collected) prep row on THIS
- * node for a working order that is STILL prep-eligible, joined to its working order for the display
- * fields a cook's screen needs — reusing 7b's `listHeldOrders` node-scoping SHAPE (`node_id =
- * cfg.nodeId`, RLS confines the tenant) over a DIFFERENT storage table: prep lives in `order_prep`,
- * not `working_orders`, for the reason that table's own schema comment gives (a Mode-P order is
- * already fiscally frozen `settled` when prep runs, so a `working_orders` column could not advance on
- * it). Ordered by `queued_at` — when the order FIRST entered prep — so the queue reads oldest-first
- * regardless of which state each row has since advanced to.
- *
- * `collected` rows are excluded (`state in ('queued','preparing','ready')`): once collected, an order
- * leaves the ACTIVE queue a cook's screen shows, mirroring `listHeldOrders` dropping a `settled`
- * order from the held list. A SECOND, independent exclusion drops an `abandoned` working order
- * (`ne(workingOrders.status, "abandoned")`) — `cancelPlacedOrder` (`placed → abandoned`) never
- * touches `order_prep` at all (design §4's amendment log and design §5's prep table are deliberately
- * separate concerns), so a cancelled order's `order_prep` row would otherwise sit at whatever state it
- * was in FOREVER, still `state in (queued, preparing, ready)` and so still matching the first filter —
- * this join is what retires it instead (fix round 1, review finding), rather than requiring every
- * removal path (cancel, and any future one) to also know to touch `order_prep`. PGlite is enough for
- * THIS behaviour — the join, the state/status filters and the ordering are plain SQL a single backend
- * proves; the node/tenant SCOPING is real-Postgres's job, the same split `listHeldOrders` uses
- * (CLAUDE.md §4).
- */
-export async function listPrepQueue(
-  deps: WorkingOrderDeps,
-  cfg: TillConfig,
-): Promise<PrepQueueEntry[]> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return (
-      tx
-        .select({
-          id: workingOrders.id,
-          orderNumber: workingOrders.orderNumber,
-          label: workingOrders.label,
-          state: orderPrep.state,
-          queuedAt: orderPrep.queuedAt,
-        })
-        .from(orderPrep)
-        // Composite join predicate (tenant_id too, not the order id alone) — the same tenant-consistency
-        // `listHeldOrders`'s own line join enforces, matching `order_prep_order_fk`'s composite shape.
-        .innerJoin(
-          workingOrders,
-          and(
-            eq(orderPrep.workingOrderId, workingOrders.id),
-            eq(orderPrep.tenantId, workingOrders.tenantId),
-          ),
-        )
-        .where(
-          and(
-            eq(orderPrep.nodeId, cfg.nodeId),
-            inArray(orderPrep.state, ["queued", "preparing", "ready"]),
-            ne(workingOrders.status, "abandoned"),
-          ),
-        )
-        .orderBy(orderPrep.queuedAt)
-    );
+    // Fire the settled order's lines to the kitchen: read them (id + product, in line order) and insert
+    // one ticket item per line, station resolved + snapshotted — the same fire `placeOrder` runs at
+    // placing.
+    const firedLines = await tx
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    await fireLines(tx, cfg, id, firedLines);
   });
 }
 

@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
   pgErrorCode,
+  ticketItems,
   withTenant,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -30,11 +31,19 @@ import {
 import type { TillConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
+  addTabRound,
+  createOpenOrder,
+  fireLines,
   getHeldOrder,
   listHeldOrders,
+  openTab,
   parkOrder,
+  placeOrder,
+  sendToPrep,
   updateHeldOrder,
 } from "./working-order.js";
+import { createStation, setCategoryStation, setProductStation } from "./kitchen.js";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `parkOrder` — the working-order
@@ -60,6 +69,8 @@ beforeAll(() => {
 
 interface SeededVenue {
   cfg: TillConfig;
+  /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
+  catalogueId: string;
   /** The `each`-priced "Café" product (VAT general/21%, category "Bebidas"). */
   cafeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
@@ -73,7 +84,7 @@ interface SeededVenue {
  * number `allocateOrderNumber` issues is that test's own — always 1 on the first park — and the suite
  * is order-independent (CLAUDE.md §4).
  */
-async function setupVenue(): Promise<SeededVenue> {
+async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -84,7 +95,7 @@ async function setupVenue(): Promise<SeededVenue> {
     values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
-  const { cafeId, aguaId } = await withTenant(db, tenantId, async (tx) => {
+  const { cafeId, aguaId, catalogueId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -107,7 +118,7 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, locationId, cat.id);
-    return { cafeId: cafe.id, aguaId: agua.id };
+    return { cafeId: cafe.id, aguaId: agua.id, catalogueId: cat.id };
   });
 
   const cfg: TillConfig = {
@@ -122,10 +133,11 @@ async function setupVenue(): Promise<SeededVenue> {
     // No integrated card terminal; these park routes never read it.
     cardProvider: "none",
     tipsEnabled: false,
-    // This PGlite suite covers park/list/retrieve/update/abandon, none of which dispatch on the mode.
-    orderFlow: "prepay",
+    // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
+    // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
+    orderFlow,
   };
-  return { cfg, cafeId, aguaId };
+  return { cfg, cafeId, aguaId, catalogueId };
 }
 
 describe("parkOrder", () => {
@@ -749,6 +761,201 @@ describe("abandonHeldOrder", () => {
     await expect(abandonHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: foreign },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
+// SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
+// tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
+// and the no-default refusal — plain SQL a single backend proves; RLS/node isolation of `ticket_items`
+// is real-Postgres's job (packages/db `ticket-items.rls.test.ts`). Every write runs through
+// `withTenant` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
+ *  stored, never joined; mirrors working-order.rls.test.ts's OPERATOR). */
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
+
+/** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
+const stubClock = {
+  now: () => ({ instant: new Date(), offsetMinutes: 0 }),
+} as unknown as TrustedClock;
+
+/** A fiscal-backend stub — never touched on the non-`invoice_first` placing paths these tests exercise. */
+const stubBackend = {} as unknown as FiscalBackend;
+
+/** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines consume. */
+const line = (productId: string) => ({ productId, quantity: "1" });
+
+/** Create a sellable product in the venue's catalogue, optionally with a category and/or a station
+ *  override; returns its id. Descriptions match the location's single locale so `check_locales` passes. */
+async function makeProduct(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+  route: { categoryId?: string; stationId?: string },
+): Promise<string> {
+  const { id } = await createProduct(tx, {
+    catalogueId,
+    categoryId: route.categoryId ?? null,
+    descriptions: { [LOCALE]: `P-${randomUUID().slice(0, 8)}` },
+    pricingUnit: "each",
+    unitPrice: "1.50",
+    vatClass: "general",
+  });
+  if (route.stationId !== undefined) {
+    await setProductStation(tx, cfg, id, route.stationId);
+  }
+  return id;
+}
+
+/** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
+async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    insert into dining_tables (tenant_id, location_id, label)
+    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+  return rows[0]!.id;
+}
+
+/** Open a fresh working order carrying `lines` and FIRE it — the same read-lines → fireLines sequence
+ *  placeOrder/sendToPrep run, isolated onto the caller's tx so the resolver + snapshot can be asserted
+ *  without the fiscal machinery. Returns the order's id. */
+async function placeOrderWith(
+  tx: Transaction,
+  cfg: TillConfig,
+  lines: { productId: string; quantity: string }[],
+): Promise<{ id: string }> {
+  const id = randomUUID();
+  await createOpenOrder(tx, cfg, id, lines, null);
+  const fired = await tx
+    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  await fireLines(tx, cfg, id, fired);
+  return { id };
+}
+
+/** The order's ticket items joined back to each line's product, for asserting where each line routed. */
+async function ticketItemsFor(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ productId: string; stationId: string; state: string }[]> {
+  return tx
+    .select({
+      productId: workingOrderLines.productId,
+      stationId: ticketItems.stationId,
+      state: ticketItems.state,
+    })
+    .from(ticketItems)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(eq(ticketItems.workingOrderId, orderId));
+}
+
+const byProduct = (
+  items: { productId: string; stationId: string; state: string }[],
+  productId: string,
+) => items.find((i) => i.productId === productId)!;
+
+describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
+  it("routes product > category > default and snapshots the station at fire time", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const drinks = await createCategory(tx, { name: "Copas" });
+      await setCategoryStation(tx, cfg, drinks.id, barra.id);
+      const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
+      const cafe = await makeProduct(tx, cfg, catalogueId, {
+        categoryId: drinks.id,
+        stationId: cocina.id,
+      }); // → cocina (the product override wins over its category default)
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cana), line(cafe)]);
+      const items = await ticketItemsFor(tx, orderId);
+      expect(byProduct(items, cana).stationId).toBe(barra.id);
+      expect(byProduct(items, cafe).stationId).toBe(cocina.id);
+      expect(items.every((i) => i.state === "queued")).toBe(true);
+
+      // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
+      // the load-bearing rule (re-categorising a product later never reroutes food already sent).
+      await setCategoryStation(tx, cfg, drinks.id, cocina.id);
+      const after = await ticketItemsFor(tx, orderId);
+      expect(byProduct(after, cana).stationId).toBe(barra.id);
+    });
+  });
+
+  it("refuses to fire when the location has no default station (station.no_default)", async () => {
+    const { cfg, catalogueId } = await setupVenue(); // no default station created
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
+      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+    });
+  });
+
+  it("addTabRound fires the appended round's lines to the resolved station (the tab round-send)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+
+      const items = await ticketItemsFor(tx, tabId);
+      expect(items).toHaveLength(1);
+      expect(items[0]!.stationId).toBe(cocina.id);
+      expect(items[0]!.state).toBe("queued");
+    });
+  });
+});
+
+describe("placeOrder / sendToPrep fire ticket items", () => {
+  it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const { cocinaId, cafe } = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const p = await makeProduct(tx, cfg, catalogueId, {});
+      return { cocinaId: cocina.id, cafe: p };
+    });
+
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [line(cafe)] });
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+
+    const items = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return ticketItemsFor(tx, id);
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.stationId).toBe(cocinaId);
+    expect(items[0]!.state).toBe("queued");
+  });
+
+  it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    // An OPEN (parked, never settled) order is ineligible — Mode P's pickup fires only a settled order.
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await expect(sendToPrep({ db }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: id },
     });
   });
 });

@@ -556,6 +556,27 @@ declare module "@waitron/shared" {
      */
     "station.no_default": { locationId: string };
     /**
+     * A per-line kitchen ticket-item bump is not legal given the item's current state (KDS-1 §3c) — the
+     * `ticket_items` successor to `order_prep.invalid_transition` (which stays declared but loses its
+     * throw sites with the KDS-1 rework, spec §6). Task 4's `advanceTicketItem` is the thrower: each bump
+     * is a single conditional UPDATE `set state = to where id = … and state = <the one legal predecessor>`,
+     * so the legality of the move IS the write — a skip, a repeat, a jump backwards, or an absent/foreign
+     * item (RLS hides another tenant's) all match no row, and the empty `returning` throws THIS. `to =
+     * 'queued'` is refused too: no state legally advances INTO queued (only firing reaches it). The same
+     * fail-closed conditional-UPDATE shape `working_order.not_open`/the prep family use for their own state
+     * machines.
+     *
+     * A fact about the ticket ITEM's state, not the process → mapped to 409 (the id may be valid, but the
+     * item's state forbids the move). `ticketItemId` names the affected item's OWN id — a ticket item
+     * advances per LINE, so the id that failed is the line's ticket item, not the order (unlike the
+     * order-level `order_prep.invalid_transition`, which named the `workingOrderId` of a one-row-per-order
+     * model). It is a caller-supplied uuid the display already holds, not a secret, so echoing it is what
+     * makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN
+     * CONCEPT (a kitchen ticket item), never the throwing package (that same note); destined for a
+     * @waitron/kitchen package if one is ever extracted. Never renamed once shipped.
+     */
+    "ticket.invalid_transition": { ticketItemId: string };
+    /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
      * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this
