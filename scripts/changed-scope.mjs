@@ -117,23 +117,24 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  * execution — so on its own it set test-light's floor, and no amount of re-sharding the other twenty
  * packages could drop the shard below it. On a dedicated runner it stops being that floor, AND it
  * runs MULTI-FORK there rather than singleFork: the @vitest/coverage-v8 branch under-merge that held
- * apps/server to one fork is a `pnpm -r` CONTENTION artifact, which a runner it has to itself does
- * not have. The receipt — single-fork vs multi-fork branch coverage, and the CI confirmation that it
- * holds on a constrained 4-vCPU runner — is on apps/server/vitest.config.ts's poolOptions.
+ * apps/server to one fork is a `pnpm -r` CONTENTION artifact, and apps/server never runs under that
+ * contention — it is terminal in the workspace graph so `pnpm -r` runs it alone, and the only
+ * `--no-sort` shards (the two light ones) exclude it. The receipt for why the flip is safe is on
+ * apps/server/vitest.config.ts's poolOptions.
  */
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
- * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu, isolated because it is
- * ANTISOCIAL. It is the workspace's one `maxForks: 4` suite — thousands of real AEAT fixtures across
- * 33 files — so it wants all four of a runner's cores to itself, and sharing a runner with other
- * packages oversubscribes them all. Measured on the two-shard run 32425078097: fiscal-verifactu was
- * 219s inside test-light-a's 270s while test-light-b, which held only single-fork packages, packed
- * its ten into 127s. A runner of its own lets it run its `maxForks: 4` uncontended AND stops it
- * inflating everything it would otherwise share a bin with. Unlike apps/server (whose split needed a
- * singleFork→maxForks flip), no config change: fiscal-verifactu already multi-forks — see its
- * vitest.config.ts. NOT to be confused with the `verifactu` gate, which is the mutation run over the
- * separate packages/verifactu.
+ * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu. It is a `maxForks: 4`
+ * suite — thousands of real AEAT fixtures across 33 files — so, like the workspace's two other
+ * maxForks:4 suites (packages/db → test-heavy, apps/server → test-server), it wants all four of a
+ * runner's cores to itself and belongs on a runner of its own. It was the LAST maxForks:4 package
+ * still sharing, in the light shards, where it oversubscribed its bin-mates: measured on the
+ * two-shard run 32425078097, fiscal-verifactu ran 219s inside test-light-a's 270s while the lighter
+ * test-light-b packed ten packages into 127s. Its own runner lets its maxForks:4 run uncontended AND
+ * stops it inflating whatever it shared a bin with. Unlike apps/server (whose split flipped
+ * singleFork→maxForks), no config change here — it already multi-forks; see its vitest.config.ts. NOT
+ * to be confused with the `verifactu` gate, the mutation run over the separate packages/verifactu.
  */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 
@@ -170,20 +171,20 @@ export const OWN_SHARD_PACKAGES = [
  * Why two shards rather than one: test-light was CPU-bound, and its wall-clock floor is
  * total-work ÷ the runner's cores, NOT the size of its biggest package. On the free public-repo
  * 4-vCPU runner its ~1340s of v8-coverage work floored it near 390s. Two free 4-vCPU runners give 8
- * effective cores for $0 — larger runners are billed per-minute even on a public repo (8-vCPU
- * ~$0.022/min, Jan-2026 rates) — so halving the work across them roughly halves the floor.
+ * effective cores for $0 — larger runners are billed per-minute even on a public repo — so halving
+ * the work across them roughly halves the floor.
  *
  * BALANCED BY MEASURED DURATION, and REBALANCED once the first split proved the naive balance wrong.
  * Per-package time is contention-dependent: on run 32425078097 the first cut put fiscal-verifactu
  * (maxForks:4) alongside the other heavies in bin A, which oversubscribed that runner — bin A ran
  * 270s against bin B's 127s. Two fixes followed: fiscal-verifactu moved to its own shard
  * (FISCAL_VERIFACTU_PACKAGE above), and the remaining twenty were rebalanced on that run's
- * dedicated-shard durations, where bin B's single-fork packages had shown their true uncontended
- * times (payments 71s, identity 74s, credentials 47s — roughly half their contended figures). With
- * the one maxForks:4 package gone the remainder is single-fork apart from @waitron/core, so the bins
- * pack predictably; estimated totals ~370s each. These are wall-clock seconds that drift as suites
- * grow — rebalance when a later run shows one shard dominating. The partition tests police the
- * COVERAGE (every package once), never the balance.
+ * dedicated-shard durations, where the single-fork packages had shown their true uncontended times
+ * (payments 71s, identity 74s, credentials 47s — roughly half their contended figures). With the one
+ * maxForks:4 package isolated, no light package dominates a bin, and the rebalanced run 32434702530
+ * measured the result: test-light-a 152s, test-light-b 131s. These are wall-clock seconds that drift
+ * as suites grow — rebalance when a later run shows one shard dominating. The partition tests police
+ * the COVERAGE (every package once), never the balance.
  *
  * A NEW package must be added to exactly one of these lists. Forget, and it lands in NEITHER bin's
  * exclusion set, so both shards select it and `scripts/ci-workflow.test.mjs`'s "nothing runs twice"
@@ -231,7 +232,7 @@ export const LIGHT_B_PACKAGES = [
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 
-/** A gate that fires when one named package is in the resolved scope — six of the seven. */
+/** A gate that fires when one named package is in the resolved scope — eight of the ten. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
 /**
@@ -241,6 +242,13 @@ const membership = (packageName) => (inScope) => inScope.has(packageName);
  */
 const runsInLightShard = (bin) => (name) =>
   bin.includes(name) && !PACKAGES_WITHOUT_TESTS.includes(name);
+
+/**
+ * A gate that fires when the resolved scope holds a package in `bin` that declares tests — the two
+ * light shards' predicate, the counterpart to `membership` for the single-package gates. The other
+ * two of the ten gates.
+ */
+const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin));
 
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
@@ -284,8 +292,8 @@ export const SCOPE_GATES = [
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
-  { output: "light_a", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_A_PACKAGES)) },
-  { output: "light_b", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_B_PACKAGES)) },
+  { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
+  { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
 ];

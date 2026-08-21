@@ -578,14 +578,15 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/server" test:coverage
 
-  # packages/fiscal-verifactu alone: the workspace's one ANTISOCIAL suite. It is the only maxForks:4
-  # package — thousands of real AEAT fixtures across 33 files — so it wants all four of a runner's
-  # cores to itself, and sharing a runner oversubscribes whatever is beside it. Measured on the
-  # two-shard run 32425078097 it was 219s inside test-light-a's 270s while the all-single-fork
-  # test-light-b packed ten packages into 127s. A runner of its own lets its maxForks:4 run
-  # uncontended AND stops it inflating its bin-mates. Unlike apps/server this needed no config change:
-  # fiscal-verifactu already multi-forks (packages/fiscal-verifactu/vitest.config.ts). See
-  # FISCAL_VERIFACTU_PACKAGE in scripts/changed-scope.mjs.
+  # packages/fiscal-verifactu alone. It is a maxForks:4 suite — thousands of real AEAT fixtures across
+  # 33 files — so, like the other two (packages/db → test-heavy, apps/server → test-server), it wants
+  # all four of a runner's cores and belongs on its own; it was the last maxForks:4 package still
+  # sharing, in the light shards, where it oversubscribed its bin-mates. Measured on the two-shard run
+  # 32425078097 it was 219s inside test-light-a's 270s while the lighter test-light-b packed ten
+  # packages into 127s. A runner of its own lets its maxForks:4 run uncontended AND stops it inflating
+  # its bin-mates. Unlike apps/server this needed no config change: fiscal-verifactu already
+  # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
+  # scripts/changed-scope.mjs.
   #
   # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other real-Postgres shards: it clones from
   # @waitron/db's shared container. NOT the mutation-verifactu job — that is the separate

@@ -227,9 +227,17 @@ describe("gateOutputs", () => {
     ["@waitron/till", ["@waitron/till"]],
     ["@waitron/dashboard", ["@waitron/dashboard"]],
     ["@waitron/server", ["@waitron/server"]],
+    ["@waitron/fiscal-verifactu", ["@waitron/fiscal-verifactu"]],
     [
       "every package that has its own shard",
-      ["@waitron/db", "@waitron/ui", "@waitron/till", "@waitron/dashboard", "@waitron/server"],
+      [
+        "@waitron/db",
+        "@waitron/ui",
+        "@waitron/till",
+        "@waitron/dashboard",
+        "@waitron/server",
+        "@waitron/fiscal-verifactu",
+      ],
     ],
   ])("skips both light shards when the whole scope is %s", (_label, names) => {
     const g = gates(packagesInScope(ls(...names)));
