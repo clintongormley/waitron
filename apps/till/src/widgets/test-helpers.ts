@@ -35,6 +35,7 @@ export async function mountWidget<T extends HTMLElement>(
   applyTokens(host);
   if (theme) host.setAttribute("data-theme", theme);
   host.style.background = "var(--wt-color-bg)";
+  paintCanvas(host);
   mounted.push(host);
 
   const el = document.createElement(tag) as T;
@@ -44,9 +45,29 @@ export async function mountWidget<T extends HTMLElement>(
   return { el, host };
 }
 
+/**
+ * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background, mirroring
+ * what a real deployment does: `index.html` sets `body { background: var(--wt-color-bg) }` under
+ * `applyTokens(document.documentElement)`, so in the app every element ultimately sits on the theme's
+ * background. The harness themes only the nested `host` `<div>`, which leaves the page's default WHITE
+ * canvas behind it — and axe-core composites the background of any element it cannot trace back to
+ * `host` (e.g. one pushed off-viewport by a wide header, where `elementsFromPoint` returns nothing)
+ * against that canvas. On white that reads as a false color-contrast failure for the dark theme's
+ * light text (`#eceef2` on `#ffffff` → 1.16:1) even though the element renders correctly on the dark
+ * canvas in the app. `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off
+ * `host` rather than passing the `var()`. Reset in {@link cleanupWidgets}.
+ */
+function paintCanvas(host: HTMLElement): void {
+  const bg = getComputedStyle(host).backgroundColor;
+  document.body.style.background = bg;
+  document.documentElement.style.background = bg;
+}
+
 /** Removes every host mounted since the last cleanup. Use as `afterEach(cleanupWidgets)`. */
 export function cleanupWidgets(): void {
   for (const host of mounted.splice(0)) host.remove();
+  document.body.style.background = "";
+  document.documentElement.style.background = "";
 }
 
 /** Formats axe violations into a readable message: rule id, impact, help text, and node targets. */
