@@ -142,6 +142,21 @@ export function percentOf(amount: Decimal, ratePercent: Decimal, scale = MONEY_S
   return divideDecimal(multiplyDecimal(amount, ratePercent), "100" as Decimal, scale);
 }
 
+/**
+ * Gross line amount: `unitPrice × quantity`, taken to money scale (rounded half away from zero) — the
+ * exact product reduced to a storable figure in ONE place. Both operands arrive as literal strings (a
+ * stored `unit_price_gross`, a rung-up quantity) and are validated through `decimal` before the
+ * multiply; `multiplyDecimal` keeps the full product scale and `toScale` does the single rounding at
+ * the money boundary, the same way `percentOf` composes the ops above.
+ *
+ * Sharing this one primitive is what keeps a rung-up basket row, the tab drawer's line and the printed
+ * receipt from ever rounding differently — the guarantee `@waitron/till`'s `lineGross` was written to
+ * give, now extended to every per-line gross by funnelling them all through here.
+ */
+export function grossOf(unitPrice: string, quantity: string): Decimal {
+  return toScale(multiplyDecimal(decimal(unitPrice), decimal(quantity)), MONEY_SCALE);
+}
+
 export function negateDecimal(value: Decimal): Decimal {
   const { units, scale } = partsOf(value);
   return fromParts({ units: -units, scale });

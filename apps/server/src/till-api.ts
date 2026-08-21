@@ -235,9 +235,9 @@ function requireTabParam(id: string): string {
 }
 
 /**
- * Screen a `:lineNo` path param as an in-range int4 line number before it reaches a query — the SAME
- * shape the sibling `DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine) route screens inline,
- * shared here by the served POST/DELETE. `line_no` is int4 (orders.ts) and `markLineServed`/
+ * Screen a `:lineNo` path param as an in-range int4 line number before it reaches a query — the ONE
+ * screen the void-line `DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine) route and the served
+ * POST/DELETE all share. `line_no` is int4 (orders.ts) and `voidTabLine`/`markLineServed`/
  * `unmarkLineServed` bind it parameterised, so a non-numeric value (`NaN`) or a fractional one is
  * refused before any query, and an integer ABOVE int4's max (which clears `Number.isInteger`) is too —
  * un-screened it would reach `where line_no = $n` and raise `22003` (out of range), a non-AppError the
@@ -790,25 +790,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a :lineNo that is
-  // not a valid int4 line number → tab.line_not_found (it names no line). The upper bound is not
-  // cosmetic: `line_no` is int4 (orders.ts) and `voidTabLine` binds it parameterised, so an integer
-  // ABOVE int4's max (`9999999999`) — one that clears `Number.isInteger` — would reach the
-  // `where line_no = $n` delete (once `voidTabLine`'s `lockOpenTab` confirms an open tab) and PostgreSQL
-  // would raise `22003` (out of range for integer), a non-AppError the boundary turns into an opaque
-  // `server.internal` 500, the exact class the `:id` screen above exists to prevent. (A non-numeric
-  // :lineNo becomes `NaN` here and is caught by `Number.isInteger` before any query, so `22P02` is not
-  // reachable on this param.) Screening the whole out-of-range set here refuses it as
-  // `tab.line_not_found` (404): a line number that cannot exist names no line, the same shape `abc`/
-  // `1.5` already resolve to. `voidTabLine` still throws tab.not_open / tab.line_not_found for the
-  // in-range cases it reaches.
+  // not a valid int4 line number → tab.line_not_found (it names no line) — the SAME `requireLineNo`
+  // screen the served POST/DELETE routes use (see its doc for why the int4 upper bound is not cosmetic:
+  // `voidTabLine` binds `line_no` parameterised, so an out-of-range integer un-screened would reach the
+  // `where line_no = $n` delete and raise `22003` → an opaque `server.internal` 500). `voidTabLine`
+  // still throws tab.not_open / tab.line_not_found for the in-range cases it reaches.
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const lineNo = Number(c.req.param("lineNo"));
-      if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647)
-        throw new AppError("tab.line_not_found", { tabId: id, lineNo });
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);

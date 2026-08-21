@@ -1,14 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import {
-  MONEY_SCALE,
-  type Decimal,
-  decimal,
-  multiplyDecimal,
-  sumDecimals,
-  toScale,
-} from "@waitron/shared";
+import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { productName } from "../widgets/product-name.js";
@@ -273,6 +266,12 @@ export class TillTableOrderScreen extends LitElement {
   readonly #roundStore = new WorkingOrderStore();
   /** The pay store fed to `tender-pay` — rebuilt from {@link lines} on every change (see {@link willUpdate}). */
   #payStore?: TabPayStore;
+  /** Per-line locked gross, keyed by `lineNo`, memoised from {@link lines} in the SAME
+   * {@link willUpdate} guard that rebuilds {@link #payStore} — so a render triggered by the unrelated
+   * `#roundStore` subscription (a product tap while building a round) reuses these instead of
+   * recomputing `unitPriceGross × quantity` for every pending + served line. `lineNo` is unique per tab,
+   * so it is a safe key; the map is fully populated for the current {@link lines} before any render. */
+  #lineGrossByLineNo = new Map<number, Decimal>();
 
   constructor() {
     super();
@@ -282,22 +281,23 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    // The tab total the pay widget settles against is the SUM of the locked line grosses, computed once
-    // per lines change — never a catalogue recompute (H2). Also built on the first update, before the
-    // first render reads it.
+    // The per-line locked grosses and the tab total the pay widget settles against are both memoised
+    // once per lines change — never a catalogue recompute (H2). Built on the first update too, before
+    // the first render reads them. The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
+      this.#lineGrossByLineNo = new Map(
+        this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
+      );
       this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
     }
   }
 
-  /** Gross line total = LOCKED `unitPriceGross × quantity` at money scale — the SAME arithmetic the
-   * server files with (`priceLockedLines`), so a drawer row can never round differently from the tab
-   * total or the filed ticket. */
+  /** The line's LOCKED gross (`unitPriceGross × quantity` at money scale, via the shared `grossOf`
+   * primitive), read from the {@link #lineGrossByLineNo} memo built in {@link willUpdate} — the SAME
+   * arithmetic the server files with, so a drawer row can never round differently from the tab total or
+   * the filed ticket. */
   #lineGross(line: TabLine): Decimal {
-    return toScale(
-      multiplyDecimal(decimal(line.unitPriceGross), decimal(line.quantity)),
-      MONEY_SCALE,
-    );
+    return this.#lineGrossByLineNo.get(line.lineNo)!;
   }
 
   /** The tab's gross total — Σ of the locked line grosses, at money scale (`0.00` for an empty tab). */
@@ -418,7 +418,7 @@ export class TillTableOrderScreen extends LitElement {
               .store=${this.#roundStore}
             ></till-product-grid>
           </div>
-          ${this.drawerOpen ? this.#drawer() : nothing}
+          ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         <div class="round-bar">
           <till-basket .store=${this.#roundStore}></till-basket>
@@ -437,10 +437,10 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
-  #drawer(): TemplateResult {
+  #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#pendingSection()} ${this.#servedSection()}
+        ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total>${formatMoney(this.#payStore!.total)}</span>
@@ -461,8 +461,7 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
-  #pendingSection(): TemplateResult {
-    const pending = this.#pending();
+  #pendingSection(pending: TabLine[]): TemplateResult {
     return html`<section class="pending">
       <h2>${t("table.pending_title")}</h2>
       ${

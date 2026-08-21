@@ -10,7 +10,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   beginPasskeyAuthentication,
@@ -253,6 +253,29 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
     throw new Error("mountManagementApi: venueCfg is required for the zone/table config routes");
   }
   return deps.venueCfg;
+}
+
+/**
+ * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
+ * tenant-scoped transaction as the app role, confirm the caller's management session carries
+ * `till.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
+ * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
+ * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
+ * `withTenant` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
+ * route resolved via `requireVenueCfg`, whose `tenantId` scopes the transaction (the zone/table verbs
+ * are location-scoped, so they take `cfg`, unlike the status verbs).
+ */
+function withVenueAuth<T>(
+  deps: ManagementApiDeps,
+  cfg: TillConfig,
+  sessionId: string,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await authorizeManager(tx, { managementSessionId: sessionId, permission: "till.configure" });
+    return fn(tx);
+  });
 }
 
 /**
@@ -824,14 +847,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // but that narrowing does not survive into the `withTenant` closure (TS resets a captured property
       // to its declared type), so the closure reads this — the login/create-person pattern above.
       const { name } = body;
-      const result = await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        return createZone(tx, cfg, { name, displayOrder });
-      });
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createZone(tx, cfg, { name, displayOrder }),
+      );
       return c.json(result, 201);
     }),
   );
@@ -841,14 +859,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        return listZones(tx, cfg);
-      });
+      const zones = await withVenueAuth(deps, cfg, sessionId, (tx) => listZones(tx, cfg));
       return c.json(zones);
     }),
   );
@@ -888,14 +899,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         return c.body(null, 204);
       }
-      await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        await updateZone(tx, cfg, id, patch);
-      });
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateZone(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -906,14 +910,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        await deactivateZone(tx, cfg, id);
-      });
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateZone(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -945,14 +942,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // but that narrowing does not survive into the `withTenant` closure (a captured property resets to
       // its declared type), so the closure reads this local — the login/create-person pattern above.
       const { label } = body;
-      const result = await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        return createTable(tx, cfg, { label, zoneId, capacity });
-      });
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createTable(tx, cfg, { label, zoneId, capacity }),
+      );
       return c.json(result, 201);
     }),
   );
@@ -962,14 +954,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const tables = await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        return listTables(tx, cfg);
-      });
+      const tables = await withVenueAuth(deps, cfg, sessionId, (tx) => listTables(tx, cfg));
       return c.json(tables);
     }),
   );
@@ -1006,14 +991,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (patch.label === undefined && patch.zoneId === undefined && patch.capacity === undefined) {
         return c.body(null, 204);
       }
-      await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        await updateTable(tx, cfg, id, patch);
-      });
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateTable(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -1025,14 +1003,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withTenant(deps.db, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        await deactivateTable(tx, cfg, id);
-      });
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateTable(tx, cfg, id));
       return c.body(null, 204);
     }),
   );

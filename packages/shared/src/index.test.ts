@@ -7,6 +7,7 @@ import {
   decimal,
   divideDecimal,
   fiscalRecordId,
+  grossOf,
   hasCode,
   isAppError,
   isZeroDecimal,
@@ -73,6 +74,7 @@ describe("package public surface (./index.js)", () => {
     expect(isZeroDecimal(decimal("0"))).toBe(true);
     expect(compareDecimal(a, b)).toBe(-1);
     expect(sumDecimals([a, b])).toBe("3.30");
+    expect(grossOf("1.50", "2.000")).toBe("3.00");
     expect(toScale(a, 3)).toBe("1.100");
     expect(assertMoney(a)).toBe("1.10");
     expect(MONEY_SCALE).toBe(2);
