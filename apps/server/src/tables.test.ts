@@ -1,10 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  ticketItems,
+  withTenant,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
 import {
   AppError,
   locationId as brandLocationId,
@@ -26,7 +38,13 @@ import {
   updateTable,
   updateZone,
 } from "./tables.js";
-import { listTablesWithState } from "./working-order.js";
+import {
+  advanceTicketItem,
+  fireLines,
+  listTablesWithState,
+  markLineServed,
+  openTab,
+} from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -466,5 +484,116 @@ describe("table placement", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
+  });
+});
+
+// KDS-1 §3d ready→floor. Unlike the CRUD describes above, this exercises the full tab→fire→bump→serve
+// path, so the venue also needs sellable products and a default kitchen station (fireLines' fallback).
+// Seeded as the superuser (RLS bypassed in setup), the shape tabs.test.ts's setupVenue uses.
+async function setupTabVenue(): Promise<{
+  cfg: TillConfig;
+  cafeId: string;
+  aguaId: string;
+  tableId: string;
+}> {
+  const tenantId = await seedTenant(db);
+  const loc = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+  const locationId = loc.rows[0]!.id;
+  await db.execute(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, is_default)
+    values (${tenantId}, ${locationId}, 'Cocina', true)`);
+  const till = await db.execute<{ id: string }>(sql`
+    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const cfg: TillConfig = {
+    tenantId,
+    tillId: brandTillId(till.rows[0]!.id),
+    nodeId: brandNodeId(nodeId),
+    seriesId: brandSeriesId(randomUUID()),
+    locationId: brandLocationId(locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+  const { cafeId, aguaId, tableId } = await withTenant(db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const cafe = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      descriptions: { [LOCALE]: "Café" },
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    const agua = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      descriptions: { [LOCALE]: "Agua" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+    });
+    await assignCatalogueToLocation(tx, locationId, cat.id);
+    const table = await createTable(tx, cfg, { label: "T1" });
+    return { cafeId: cafe.id, aguaId: agua.id, tableId: table.id };
+  });
+  return { cfg, cafeId, aguaId, tableId };
+}
+
+// PGlite is the right target: a read-model shape test with no RLS/concurrency dimension (Task 1's
+// real-PG suite covers ticket_items RLS). The read-model shape is what this pins.
+describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
+  it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+
+    // Open a tab with two lines and FIRE the round → two ticket items, both queued.
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+    const lines = await asApp(cfg, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+
+    // Queued, nothing served → readyToServe 0; pendingToServe still counts both unserved lines.
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === tableId,
+    )!;
+    expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
+
+    // Bump the first line's ticket item queued → preparing → ready.
+    const [item] = await asApp(cfg, (tx) =>
+      tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, lines[0]!.id)),
+    );
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "ready"));
+
+    // One line ready and still unserved → readyToServe 1; pendingToServe unchanged (ready ≠ served).
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
+
+    // Mark that same line served → the ready item drops out of readyToServe; pendingToServe falls to 1.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });

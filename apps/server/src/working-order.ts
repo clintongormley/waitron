@@ -527,7 +527,9 @@ export async function fireLines(
   const [fallback] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)));
+    .where(
+      and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)),
+    );
   const defaultStationId = fallback?.id ?? null;
 
   // Every fired product's own override AND its category's default, in ONE batched read (no per-line
@@ -2128,6 +2130,12 @@ export interface TableState {
    *  LEFT-join branch. DISTINCT from `pendingDeliveries` (uncollected counter deliveries to this table);
    *  both are kept. */
   pendingToServe: number;
+  /** Count of the open tab's lines that are KITCHEN-DONE but NOT yet carried out — the ticket item is
+   *  `ready` AND the line's `served_at IS NULL` (KDS-1 §3d, the floor's "N listos"). DISTINCT from
+   *  `pendingToServe` (unserved lines regardless of kitchen state) and from `pendingDeliveries` (counter
+   *  deliveries): a line is counted here only in the window between the kitchen bumping it `ready` and the
+   *  waiter marking it served. `0` for a free table (no open tab — the LEFT-join branch). */
+  readyToServe: number;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -2174,6 +2182,7 @@ export async function listTablesWithState(
     tab_line_count: number;
     tab_total: string | null;
     pending_to_serve: number;
+    ready_to_serve: number;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -2190,6 +2199,7 @@ export async function listTablesWithState(
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
       coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
+      coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
@@ -2197,10 +2207,18 @@ export async function listTablesWithState(
       select wo.id,
              count(wol.id)::int as line_count,
              (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
+             -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
+             -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
+             -- (tenant_id, working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
+             -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
+             -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
+             (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
              coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
       from working_orders wo
       left join working_order_lines wol
         on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
+      left join ticket_items ti
+        on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
       where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
       group by wo.id
     ) tab on true
@@ -2236,6 +2254,7 @@ export async function listTablesWithState(
       state,
       hasOpenTab,
       pendingToServe: Number(r.pending_to_serve),
+      readyToServe: Number(r.ready_to_serve),
       pendingDeliveries,
       status:
         r.status_id !== null
