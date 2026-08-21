@@ -169,14 +169,33 @@ describe("sala-screen", () => {
     expect(api.listTables).toHaveBeenCalledTimes(2);
   });
 
-  it("does not call updateTable when the zone is set back to none (the route cannot unset it)", async () => {
+  it("offers no blank clear option once a table has a zone (the select can never show a fake unassigned state)", async () => {
+    // t2 is already in z1. Clearing a zone is not supported server-side, so a blank/"sin zona" option
+    // that would visually clear it (while the assignment stays) must not be selectable — the select
+    // shows only real zones, with the current one selected.
     const api = stubApi({}, ZONES, TWO_TABLES);
     const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
     await flush(el);
-    // t2 starts in z1; picking the blank "— no zone —" option is a no-op (route takes no null).
-    selectValue(el, "[data-test=table-zone-t2]", "");
+    const select = q(el, "[data-test=table-zone-t2]") as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).not.toContain(""); // no blank-clear option for an assigned table
+    expect(select.value).toBe("z1"); // the select reflects the real, still-assigned zone
+  });
+
+  it("shows the blank placeholder for an unassigned table, and picking it is a true no-op", async () => {
+    // t1 has no zone: the blank "— no zone —" IS its genuine current state, so it is offered and
+    // selected. Picking it again changes nothing and never calls updateTable (the route takes no null),
+    // and the select still reflects the real unassigned state (no desync).
+    const api = stubApi();
+    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    await flush(el);
+    const select = q(el, "[data-test=table-zone-t1]") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toContain("");
+    expect(select.value).toBe("");
+    selectValue(el, "[data-test=table-zone-t1]", "");
     await flush(el);
     expect(api.updateTable).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=table-zone-t1]") as HTMLSelectElement).value).toBe("");
   });
 
   it("saves an edited table row (updateTable with the row's label + capacity), then reloads", async () => {
@@ -282,6 +301,43 @@ describe("sala-screen", () => {
     expect(errorKey(el)).toBe("zone.not_found");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("zone.not_found", "es-ES"));
+  });
+
+  it("surfaces a rejected zone save as a localised role=alert", async () => {
+    const api = stubApi({ updateZone: vi.fn().mockRejectedValue({ code: "zone.not_found" }) });
+    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    await flush(el);
+    type(el, "[data-test=zone-name-z1]", "Salón");
+    q(el, "[data-test=zone-save-z1]")!.click();
+    await flush(el);
+    expect(errorKey(el)).toBe("zone.not_found");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("zone.not_found", "es-ES"));
+  });
+
+  it("surfaces a rejected table save as a localised role=alert", async () => {
+    const api = stubApi({ updateTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
+    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    await flush(el);
+    type(el, "[data-test=table-label-t1]", "4");
+    q(el, "[data-test=table-save-t1]")!.click();
+    await flush(el);
+    expect(errorKey(el)).toBe("table.label_taken");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("table.label_taken", "es-ES"));
+  });
+
+  it("surfaces a rejected table deactivate as a localised role=alert", async () => {
+    const api = stubApi({
+      deactivateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }),
+    });
+    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    await flush(el);
+    q(el, "[data-test=table-deactivate-t1]")!.click();
+    await flush(el);
+    expect(errorKey(el)).toBe("table.not_found");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("table.not_found", "es-ES"));
   });
 
   it("falls back to server.internal when a rejected mutation carries no code", async () => {

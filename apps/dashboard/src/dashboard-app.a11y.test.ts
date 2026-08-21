@@ -59,6 +59,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getPlannedVsActual: vi.fn().mockResolvedValue([]),
     // The purchases screen (reachable via the nav) loads this on connect.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
+    // The sala (floor-plan) screen (reachable via the nav) loads both on connect.
+    listZones: vi.fn().mockResolvedValue([]),
+    listTables: vi.fn().mockResolvedValue([]),
     // The recipe screen (reachable via the nav) loads ingredients on connect (listCatalogues is
     // already stubbed above); getProductRecipe/setProductRecipe only fire once a product is chosen.
     listIngredients: vi.fn().mockResolvedValue([]),
@@ -222,6 +225,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(purchases!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the sala (floor-plan) screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the sala screen (its own <h1> "Sala" is then the sole heading; the shell's nav chrome
+    // carries none, and the screen's panel headings are <h2>), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-sala]")!.click();
+    await flush(el);
+    const sala = el.shadowRoot!.querySelector("dashboard-sala-screen");
+    expect(sala).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(sala!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

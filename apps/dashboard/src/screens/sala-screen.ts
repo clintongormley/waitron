@@ -40,7 +40,10 @@ interface EditableTable {
  * never a stale render closure, so an edit made just before the click is the one that persists.
  *
  * The zone <select> can only ASSIGN a zone, never clear one: the table PATCH route takes a `zoneId`
- * string and has no null form, so picking the blank "— sin zona —" option is a deliberate no-op. Tables
+ * string and has no null form (clearing is a deferred backlog follow-up). So the blank "— sin zona —"
+ * placeholder is offered ONLY on a table that is genuinely unassigned — never on one that already has a
+ * zone, where a selectable blank would visually clear the assignment while it persisted server-side. On
+ * an unassigned table the blank is its real current state and re-picking it is a true no-op. Tables
  * deactivate via the DELETE route (there is no `active` field on the table PATCH, and `listTables`
  * returns only active rows), so a Mesa row carries a Desactivar button rather than an active toggle —
  * the same is true of Zonas.
@@ -258,9 +261,10 @@ export class SalaScreen extends LitElement {
     }
   }
 
-  /** Assign the table `id` holds to the picked zone, then reload. The blank "— sin zona —" option is a
-   * deliberate no-op: the table PATCH route takes a `zoneId` string with no null form, so a zone can be
-   * assigned but not cleared here. A rejection becomes the `errorKey` banner. */
+  /** Assign the table `id` holds to the picked zone, then reload. The blank placeholder is offered only
+   * on an already-unassigned table (see `#renderTable`), where a re-pick of it (value `""`) is a TRUE
+   * no-op: nothing changes, so the select still reflects the real unassigned state (no DOM desync). A
+   * rejection becomes the `errorKey` banner. */
   #onAssignZone(id: string, event: Event): void {
     event.stopPropagation();
     const zoneId = (event.target as HTMLSelectElement).value;
@@ -366,7 +370,16 @@ export class SalaScreen extends LitElement {
               data-test="table-zone-${tbl.id}"
               @change=${(e: Event) => this.#onAssignZone(tbl.id, e)}
             >
-              <option value="" .selected=${selected === ""}>${t("sala.no_zone")}</option>
+              ${
+                // The blank "— sin zona —" placeholder is offered ONLY for a table that is genuinely
+                // unassigned (its real current state). Once a table has a zone it is omitted, because
+                // clearing a zone is unsupported server-side (the table PATCH takes `zoneId?: string`,
+                // no null — a deferred backlog follow-up): a selectable blank on an assigned table would
+                // visually clear it while the assignment persisted, desyncing the DOM from state.
+                tbl.zoneId === null
+                  ? html`<option value="" selected>${t("sala.no_zone")}</option>`
+                  : nothing
+              }
               ${this.zones.map(
                 (z) =>
                   html`<option value=${z.id} .selected=${z.id === selected}>${z.name}</option>`,
