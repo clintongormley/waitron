@@ -277,6 +277,30 @@ export interface FloorZone {
   active: boolean;
 }
 
+/**
+ * The rendered shape of a placed table on the FP-2 floor plan. A LOCAL union mirroring `@waitron/db`'s
+ * `floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"])` and `@waitron/ui`'s
+ * `TableShape` — deliberately NOT imported (the bundle-decoupling rule the whole file follows; a server
+ * round-trip re-validates against the real enum).
+ */
+export type TableShape = "round" | "square" | "rect";
+
+/**
+ * The body of a `PUT /management-api/tables/:id/placement` (FP-2, Task 3) — the four placement columns
+ * plus the table's target zone. Mirrors the management placement route's parsed body
+ * (`apps/server/src/management-api.ts`); the server re-validates every field (`placement.invalid` for an
+ * out-of-range coord / bad shape / bad rotation, `zone.not_found` for a missing or inactive zone).
+ * `zoneId` is `| null` because the shared canvas can emit a placement for a still-zoneless table — the
+ * server refuses it, so a `null` never silently persists.
+ */
+export interface TablePlacement {
+  posX: number;
+  posY: number;
+  shape: TableShape;
+  rotation: number;
+  zoneId: string | null;
+}
+
 /** One `dining_tables` row as the config surface returns it (`GET /management-api/tables`, active
  * only, by `label`) — mirrors the server's `DiningTable`. `zoneId` is the `floor_zones` FK or null;
  * `createdAt` is an ISO instant. */
@@ -287,6 +311,21 @@ export interface DashboardTable {
   capacity: number | null;
   active: boolean;
   createdAt: string;
+  /**
+   * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
+   * rendered `shape`, and `rotation` in degrees; `null`/absent for an unplaced table. These mirror the
+   * server's `dining_tables` placement columns (`apps/server/src/tables.ts`'s `DiningTable`), written by
+   * {@link DashboardApi.setTablePlacement} / {@link DashboardApi.clearPlacement}. The config route
+   * `GET /management-api/tables` (`listTables`) now PROJECTS them (Task 7b), alongside the till's
+   * `listTablesWithState` (`GET /api/tables/state`), so a loaded row carries its placement and the Plano
+   * editor keeps a placed table placed on reload. Kept OPTIONAL (`?`) so the type also admits an unplaced
+   * row that omits the fields; the editor reads `posX != null` to decide placed vs unplaced, mirroring
+   * the till's live-floor screen.
+   */
+  posX?: number | null;
+  posY?: number | null;
+  shape?: TableShape | null;
+  rotation?: number | null;
 }
 
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
@@ -882,6 +921,29 @@ export class DashboardApi {
   /** `DELETE /management-api/tables/:id` — soft-delete (deactivate) a table. Answers an empty 204. */
   deactivateTable(id: string): Promise<void> {
     return this.#request<void>(`/management-api/tables/${id}`, "DELETE");
+  }
+
+  /**
+   * Place (or re-place) a table on the FP-2 spatial floor plan → `PUT /management-api/tables/:id/placement`
+   * (Task 3's MANAGEMENT route, `authorizeManager(till.configure)`-gated — the dashboard's own path, NOT
+   * the on-till route). Writes the four placement columns + the target zone; the server re-validates the
+   * values (`placement.invalid` for an out-of-range coord / bad shape / bad rotation; `zone.not_found`
+   * for a missing/inactive zone; `table.not_found` for a bad/absent id) — each surfaced as a rejected
+   * `{ code }`. The route answers an empty 204, so this resolves void; the Plano editor reloads
+   * `listTables` after a successful call.
+   */
+  async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
+    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "PUT", placement);
+  }
+
+  /**
+   * Un-place a table (NULL its four placement columns, leaving `zone_id` as-is) →
+   * `DELETE /management-api/tables/:id/placement` (Task 3's management route, same
+   * `authorizeManager(till.configure)` gate as {@link setTablePlacement}). The route answers an empty
+   * 204, so this resolves void; `table.not_found` (a bad/absent id) surfaces as a rejected `{ code }`.
+   */
+  async clearPlacement(tableId: string): Promise<void> {
+    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "DELETE");
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────

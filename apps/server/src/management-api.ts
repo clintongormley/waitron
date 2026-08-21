@@ -31,15 +31,18 @@ import {
 } from "@waitron/identity";
 import { getLayout, putLayout, putReceipt } from "@waitron/layouts";
 import {
+  clearPlacement,
   createStatus,
   createTable,
   createZone,
   deactivateStatus,
   deactivateTable,
   deactivateZone,
+  type FloorTableShape,
   listStatuses,
   listTables,
   listZones,
+  setTablePlacement,
   updateStatus,
   updateTable,
   updateZone,
@@ -176,6 +179,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "zone.name_taken": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
+  // Floor-plan spatial placement (FP-2). A `posX`/`posY`/`rotation` out of range or a `shape` naming no
+  // `floor_table_shape` enum member — `setTablePlacement`'s per-field guards — is a well-formed request
+  // whose payload the verb refuses → 400, the same family as `management.request_invalid` (which the
+  // placement route's own body-shape/type screens throw for a MISSING or wrong-TYPE field). Registered
+  // in `errors.ts` (Task 2) where it already defaults to 400; listed explicitly as the house style
+  // requires (see this map's doc, and `errors.ts`'s note that the route task would list it here).
+  "placement.invalid": 400,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -1013,6 +1023,80 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateTable(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Floor-plan spatial placement (FP-2) ───────────────────────────────────────────────────────────
+  // The dashboard "Sala" editor's place / un-place actions (design §placement): thin wrappers over Task
+  // 2's `setTablePlacement` / `clearPlacement`. Same gating and mapping as the FP-1 zone/table routes
+  // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
+  // under `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`, so a staff session is
+  // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
+  // the test names). `requireTableId` screens `:id` (malformed → table.not_found, not an opaque 22P02
+  // 500); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
+  // live-zone reads (`table.not_found` / `zone.not_found`).
+
+  // Place a table (PUT = full placement). Body { zoneId, posX, posY, shape, rotation }; the body-shape
+  // screen mirrors the sibling table routes — a non-object body → management.request_invalid naming
+  // "body", each MISSING or wrong-TYPE field → the same code naming THAT field. A string-typed but
+  // MALFORMED `zoneId` is screened to zone.not_found (as the sibling POST/PATCH do: un-screened it reaches
+  // the `id` uuid column → 22P02 → opaque 500). The narrowed fields are bound to locals before the
+  // closure (the login/create-person pattern). Value/range faults (posX/posY 0..1000, shape enum,
+  // rotation 0..359) are the verb's `placement.invalid`; a missing/inactive table or zone is its
+  // table.not_found/zone.not_found. Returns 204 (the sibling PATCH/DELETE convention on this surface).
+  app.put("/management-api/tables/:id/placement", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireTableId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{
+          zoneId?: unknown;
+          posX?: unknown;
+          posY?: unknown;
+          shape?: unknown;
+          rotation?: unknown;
+        }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.zoneId !== "string")
+        throw new AppError("management.request_invalid", { field: "zoneId" });
+      // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
+      // verb reads `floor_zones … where id = ${zoneId}`, so an un-screened non-UUID reaches the `uuid`
+      // column → 22P02 → opaque 500. Give it the SAME zone.not_found a well-formed-but-missing one gets.
+      if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
+      if (typeof body.posX !== "number")
+        throw new AppError("management.request_invalid", { field: "posX" });
+      if (typeof body.posY !== "number")
+        throw new AppError("management.request_invalid", { field: "posY" });
+      if (typeof body.shape !== "string")
+        throw new AppError("management.request_invalid", { field: "shape" });
+      if (typeof body.rotation !== "number")
+        throw new AppError("management.request_invalid", { field: "rotation" });
+      // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
+      // `withVenueAuth` closure — a captured property resets to its declared type). `shape` is cast to
+      // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
+      // asserts nothing the verb does not check.
+      const { zoneId, posX, posY, rotation } = body;
+      const shape = body.shape as FloorTableShape;
+      await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation }),
+      );
+      return c.body(null, 204);
+    }),
+  );
+
+  // Un-place a table (DELETE = clear placement; NULLs the four columns, leaves zone_id as-is). Malformed
+  // :id → table.not_found; an absent row → table.not_found (the verb's row-count check). Same gate as the
+  // PUT above; mirrors the sibling `DELETE /management-api/tables/:id` shape exactly. Returns 204.
+  app.delete("/management-api/tables/:id/placement", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireTableId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => clearPlacement(tx, cfg, id));
       return c.body(null, 204);
     }),
   );

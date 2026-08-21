@@ -14,6 +14,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import {
+  clearPlacement,
   createTable,
   createZone,
   deactivateTable,
@@ -21,9 +22,11 @@ import {
   isZoneFkViolation,
   listTables,
   listZones,
+  setTablePlacement,
   updateTable,
   updateZone,
 } from "./tables.js";
+import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -72,9 +75,41 @@ describe("table CRUD", () => {
       createTable(tx, cfg, { label: "12", zoneId, capacity: 4 }),
     );
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
+    // A freshly-created (unplaced) table carries the four FP-2 placement columns as null — listTables
+    // now PROJECTS them (Task 7b), so the dashboard editor no longer loses a placement on reload.
     expect(tables).toEqual([
-      expect.objectContaining({ id, label: "12", zoneId, capacity: 4, active: true }),
+      expect.objectContaining({
+        id,
+        label: "12",
+        zoneId,
+        capacity: 4,
+        active: true,
+        posX: null,
+        posY: null,
+        shape: null,
+        rotation: null,
+      }),
     ]);
+  });
+
+  it("listTables projects the FP-2 placement columns — place a table, then read them back", async () => {
+    // The place-then-read receipt (CLAUDE.md §1): a null-only assertion proves nothing about the
+    // projection, so PLACE the table and read the exact values back through listTables. Sibling at the
+    // "table placement" describe below proves the same for `listTablesWithState` (the till surface).
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "4", capacity: 4 }));
+    await asApp(cfg, (tx) =>
+      setTablePlacement(tx, cfg, id, {
+        zoneId,
+        posX: 500,
+        posY: 250,
+        shape: "square",
+        rotation: 15,
+      }),
+    );
+    const placed = (await asApp(cfg, (tx) => listTables(tx, cfg))).find((t) => t.id === id)!;
+    expect(placed).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15, zoneId });
   });
 
   it("creates a table WITHOUT a zone (zoneId null)", async () => {
@@ -312,5 +347,124 @@ describe("isZoneFkViolation", () => {
     const selfRef: { cause?: unknown } = {};
     selfRef.cause = selfRef;
     expect(isZoneFkViolation(selfRef)).toBe(false);
+  });
+});
+
+// FP-2 spatial placement (Task 2). PGlite is enough here — the verb logic is validation + a by-id
+// UPDATE with no privilege/concurrency dimension (the real-PG gate lives on the ROUTE in a later task).
+// A distinct case proves EACH validation branch: table.not_found, zone.not_found, and one per field.
+describe("table placement", () => {
+  it("places a table, reads the placement back via listTablesWithState, then clears the four columns (zoneId kept)", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "4", capacity: 4 }));
+
+    await asApp(cfg, (tx) =>
+      setTablePlacement(tx, cfg, id, {
+        zoneId,
+        posX: 500,
+        posY: 250,
+        shape: "square",
+        rotation: 15,
+      }),
+    );
+    const placed = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === id,
+    )!;
+    expect(placed).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15, zoneId });
+
+    await asApp(cfg, (tx) => clearPlacement(tx, cfg, id));
+    const cleared = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === id,
+    )!;
+    // The four placement columns are NULL; zoneId (an FP-1 column, not one of the four) is left as-is.
+    expect(cleared).toMatchObject({ posX: null, posY: null, shape: null, rotation: null, zoneId });
+  });
+
+  it("returns null placement fields for a table that has never been placed", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "unplaced" }));
+    const [t] = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(t).toMatchObject({ id, posX: null, posY: null, shape: null, rotation: null });
+  });
+
+  it("rejects each invalid placement field with placement.invalid naming THAT field (never the value)", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Barra" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "5" }));
+    const ok = { zoneId, posX: 0, posY: 0, shape: "round" as const, rotation: 0 };
+
+    // posX above the range, AND a non-integer — both name posX (the two upper/non-integer branches).
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posX: 2000 })),
+    ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posX" } });
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posX: 1.5 })),
+    ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posX" } });
+    // posY below the range → names posY (the lower branch).
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posY: -1 })),
+    ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posY" } });
+    // shape not a floor_table_shape enum member → names shape.
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, shape: "hexagon" as never })),
+    ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "shape" } });
+    // rotation above 359 → names rotation.
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, rotation: 360 })),
+    ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "rotation" } });
+  });
+
+  it("rejects placement of a missing OR deactivated table with table.not_found", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Z" }));
+    const p = { zoneId, posX: 0, posY: 0, shape: "round" as const, rotation: 0 };
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => setTablePlacement(tx, cfg, missing, p))).rejects.toMatchObject({
+      code: "table.not_found",
+      params: { tableId: missing },
+    });
+    // A deactivated table is not placeable — an ACTIVE table is required (setTableStatus/design §3b shape).
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "gone" }));
+    await asApp(cfg, (tx) => deactivateTable(tx, cfg, id));
+    await expect(asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, p))).rejects.toMatchObject({
+      code: "table.not_found",
+      params: { tableId: id },
+    });
+  });
+
+  it("rejects placement into a missing OR deactivated zone with zone.not_found (a live zone is required)", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "6" }));
+    const missingZone = randomUUID();
+    await expect(
+      asApp(cfg, (tx) =>
+        setTablePlacement(tx, cfg, id, {
+          zoneId: missingZone,
+          posX: 0,
+          posY: 0,
+          shape: "round",
+          rotation: 0,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: missingZone } });
+    // A deactivated zone is not "live" → zone.not_found. The zone FK (createTable/updateTable's check)
+    // cannot see `active`, so setTablePlacement checks it explicitly.
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Old" }));
+    await asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId));
+    await expect(
+      asApp(cfg, (tx) =>
+        setTablePlacement(tx, cfg, id, { zoneId, posX: 0, posY: 0, shape: "round", rotation: 0 }),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId } });
+  });
+
+  it("clearPlacement throws table.not_found for an unknown id", async () => {
+    const cfg = await setupVenue();
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => clearPlacement(tx, cfg, missing))).rejects.toMatchObject({
+      code: "table.not_found",
+      params: { tableId: missing },
+    });
   });
 });

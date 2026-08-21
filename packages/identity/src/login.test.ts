@@ -37,12 +37,27 @@ describe("loginWithPin", () => {
 
     // toEqual, not toMatchObject: every field of Session is pinned, so an unlisted extra key would
     // fail rather than be silently ignored (CLAUDE.md §4). id is a fresh uuid, hence expect.any.
-    expect(session).toEqual({ id: expect.any(String), tenantId, personId, tillId });
+    // `role` is the person's own role (seedPerson's default is "staff"), surfaced so the till can
+    // gate its manager-only affordances client-side (the server still re-checks every gate).
+    expect(session).toEqual({ id: expect.any(String), tenantId, personId, tillId, role: "staff" });
 
     const rows = await suite.db.execute<{ ended_at: string | null }>(
       sql`select ended_at from sessions where id = ${session.id}`,
     );
     expect(rows.rows).toEqual([{ ended_at: null }]);
+  });
+
+  it("carries the person's own role in the session (a manager, not just the staff default)", async () => {
+    // Proves `role` is the LOOKED-UP role, not a hardcoded constant — a mutant returning "staff"
+    // (or dropping the field) fails here.
+    const tillId = await seedTill(suite.db, tenantId);
+    const personId = await seedPerson(suite.db, tenantId, "manager");
+
+    const session = await run((tx) =>
+      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+    );
+
+    expect(session.role).toBe("manager");
   });
 
   it("throws pin.invalid when the PIN does not verify", async () => {

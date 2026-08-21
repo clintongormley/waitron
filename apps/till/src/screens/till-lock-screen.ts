@@ -7,13 +7,17 @@ import "../widgets/numeric-pad.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 
 /**
- * The `logged-in` event payload: the server-confirmed `personId` plus the operator's `displayName`.
- * The name rides along because the screen already holds it (the roster entry the operator picked), so
- * the parent (`till-app`) can label the counter header without a second `listStaff` round-trip.
+ * The `logged-in` event payload: the server-confirmed `personId`, the operator's `displayName`, and
+ * the server-computed `canConfigureTill` capability. The name rides along because the screen already
+ * holds it (the roster entry the operator picked), so the parent (`till-app`) can label the counter
+ * header without a second `listStaff` round-trip; `canConfigureTill` comes from the `POST /api/session`
+ * response so the app can gate manager-only affordances (FP-2's on-till "Editar plano") without another
+ * round-trip either — and without the client re-deriving it from a role (which would drift).
  */
 export interface LoggedInDetail {
   personId: string;
   displayName: string;
+  canConfigureTill: boolean;
 }
 
 /**
@@ -172,11 +176,11 @@ export class TillLockScreen extends LitElement {
     const person = this.selected;
     if (person === undefined || this.pin === "") return;
     try {
-      const { personId } = await this.api.login(person.personId, this.pin);
+      const { personId, canConfigureTill } = await this.api.login(person.personId, this.pin);
       if (!this.isConnected) return;
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
-          detail: { personId, displayName: person.displayName },
+          detail: { personId, displayName: person.displayName, canConfigureTill },
           bubbles: true,
           composed: true,
         }),

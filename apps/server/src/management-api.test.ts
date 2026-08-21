@@ -148,17 +148,21 @@ async function login(app: Hono, personId: string): Promise<string> {
 }
 
 // One provisioned tenant + a manager and a staff cookie, shared across the tests. Each test uses UNIQUE
-// zone/table names so the accumulating sets never collide (CLAUDE.md §4).
+// zone/table names so the accumulating sets never collide (CLAUDE.md §4). `venue` is kept at module
+// scope too so the placement tests can read `dining_tables` back directly under its tenant (see
+// `readPlacement`).
 let app: Hono;
+let venue: VenueResult;
 let managerCookie: string;
 let staffCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  const { venue, managerId, staffId } = await setupTenant();
+  const setup = await setupTenant();
+  venue = setup.venue;
   app = mountApp(venue);
-  managerCookie = await login(app, managerId);
-  staffCookie = await login(app, staffId);
+  managerCookie = await login(app, setup.managerId);
+  staffCookie = await login(app, setup.staffId);
 });
 
 /** Request a `/management-api<path>` route with the given cookie. */
@@ -463,6 +467,44 @@ describe("/management-api/tables", () => {
     expect(list.find((t) => t.id === id)).toMatchObject({ label, capacity: 4, active: true });
   });
 
+  it("GET projects a placed table's FP-2 placement columns (posX/posY/shape/rotation)", async () => {
+    // Route-level place-then-read receipt for the Task-7b gap: the config GET /tables surface now
+    // projects the four placement columns (listTables), so the Plano editor sees a placed table as
+    // placed on reload instead of snapping it back to the unplaced tray. Proven by the POSITIVE read
+    // of real values, not merely that nulls pass (CLAUDE.md §1).
+    const zoneId = await createZone(unique("GetPlaceZone"));
+    const { id } = (await (
+      await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("gp") }) },
+        managerCookie,
+      )
+    ).json()) as { id: string };
+    const put = await req(
+      `/tables/${id}/placement`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ zoneId, posX: 500, posY: 250, shape: "square", rotation: 15 }),
+      },
+      managerCookie,
+    );
+    expect(put.status).toBe(204);
+
+    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
+      id: string;
+      posX: number | null;
+      posY: number | null;
+      shape: string | null;
+      rotation: number | null;
+    }[];
+    expect(list.find((t) => t.id === id)).toMatchObject({
+      posX: 500,
+      posY: 250,
+      shape: "square",
+      rotation: 15,
+    });
+  });
+
   it("POST with a duplicate label → 409 table.label_taken", async () => {
     const label = unique("dup");
     await req("/tables", { method: "POST", body: JSON.stringify({ label }) }, managerCookie);
@@ -751,5 +793,254 @@ describe("/management-api/tables", () => {
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
+  });
+});
+
+// ── FP-2 spatial placement (dashboard) ──────────────────────────────────────────────────────────────
+// The manager-gated PUT/DELETE that place a table on / remove it from the floor-plan canvas, thin
+// wrappers over Task 2's `setTablePlacement` / `clearPlacement`. Same gate + `run` mapping as the FP-1
+// zone/table routes above (`requireManagementSession` 401 first, then `withVenueAuth`'s
+// `authorizeManager(till.configure)` 403). These placement tests read the row back with a DIRECT
+// `dining_tables` read (`readPlacement`) — a tight row-level receipt for exactly the four columns the
+// PUT/DELETE write. The management `GET /tables` surface (`listTables`) DOES now project those columns
+// (Task 7b), verified end-to-end by the "GET projects a placed table's placement columns" case in the
+// `/management-api/tables` describe above; the direct read here keeps this describe focused on the verb.
+
+/** The canonical placement body — the exact values the brief pins. `zoneId` varies per test (each needs
+ *  its own LIVE zone), so it is a parameter. */
+function place(zoneId: string): {
+  zoneId: string;
+  posX: number;
+  posY: number;
+  shape: string;
+  rotation: number;
+} {
+  return { zoneId, posX: 500, posY: 250, shape: "square", rotation: 0 };
+}
+
+/** Read a table's four placement columns as the app role under the venue's tenant (RLS-scoped). */
+async function readPlacement(tableId: string): Promise<{
+  posX: number | null;
+  posY: number | null;
+  shape: string | null;
+  rotation: number | null;
+}> {
+  return withTenant(suite.admin, venue.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const { rows } = await tx.execute<{
+      pos_x: number | null;
+      pos_y: number | null;
+      shape: string | null;
+      rotation: number | null;
+    }>(sql`select pos_x, pos_y, shape, rotation from dining_tables where id = ${tableId}`);
+    const r = rows[0]!;
+    return { posX: r.pos_x, posY: r.pos_y, shape: r.shape, rotation: r.rotation };
+  });
+}
+
+describe("/management-api/tables/:id/placement", () => {
+  /** A fresh ACTIVE table + ACTIVE zone — `setTablePlacement` requires BOTH live. */
+  async function tableAndZone(): Promise<{ tableId: string; zoneId: string }> {
+    const zoneId = await createZone(unique("PlaceZone"));
+    const { id: tableId } = (await (
+      await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("p") }) },
+        managerCookie,
+      )
+    ).json()) as { id: string };
+    return { tableId, zoneId };
+  }
+
+  it("manager places a table (204) + read-back shows it; staff is 403; no session is 401", async () => {
+    const { tableId, zoneId } = await tableAndZone();
+
+    // No session → 401 before any DB work.
+    const unauth = await req(`/tables/${tableId}/placement`, {
+      method: "PUT",
+      body: JSON.stringify(place(zoneId)),
+    });
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+
+    // A staff session CAN log in but holds no `till.configure`, so `authorizeManager` (inside
+    // `withVenueAuth`) refuses it 403 — the gate deletion-proof: dropping that authorize call flips
+    // this case to 204.
+    const staff = await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify(place(zoneId)) },
+      staffCookie,
+    );
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    // The refused staff attempt wrote nothing.
+    expect(await readPlacement(tableId)).toMatchObject({ posX: null, posY: null, shape: null });
+
+    // A manager places it → 204, and the placement lands on the row.
+    const ok = await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify(place(zoneId)) },
+      managerCookie,
+    );
+    expect(ok.status).toBe(204);
+    expect(await ok.text()).toBe("");
+    expect(await readPlacement(tableId)).toMatchObject({
+      posX: 500,
+      posY: 250,
+      shape: "square",
+      rotation: 0,
+    });
+  });
+
+  it("manager clears a placement (204) + read-back nulls it; staff is 403; no session is 401", async () => {
+    const { tableId, zoneId } = await tableAndZone();
+    // Place it first (manager), so DELETE has something to clear.
+    await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify(place(zoneId)) },
+      managerCookie,
+    );
+
+    const unauth = await req(`/tables/${tableId}/placement`, { method: "DELETE" });
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+
+    const staff = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, staffCookie);
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    // The refused staff attempt did not clear it.
+    expect(await readPlacement(tableId)).toMatchObject({ posX: 500, posY: 250, shape: "square" });
+
+    const ok = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, managerCookie);
+    expect(ok.status).toBe(204);
+    expect(await ok.text()).toBe("");
+    expect(await readPlacement(tableId)).toMatchObject({
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+    });
+  });
+
+  it("PUT a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
+    const zoneId = await createZone(unique("PZ"));
+
+    // Malformed :id → requireTableId throws table.not_found at the route (else 22P02 → opaque 500).
+    const malformed = await req(
+      "/tables/not-a-uuid/placement",
+      { method: "PUT", body: JSON.stringify(place(zoneId)) },
+      managerCookie,
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
+
+    // Well-formed but unknown id → the verb's active-table read finds nothing → table.not_found.
+    const unknown = await req(
+      "/tables/00000000-0000-4000-8000-000000000000/placement",
+      { method: "PUT", body: JSON.stringify(place(zoneId)) },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
+  });
+
+  it("DELETE a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
+    const malformed = await req(
+      "/tables/not-a-uuid/placement",
+      { method: "DELETE" },
+      managerCookie,
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
+
+    const unknown = await req(
+      "/tables/00000000-0000-4000-8000-000000000000/placement",
+      { method: "DELETE" },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
+  });
+
+  it("PUT with a zoneId naming no LIVE zone → 404 zone.not_found; a malformed zoneId → 404 too", async () => {
+    const { tableId } = await tableAndZone();
+
+    const missing = await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify(place("00000000-0000-4000-8000-000000000000")) },
+      managerCookie,
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "zone.not_found" } });
+
+    // A present, string-typed but non-UUID zoneId is screened to zone.not_found at the route (else it
+    // reaches the `id` uuid column → 22P02 → opaque 500), the sibling table-route shape.
+    const malformed = await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify({ ...place("x"), zoneId: "not-a-uuid" }) },
+      managerCookie,
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
+  it("PUT body screens: array → body; non-string zoneId; non-number posX/posY/rotation; non-string shape", async () => {
+    const id = randomUUID(); // well-formed uuid, so requireTableId passes and the body screens fire
+    const base = { zoneId: randomUUID(), posX: 500, posY: 250, shape: "square", rotation: 0 };
+
+    // A `null` body coerces to `{}` (`?? {}`), then the first field screen fires (field "body" is only
+    // for a non-object TRUTHY body such as an array) — the same null-body discipline the sibling routes
+    // follow.
+    const nullBody = await req(
+      `/tables/${id}/placement`,
+      { method: "PUT", body: "null" },
+      managerCookie,
+    );
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "zoneId" } },
+    });
+
+    const arrayBody = await req(
+      `/tables/${id}/placement`,
+      { method: "PUT", body: "[]" },
+      managerCookie,
+    );
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+
+    const cases: readonly [string, Record<string, unknown>][] = [
+      ["zoneId", { ...base, zoneId: 123 }],
+      ["posX", { ...base, posX: "500" }],
+      ["posY", { ...base, posY: "250" }],
+      ["shape", { ...base, shape: 1 }],
+      ["rotation", { ...base, rotation: "0" }],
+    ];
+    for (const [field, body] of cases) {
+      const res = await req(
+        `/tables/${id}/placement`,
+        { method: "PUT", body: JSON.stringify(body) },
+        managerCookie,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
+  it("PUT with an out-of-range coordinate → 400 placement.invalid (the verb's field guard, mapped here)", async () => {
+    const { tableId, zoneId } = await tableAndZone();
+    const res = await req(
+      `/tables/${tableId}/placement`,
+      { method: "PUT", body: JSON.stringify({ ...place(zoneId), posX: 1001 }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "placement.invalid", params: { field: "posX" } },
+    });
   });
 });

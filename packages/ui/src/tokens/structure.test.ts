@@ -30,6 +30,7 @@ test("defines the structural contract", () => {
     "--wt-radius-sm",
     "--wt-radius-md",
     "--wt-radius-lg",
+    "--wt-radius-full",
     "--wt-font-family",
     "--wt-font-size-sm",
     "--wt-font-size-md",

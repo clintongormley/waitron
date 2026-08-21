@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -232,7 +232,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: ana.id });
+    // The response carries the server-computed `canConfigureTill` capability so the till can gate
+    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `till.configure`, so it is
+    // false. The on-till placement route (Task 4) still re-checks the gate server-side.
+    expect(await res.json()).toEqual({ personId: ana.id, canConfigureTill: false });
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -251,6 +254,30 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       sql`select ended_at is not null as ended from sessions where id = ${sessionId}`,
     );
     expect(rows.rows).toEqual([{ ended: true }]);
+  });
+
+  it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {
+    // Seed + log in a manager to prove `canConfigureTill` reflects the person's ACTUAL role, not a
+    // hardcoded value — a mutant that hardcoded `false` (or dropped the field) fails here, while the
+    // staff case above (canConfigureTill: false) kills a mutant that hardcoded `true`. A manager holds
+    // `till.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const mgr = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${cfg.tenantId}, 'Marta', ${hashPin("9999")}, 'manager') returning id`);
+    const managerId = mgr.rows[0]!.id;
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: managerId, pin: "9999" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ personId: managerId, canConfigureTill: true });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
+    await suite.db.execute(sql`delete from persons where id = ${managerId}`);
   });
 
   it("POST rejects a bad pin with 401 and a code", async () => {
@@ -1396,5 +1423,288 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
+  });
+});
+
+describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.configure) gate (FP-2, Task 4)", () => {
+  // PGlite, like the rest of this suite. The novel thing under test is the FIRST on-till
+  // `authorize(till.configure)` hop: the route resolves the SESSION operator's OWN role and refuses a
+  // write the role cannot make (no supervisor override this slice — manager-on-till only). That gate is
+  // `authorize` reading `persons.role` for the open session and asking `roleHasPermission` — a query
+  // plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on PGlite and real Postgres, because it
+  // turns on the person's role VALUE, not on any privilege / RLS-as-deployment-role / concurrency
+  // behaviour (CLAUDE.md §4's real-PG triggers). The write itself (`setTablePlacement`'s UPDATE on
+  // dining_tables under FORCE RLS as app_user) is proven over REAL Postgres by the management-api
+  // placement sibling, which wraps the SAME verb (management-api.test.ts). So the lighter target is the
+  // right one here and the heavier one adds nothing to THIS gate proof — the choice §4 asks to state.
+
+  // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
+  // (role `manager`, which holds `till.configure`) and a STAFF operator (Ana, role `staff`, which does
+  // NOT — reused from setup rather than re-seeded). Both are GENUINE `persons.role` values logged in
+  // through the real `loginWithPin` path; the role is never faked.
+  let managerCookie: string;
+  let managerPersonId: string;
+  let staffCookie: string;
+  let zoneId: string;
+
+  beforeAll(async () => {
+    const managerRow = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${cfg.tenantId}, 'Manolo (manager)', ${hashPin("9999")}, 'manager') returning id`);
+    managerPersonId = managerRow.rows[0]!.id;
+    const managerSession = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginWithPin(tx, {
+        tenantId: cfg.tenantId,
+        tillId: cfg.tillId,
+        personId: managerPersonId,
+        pin: "9999",
+      });
+    });
+    managerCookie = `${SESSION_COOKIE}=${managerSession.id}`;
+    // Ana (role `staff`) is the STAFF operator — no `till.configure`. Reusing the setup fixture keeps
+    // the roster's `[abel, ana]` invariant untouched (no extra staff person seeded).
+    staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const zoneRow = await suite.db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Sala') returning id`);
+    zoneId = zoneRow.rows[0]!.id;
+  });
+
+  // Remove the seeded manager (and its session) so `GET /api/staff`'s EXACT `[abel, ana]` roster
+  // assertion stays order-independent whatever order the suites run in (CLAUDE.md §4).
+  afterAll(async () => {
+    await suite.db.execute(sql`delete from sessions where person_id = ${managerPersonId}`);
+    await suite.db.execute(sql`delete from persons where id = ${managerPersonId}`);
+  });
+
+  /** A valid full placement against the live `zoneId`: a real `floor_table_shape` member and in-range
+   *  coordinates/rotation, so nothing in the body is itself the fault under test. */
+  function place() {
+    return { zoneId, posX: 120, posY: 340, shape: "rect", rotation: 90 };
+  }
+
+  /** Create a fresh table (unique label) through the till route, returning its id — a distinct row per
+   *  test so the PUT/DELETE cases never contend on one table's placement. */
+  async function makeTable(app: Hono): Promise<string> {
+    const res = await app.request("/api/tables", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify({ label: `placement-${randomUUID().slice(0, 8)}` }),
+    });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  /** Read a table's four placement columns (plus zone_id) back as the PGlite superuser (RLS bypassed —
+   *  a pure assertion read, not a path under test). */
+  async function placementOf(tableId: string) {
+    const rows = await suite.db.execute<{
+      pos_x: number | null;
+      pos_y: number | null;
+      shape: string | null;
+      rotation: number | null;
+      zone_id: string | null;
+    }>(sql`select pos_x, pos_y, shape, rotation, zone_id from dining_tables where id = ${tableId}`);
+    return rows.rows[0]!;
+  }
+
+  it("a MANAGER operator places a table (204, placement landed); a STAFF operator is 403", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const tableId = await makeTable(app);
+
+    // Manager holds `till.configure`: `authorize` passes, the placement is written, the route answers 204.
+    const ok = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify(place()),
+    });
+    expect(ok.status).toBe(204);
+    expect(await ok.text()).toBe("");
+    // The four placement columns (plus zone_id) actually landed on the row.
+    expect(await placementOf(tableId)).toEqual({
+      pos_x: 120,
+      pos_y: 340,
+      shape: "rect",
+      rotation: 90,
+      zone_id: zoneId,
+    });
+
+    // Staff holds no `till.configure` and sends no override: `authorize` throws
+    // `authorization.not_permitted`, which the till STATUS map answers 403. (Removing the `authorize`
+    // call flips this case to a 204 — the gate deletion-proof this task runs.)
+    const forbidden = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: staffCookie },
+      body: JSON.stringify(place()),
+    });
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "till.configure" } },
+    });
+  });
+
+  it("a MANAGER operator clears a placement (204, columns NULLed); a STAFF operator is 403", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const tableId = await makeTable(app);
+
+    // Place it first (as the manager) so there is something to clear.
+    const placed = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify(place()),
+    });
+    expect(placed.status).toBe(204);
+
+    // Staff cannot clear either — the same gate, 403 before any write.
+    const forbidden = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "DELETE",
+      headers: { cookie: staffCookie },
+    });
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    // The staff 403 wrote nothing: the placement the manager set is still present.
+    expect(await placementOf(tableId)).toMatchObject({ pos_x: 120, pos_y: 340 });
+
+    // Manager clears it: the four placement columns go NULL (zone_id is an FP-1 assignment, left as-is).
+    const cleared = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "DELETE",
+      headers: { cookie: managerCookie },
+    });
+    expect(cleared.status).toBe(204);
+    expect(await cleared.text()).toBe("");
+    expect(await placementOf(tableId)).toMatchObject({
+      pos_x: null,
+      pos_y: null,
+      shape: null,
+      rotation: null,
+      zone_id: zoneId,
+    });
+  });
+
+  it("a malformed :id is 404 table.not_found on PUT and DELETE (the screen, never an opaque 22P02 500)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // A non-UUID :id passed into `eq(diningTables.id, id)` would 22P02 → an opaque 500; the isUuid screen
+    // refuses it first with the domain `table.not_found` (404), the shape the sibling PATCH/DELETE
+    // /api/tables routes use. The MANAGER cookie proves it is the SCREEN, not the gate, that rejects it —
+    // an authorized operator still gets the 404 (the screen runs before `authorize`).
+    const put = await app.request("/api/tables/not-a-uuid/placement", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify(place()),
+    });
+    expect(put.status).toBe(404);
+    expect(await put.json()).toMatchObject({
+      error: { code: "table.not_found", params: { tableId: "not-a-uuid" } },
+    });
+
+    const del = await app.request("/api/tables/not-a-uuid/placement", {
+      method: "DELETE",
+      headers: { cookie: managerCookie },
+    });
+    expect(del.status).toBe(404);
+    expect(await del.json()).toMatchObject({
+      error: { code: "table.not_found", params: { tableId: "not-a-uuid" } },
+    });
+  });
+
+  it("a malformed zoneId in the PUT body is 404 zone.not_found (the screen, never an opaque 22P02 500)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const tableId = await makeTable(app);
+
+    // A string-typed but non-UUID zoneId reaches `setTablePlacement`'s `where floor_zones.id = ${zoneId}`
+    // read → 22P02 → opaque 500 un-screened; the route screens it to the SAME `zone.not_found` a
+    // well-formed-but-missing zone gets, matching the sibling table POST/PATCH routes.
+    const res = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify({ ...place(), zoneId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "zone.not_found", params: { zoneId: "not-a-uuid" } },
+    });
+  });
+
+  it("PUT body screens: non-string zoneId; non-number posX/posY/rotation; non-string shape (mirrors management-api)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    // A well-formed but non-existent table id: every case here is refused by the body-shape ladder
+    // BEFORE `setTablePlacement` runs, so no live table row is needed (mirrors management-api.test.ts's
+    // "PUT body screens" case, which uses the same trick for the same reason).
+    const id = randomUUID();
+
+    // A `null` body coerces to `{}` (`?? {}`), then the first field screen fires (field "body" is only
+    // for a non-object TRUTHY body such as an array) — the same null-body discipline the management-api
+    // sibling follows, and the only case that exercises the `?? {}` fallback itself.
+    const nullBody = await app.request(`/api/tables/${id}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "null",
+    });
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "zoneId" } },
+    });
+
+    // An array body fails the `typeof body !== "object" || body === null || Array.isArray(body)` guard
+    // itself (an array IS typeof "object" in JS), naming "body" rather than a field — the one case the
+    // per-field table below cannot reach.
+    const arrayBody = await app.request(`/api/tables/${id}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "[]",
+    });
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+
+    const cases: readonly [string, Record<string, unknown>][] = [
+      ["zoneId", { ...place(), zoneId: 123 }],
+      ["posX", { ...place(), posX: "500" }],
+      ["posY", { ...place(), posY: "250" }],
+      ["shape", { ...place(), shape: 1 }],
+      ["rotation", { ...place(), rotation: "0" }],
+    ];
+    for (const [field, body] of cases) {
+      const res = await app.request(`/api/tables/${id}/placement`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: managerCookie },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
+  it("a placement VALUE fault surfaces the verb's placement.invalid as 400 through the till route", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const tableId = await makeTable(app);
+
+    // posX above the 0..1000 canvas bound is `setTablePlacement`'s `placement.invalid` naming the field
+    // (reached only AFTER `authorize` passes for the manager). The till STATUS map answers it 400 — the
+    // entry this task lists explicitly; absent it the `?? 400` default yields the same 400, so this pins
+    // the surfaced status rather than proving the entry load-bearing.
+    const res = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify({ ...place(), posX: 5000 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "placement.invalid", params: { field: "posX" } },
+    });
   });
 });

@@ -65,6 +65,11 @@ const freeTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 0,
   status: null,
+  // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
 };
 
 const openTable: TableState = {
@@ -80,6 +85,10 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   status: null,
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
 };
 
 const saleResult: TillSaleResult = {
@@ -201,7 +210,10 @@ function emit(source: Element, type: string, detail?: unknown): void {
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana" });
+  // Log in as a NON-configuring operator by default (the common case) — the FP-2 capability tests below
+  // drive a configuring one explicitly. `canConfigureTill` rides the `logged-in` event exactly as the
+  // lock screen sends it (the server computes it from the operator's role).
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
   await flush(el);
   return counter(el)!;
 }
@@ -1157,6 +1169,111 @@ describe("till-app", () => {
       // A failed read shows the floor anyway (degrade gracefully), with tables left at their default.
       expect(floor(el)).not.toBeNull();
       expect(floor(el)!.tables).toEqual([]);
+    });
+
+    it("threads the api + the canEdit gate to the floor screen (FP-2)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      // The floor screen gets the app's api (for the on-till placement writes) and the manager gate.
+      // `toCounter` logged in as STAFF, so `canEdit` is false here (the manager path is covered below).
+      expect(floor(el)!.api).toBe(currentApi);
+      expect(floor(el)!.canEdit).toBe(false);
+    });
+
+    it("a login WITH the till.configure capability lights up the on-till floor editor, end-to-end", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      // The lock screen sends the server-computed capability; a manager holds `till.configure`.
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Marta",
+        canConfigureTill: true,
+      });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+
+      expect(floor(el)!.canEdit).toBe(true);
+      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).not.toBeNull();
+
+      // Logging out drops the privilege so the next operator starts un-privileged.
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+      emit(counter(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+      expect(floor(el)!.canEdit).toBe(false);
+    });
+
+    it("a login WITHOUT the till.configure capability keeps the on-till floor editor hidden, end-to-end", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+
+      expect(floor(el)!.canEdit).toBe(false);
+      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
+    });
+
+    it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+      // The initial floor load read each once.
+      expect(currentApi.getTablesState).toHaveBeenCalledOnce();
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+
+      // The refresh re-read the TABLES (twice total) so the map reflects the just-persisted placement —
+      // but NOT the zones: a placement write cannot change the zone list, so re-fetching it is waste.
+      expect(currentApi.getTablesState).toHaveBeenCalledTimes(2);
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
+    });
+
+    it("floor-refresh degrades gracefully when the re-read fails (keeps the last-known floor)", async () => {
+      // The first load succeeds; the refresh re-read rejects. A failed refresh must NOT blank the floor
+      // or throw (the floor touches no fiscal path) — the last-known tables stay put.
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockRejectedValue({ code: "server.internal" }),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([freeTable]);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+
+      // Still on the floor, tables unchanged from the last good load.
+      expect(floor(el)).not.toBeNull();
+      expect(floor(el)!.tables).toEqual([freeTable]);
     });
 
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {

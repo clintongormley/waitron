@@ -2,7 +2,9 @@ import {
   boolean,
   foreignKey,
   integer,
+  pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -10,6 +12,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations, tenants } from "./tenants.js";
+
+/**
+ * The rendered shape of a table on the FP-2 floor plan. Venue layout only — nowhere near the fiscal
+ * huella — so it carries no Spanish vocabulary and needs no fiscal review.
+ */
+export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"]);
 
 /**
  * A dining table — tenant + location scoped, long-lived. Anchored to the venue-wide `location`, NOT to
@@ -62,6 +70,14 @@ export const diningTables = pgTable(
     // dining_tables' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide, RLS
     // row-level). The FK is the tenant-consistent COMPOSITE in extraConfig below.
     statusId: uuid("status_id"),
+    // FP-2 spatial placement on the floor-plan canvas. All four are nullable — a table need not be
+    // placed. Additive columns on this existing FORCE-RLS table, so dining_tables' TS-1 policy and
+    // app_user grants already cover them (grants table-wide, RLS row-level); no --custom migration is
+    // needed, unlike a new table. Coordinates are smallint (canvas units); `rotation` is degrees.
+    posX: smallint("pos_x"),
+    posY: smallint("pos_y"),
+    shape: floorTableShape("shape"),
+    rotation: smallint("rotation"),
   },
   (t) => [
     // Composite (tenant_id, id) UNIQUE — the target for working_orders' tenant-consistent

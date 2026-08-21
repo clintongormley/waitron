@@ -1,0 +1,536 @@
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { customElement, property, query, state } from "lit/decorators.js";
+import { styleMap } from "lit/directives/style-map.js";
+import { baseStyles } from "../base-styles.js";
+import {
+  FLOOR_ASPECT,
+  type FloorTable,
+  GRID_STEP,
+  type PlacementChange,
+  type PlacementClear,
+  ROTATION_STEP,
+  type TableShape,
+  clampPermille,
+  sizeForCapacity,
+  snapRotation,
+  snapToGrid,
+} from "../floor.js";
+import "./wt-table-token.js";
+
+/**
+ * The user-facing copy the canvas needs. Threaded as a prop (the `@waitron/ui` convention — copy is
+ * never hardcoded locale text), with English defaults so the component is usable and testable
+ * standalone. A consumer app (the till, the dashboard) passes its own i18n; only the keys it overrides
+ * change. `covers`/`toServe` also flow down into each `<wt-table-token>`.
+ */
+export interface FloorCanvasCopy {
+  floor: string;
+  covers: string;
+  toServe: string;
+  zone: string;
+  rotate: string;
+  remove: string;
+  /** The name of the shape-picker GROUP (not one shape) — what a screen reader announces for it. */
+  shape: string;
+  shapeRound: string;
+  shapeSquare: string;
+  shapeRect: string;
+}
+
+const DEFAULT_COPY: FloorCanvasCopy = {
+  floor: "Floor plan",
+  covers: "covers",
+  toServe: "to serve",
+  zone: "Zone",
+  rotate: "Rotate",
+  remove: "Remove from plan",
+  shape: "Shape",
+  shapeRound: "Round",
+  shapeSquare: "Square",
+  shapeRect: "Rect",
+};
+
+/** The three shapes the palette offers, paired with their copy key. */
+const SHAPES: readonly TableShape[] = ["round", "square", "rect"];
+
+/** How far an arrow-key nudge moves a table when grid snap is off (a fine adjustment, in permille). */
+const NUDGE_STEP = 10;
+
+interface DragState {
+  table: FloorTable;
+  /** The pointer that started the gesture; move/up events from any other pointer are ignored. */
+  pointerId: number;
+  startX: number;
+  startY: number;
+  moved: boolean;
+}
+
+/** The three per-table event handlers a token binds. Memoised (see {@link WtFloorCanvas.#handlersOf}). */
+interface TableHandlers {
+  tap: (e: Event) => void;
+  down: (e: PointerEvent) => void;
+  key: (e: KeyboardEvent) => void;
+}
+
+/**
+ * The shared spatial floor plan (FP-2). In VIEW mode it lays every placed table out on a fixed-aspect
+ * (3:2) canvas at its `posX`/`posY` permille coordinates, each rendered with the shared
+ * `<wt-table-token>` so the map and the till's list card can never drift; tapping a table asks the app
+ * to open its tab (`wt-open-table`). In EDIT mode (`.editable`) a table can be dragged (snapping to a
+ * 50‰ grid when `.gridSnap`), reshaped from a palette, rotated in 15° detents, re-homed to another zone
+ * by id (the inspector emits the target `zoneId`; a name-based picker is a consuming app's job — no
+ * `.zones` prop is supplied yet), or cleared from the plan; every gesture emits `wt-placement-change`
+ * (or `wt-placement-clear`). The events carry the `wt-` prefix the house convention uses (`wt-dialog`
+ * emits `wt-close`), so a consumer never sees a bare `placement-change` from the shadow boundary.
+ * Tables stay keyboard-reachable — each is a real `<button>`, and the arrow keys nudge the focused one.
+ *
+ * The component is CONTROLLED: it never mutates `.tables`, it only reports the intent. The parent owns
+ * the data and re-feeds `.tables` after persisting a change.
+ */
+@customElement("wt-floor-canvas")
+export class WtFloorCanvas extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      :host {
+        display: block;
+      }
+
+      .canvas {
+        position: relative;
+        width: 100%;
+        aspect-ratio: ${FLOOR_ASPECT};
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        overflow: hidden;
+        touch-action: none;
+      }
+
+      .table {
+        position: absolute;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      :host([editable]) .table {
+        cursor: grab;
+      }
+
+      .table[data-size="S"] {
+        width: calc(var(--wt-tap-min) * 1.1);
+      }
+
+      .table[data-size="M"] {
+        width: calc(var(--wt-tap-min) * 1.4);
+      }
+
+      .table[data-size="L"] {
+        width: calc(var(--wt-tap-min) * 1.7);
+      }
+
+      .table[data-size="XL"] {
+        width: calc(var(--wt-tap-min) * 2.1);
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        margin-top: var(--wt-space-3);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .meta {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+      }
+
+      .meta .name {
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .meta .covers {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .palette {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      .zone {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+
+      .zone input {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      button.chip {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button.chip[aria-pressed="true"] {
+        border-color: var(--wt-color-primary);
+        color: var(--wt-color-primary);
+      }
+
+      button.chip.deactivate {
+        border-color: var(--wt-color-danger);
+        color: var(--wt-color-danger);
+      }
+    `,
+  ];
+
+  /** The tables to lay out. The component never mutates this — it is controlled by the parent. */
+  @property({ attribute: false }) tables: FloorTable[] = [];
+
+  /** Edit mode: tables become draggable/selectable and the inspector appears. */
+  @property({ type: Boolean, reflect: true }) editable = false;
+
+  /** Snap drags and nudges to the {@link GRID_STEP} (50‰) grid. */
+  @property({ type: Boolean }) gridSnap = false;
+
+  /** Localisable copy (see {@link FloorCanvasCopy}); only overridden keys need supplying. */
+  @property({ attribute: false }) copy: Partial<FloorCanvasCopy> = {};
+
+  /** The id of the table shown in the inspector, if any. */
+  @state() private selectedId: string | null = null;
+
+  /** Live position of the table being dragged, so it tracks the pointer before the drop is committed. */
+  @state() private draft: { id: string; posX: number; posY: number } | null = null;
+
+  @query(".canvas") private canvasEl!: HTMLElement;
+
+  #drag: DragState | null = null;
+
+  /**
+   * Per-table event handlers, memoised so their identity is STABLE across a re-render that changes only
+   * `draft` — and during a drag `#onPointerMove` writes `draft` on every pointermove, re-rendering every
+   * token. Lit rebinds a `@click`/`@pointerdown`/`@keydown` listener only when its reference changes, so
+   * stable handlers stop O(N) listener teardown/rebind on every token at pointer frame-rate. The map is
+   * rebuilt only when the `this.tables` REFERENCE changes (a parent re-feed after persisting an edit) —
+   * never on a `draft`/`selectedId` change — which is exactly when Lit itself re-reads `.tables`, so the
+   * captured `table` is always the current element. Behaviour is unchanged; only listener identity is.
+   */
+  #tableHandlers = new Map<string, TableHandlers>();
+  /** The `this.tables` reference the memo was built for; a change triggers a rebuild in {@link #handlersOf}. */
+  #handlersFor: readonly FloorTable[] | null = null;
+
+  get #copy(): FloorCanvasCopy {
+    return { ...DEFAULT_COPY, ...this.copy };
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#endDrag();
+  }
+
+  override render(): TemplateResult {
+    const copy = this.#copy;
+    const selected =
+      this.editable && this.selectedId != null
+        ? (this.tables.find((t) => t.id === this.selectedId) ?? null)
+        : null;
+    return html`
+      <div class="canvas" role="group" aria-label=${copy.floor}>
+        ${this.tables.map((t) => this.#renderTable(t, copy))}
+      </div>
+      ${selected ? this.#renderInspector(selected, copy) : nothing}
+    `;
+  }
+
+  /**
+   * The stable per-table handlers for `t`, rebuilding the whole memo when the `this.tables` reference
+   * has changed since the last build (see {@link #tableHandlers}). Called from {@link #renderTable}, which
+   * only ever passes a current `this.tables` element, so the lookup always hits.
+   */
+  #handlersOf(t: FloorTable): TableHandlers {
+    if (this.#handlersFor !== this.tables) {
+      this.#tableHandlers.clear();
+      for (const table of this.tables) {
+        this.#tableHandlers.set(table.id, {
+          tap: (e: Event) => this.#onTap(e, table),
+          down: (e: PointerEvent) => this.#onPointerDown(e, table),
+          key: (e: KeyboardEvent) => this.#onKeyDown(e, table),
+        });
+      }
+      this.#handlersFor = this.tables;
+    }
+    return this.#tableHandlers.get(t.id)!;
+  }
+
+  #renderTable(t: FloorTable, copy: FloorCanvasCopy): TemplateResult {
+    const pos = this.draft?.id === t.id ? this.draft : { posX: t.posX, posY: t.posY };
+    const style = styleMap({
+      left: `${pos.posX / 10}%`,
+      top: `${pos.posY / 10}%`,
+      transform: `translate(-50%, -50%) rotate(${t.rotation ?? 0}deg)`,
+    });
+    const handlers = this.#handlersOf(t);
+    // No aria-label: an aria-label would OVERRIDE the descendant content per the accessible-name
+    // algorithm, flattening every table to a bare label and erasing the occupancy state a sighted user
+    // reads from colour/total/badges. Matching FP-1's card button (which carries none), the button's
+    // accessible name is computed from the <wt-table-token> content — label + total + badges — so a
+    // screen reader hears the same state the map shows.
+    return html`
+      <button
+        type="button"
+        class="table state-${t.state}"
+        data-table=${t.id}
+        data-size=${sizeForCapacity(t.capacity)}
+        style=${style}
+        @click=${handlers.tap}
+        @pointerdown=${handlers.down}
+        @keydown=${handlers.key}
+      >
+        <wt-table-token
+          .table=${t}
+          .labels=${{ covers: copy.covers, toServe: copy.toServe }}
+        ></wt-table-token>
+      </button>
+    `;
+  }
+
+  #renderInspector(t: FloorTable, copy: FloorCanvasCopy): TemplateResult {
+    return html`
+      <div class="inspector">
+        <div class="meta">
+          <span class="name">${t.label}</span>
+          ${
+            t.capacity != null
+              ? html`<span class="covers">${t.capacity} ${copy.covers}</span>`
+              : nothing
+          }
+        </div>
+        <div class="palette" role="group" aria-label=${copy.shape}>
+          ${SHAPES.map(
+            (shape) => html`
+              <button
+                type="button"
+                class="chip"
+                data-shape=${shape}
+                aria-pressed=${(t.shape ?? "round") === shape}
+                @click=${() => this.#onShape(t, shape)}
+              >
+                ${this.#shapeLabel(shape, copy)}
+              </button>
+            `,
+          )}
+        </div>
+        <label class="zone">
+          ${copy.zone}
+          <input
+            .value=${t.zoneId ?? ""}
+            @change=${(e: Event) => this.#onZone(t, (e.target as HTMLInputElement).value)}
+          />
+        </label>
+        <div class="actions">
+          <button type="button" class="chip rotate" @click=${() => this.#onRotate(t)}>
+            ${copy.rotate}
+          </button>
+          <button type="button" class="chip deactivate" @click=${() => this.#onDeactivate(t)}>
+            ${copy.remove}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  #shapeLabel(shape: TableShape, copy: FloorCanvasCopy): string {
+    if (shape === "round") return copy.shapeRound;
+    if (shape === "square") return copy.shapeSquare;
+    return copy.shapeRect;
+  }
+
+  // --- interaction ---
+
+  /** A plain tap: open the table (view) or select it for the inspector (edit). Stops the NATIVE click
+   *  before re-emitting so a consumer above the shadow boundary sees only the intentional
+   *  `wt-open-table`, never the raw composed click alongside it. */
+  #onTap(e: Event, t: FloorTable): void {
+    e.stopPropagation();
+    if (this.editable) {
+      this.selectedId = t.id;
+      return;
+    }
+    this.dispatchEvent(
+      new CustomEvent("wt-open-table", {
+        detail: { tableId: t.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #onPointerDown(e: PointerEvent, t: FloorTable): void {
+    if (!this.editable) return;
+    // Ignore a second pointerdown while a drag is already live: replacing `#drag`'s owner would strand
+    // the first pointer's pointerup (it no longer matches the owner), leaving the gesture half-torn-down.
+    if (this.#drag !== null) return;
+    e.preventDefault();
+    this.#drag = {
+      table: t,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+    };
+    window.addEventListener("pointermove", this.#onPointerMove);
+    window.addEventListener("pointerup", this.#onPointerUp);
+    window.addEventListener("pointercancel", this.#onPointerCancel);
+  }
+
+  readonly #onPointerMove = (e: PointerEvent): void => {
+    // Ignore a stray second pointer (multi-touch): only the pointer that started the drag moves it.
+    if (this.#drag === null || e.pointerId !== this.#drag.pointerId) return;
+    this.#drag.moved = true;
+    this.draft = { id: this.#drag.table.id, ...this.#pointerToPos(e.clientX, e.clientY) };
+  };
+
+  readonly #onPointerUp = (e: PointerEvent): void => {
+    const drag = this.#drag;
+    if (drag !== null && e.pointerId !== drag.pointerId) return;
+    if (drag === null || !drag.moved) {
+      this.#endDrag();
+      return;
+    }
+    // Read the final position while #drag is still live, THEN tear the gesture down.
+    const raw = this.#pointerToPos(e.clientX, e.clientY);
+    this.#endDrag();
+    const posX = this.gridSnap ? clampPermille(snapToGrid(raw.posX)) : raw.posX;
+    const posY = this.gridSnap ? clampPermille(snapToGrid(raw.posY)) : raw.posY;
+    this.#emitPlacement({ ...this.#placementOf(drag.table), posX, posY });
+  };
+
+  /** A cancelled gesture (touch/pen interrupted by the OS) leaves no drop to commit: run the SAME
+   *  cleanup as pointerup but emit nothing, so `#drag`/`draft` never linger stale after the cancel. */
+  readonly #onPointerCancel = (e: PointerEvent): void => {
+    if (this.#drag !== null && e.pointerId !== this.#drag.pointerId) return;
+    this.#endDrag();
+  };
+
+  #endDrag(): void {
+    this.#drag = null;
+    this.draft = null;
+    window.removeEventListener("pointermove", this.#onPointerMove);
+    window.removeEventListener("pointerup", this.#onPointerUp);
+    window.removeEventListener("pointercancel", this.#onPointerCancel);
+  }
+
+  /** Maps a pointer position to permille coordinates via the drag's start offset. */
+  #pointerToPos(clientX: number, clientY: number): { posX: number; posY: number } {
+    const drag = this.#drag!;
+    const rect = this.canvasEl.getBoundingClientRect();
+    const dxFrac = (clientX - drag.startX) / rect.width;
+    const dyFrac = (clientY - drag.startY) / rect.height;
+    return {
+      posX: clampPermille(Math.round(drag.table.posX + dxFrac * 1000)),
+      posY: clampPermille(Math.round(drag.table.posY + dyFrac * 1000)),
+    };
+  }
+
+  #onKeyDown(e: KeyboardEvent, t: FloorTable): void {
+    if (!this.editable) return;
+    const step = this.gridSnap ? GRID_STEP : NUDGE_STEP;
+    let dx = 0;
+    let dy = 0;
+    if (e.key === "ArrowLeft") dx = -step;
+    else if (e.key === "ArrowRight") dx = step;
+    else if (e.key === "ArrowUp") dy = -step;
+    else if (e.key === "ArrowDown") dy = step;
+    else return;
+    e.preventDefault();
+    this.selectedId = t.id;
+    const nextX = clampPermille(t.posX + dx);
+    const nextY = clampPermille(t.posY + dy);
+    const posX = this.gridSnap ? clampPermille(snapToGrid(nextX)) : nextX;
+    const posY = this.gridSnap ? clampPermille(snapToGrid(nextY)) : nextY;
+    this.#emitPlacement({ ...this.#placementOf(t), posX, posY });
+  }
+
+  #onShape(t: FloorTable, shape: TableShape): void {
+    this.#emitPlacement({ ...this.#placementOf(t), shape });
+  }
+
+  #onRotate(t: FloorTable): void {
+    this.#emitPlacement({
+      ...this.#placementOf(t),
+      rotation: snapRotation((t.rotation ?? 0) + ROTATION_STEP),
+    });
+  }
+
+  #onZone(t: FloorTable, value: string): void {
+    // Emit the TRIMMED value (or null when blank) — never surrounding whitespace as a live zone id.
+    const trimmed = value.trim();
+    this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
+  }
+
+  #onDeactivate(t: FloorTable): void {
+    const detail: PlacementClear = { tableId: t.id };
+    this.dispatchEvent(
+      new CustomEvent("wt-placement-clear", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  /** The table's current full placement, the base every edit gesture overrides one field of. */
+  #placementOf(t: FloorTable): PlacementChange {
+    return {
+      tableId: t.id,
+      posX: t.posX,
+      posY: t.posY,
+      shape: t.shape ?? "round",
+      rotation: t.rotation ?? 0,
+      zoneId: t.zoneId ?? null,
+    };
+  }
+
+  #emitPlacement(detail: PlacementChange): void {
+    this.dispatchEvent(
+      new CustomEvent("wt-placement-change", { detail, bubbles: true, composed: true }),
+    );
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "wt-floor-canvas": WtFloorCanvas;
+  }
+}

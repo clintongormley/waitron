@@ -4,12 +4,43 @@ import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
-import { diningTables, floorZones, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
+import {
+  diningTables,
+  floorTableShape,
+  floorZones,
+  isUniqueViolation,
+  tableServiceStatuses,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 const FOREIGN_KEY_VIOLATION = "23503";
 const ZONE_FK = "dining_tables_zone_fk";
+
+/**
+ * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
+ * enum rather than hand-re-declared as a string union — so this and the DB stay in lockstep if a
+ * member is ever added/removed (the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow`
+ * and `working-order.ts`'s `PrepState` use). `working-order.ts`'s `TableState` imports this for the
+ * read side, so the write verb and the read model share one source of truth.
+ */
+export type FloorTableShape = (typeof floorTableShape.enumValues)[number];
+
+/** The inclusive canvas-coordinate bound (design §placement: `pos_x`/`pos_y` are 0..1000). */
+const COORD_MAX = 1000;
+/** The inclusive rotation bound in degrees (design §placement: `rotation` is 0..359). */
+const ROTATION_MAX = 359;
+
+/**
+ * Refuse a placement number that is not an integer in `[0, max]`, naming the FIELD (never the value —
+ * the no-leak discipline `placement.invalid` documents). Shared by `posX`/`posY`/`rotation` so the
+ * three field guards read and reject identically.
+ */
+function requirePlacementInt(value: number, max: number, field: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > max) {
+    throw new AppError("placement.invalid", { field });
+  }
+}
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
@@ -53,6 +84,15 @@ export interface DiningTable {
   capacity: number | null;
   active: boolean;
   createdAt: string;
+  /** FP-2 spatial placement on the floor-plan canvas — canvas coordinates, rendered shape, and rotation
+   *  in degrees, or `null` for an unplaced table. Written by {@link setTablePlacement} /
+   *  {@link clearPlacement}. Non-optional `| null` (unconditionally present, `null` when unplaced),
+   *  mirroring `working-order.ts`'s `TableState` placement block so the dashboard editor reads a
+   *  placement field without a presence check and keeps a placed table placed on reload. */
+  posX: number | null;
+  posY: number | null;
+  shape: FloorTableShape | null;
+  rotation: number | null;
 }
 
 /**
@@ -104,6 +144,10 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
       capacity: diningTables.capacity,
       active: diningTables.active,
       createdAt: diningTables.createdAt,
+      posX: diningTables.posX,
+      posY: diningTables.posY,
+      shape: diningTables.shape,
+      rotation: diningTables.rotation,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.active, true)))
@@ -168,6 +212,96 @@ export async function deactivateTable(
     .returning({ id: diningTables.id });
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId: id });
+  }
+}
+
+/**
+ * Place a table on the FP-2 spatial floor plan (design §placement): write its zone + canvas
+ * coordinates + shape + rotation. Runs on the CALLER's transaction under its tenant/app_user scope.
+ * LOCATION-scoped to `cfg.locationId` (like the sibling read {@link listTables}): RLS confines every
+ * read/write to the tenant, but a tenant can hold several venues, so both the table and the zone must
+ * belong to THIS venue — a caller supplying another location's table or zone UUID is refused, not
+ * allowed to reach across venues. Validates IN ORDER, each with its own precise code:
+ *  1. the table is ACTIVE and in this LOCATION (an absent, deactivated, foreign/RLS-hidden, or
+ *     cross-location row → `table.not_found`, the same "must be active" shape {@link setTableStatus}
+ *     enforces);
+ *  2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
+ *     cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds into
+ *     the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk`
+ *     {@link createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither
+ *     `active` nor the location — so this is an explicit read rather than a caught FK violation;
+ *  3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation` integer
+ *     in `0..359` — each failure is `placement.invalid` naming THAT field, never the value.
+ * Steps 1–2 are ONE round trip (two scalar subqueries, NULL when no row matches), the shape
+ * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`,
+ * itself re-scoped to (id, location) so a zero-row UPDATE (the table is not this venue's) is
+ * `table.not_found` rather than a silent no-op.
+ */
+export async function setTablePlacement(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
+): Promise<void> {
+  // One round trip: the table's `active` flag and the target zone's `active` flag, each NULL when no
+  // row matches (RLS confines both reads to this tenant; the `location_id` predicate narrows each to
+  // THIS venue). NULL-or-false distinguishes missing from inactive but both map to the one code here —
+  // a placement needs a live table AND a live zone, both in this location.
+  const { rows } = await tx.execute<{
+    table_active: boolean | null;
+    zone_active: boolean | null;
+  }>(
+    sql`select
+      (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId} and ${diningTables.locationId} = ${cfg.locationId}) as table_active,
+      (select ${floorZones.active} from ${floorZones} where ${floorZones.id} = ${p.zoneId} and ${floorZones.locationId} = ${cfg.locationId}) as zone_active`,
+  );
+  const row = rows[0]!;
+  if (!row.table_active) {
+    throw new AppError("table.not_found", { tableId });
+  }
+  if (!row.zone_active) {
+    throw new AppError("zone.not_found", { zoneId: p.zoneId });
+  }
+
+  requirePlacementInt(p.posX, COORD_MAX, "posX");
+  requirePlacementInt(p.posY, COORD_MAX, "posY");
+  if (!floorTableShape.enumValues.includes(p.shape)) {
+    throw new AppError("placement.invalid", { field: "shape" });
+  }
+  requirePlacementInt(p.rotation, ROTATION_MAX, "rotation");
+
+  const updated = await tx
+    .update(diningTables)
+    .set({ zoneId: p.zoneId, posX: p.posX, posY: p.posY, shape: p.shape, rotation: p.rotation })
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
+    .returning({ id: diningTables.id });
+  if (updated.length === 0) {
+    throw new AppError("table.not_found", { tableId });
+  }
+}
+
+/**
+ * Remove a table from the floor plan: NULL the four placement columns (`pos_x`/`pos_y`/`shape`/
+ * `rotation`). `zone_id` is left AS-IS — it is an FP-1 assignment, not one of the four placement
+ * columns, and a table may belong to a zone without being spatially placed. LOCATION-scoped to
+ * `cfg.locationId` (like {@link setTablePlacement} and the sibling read {@link listTables}): an absent
+ * id, another tenant's (RLS-hidden), or another VENUE's (same tenant, different `location_id`) matches
+ * no row and throws `table.not_found`, the by-id shape {@link updateTable}/{@link deactivateTable} use.
+ * No `active` check — like those two, `clearPlacement` operates on the row regardless of its `active`
+ * flag.
+ */
+export async function clearPlacement(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const updated = await tx
+    .update(diningTables)
+    .set({ posX: null, posY: null, shape: null, rotation: null })
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
+    .returning({ id: diningTables.id });
+  if (updated.length === 0) {
+    throw new AppError("table.not_found", { tableId });
   }
 }
 

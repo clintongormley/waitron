@@ -109,6 +109,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
+  // Floor-plan spatial placement (apps/server/src/tables.ts, FP-2). The Plano editor's canvas emits a
+  // placement the server refuses when a coordinate is out of range, the shape/rotation is bad, or the
+  // target zone is inactive — surfaced as this one code (its params name the FIELD, never the value).
+  "placement.invalid": {
+    en: "That table position isn't valid",
+    es: "Esa posición de la mesa no es válida",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",

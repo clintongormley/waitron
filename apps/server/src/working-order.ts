@@ -34,6 +34,7 @@ import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/c
 import type { LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FloorTableShape } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 
 export interface WorkingOrderDeps {
@@ -2001,6 +2002,15 @@ export interface TableState {
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
+  /** FP-2 spatial placement on the floor-plan canvas — canvas coordinates, rendered shape, and
+   *  rotation in degrees, or `null` for an unplaced table. Written by `setTablePlacement` /
+   *  `clearPlacement`. Non-optional `| null` (unconditionally present, `null` when unplaced), matching
+   *  the `zoneId`/`capacity`/`status` siblings above rather than the conditionally-spread `tab*`
+   *  fields below — so the canvas can read a placement field without a presence check. */
+  posX: number | null;
+  posY: number | null;
+  shape: FloorTableShape | null;
+  rotation: number | null;
 }
 
 /**
@@ -2034,9 +2044,14 @@ export async function listTablesWithState(
     status_id: string | null;
     status_label: string | null;
     status_color: string | null;
+    pos_x: number | null;
+    pos_y: number | null;
+    shape: FloorTableShape | null;
+    rotation: number | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
+      dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
@@ -2089,6 +2104,11 @@ export async function listTablesWithState(
         r.status_id !== null
           ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
           : null,
+      // Unconditionally present, null when unplaced (the smallint/enum columns return null directly).
+      posX: r.pos_x,
+      posY: r.pos_y,
+      shape: r.shape,
+      rotation: r.rotation,
       ...(hasOpenTab
         ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
         : {}),

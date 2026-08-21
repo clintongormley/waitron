@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
+import {
+  authorize,
+  endSession,
+  listActiveStaff,
+  loginWithPin,
+  roleHasPermission,
+} from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { getLayout } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -15,13 +21,16 @@ import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
 import {
+  clearPlacement,
   createTable,
   deactivateTable,
   listServiceStatuses,
   listTables,
   listZones,
+  setTablePlacement,
   setTableStatus,
   updateTable,
+  type FloorTableShape,
 } from "./tables.js";
 import {
   abandonHeldOrder,
@@ -143,6 +152,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // is thrown only by the zone CRUD verbs, which the MANAGEMENT API exposes and maps there; the till
   // surface only LISTS zones (`GET /api/zones`) and never creates/renames one, so it never throws it.)
   "zone.not_found": 404,
+  // Floor-plan spatial placement (FP-2, Task 4). A `posX`/`posY`/`rotation` out of range or a `shape`
+  // naming no `floor_table_shape` enum member is `setTablePlacement`'s per-field `placement.invalid` — a
+  // request-shape fault, 400. Listed explicitly (house style) though 400 is the map's default; the
+  // on-till placement routes (`PUT`/`DELETE /api/tables/:id/placement`) surface it. (`table.not_found`/
+  // `zone.not_found`, already mapped above, cover the missing/inactive table or zone the verb also throws.)
+  "placement.invalid": 400,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
@@ -278,7 +293,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
       });
       setSessionCookie(c, session.id, deps.secureCookies);
-      return c.json({ personId: session.personId });
+      // Surface the derived CAPABILITY the till needs — whether this operator may configure the till
+      // (FP-2's on-till "Editar plano") — computed server-side from the session's role via the identity
+      // package's own `roleHasPermission`, never mirrored as a role→permission map on the client (which
+      // would silently drift from `permissions.ts`). Convenience only: every server gate re-derives the
+      // role from the session and re-checks the permission via `authorize` (e.g. the placement route
+      // below), so a tampered client value grants nothing.
+      const canConfigureTill = roleHasPermission(session.role, "till.configure");
+      return c.json({ personId: session.personId, canConfigureTill });
     }),
   );
 
@@ -897,6 +919,89 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await setTableStatus(tx, deps.cfg, id, statusId);
       });
       return c.body(null, 200);
+    }),
+  );
+
+  // Place a table on the FP-2 spatial floor plan (design §placement) — the FIRST on-till
+  // `authorize(till.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
+  // guard: the session only IDENTIFIES the operator, and the write is a manager-level venue-config
+  // action. So this route pulls `sessionId` out of the session (the sale routes ignore it) and, inside
+  // the tenant/app_user transaction, calls `authorize(tx, { sessionId, permission: "till.configure" })`
+  // — which resolves the OPERATOR's OWN role and throws `authorization.not_permitted` (→ 403) when it
+  // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
+  // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a
+  // rejected operator performs no write (proven by-deletion in the suite — dropping the `authorize` call
+  // flips the staff case to a 204). The `:id` isUuid screen runs FIRST (before the tx), refusing a
+  // malformed value with the SAME domain code the sibling table routes use — `table.not_found` (404) —
+  // rather than the 22P02→500 the raw value would raise. The body-shape screen mirrors the
+  // `management-api.ts` placement sibling exactly: a non-object body → `management.request_invalid`
+  // naming "body", each MISSING or wrong-TYPE field → the same code naming THAT field, and a
+  // string-typed but MALFORMED `zoneId` → `zone.not_found` (the sibling POST/PATCH `/api/tables`
+  // convention, one field over — un-screened it reaches the `floor_zones.id` uuid column in
+  // `setTablePlacement` → 22P02 → opaque 500). The verb owns the placement VALUE validation
+  // (`placement.invalid`) and the live-table/live-zone reads. Returns 204 (the management-api
+  // placement sibling's convention).
+  app.put("/api/tables/:id/placement", (c) =>
+    run(c, log, async () => {
+      const { sessionId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      const body =
+        (await c.req.json<{
+          zoneId?: unknown;
+          posX?: unknown;
+          posY?: unknown;
+          shape?: unknown;
+          rotation?: unknown;
+        }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.zoneId !== "string")
+        throw new AppError("management.request_invalid", { field: "zoneId" });
+      // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
+      // verb reads `floor_zones … where id = ${zoneId}`, so an un-screened non-UUID reaches the `uuid`
+      // column → 22P02 → opaque 500. Give it the SAME zone.not_found a well-formed-but-missing one gets.
+      if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
+      if (typeof body.posX !== "number")
+        throw new AppError("management.request_invalid", { field: "posX" });
+      if (typeof body.posY !== "number")
+        throw new AppError("management.request_invalid", { field: "posY" });
+      if (typeof body.shape !== "string")
+        throw new AppError("management.request_invalid", { field: "shape" });
+      if (typeof body.rotation !== "number")
+        throw new AppError("management.request_invalid", { field: "rotation" });
+      // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
+      // `withTenant` closure — a captured property resets to its declared type). `shape` is cast to
+      // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
+      // asserts nothing the verb does not check.
+      const { zoneId, posX, posY, rotation } = body;
+      const shape = body.shape as FloorTableShape;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorize(tx, { sessionId, permission: "till.configure" });
+        await setTablePlacement(tx, deps.cfg, id, { zoneId, posX, posY, shape, rotation });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Un-place a table (NULL the four placement columns, leave zone_id as-is — an FP-1 assignment).
+  // Mirrors the PUT's gate exactly: the operator's OWN `till.configure` via `authorize` (no override),
+  // BEFORE `clearPlacement`, so a staff operator is 403 and writes nothing. Malformed :id → table.not_found
+  // (the isUuid screen, never a 22P02 500); an absent row → table.not_found (the verb's row-count check).
+  // Returns 204.
+  app.delete("/api/tables/:id/placement", (c) =>
+    run(c, log, async () => {
+      const { sessionId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorize(tx, { sessionId, permission: "till.configure" });
+        await clearPlacement(tx, deps.cfg, id);
+      });
+      return c.body(null, 204);
     }),
   );
 

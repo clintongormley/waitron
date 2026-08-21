@@ -73,6 +73,8 @@ function stubApi(
     createTable: vi.fn().mockResolvedValue({ id: "t9" }),
     updateTable: vi.fn().mockResolvedValue(undefined),
     deactivateTable: vi.fn().mockResolvedValue(undefined),
+    setTablePlacement: vi.fn().mockResolvedValue(undefined),
+    clearPlacement: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -368,5 +370,289 @@ describe("floor-screen", () => {
     type(el, "[data-new-table]", "Z");
     type(el, "[data-test=table-label-t1]", "W");
     expect(leaked).toBe(false);
+  });
+});
+
+/**
+ * The FP-2 "Plano" tab: the same `wt-floor-canvas` (from `@waitron/ui`, Task 5) in EDIT mode, per zone.
+ * The dashboard is manager-only (a management session gates the whole screen), so there is NO
+ * operator-role gate — the editor is always available (unlike the till, which gates on `canEdit`). A
+ * placed table (posX ≠ null) draws on the canvas; an unplaced one sits in a tray and is tap-to-placed.
+ * `wt-placement-change` persists via `setTablePlacement` then reloads; `wt-placement-clear` via
+ * `clearPlacement`; a `placement.invalid` rejection surfaces the localised `role="alert"` banner (never
+ * the raw code). The FP-1 Zonas/Mesas config panels are ADDITIVE-unchanged: they stay the default tab.
+ */
+describe("floor-screen — Plano editor (FP-2)", () => {
+  /** A placed table (t1, on the canvas) + an unplaced one (t2, in the tray), both in z1. */
+  const Z1_TABLES: DashboardTable[] = [
+    {
+      id: "t1",
+      label: "1",
+      zoneId: "z1",
+      capacity: 4,
+      active: true,
+      createdAt: "2026-08-17T00:00:00Z",
+      posX: 250,
+      posY: 400,
+      shape: "round",
+      rotation: 0,
+    },
+    {
+      id: "t2",
+      label: "2",
+      zoneId: "z1",
+      capacity: 2,
+      active: true,
+      createdAt: "2026-08-17T00:00:00Z",
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+    },
+  ];
+
+  /** The shadow-DOM canvas element, once the Plano tab is open. */
+  type Canvas = HTMLElement & {
+    editable: boolean;
+    shadowRoot: ShadowRoot;
+    updateComplete: Promise<unknown>;
+  };
+  const canvasOf = (el: FloorScreen): Canvas => q(el, "wt-floor-canvas") as Canvas;
+
+  /** Click the Plano top-tab and settle the re-render (mirrors the brief's step-2 dispatch). */
+  async function openPlano(el: FloorScreen): Promise<void> {
+    q(el, '[data-tab="plano"]')!.dispatchEvent(new Event("click"));
+    await el.updateComplete;
+  }
+
+  it("hosts an editable wt-floor-canvas on the Plano tab (and not on the default config tab)", async () => {
+    const api = stubApi({}, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    expect(canvasOf(el)).toBeNull(); // config is the default tab — no canvas
+    expect(q(el, "[data-test=zones-panel]")).not.toBeNull();
+    await openPlano(el);
+    const canvas = canvasOf(el);
+    expect(canvas).not.toBeNull();
+    expect(canvas.editable).toBe(true); // always edit mode (manager-only screen, no role gate)
+    expect(q(el, "[data-test=zones-panel]")).toBeNull(); // config panels hidden while Plano is active
+  });
+
+  it("draws a placed table on the canvas and lists an unplaced one in the tray", async () => {
+    const api = stubApi({}, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    const canvas = canvasOf(el);
+    await canvas.updateComplete;
+    expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).not.toBeNull(); // placed → canvas
+    expect(q(el, '[data-tray-table="t2"]')).not.toBeNull(); // unplaced → tray
+    expect(canvas.shadowRoot.querySelector('[data-table="t2"]')).toBeNull(); // and not on the canvas
+  });
+
+  it("persists a placement-change via setTablePlacement, then reloads", async () => {
+    const api = stubApi({}, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("wt-placement-change", {
+        detail: { tableId: "t1", posX: 200, posY: 300, shape: "rect", rotation: 90, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.setTablePlacement).toHaveBeenCalledWith("t1", {
+      posX: 200,
+      posY: 300,
+      shape: "rect",
+      rotation: 90,
+      zoneId: "z1",
+    });
+    expect(api.listTables).toHaveBeenCalledTimes(2); // initial + reload after the write
+    // A placement cannot change the zone list, so the reload re-fetches only tables — zones stay at
+    // their single initial load.
+    expect(api.listZones).toHaveBeenCalledOnce();
+  });
+
+  it("clears a placement via clearPlacement, then reloads", async () => {
+    const api = stubApi({}, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("wt-placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.clearPlacement).toHaveBeenCalledWith("t1");
+    expect(api.listTables).toHaveBeenCalledTimes(2);
+    // Only the tables are re-fetched on a placement clear; the zone list is left untouched.
+    expect(api.listZones).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces a failed table reload after a placement write as the localised errorKey banner", async () => {
+    // The placement write lands, but the follow-up tables-only reload rejects: the failure surfaces as
+    // the localised errorKey banner (the reconcile-to-server-truth shape #load had, kept in #loadTables),
+    // never swallowed. The first listTables (initial load) resolves; the reload (second call) rejects.
+    const listTables = vi
+      .fn()
+      .mockResolvedValueOnce(Z1_TABLES.map((t) => ({ ...t })))
+      .mockRejectedValueOnce({ code: "server.internal" });
+    const api = stubApi({ listTables }, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("wt-placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.clearPlacement).toHaveBeenCalledWith("t1");
+    expect(errorKey(el)).toBe("server.internal");
+    expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("server.internal", "es-ES"));
+  });
+
+  it("tap-to-places an unplaced tray table at a default position, then reloads", async () => {
+    // Only an unplaced table in z1, so the default slot is the centre (no placed tables to nudge past).
+    const only: DashboardTable[] = [Z1_TABLES[1]!];
+    const api = stubApi({}, ZONES, only);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    q(el, '[data-tray-table="t2"]')!.click();
+    await flush(el);
+    expect(api.setTablePlacement).toHaveBeenCalledWith("t2", {
+      posX: 500,
+      posY: 500,
+      shape: "round",
+      rotation: 0,
+      zoneId: "z1",
+    });
+    expect(api.listTables).toHaveBeenCalledTimes(2);
+    // Tap-to-place goes through the same placement path, so it too re-fetches only the tables.
+    expect(api.listZones).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces a rejected placement (placement.invalid) as a localised role=alert, never the raw code", async () => {
+    const api = stubApi(
+      { setTablePlacement: vi.fn().mockRejectedValue({ code: "placement.invalid" }) },
+      ZONES,
+      Z1_TABLES,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("wt-placement-change", {
+        detail: { tableId: "t1", posX: 5000, posY: 0, shape: "round", rotation: 0, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(errorKey(el)).toBe("placement.invalid");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("placement.invalid", "es-ES"));
+    expect(banner).not.toContain("placement.invalid");
+  });
+
+  it("surfaces a rejected placement-clear as a localised role=alert", async () => {
+    const api = stubApi(
+      { clearPlacement: vi.fn().mockRejectedValue({ code: "table.not_found" }) },
+      ZONES,
+      Z1_TABLES,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("wt-placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(errorKey(el)).toBe("table.not_found");
+    expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("table.not_found", "es-ES"));
+  });
+
+  it("shows a Sin zona sub-tab and canvas for a zoneless placed table", async () => {
+    const zoneless: DashboardTable[] = [
+      {
+        id: "t9",
+        label: "9",
+        zoneId: null,
+        capacity: null,
+        active: true,
+        createdAt: "2026-08-17T00:00:00Z",
+        posX: 100,
+        posY: 100,
+        shape: "square",
+        rotation: 0,
+      },
+    ];
+    const api = stubApi({}, ZONES, zoneless);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    // The first (zone z1) tab is active by default; switch to the "Sin zona" tab.
+    q(el, '[data-zone="none"]')!.dispatchEvent(new Event("click"));
+    await el.updateComplete;
+    const canvas = canvasOf(el);
+    await canvas.updateComplete;
+    expect(canvas.shadowRoot.querySelector('[data-table="t9"]')).not.toBeNull();
+  });
+
+  it("switches the canvas contents when another zone sub-tab is picked", async () => {
+    const spread: DashboardTable[] = [
+      { ...Z1_TABLES[0]!, id: "t1", zoneId: "z1" },
+      {
+        id: "tB",
+        label: "B",
+        zoneId: "z2",
+        capacity: 4,
+        active: true,
+        createdAt: "2026-08-17T00:00:00Z",
+        posX: 600,
+        posY: 600,
+        shape: "rect",
+        rotation: 0,
+      },
+    ];
+    const api = stubApi({}, TWO_ZONES, spread);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    // Default (z1): t1 on the canvas, tB not.
+    let canvas = canvasOf(el);
+    await canvas.updateComplete;
+    expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).not.toBeNull();
+    expect(canvas.shadowRoot.querySelector('[data-table="tB"]')).toBeNull();
+    // Pick the z2 tab: tB now on the canvas, t1 gone.
+    q(el, '[data-zone="z2"]')!.dispatchEvent(new Event("click"));
+    await el.updateComplete;
+    canvas = canvasOf(el);
+    await canvas.updateComplete;
+    expect(canvas.shadowRoot.querySelector('[data-table="tB"]')).not.toBeNull();
+    expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).toBeNull();
+  });
+
+  it("renders the Plano tab with no zones and no tables (empty canvas, no sub-tabs)", async () => {
+    const api = stubApi({}, [], []);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    expect(canvasOf(el)).not.toBeNull(); // canvas still renders (empty)
+    expect(q(el, "[data-zone]")).toBeNull(); // no zone sub-tabs
+    expect(q(el, "[data-tray-table]")).toBeNull(); // no tray
   });
 });
