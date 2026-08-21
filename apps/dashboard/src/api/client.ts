@@ -315,12 +315,12 @@ export interface DashboardTable {
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
    * rendered `shape`, and `rotation` in degrees; `null`/absent for an unplaced table. These mirror the
    * server's `dining_tables` placement columns (`apps/server/src/tables.ts`'s `DiningTable`), written by
-   * {@link DashboardApi.setTablePlacement} / {@link DashboardApi.clearPlacement}. Kept OPTIONAL because
-   * the config route `GET /management-api/tables` (`listTables`) does NOT yet project them — only the
-   * till's `listTablesWithState` (`GET /api/tables/state`) does (see the Task-3 report). Until the
-   * config route projects them, a loaded row carries no placement and the Plano editor treats the table
-   * as UNPLACED (it sits in the tray until tap-to-placed). The editor reads `posX != null` to decide
-   * placed vs unplaced, mirroring the till's live-floor screen.
+   * {@link DashboardApi.setTablePlacement} / {@link DashboardApi.clearPlacement}. The config route
+   * `GET /management-api/tables` (`listTables`) now PROJECTS them (Task 7b), alongside the till's
+   * `listTablesWithState` (`GET /api/tables/state`), so a loaded row carries its placement and the Plano
+   * editor keeps a placed table placed on reload. Kept OPTIONAL (`?`) so the type also admits an unplaced
+   * row that omits the fields; the editor reads `posX != null` to decide placed vs unplaced, mirroring
+   * the till's live-floor screen.
    */
   posX?: number | null;
   posY?: number | null;

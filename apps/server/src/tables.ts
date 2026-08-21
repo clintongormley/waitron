@@ -84,6 +84,15 @@ export interface DiningTable {
   capacity: number | null;
   active: boolean;
   createdAt: string;
+  /** FP-2 spatial placement on the floor-plan canvas — canvas coordinates, rendered shape, and rotation
+   *  in degrees, or `null` for an unplaced table. Written by {@link setTablePlacement} /
+   *  {@link clearPlacement}. Non-optional `| null` (unconditionally present, `null` when unplaced),
+   *  mirroring `working-order.ts`'s `TableState` placement block so the dashboard editor reads a
+   *  placement field without a presence check and keeps a placed table placed on reload. */
+  posX: number | null;
+  posY: number | null;
+  shape: FloorTableShape | null;
+  rotation: number | null;
 }
 
 /**
@@ -135,6 +144,10 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
       capacity: diningTables.capacity,
       active: diningTables.active,
       createdAt: diningTables.createdAt,
+      posX: diningTables.posX,
+      posY: diningTables.posY,
+      shape: diningTables.shape,
+      rotation: diningTables.rotation,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.active, true)))

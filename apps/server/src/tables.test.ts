@@ -75,9 +75,35 @@ describe("table CRUD", () => {
       createTable(tx, cfg, { label: "12", zoneId, capacity: 4 }),
     );
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
+    // A freshly-created (unplaced) table carries the four FP-2 placement columns as null — listTables
+    // now PROJECTS them (Task 7b), so the dashboard editor no longer loses a placement on reload.
     expect(tables).toEqual([
-      expect.objectContaining({ id, label: "12", zoneId, capacity: 4, active: true }),
+      expect.objectContaining({
+        id,
+        label: "12",
+        zoneId,
+        capacity: 4,
+        active: true,
+        posX: null,
+        posY: null,
+        shape: null,
+        rotation: null,
+      }),
     ]);
+  });
+
+  it("listTables projects the FP-2 placement columns — place a table, then read them back", async () => {
+    // The place-then-read receipt (CLAUDE.md §1): a null-only assertion proves nothing about the
+    // projection, so PLACE the table and read the exact values back through listTables. Sibling at the
+    // "table placement" describe below proves the same for `listTablesWithState` (the till surface).
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "4", capacity: 4 }));
+    await asApp(cfg, (tx) =>
+      setTablePlacement(tx, cfg, id, { zoneId, posX: 500, posY: 250, shape: "square", rotation: 15 }),
+    );
+    const placed = (await asApp(cfg, (tx) => listTables(tx, cfg))).find((t) => t.id === id)!;
+    expect(placed).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15, zoneId });
   });
 
   it("creates a table WITHOUT a zone (zoneId null)", async () => {

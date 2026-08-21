@@ -467,6 +467,44 @@ describe("/management-api/tables", () => {
     expect(list.find((t) => t.id === id)).toMatchObject({ label, capacity: 4, active: true });
   });
 
+  it("GET projects a placed table's FP-2 placement columns (posX/posY/shape/rotation)", async () => {
+    // Route-level place-then-read receipt for the Task-7b gap: the config GET /tables surface now
+    // projects the four placement columns (listTables), so the Plano editor sees a placed table as
+    // placed on reload instead of snapping it back to the unplaced tray. Proven by the POSITIVE read
+    // of real values, not merely that nulls pass (CLAUDE.md §1).
+    const zoneId = await createZone(unique("GetPlaceZone"));
+    const { id } = (await (
+      await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("gp") }) },
+        managerCookie,
+      )
+    ).json()) as { id: string };
+    const put = await req(
+      `/tables/${id}/placement`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ zoneId, posX: 500, posY: 250, shape: "square", rotation: 15 }),
+      },
+      managerCookie,
+    );
+    expect(put.status).toBe(204);
+
+    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
+      id: string;
+      posX: number | null;
+      posY: number | null;
+      shape: string | null;
+      rotation: number | null;
+    }[];
+    expect(list.find((t) => t.id === id)).toMatchObject({
+      posX: 500,
+      posY: 250,
+      shape: "square",
+      rotation: 15,
+    });
+  });
+
   it("POST with a duplicate label → 409 table.label_taken", async () => {
     const label = unique("dup");
     await req("/tables", { method: "POST", body: JSON.stringify({ label }) }, managerCookie);
@@ -762,10 +800,11 @@ describe("/management-api/tables", () => {
 // The manager-gated PUT/DELETE that place a table on / remove it from the floor-plan canvas, thin
 // wrappers over Task 2's `setTablePlacement` / `clearPlacement`. Same gate + `run` mapping as the FP-1
 // zone/table routes above (`requireManagementSession` 401 first, then `withVenueAuth`'s
-// `authorizeManager(till.configure)` 403). The read-back is a DIRECT `dining_tables` read, because the
-// management `GET /tables` surface (`listTables`) does NOT project the placement columns — only the
-// till's `listTablesWithState` (`GET /api/tables/state`, a Task-4 surface this management-only test does
-// not mount) does — so the placement is verified straight from the row the same way `setupTenant` seeds.
+// `authorizeManager(till.configure)` 403). These placement tests read the row back with a DIRECT
+// `dining_tables` read (`readPlacement`) — a tight row-level receipt for exactly the four columns the
+// PUT/DELETE write. The management `GET /tables` surface (`listTables`) DOES now project those columns
+// (Task 7b), verified end-to-end by the "GET projects a placed table's placement columns" case in the
+// `/management-api/tables` describe above; the direct read here keeps this describe focused on the verb.
 
 /** The canonical placement body — the exact values the brief pins. `zoneId` varies per test (each needs
  *  its own LIVE zone), so it is a parameter. */
