@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   compareDecimal,
@@ -27,6 +27,7 @@ import {
   products,
   sales,
   ticketItems,
+  ticketState,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -1908,6 +1909,202 @@ export async function sendToPrep(
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
   });
+}
+
+/** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
+ *  the `ticket_state` enum (the successor to `order_prep`'s dropped `prep_state`). */
+export type TicketState = (typeof ticketState.enumValues)[number];
+
+/**
+ * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. Each branch is a
+ * single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
+ * legal predecessor of to>` — so the legality of the move IS the write: a skip (`queued → ready`), a
+ * repeat, a jump backwards, or an absent/foreign item (RLS hides another tenant's) all match no row, and
+ * the empty `returning` throws `ticket.invalid_transition` naming the offending item. The per-line
+ * successor to #63's order-level `advancePrep`, over `ticket_items` — the same fail-closed
+ * conditional-UPDATE shape `advancePrep` used over `order_prep`, and the shape `abandonHeldOrder` uses
+ * for `working_orders`.
+ *
+ * `to = "queued"` is refused immediately, before any query: no kitchen state legally advances INTO
+ * `queued` (reaching it is a FIRE's job — {@link fireLines}'s insert), so that case throws the same
+ * domain code the empty-`returning` branch would. The switch (rather than a table keyed by a computed
+ * column name) keeps each `.set()` fully typed against Drizzle's inferred update shape.
+ *
+ * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
+ * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
+ * calls uniformly) — underscore-prefixed the way {@link voidTabLine}/{@link markLineServed} keep it.
+ * Advances freely regardless of the parent order's FISCAL status (a settled Mode-P order's lines still
+ * cook), as `ticket_items` is a MUTABLE table separate from the frozen `working_orders` row.
+ */
+export async function advanceTicketItem(
+  tx: Transaction,
+  _cfg: TillConfig,
+  itemId: string,
+  to: TicketState,
+): Promise<void> {
+  let updated: { id: string }[];
+  switch (to) {
+    case "preparing":
+      updated = await tx
+        .update(ticketItems)
+        .set({ state: to, preparingAt: sql`now()` })
+        .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, "queued")))
+        .returning({ id: ticketItems.id });
+      break;
+    case "ready":
+      updated = await tx
+        .update(ticketItems)
+        .set({ state: to, readyAt: sql`now()` })
+        .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, "preparing")))
+        .returning({ id: ticketItems.id });
+      break;
+    case "queued":
+    default:
+      // No kitchen state advances TO queued — reaching it is a FIRE's job (fireLines' insert).
+      throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+  }
+
+  if (updated.length === 0) {
+    throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+  }
+}
+
+/**
+ * Whole-ticket bump (KDS-1 §3c): advance EVERY not-yet-`to` line of one order at one station together —
+ * the convenience the `bump_mode = 'ticket'` venue setting (and a "bump all" affordance) drives, over
+ * the per-line {@link advanceTicketItem} truth. A single bulk conditional UPDATE — `set state = to,
+ * <to>_at = now() where working_order_id = orderId and station_id = stationId and state = <the legal
+ * predecessor of to>` — so it moves exactly the items still AT that predecessor and leaves the rest
+ * untouched (a line already `ready` is not at `queued`, so a `to = "preparing"` bump skips it). Unlike
+ * the per-line verb it does NOT throw on an empty match: bumping a ticket whose lines have all already
+ * advanced is a no-op convenience, not an illegal move (there is no single item to name in
+ * `ticket.invalid_transition`).
+ *
+ * `to` is `"preparing" | "ready"` — the two forward targets; there is no whole-ticket move INTO `queued`
+ * (a fire, not a bump, reaches it), so unlike the per-line verb this needs no runtime `queued` guard,
+ * and the type forbids it at the call site. Runs on the CALLER's transaction under its tenant/app_user
+ * scope; RLS confines the update to the tenant, and the (orderId, stationId) pair addresses one node's
+ * items (a working order is node-local), so `_cfg` is unused — the uniform tab-verb signature shape.
+ */
+export async function advanceTicket(
+  tx: Transaction,
+  _cfg: TillConfig,
+  orderId: string,
+  stationId: string,
+  to: Exclude<TicketState, "queued">,
+): Promise<void> {
+  const predecessor: TicketState = to === "preparing" ? "queued" : "preparing";
+  const stamp = to === "preparing" ? { preparingAt: sql`now()` } : { readyAt: sql`now()` };
+  await tx
+    .update(ticketItems)
+    .set({ state: to, ...stamp })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.stationId, stationId),
+        eq(ticketItems.state, predecessor),
+      ),
+    );
+}
+
+/** One ticket item on a station's queue — its id (the bump target for {@link advanceTicketItem}), the
+ *  line it was fired from, and its current kitchen state. */
+export interface StationQueueItem {
+  id: string;
+  workingOrderLineId: string;
+  state: TicketState;
+}
+
+/** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
+ *  operator label, the `queued_at` of its OLDEST line at this station (the group's oldest-first ordering
+ *  key + elapsed-time anchor), and the lines themselves. */
+export interface StationQueueGroup {
+  orderId: string;
+  orderNumber: number;
+  label: string | null;
+  queuedAt: string;
+  items: StationQueueItem[];
+}
+
+/**
+ * The per-station kitchen queue (KDS-1 §3c) — this node's ticket items AT `stationId`, joined to their
+ * working order for the display fields and GROUPED BY ORDER (each group = one order's lines at this
+ * station), oldest order first. The per-line/per-station successor to #63's order-level `listPrepQueue`,
+ * over `ticket_items` rather than `order_prep`.
+ *
+ * Two order-level exclusions, mirroring `listPrepQueue`'s abandoned filter and adding the collect
+ * handover: an `abandoned` working order (`ne(status, "abandoned")` — a cancelled placed order's items
+ * are cascaded only if the LINE is deleted, so the status join is what retires a still-present item's
+ * order, as `listPrepQueue` relied on) and a COLLECTED order (`collected_at IS NULL` — the default-station
+ * display drops an order once handed to the customer, §3e) both drop out. Ticket items are NOT filtered
+ * by state: a `ready` line stays on the display until its order collects, so the group carries the
+ * order's queued/preparing/ready lines alike (the Nuevo/Preparando/Listo columns are a client lens).
+ *
+ * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
+ * order fixes that group's position (oldest-first) and its `queuedAt`. Node-scoped
+ * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
+ * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope; RLS
+ * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
+ * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
+ * used (CLAUDE.md §4).
+ */
+export async function listStationQueue(
+  tx: Transaction,
+  cfg: TillConfig,
+  stationId: string,
+): Promise<StationQueueGroup[]> {
+  const rows = await tx
+    .select({
+      itemId: ticketItems.id,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      state: ticketItems.state,
+      queuedAt: ticketItems.queuedAt,
+      orderId: workingOrders.id,
+      orderNumber: workingOrders.orderNumber,
+      label: workingOrders.label,
+    })
+    .from(ticketItems)
+    // Composite join predicate (tenant_id too) — the tenant-consistency `listPrepQueue`'s own join
+    // enforced, matching the composite shape the ticket_items → working_order_lines FK carries.
+    .innerJoin(
+      workingOrders,
+      and(
+        eq(ticketItems.workingOrderId, workingOrders.id),
+        eq(ticketItems.tenantId, workingOrders.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(ticketItems.nodeId, cfg.nodeId),
+        eq(ticketItems.stationId, stationId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+      ),
+    )
+    .orderBy(ticketItems.queuedAt);
+
+  // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
+  // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
+  const groups = new Map<string, StationQueueGroup>();
+  for (const row of rows) {
+    let group = groups.get(row.orderId);
+    if (group === undefined) {
+      group = {
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        label: row.label,
+        queuedAt: row.queuedAt,
+        items: [],
+      };
+      groups.set(row.orderId, group);
+    }
+    group.items.push({
+      id: row.itemId,
+      workingOrderLineId: row.workingOrderLineId,
+      state: row.state,
+    });
+  }
+  return [...groups.values()];
 }
 
 /** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)

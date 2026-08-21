@@ -32,10 +32,13 @@ import type { TillConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
   addTabRound,
+  advanceTicket,
+  advanceTicketItem,
   createOpenOrder,
   fireLines,
   getHeldOrder,
   listHeldOrders,
+  listStationQueue,
   openTab,
   parkOrder,
   placeOrder,
@@ -956,6 +959,152 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await expect(sendToPrep({ db }, cfg, id)).rejects.toMatchObject({
       code: "working_order.not_settled",
       params: { workingOrderId: id },
+    });
+  });
+});
+
+// KDS-1 Task 4 — bump (advance) + per-station queue read. `advanceTicketItem` is the per-line
+// conditional-UPDATE state machine (queued → preparing → ready, illegal moves refused via an empty
+// `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
+// order at one station together; `listStationQueue` groups a station's items by order, dropping
+// collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
+// grouping/exclusion filters — plain SQL a single backend proves; the RLS/tenant-isolation + node
+// scoping are real-Postgres's job (working-order.rls.test.ts). Every write runs through
+// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
+ *  line and current state, so a test can address item[0]/item[1] deterministically. */
+async function ticketItemRows(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ id: string; lineNo: number; state: string }[]> {
+  return tx
+    .select({ id: ticketItems.id, lineNo: workingOrderLines.lineNo, state: ticketItems.state })
+    .from(ticketItems)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(eq(ticketItems.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", () => {
+  it("bumps a line queued→preparing→ready, refuses illegal moves, and whole-ticket bumps together", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const agua = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe), line(agua)]); // both → Cocina, queued
+
+      const items = await ticketItemRows(tx, orderId);
+      expect(items.map((i) => i.state)).toEqual(["queued", "queued"]);
+
+      // Per-line bump: item[0] walks queued → preparing → ready.
+      await advanceTicketItem(tx, cfg, items[0]!.id, "preparing");
+      await advanceTicketItem(tx, cfg, items[0]!.id, "ready");
+
+      // Backwards (ready → preparing) is refused via the empty `returning` — the state predicate no
+      // longer matches — naming the offending ticket item.
+      await expect(advanceTicketItem(tx, cfg, items[0]!.id, "preparing")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: items[0]!.id },
+      });
+
+      // Whole-ticket bump advances only the still-queued item[1] (item[0], already `ready`, is left
+      // alone — it is no longer at the `queued` predecessor).
+      await advanceTicket(tx, cfg, orderId, cocina.id, "preparing");
+
+      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const group = queue.find((g) => g.orderId === orderId)!;
+      expect(group.items).toHaveLength(2);
+      expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
+
+      // A second whole-ticket bump to `ready` advances the now-preparing item[1]; item[0] (already
+      // `ready`) is skipped — the bulk UPDATE matches only the `preparing` predecessor.
+      await advanceTicket(tx, cfg, orderId, cocina.id, "ready");
+      const readied = await listStationQueue(tx, cfg, cocina.id);
+      expect(readied.find((g) => g.orderId === orderId)!.items.map((i) => i.state)).toEqual([
+        "ready",
+        "ready",
+      ]);
+    });
+  });
+
+  it("advanceTicketItem refuses a skip (queued→ready), to='queued', and a nonexistent item", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+      const [item] = await ticketItemRows(tx, orderId);
+
+      // Skipping preparing (queued → ready) matches no row — `ready`'s only legal predecessor is
+      // `preparing` — so the empty `returning` refuses it.
+      await expect(advanceTicketItem(tx, cfg, item!.id, "ready")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+      // No state legally advances INTO queued — refused before any query.
+      await expect(advanceTicketItem(tx, cfg, item!.id, "queued")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+      });
+      // An absent id (or another tenant's, RLS-hidden) matches no row — the same fail-closed code.
+      const missing = randomUUID();
+      await expect(advanceTicketItem(tx, cfg, missing, "preparing")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: missing },
+      });
+      // The refusals changed nothing.
+      const [after] = await ticketItemRows(tx, orderId);
+      expect(after!.state).toBe("queued");
+    });
+  });
+
+  it("listStationQueue groups a station's items by order oldest-first, dropping collected and abandoned orders", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const copa = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id });
+
+      // Order 1 → Cocina (two lines), then order 2 → Cocina (one line) + one line to Barra.
+      const { id: order1 } = await placeOrderWith(tx, cfg, [line(cafe), line(cafe)]);
+      const { id: order2 } = await placeOrderWith(tx, cfg, [line(cafe), line(copa)]);
+
+      const cocinaQueue = await listStationQueue(tx, cfg, cocina.id);
+      // Two groups, oldest order first; order 1 has two Cocina lines, order 2 has one (its copa went
+      // to Barra, so it is NOT in this station's group).
+      expect(cocinaQueue.map((g) => g.orderId)).toEqual([order1, order2]);
+      expect(cocinaQueue[0]!.items).toHaveLength(2);
+      expect(cocinaQueue[1]!.items).toHaveLength(1);
+      // The Barra station sees only order 2's copa line.
+      const barraQueue = await listStationQueue(tx, cfg, barra.id);
+      expect(barraQueue.map((g) => g.orderId)).toEqual([order2]);
+      expect(barraQueue[0]!.items).toHaveLength(1);
+
+      // Collecting order 1 (handover marker) drops it from the station queue.
+      await tx
+        .update(workingOrders)
+        .set({ collectedAt: sql`now()` })
+        .where(eq(workingOrders.id, order1));
+      expect((await listStationQueue(tx, cfg, cocina.id)).map((g) => g.orderId)).toEqual([order2]);
+
+      // Abandoning order 2 drops it too — the queue is empty at Cocina.
+      await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, order2));
+      expect(await listStationQueue(tx, cfg, cocina.id)).toEqual([]);
     });
   });
 });

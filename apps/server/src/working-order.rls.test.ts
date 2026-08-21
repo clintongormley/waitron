@@ -16,7 +16,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
-import type { VerifiableAmendment } from "@waitron/db";
+import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
   locationId as brandLocationId,
@@ -30,11 +30,12 @@ import { readOrderFlow } from "./till-config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
-  advancePrep,
+  advanceTicket,
+  advanceTicketItem,
   cancelPlacedOrder,
   getHeldOrder,
   listHeldOrders,
-  listPrepQueue,
+  listStationQueue,
   parkOrder,
   placeOrder,
   sendToPrep,
@@ -340,13 +341,54 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
   return rows;
 }
 
-/** The prep queue row's state for this order, or null when placing enqueued none — owner read. Placing
- *  (= send-to-prep) enqueues exactly one `queued` row (design §5); a walk-up never places, so none. */
-async function prepStateOf(id: string): Promise<string | null> {
+/** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was fired —
+ *  owner read. Placing (Modes I/T, inside `placeOrder`) and send-to-prep (Mode P) fire one `ticket_items`
+ *  row per line (KDS-1); a walk-up never fires. The callers here fire SINGLE-line orders, so at most one
+ *  row exists — the per-line `ticket_items` successor to the dropped-`order_prep` `prepStateOf`. */
+async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.admin.execute<{ state: string }>(sql`
-    select state from order_prep where working_order_id = ${id}
+    select state from ticket_items where working_order_id = ${id}
   `);
   return rows[0]?.state ?? null;
+}
+
+/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location — venue-apply.ts)
+ *  — owner read. Every fixture line here carries no product/category route, so it fires to this station;
+ *  it is the id the whole-ticket bump and the per-station queue address. */
+async function defaultStationId(cfg: TillConfig): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    select id from kitchen_stations
+    where location_id = ${cfg.locationId} and is_default and active
+  `);
+  return rows[0]!.id;
+}
+
+/** The ticket item ids fired for an order, in `line_no` order — owner read. The per-line bump targets
+ *  for {@link advanceTicketItem}, addressed by index the way the display taps a specific line. */
+async function ticketItemIdsFor(orderId: string): Promise<string[]> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    select ti.id
+    from ticket_items ti
+    join working_order_lines wol
+      on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id
+    where ti.working_order_id = ${orderId}
+    order by wol.line_no
+  `);
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) under a cfg's
+ * tenant + `app_user` scope. Unlike the old deps-based `advancePrep`, these verbs run on a
+ * CALLER-supplied transaction, so the suite opens the `withTenant` + `asAppUser` scope for them — as
+ * `app_user`, so RLS is IN FORCE (a foreign tenant's ticket items are invisible), which is what the
+ * cross-tenant isolation assertions below rest on.
+ */
+async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return fn(tx);
+  });
 }
 
 /**
@@ -1125,9 +1167,9 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
 
-    // send-to-prep = placing enqueued the node-scoped prep row at `queued` (design §5) — the row Task 9's
-    // prep routes advance.
-    expect(await prepStateOf(id)).toBe("queued");
+    // Placing FIRED the order's one line to the kitchen (KDS-1 §3b): a `ticket_items` row at `queued`
+    // on the default station — the item the KDS bump verbs advance.
+    expect(await ticketStateOf(id)).toBe("queued");
   });
 
   it("placeOrder refuses a non-open order — a re-place of a placed one, and an absent id — writing no second log", async () => {
@@ -1294,7 +1336,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
-    expect(await prepStateOf(id)).toBeNull();
+    expect(await ticketStateOf(id)).toBeNull(); // a walk-up never fires — fire is at place/send-to-prep
   });
 });
 
@@ -1646,13 +1688,16 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 });
 
-// The prep surface (Task 9, design §5): send-to-prep (the Mode-P pickup on an already-settled
-// order) / advancePrep's conditional-UPDATE state machine / the node-scoped queue view. Real
-// Postgres — `order_prep` is FORCE-RLS + tenant-isolation-policy scoped (Task 4), and the node
-// scoping below is exactly what PGlite's single-backend, all-superuser connection cannot show
-// (CLAUDE.md §4).
-describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
-  it("advancePrep walks queued → preparing → ready → collected; an out-of-order jump is refused", async () => {
+// The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
+// whole-ticket bump (`advanceTicket`) and the per-station queue read (`listStationQueue`) — over the
+// per-line/per-station `ticket_items` that replaced #63's one-row-per-order `order_prep`. Real
+// Postgres — `ticket_items` is FORCE-RLS + tenant-isolation-policy scoped (Task 1), and the cross-tenant
+// isolation + node scoping below are exactly what PGlite's single-backend, all-superuser connection
+// cannot show (CLAUDE.md §4). `sendToPrep` (Mode P) and `placeOrder` (Modes I/T) are the FIRES that put
+// items on the queue; their settled-only guard is exercised here too. The verbs run through
+// {@link asTenant} (a caller-supplied `withTenant` + `asAppUser` scope), as `app_user`, so RLS is in force.
+describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
+  it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, cafe } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
@@ -1665,270 +1710,143 @@ describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
       },
       OPERATOR,
     );
+    await sendToPrep({ db: suite.admin }, cfg, id); // Mode-P pickup fires the ticket item on the SETTLED order
+    expect(await ticketStateOf(id)).toBe("queued");
+    const [item] = await ticketItemIdsFor(id);
 
-    await sendToPrep({ db: suite.admin }, cfg, id); // enqueue on the SETTLED order (Mode P)
-    expect(await prepStateOf(id)).toBe("queued");
-
-    await advancePrep({ db: suite.admin }, cfg, id, "preparing");
-    expect(await prepStateOf(id)).toBe("preparing");
-    await advancePrep({ db: suite.admin }, cfg, id, "ready");
-    expect(await prepStateOf(id)).toBe("ready");
-    await expect(advancePrep({ db: suite.admin }, cfg, id, "collected")).resolves.toBeUndefined();
-    expect(await prepStateOf(id)).toBe("collected");
-
-    // Jumping backwards is refused: the order is `collected` (terminal), and `preparing`'s only legal
-    // predecessor is `queued`, which this row no longer is.
-    await expect(advancePrep({ db: suite.admin }, cfg, id, "preparing")).rejects.toMatchObject({
-      code: "order_prep.invalid_transition",
-      params: { workingOrderId: id },
-    });
-    expect(await prepStateOf(id)).toBe("collected"); // the refused jump changed nothing
-  });
-
-  it("advancePrep refuses to='queued' (no state legally advances INTO queued) and an order never sent to prep", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
-    const id = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      cfg,
-      {
-        id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    await sendToPrep({ db: suite.admin }, cfg, id);
-
-    // Reaching `queued` is `sendToPrep`'s job (an INSERT) — `advancePrep` refuses `to: "queued"`
-    // unconditionally, before touching the row.
-    await expect(advancePrep({ db: suite.admin }, cfg, id, "queued")).rejects.toMatchObject({
-      code: "order_prep.invalid_transition",
-      params: { workingOrderId: id },
-    });
-    expect(await prepStateOf(id)).toBe("queued"); // unchanged
-
-    // A SEPARATE settled order that was NEVER sent to prep has no `order_prep` row at all — the same
-    // fail-closed code as an illegal jump, per `order_prep.invalid_transition`'s own doc comment.
-    const neverSent = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      cfg,
-      {
-        id: neverSent,
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    expect(await prepStateOf(neverSent)).toBeNull();
+    // Skipping `preparing` (queued → ready) matches no row — `ready`'s only legal predecessor is
+    // `preparing` — so the empty `returning` refuses it, naming the offending item.
     await expect(
-      advancePrep({ db: suite.admin }, cfg, neverSent, "preparing"),
+      asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready")),
     ).rejects.toMatchObject({
-      code: "order_prep.invalid_transition",
-      params: { workingOrderId: neverSent },
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: item },
     });
+    expect(await ticketStateOf(id)).toBe("queued"); // the refused skip changed nothing
+
+    // The forward walk, one legal step at a time — the timestamps are stamped as it goes.
+    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
+    expect(await ticketStateOf(id)).toBe("preparing");
+    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    expect(await ticketStateOf(id)).toBe("ready");
+
+    // A repeat (ready → ready) and a backwards move (ready → preparing) both match no row now.
+    for (const to of ["ready", "preparing"] as const) {
+      await expect(
+        asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, to)),
+      ).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item },
+      });
+    }
+    // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
+    await expect(
+      asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "queued")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: item },
+    });
+    expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
   });
 
-  it("sendToPrep refuses a DOUBLE send-to-prep for the same order (order_prep_pk collision), not a raw 23505", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
-    const id = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      cfg,
-      {
-        id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    await sendToPrep({ db: suite.admin }, cfg, id);
-    expect(await prepStateOf(id)).toBe("queued");
-
-    // A second send-to-prep for the SAME order collides on `order_prep_pk` (tenant_id,
-    // working_order_id) — caught and reported as the same domain code every other illegal prep move
-    // gets, never the raw driver's 23505.
-    await expect(sendToPrep({ db: suite.admin }, cfg, id)).rejects.toMatchObject({
-      code: "order_prep.invalid_transition",
-      params: { workingOrderId: id },
-    });
-    expect(await prepStateOf(id)).toBe("queued"); // the refused re-send changed nothing
-  });
-
-  it("sendToPrep refuses a still-OPEN or PLACED order (working_order.not_settled) and does not enqueue it", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
-
-    // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
-    // `payWorkingOrder`); an open order has never reached settlement at all.
-    const openId = randomUUID();
-    await parkOrder({ db: suite.admin }, cfg, {
-      id: openId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
-    });
-    await expect(sendToPrep({ db: suite.admin }, cfg, openId)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: openId },
-    });
-    expect(await prepStateOf(openId)).toBeNull(); // nothing enqueued by the refused call
-
-    // PLACED — Modes I/T's own shape, whose prep row is already enqueued INSIDE `placeOrder` at
-    // placing. Calling `sendToPrep` on a placed (not yet settled) order is the WRONG route for it —
-    // refused the same way, not treated as a legitimate double-enqueue.
-    const { cfg: modeTCfg, cafe: modeTCafe } = await modeVenue("ticket_then_pay");
-    const placedId = randomUUID();
-    await parkOrder({ db: suite.admin }, modeTCfg, {
-      id: placedId,
-      lines: [{ productId: modeTCafe.id, quantity: "1" }],
-    });
-    await placeOrder({ db: suite.admin, backend, clock }, modeTCfg, placedId, OPERATOR);
-    expect(await prepStateOf(placedId)).toBe("queued"); // placeOrder's OWN enqueue, already there
-    await expect(sendToPrep({ db: suite.admin }, modeTCfg, placedId)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: placedId },
-    });
-    expect(await prepStateOf(placedId)).toBe("queued"); // unchanged by the refused call
-  });
-
-  it("sendToPrep on a NONEXISTENT id is refused working_order.not_settled, not a raw FK-violation 500", async () => {
-    const { cfg } = await modeVenue("prepay");
-    const missing = randomUUID();
-
-    // No `working_orders` row exists for `missing` — the existence+status guard now catches this
-    // BEFORE the insert is ever attempted, so `order_prep_order_fk` is never reached (fix round 1: it
-    // previously WAS reached here, surfacing as an opaque, un-caught driver error).
-    await expect(sendToPrep({ db: suite.admin }, cfg, missing)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: missing },
-    });
-    expect(await prepStateOf(missing)).toBeNull();
-  });
-
-  it("sendToPrep surfaces a RAW error for a non-unique insert failure — a settled order but a phantom node (order_prep_node_fk)", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
-    const id = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      cfg,
-      {
-        id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true }); // passes the guard
-
-    // `cfg.nodeId` names NO row in `nodes` for this tenant — the order itself genuinely IS settled
-    // (the existence+status guard passes), but the INSERT then violates `order_prep_node_fk`, which
-    // is NOT a unique violation, so `sendToPrep`'s catch re-throws it UNCHANGED rather than reporting
-    // either domain code. The backstop `isUniqueViolation` branch exists specifically to distinguish
-    // this from the double-send-to-prep case (`order_prep_pk`).
-    const badNodeCfg = { ...cfg, nodeId: brandNodeId(randomUUID()) };
-    const attempt = sendToPrep({ db: suite.admin }, badNodeCfg, id);
-    await expect(attempt).rejects.toBeTruthy();
-    await expect(attempt).rejects.not.toMatchObject({ code: "order_prep.invalid_transition" });
-    await expect(attempt).rejects.not.toMatchObject({ code: "working_order.not_settled" });
-  });
-
-  it("sendToPrep on ANOTHER tenant's settled order is refused the SAME code — RLS hides it, not a leak of its real state", async () => {
-    const { cfg: tenantA, cafe } = await modeVenue("prepay");
-    const { cfg: tenantB } = await modeVenue("prepay"); // a wholly separate venue + tenant
-
-    const foreignId = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      tenantA,
-      {
-        id: foreignId,
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    expect(await orderState(foreignId)).toEqual({ status: "settled", settledAtSet: true }); // genuinely settled — under tenant A
-
-    // Tenant B's config cannot see it at all (RLS) — the SAME `working_order.not_settled` a
-    // nonexistent id gets, not a distinct "wrong tenant" code (the fail-closed reasoning
-    // `node.not_found`'s own note in `errors.ts` gives: a separate code would confirm another
-    // tenant's order exists).
-    await expect(sendToPrep({ db: suite.admin }, tenantB, foreignId)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: foreignId },
-    });
-    // And no prep row was created reachable from EITHER tenant's scope.
-    expect(await listPrepQueue({ db: suite.admin }, tenantB)).toEqual([]);
-  });
-
-  it("listPrepQueue lists this node's ACTIVE prep oldest-first and drops a collected order", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+  it("advanceTicket bumps every not-yet-`to` line of an order at a station together, leaving already-advanced lines alone", async () => {
+    const { cfg, cafe, agua } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.admin }, cfg, {
       id,
+      lines: [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1" },
+      ],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // fires two items → default station
+    const station = await defaultStationId(cfg);
+    const items = await ticketItemIdsFor(id);
+    expect(items).toHaveLength(2);
+
+    // Push item[0] all the way to `ready` first, so the whole-ticket bump must SKIP it (it is no longer
+    // at the `queued` predecessor).
+    await asTenant(cfg, async (tx) => {
+      await advanceTicketItem(tx, cfg, items[0]!, "preparing");
+      await advanceTicketItem(tx, cfg, items[0]!, "ready");
+    });
+
+    // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
+    await asTenant(cfg, (tx) => advanceTicket(tx, cfg, id, station, "preparing"));
+
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const group = queue.find((g) => g.orderId === id)!;
+    expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
+  });
+
+  it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const station = await defaultStationId(cfg);
+
+    // Two orders placed oldest-first, each a single line → the default station.
+    const id1 = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: id1,
       lines: [{ productId: cafe.id, quantity: "1" }],
       label: "Mesa 7",
     });
-    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // enqueues at queued
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id1, OPERATOR);
 
-    const queue = await listPrepQueue({ db: suite.admin }, cfg);
-    expect(queue).toEqual([
-      {
-        id,
-        orderNumber: expect.any(Number),
-        label: "Mesa 7",
-        state: "queued",
-        queuedAt: expect.any(String),
-      },
-    ]);
-
-    await advancePrep({ db: suite.admin }, cfg, id, "preparing");
-    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([
-      expect.objectContaining({ id, state: "preparing" }),
-    ]);
-    await advancePrep({ db: suite.admin }, cfg, id, "ready");
-    await advancePrep({ db: suite.admin }, cfg, id, "collected");
-    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // collected leaves the active queue
-  });
-
-  it("listPrepQueue drops a CANCELLED order — cancelling doesn't leave it stuck in the active queue forever", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
-    const id = randomUUID();
+    const id2 = randomUUID();
     await parkOrder({ db: suite.admin }, cfg, {
-      id,
+      id: id2,
       lines: [{ productId: cafe.id, quantity: "1" }],
       label: "Mesa 3",
     });
-    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // enqueues at queued
-    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([
-      expect.objectContaining({ id, state: "queued" }),
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id2, OPERATOR);
+
+    // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    expect(queue.map((g) => g.orderId)).toEqual([id1, id2]);
+    expect(queue[0]).toMatchObject({
+      orderId: id1,
+      label: "Mesa 7",
+      orderNumber: expect.any(Number),
+      queuedAt: expect.any(String),
+    });
+    expect(queue[0]!.items).toHaveLength(1);
+    expect(queue[0]!.items[0]!.state).toBe("queued");
+
+    // Advancing order 1's line keeps it on the queue (a `preparing`/`ready` line stays until collected).
+    const [item1] = await ticketItemIdsFor(id1);
+    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).find((g) => g.orderId === id1)
+        ?.items[0]?.state,
+    ).toBe("preparing");
+
+    // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
+    // legal placed → settled transition (the enforce_transition trigger forbids editing a placed row
+    // any other way). The default-station display drops a collected order (§3e), so it leaves the queue.
+    await suite.admin.execute(sql`
+      update working_orders set status = 'settled', settled_at = now(), collected_at = now()
+      where id = ${id1}`);
+    expect((await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId)).toEqual([
+      id2,
     ]);
 
-    // `cancelPlacedOrder` (placed → abandoned) never touches `order_prep` at all — the row itself
-    // stays `queued`, UNCHANGED. It is `listPrepQueue`'s own join on `working_orders.status` that
-    // retires it, not a write this cancel makes (fix round 1: previously nothing did, so a cancelled
-    // order sat on the active queue forever).
-    await cancelPlacedOrder(
-      { db: suite.admin, backend, clock },
-      cfg,
-      id,
-      "customer left",
-      OPERATOR,
-    );
-    expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
-    expect(await prepStateOf(id)).toBe("queued"); // order_prep itself is untouched by cancel
-
-    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // but no longer surfaced
+    // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
+    // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it, exactly as
+    // `listPrepQueue` relied on the status join rather than a write the cancel makes.
+    await cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, id2, "customer left", OPERATOR);
+    expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
   });
 
-  it("listPrepQueue node scope is SYMMETRIC: each node sees only its own order, both non-empty", async () => {
+  it("listStationQueue node scope is SYMMETRIC: each node sees only its own order's items, both non-empty", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs
-    // only in `node_id`, so RLS (tenant-scoped) would NOT hide either order from the other node; only
-    // the `node_id = cfg.nodeId` filter does. BOTH nodes get a genuine order in prep, so this proves
-    // "A shows A, B shows B" rather than "one empty, one not" — a measurement where both answers look
-    // alike measures nothing (CLAUDE.md §1), the exact gap Task 4's own review found and fixed for
-    // `order_prep`'s RLS suite.
+    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs only
+    // in `node_id`, so RLS (tenant-scoped) would NOT hide either node's items from the other; only
+    // `listStationQueue`'s `node_id = cfg.nodeId` filter does. BOTH nodes fire a genuine order, so this
+    // proves "A shows A, B shows B" rather than "one empty, one not" — a measurement where both answers
+    // look alike measures nothing (CLAUDE.md §1). Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA, "Servidor 2");
+    const station = await defaultStationId(nodeA);
 
     const idA = randomUUID();
     await parkOrder({ db: suite.admin }, nodeA, {
@@ -1946,11 +1864,89 @@ describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
     });
     await placeOrder({ db: suite.admin, backend, clock }, nodeB, idB, OPERATOR);
 
-    const queueA = await listPrepQueue({ db: suite.admin }, nodeA);
-    const queueB = await listPrepQueue({ db: suite.admin }, nodeB);
+    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, nodeA, station));
+    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, nodeB, station));
 
-    // Same state on both sides (each has exactly one ACTIVE prep row), opposite membership.
-    expect(queueA.map((e) => e.id)).toEqual([idA]);
-    expect(queueB.map((e) => e.id)).toEqual([idB]);
+    // Same station on both sides, each with exactly one order's items, opposite membership.
+    expect(queueA.map((g) => g.orderId)).toEqual([idA]);
+    expect(queueB.map((g) => g.orderId)).toEqual([idB]);
+  });
+
+  it("cross-tenant isolation: tenant B can neither advance nor see tenant A's ticket items (RLS hides them)", async () => {
+    const { cfg: tenantA, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg: tenantB } = await modeVenue("ticket_then_pay"); // a wholly separate venue + tenant
+    const stationA = await defaultStationId(tenantA);
+
+    const idA = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantA, {
+      id: idA,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, tenantA, idA, OPERATOR);
+    const [itemA] = await ticketItemIdsFor(idA);
+    expect(await ticketStateOf(idA)).toBe("queued");
+
+    // Under tenant B's `app_user` scope the tenant-isolation policy hides A's row, so the conditional
+    // UPDATE matches nothing and refuses with the SAME fail-closed `ticket.invalid_transition` an illegal
+    // move gets — never a distinct "wrong tenant" code that would confirm A's item exists.
+    await expect(
+      asTenant(tenantB, (tx) => advanceTicketItem(tx, tenantB, itemA!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: itemA },
+    });
+    // A whole-ticket bump from tenant B likewise touches nothing (RLS hides every one of A's items).
+    await asTenant(tenantB, (tx) => advanceTicket(tx, tenantB, idA, stationA, "preparing"));
+
+    // A's item is UNCHANGED — neither B call reached it (proven as the owner, bypassing RLS).
+    expect(await ticketStateOf(idA)).toBe("queued");
+    // And tenant B's own queue never surfaces A's items (its node + RLS both exclude them).
+    expect(await asTenant(tenantB, (tx) => listStationQueue(tx, tenantB, stationA))).toEqual([]);
+  });
+
+  it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one, an absent id, and another tenant's settled order", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+
+    // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
+    // `payWorkingOrder`); an open order has never reached settlement, so nothing is fired.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(sendToPrep({ db: suite.admin }, cfg, openId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: openId },
+    });
+    expect(await ticketStateOf(openId)).toBeNull(); // the refused call fired nothing
+
+    // An ABSENT id — the existence+status guard catches it before any fire (never a raw FK 500).
+    const missing = randomUUID();
+    await expect(sendToPrep({ db: suite.admin }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: missing },
+    });
+    expect(await ticketStateOf(missing)).toBeNull();
+
+    // ANOTHER tenant's genuinely-settled order — RLS hides it, so tenant B's `sendToPrep` sees no row
+    // and refuses the SAME code, not a distinct "wrong tenant" leak that its real state exists.
+    const { cfg: tenantB } = await modeVenue("prepay");
+    const foreignId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id: foreignId,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await orderState(foreignId)).toEqual({ status: "settled", settledAtSet: true }); // settled under tenant A
+    await expect(sendToPrep({ db: suite.admin }, tenantB, foreignId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: foreignId },
+    });
+    expect(await ticketStateOf(foreignId)).toBeNull(); // tenant B's refused call fired nothing
   });
 });
