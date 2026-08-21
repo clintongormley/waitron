@@ -1536,6 +1536,18 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     into `@waitron/ui` `wt-table-token` (classes/colours byte-identical); T6 reconciled the map token as
     the deliberate "reuse-don't-fork" choice (no drift). Hoisting the till's private copy onto the shared
     element is the follow-up if a third consumer appears.
+  - **The canvas inspector re-homes a table by raw zone UUID, not a name picker** (finish-branch review
+    F2). `wt-floor-canvas`'s selection inspector renders the "zone" field as a bare `<input>` pre-filled
+    with the `zoneId`; the component takes no `.zones` prop, so re-homing from the canvas means typing a
+    UUID by hand. Not a data-integrity risk (a bad value 404s as `zone.not_found`; both apps already
+    re-home by NAME via the FP-1 Mesas `<select>` / the dashboard's config panel, and organise by
+    per-zone tabs), so it was left for a follow-up: add a `.zones: {id,name}[]` prop + a `<select>`/datalist
+    in the inspector, or drop the inspector zone field and rely on the existing name-based path.
+  - **`wt-floor-canvas` supports grid-snap, but no screen exposes a toggle.** The canvas has a tested,
+    documented `.gridSnap` capability (drag + keyboard nudge snap to `GRID_STEP` when set) that neither
+    the till nor the dashboard editor wires — `.gridSnap` is never bound, so it is always off in the
+    product. The simplify pass deliberately KEPT it (tested, coherent, not dead code) rather than delete
+    it; the follow-up is to add a "snap to grid" toggle in the on-till / dashboard "Editar plano" chrome.
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
