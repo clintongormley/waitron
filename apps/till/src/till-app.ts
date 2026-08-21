@@ -173,6 +173,21 @@ export class TillApp extends LitElement {
    * Owned and refreshed by the app, like {@link heldOrders}. */
   @state() private tables: TableState[] = [];
   /**
+   * Whether the logged-in operator may edit the spatial floor plan (FP-2) — true iff they hold
+   * `till.configure` (a manager/admin, spec §3). Threaded to `till-floor-screen.canEdit` to gate its
+   * "Editar plano" toggle. Client hiding is convenience only; the on-till placement route re-checks the
+   * gate server-side (FP-2 Task 4).
+   *
+   * DEFAULTS `false` and, for now, STAYS false: the server exposes no operator role to the client — the
+   * login route answers `{ personId }` only (`POST /api/session`, `apps/server/src/till-api.ts`), and
+   * neither `getTill` nor the `logged-in` event carries a role. Lighting this up is a one-line
+   * follow-up once the session response returns the role: set
+   * `canEdit = ["manager", "admin"].includes(role)` in {@link #onLoggedIn} (mirroring the server's
+   * `till.configure` = manager + admin). Left as the safe default rather than reaching into the server,
+   * which is out of this task's scope.
+   */
+  @state() private canEdit = false;
+  /**
    * The venue's ACTIVE service statuses (FP-1, TS-2) — the catalogue the table-order screen's Estado
    * picker offers, loaded from `GET /api/statuses` on entering the floor and threaded to the screen.
    * The FULL active set (not derived from which statuses happen to be applied to a table), so a
@@ -828,6 +843,24 @@ export class TillApp extends LitElement {
   }
 
   /**
+   * Re-read the floor after the floor screen persisted a spatial placement change (FP-2) — it emits
+   * `floor-refresh` once its on-till `setTablePlacement` / `clearPlacement` write lands. Re-loads the
+   * tables (whose placement columns changed) and the zones (a placement can re-home a table), NOT the
+   * statuses (unchanged by a placement), then re-supplies them to the screen. Stays on the floor and,
+   * like {@link #onShowFloor}, swallows a failed read (degrade gracefully — the floor touches no fiscal
+   * path). Only writes reactive state, so no `isConnected` guard is needed (the DISCONNECT SAFETY note).
+   */
+  async #refreshFloor(): Promise<void> {
+    try {
+      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
+      this.tables = tables;
+      this.zones = zones;
+    } catch {
+      // Non-fatal: leave the last-known floor in place (degrade gracefully).
+    }
+  }
+
+  /**
    * The floor screen asked to open (or resume) a table's tab (FP-1). A FREE table opens a fresh tab via
    * `openTab` — a PRE-FISCAL working order (design H2), never a sale/registro/huella — and the app
    * remembers its new working-order id; an OCCUPIED table already has one, resolved from the read-model
@@ -997,6 +1030,7 @@ export class TillApp extends LitElement {
         @new-sale=${() => this.#onNewSale()}
         @show-schedule=${() => this.#onShowSchedule()}
         @show-floor=${() => void this.#onShowFloor()}
+        @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @send-round=${(event: Event) => void this.#onSendRound(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
@@ -1049,6 +1083,8 @@ export class TillApp extends LitElement {
         return html`<till-floor-screen
           .zones=${this.zones}
           .tables=${this.tables}
+          .api=${this.api}
+          .canEdit=${this.canEdit}
         ></till-floor-screen>`;
       // FP-1 (Ruling FP-D): the per-table ordering screen. It renders from the app-owned tab lines
       // (loaded via `getTabLines`, reloaded after each round/serve) and emits `send-round`/`serve-line`/

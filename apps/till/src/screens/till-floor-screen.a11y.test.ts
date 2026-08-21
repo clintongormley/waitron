@@ -10,7 +10,8 @@ const zones: FloorZone[] = [
 ];
 
 // A spread of occupancy states + badges + a zoneless table, so axe sees every card variant, both
-// badges and the manual-status swatch in the one mount.
+// badges and the manual-status swatch in the one mount. All UNPLACED, so the screen defaults to the
+// LIST view here (the map view is exercised by its own suite below).
 const tables: TableState[] = [
   {
     id: "t1",
@@ -25,6 +26,10 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 2,
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
   },
   {
     id: "t2",
@@ -36,6 +41,10 @@ const tables: TableState[] = [
     pendingDeliveries: 1,
     pendingToServe: 0,
     status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
   },
   {
     id: "t3",
@@ -47,6 +56,10 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
   },
   {
     id: "t9",
@@ -58,18 +71,73 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
+  },
+];
+
+// The MAP view (FP-2): the first zone's table is PLACED (drawn on the shared canvas), a second is
+// UNPLACED (the tray). Mounted with `canEdit` so the manager-only "Editar plano" toggle also renders,
+// and `editing` is entered by the suite so axe sees the canvas's edit inspector chrome too.
+const placedTables: TableState[] = [
+  {
+    id: "t1",
+    label: "1",
+    zoneId: "z1",
+    capacity: 4,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabId: "wo-1",
+    tabLineCount: 3,
+    tabTotal: "47.50",
+    pendingDeliveries: 0,
+    pendingToServe: 2,
+    status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
+    posX: 250,
+    posY: 400,
+    shape: "round",
+    rotation: 0,
+  },
+  {
+    id: "t4",
+    label: "4",
+    zoneId: "z1",
+    capacity: 2,
+    state: "free",
+    hasOpenTab: false,
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
   },
 ];
 
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (theme) => {
-  it("has no violations rendering occupancy cards grouped by zone", async () => {
+  it("has no violations rendering the LIST view (occupancy cards grouped by zone)", async () => {
     const { host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
       { zones, tables },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations rendering the MAP view with the tray + Editar plano (edit mode)", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: placedTables, canEdit: true },
+      theme,
+    );
+    // Enter edit mode so the canvas exposes its edit inspector chrome to axe as well.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

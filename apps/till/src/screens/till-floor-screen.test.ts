@@ -1,14 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
 /** A fully-typed zone; overrides tweak the fields a case cares about (the render asserts real data). */
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return { id: "z1", name: "Comedor", displayOrder: 0, active: true, ...over };
 }
 
-/** A fully-typed occupancy row; defaults to a free, unstatused table in zone z1. */
+/** A fully-typed occupancy row; defaults to a free, unstatused, UNPLACED table in zone z1 (so the
+ *  screen defaults to the LIST view, exactly as every FP-1 assertion below expects). */
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t1",
@@ -20,8 +21,58 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
     ...over,
   };
+}
+
+/** A PLACED table (carries spatial coordinates), so the screen defaults to the MAP view. */
+function placed(id: string, over: Partial<TableState> = {}): TableState {
+  return table({ id, posX: 250, posY: 400, shape: "round", rotation: 0, ...over });
+}
+
+/** A fake `TillApi` exposing only the two placement writes the floor screen calls in edit mode. */
+function fakeTillApi(overrides: Partial<TillApi> = {}): TillApi {
+  return {
+    setTablePlacement: vi.fn().mockResolvedValue(undefined),
+    clearPlacement: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as TillApi;
+}
+
+/** The roles that hold `till.configure` (spec §3 — manager + admin), mirrored here so `mountFloor`'s
+ *  `role` shorthand maps to `canEdit` the same way the app will once the server exposes the role. */
+const EDIT_ROLES = new Set(["manager", "admin"]);
+
+/**
+ * Mounts the floor screen, translating a `role` shorthand into the `canEdit` gate and (optionally)
+ * entering edit mode by clicking the manager-only "Editar plano" toggle.
+ */
+async function mountFloor(
+  opts: {
+    role?: string;
+    canEdit?: boolean;
+    editing?: boolean;
+    api?: TillApi;
+    zones?: FloorZone[];
+    tables?: TableState[];
+  } = {},
+): Promise<TillFloorScreen> {
+  const canEdit = opts.canEdit ?? (opts.role !== undefined && EDIT_ROLES.has(opts.role));
+  const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+    zones: opts.zones ?? [zone()],
+    tables: opts.tables ?? [table()],
+    canEdit,
+    api: opts.api,
+  });
+  if (opts.editing) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
+    await el.updateComplete;
+  }
+  return el;
 }
 
 const mount = (over: Partial<TillFloorScreen> = {}) =>
@@ -253,5 +304,182 @@ describe("till-floor-screen", () => {
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
+  });
+});
+
+describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () => {
+  it("defaults to the MAP (shared canvas) when the active zone has a placed table", async () => {
+    const el = await mountFloor({ tables: [placed("t1")] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
+    // The list grid is not rendered in map view.
+    expect(el.shadowRoot!.querySelector(".grid")).toBeNull();
+  });
+
+  it("defaults to the LIST (FP-1 cards) when the active zone has no placed table", async () => {
+    const el = await mountFloor({ tables: [table({ id: "t1" })] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
+    expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
+  });
+
+  it("a manual toggle flips the map to the list", async () => {
+    const el = await mountFloor({ tables: [placed("t1")] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
+    expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
+  });
+
+  it("a manual toggle flips the list to the map", async () => {
+    const el = await mountFloor({ tables: [table({ id: "t1" })] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
+  });
+
+  it("lists the active zone's UNPLACED tables in a tray in map view (placed stays on the canvas)", async () => {
+    const el = await mountFloor({
+      zones: [zone({ id: "z1" })],
+      tables: [placed("t1", { zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: "z1" })],
+    });
+    expect(el.shadowRoot!.querySelector('[data-tray-table="t9"]')).not.toBeNull();
+    // The placed table is drawn on the canvas, not duplicated into the tray.
+    expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).toBeNull();
+  });
+
+  it("emits open-table (with the resolved hasOpenTab) when a tray table is tapped", async () => {
+    const el = await mountFloor({ tables: [placed("t1"), table({ id: "t9", label: "9" })] });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
+    expect(seen.detail).toEqual({ tableId: "t9", hasOpenTab: false });
+  });
+
+  it("re-emits a canvas open-table with hasOpenTab resolved from the read-model", async () => {
+    // The shared canvas emits `open-table { tableId }` only; the screen must resolve `hasOpenTab` from
+    // the read-model so the app resumes an EXISTING tab rather than minting a second one on an
+    // occupied table.
+    const el = await mountFloor({
+      tables: [
+        placed("t1", {
+          state: "open-tab",
+          hasOpenTab: true,
+          tabId: "wo-1",
+          tabLineCount: 1,
+          tabTotal: "9.00",
+        }),
+      ],
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("open-table", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(seen.detail).toEqual({ tableId: "t1", hasOpenTab: true });
+  });
+
+  it("hides Editar plano for a non-manager operator", async () => {
+    const el = await mountFloor({ role: "staff", tables: [placed("t1")] });
+    expect(el.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
+  });
+
+  it("shows Editar plano for a manager operator", async () => {
+    const el = await mountFloor({ role: "manager", tables: [placed("t1")] });
+    expect(el.shadowRoot!.querySelector("[data-edit-toggle]")).not.toBeNull();
+  });
+
+  it("entering edit mode makes the shared canvas editable", async () => {
+    const el = await mountFloor({ role: "manager", tables: [placed("t1")] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")!.hasAttribute("editable")).toBe(false);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")!.hasAttribute("editable")).toBe(true);
+  });
+
+  it("persists a canvas placement-change via the till route", async () => {
+    const api = fakeTillApi();
+    const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("placement-change", {
+        detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(api.setTablePlacement).toHaveBeenCalledWith(
+      "t1",
+      expect.objectContaining({ posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" }),
+    );
+  });
+
+  it("un-places a table via the canvas placement-clear → clearPlacement", async () => {
+    const api = fakeTillApi();
+    const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(api.clearPlacement).toHaveBeenCalledWith("t1");
+  });
+
+  it("asks the app to refresh the floor after a placement write lands", async () => {
+    const api = fakeTillApi();
+    const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
+    let refreshed = false;
+    el.addEventListener("floor-refresh", () => (refreshed = true));
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("placement-change", {
+        detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    // The write is awaited before the refresh dispatch, so let the microtask queue settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).toBe(true);
+  });
+
+  it("swallows a rejected placement-change and still refreshes (reconciles to server truth)", async () => {
+    // A staff operator who bypassed the hidden toggle is 403 server-side (the route re-gates); the
+    // screen must not throw — it swallows and refreshes so the map snaps back to what actually persisted.
+    const api = fakeTillApi({
+      setTablePlacement: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
+    let refreshed = false;
+    el.addEventListener("floor-refresh", () => (refreshed = true));
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("placement-change", {
+        detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).toBe(true);
+  });
+
+  it("swallows a rejected placement-clear and still refreshes", async () => {
+    const api = fakeTillApi({
+      clearPlacement: vi.fn().mockRejectedValue({ code: "table.not_found" }),
+    });
+    const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
+    let refreshed = false;
+    el.addEventListener("floor-refresh", () => (refreshed = true));
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).toBe(true);
   });
 });

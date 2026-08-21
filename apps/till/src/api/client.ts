@@ -316,6 +316,43 @@ export interface TableState {
   pendingDeliveries: number;
   pendingToServe: number;
   status: { id: string; label: string; color: string } | null;
+  /**
+   * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
+   * rendered `shape`, and `rotation` in degrees, or `null` for an unplaced table. A LOCAL mirror of the
+   * server's `TableState` placement fields (`apps/server/src/working-order.ts`'s `listTablesWithState`),
+   * NOT imported — same bundle-decoupling rationale as every other type in this file. Written by
+   * `setTablePlacement` / `clearPlacement`; the live-floor screen reads `posX != null` to decide whether
+   * a table is placed (map) or belongs in the unplaced tray. Non-optional `| null` (unconditionally
+   * present, `null` when unplaced), matching the `zoneId`/`capacity`/`status` siblings above.
+   */
+  posX: number | null;
+  posY: number | null;
+  shape: TableShape | null;
+  rotation: number | null;
+}
+
+/**
+ * The rendered shape of a placed table (FP-2). A LOCAL union mirroring `@waitron/db`'s
+ * `floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"])` and `@waitron/ui`'s
+ * `TableShape` — deliberately NOT imported (the bundle-decoupling rule; a server round-trip
+ * re-validates against the real enum).
+ */
+export type TableShape = "round" | "square" | "rect";
+
+/**
+ * The body of a `PUT /api/tables/:id/placement` (FP-2, Task 4) — the four placement columns plus the
+ * table's target zone. Mirrors the on-till route's parsed body (`apps/server/src/till-api.ts`); the
+ * server re-validates every field (`placement.invalid` for an out-of-range coord / bad shape / bad
+ * rotation, `zone.not_found` for a missing or inactive zone). `zoneId` is `| null` because the shared
+ * canvas can emit a placement for a still-zoneless table — the server refuses it, so a `null` never
+ * silently persists.
+ */
+export interface TablePlacement {
+  posX: number;
+  posY: number;
+  shape: TableShape;
+  rotation: number;
+  zoneId: string | null;
 }
 
 /**
@@ -616,6 +653,28 @@ export class TillApi {
    */
   async setTableStatus(tableId: string, statusId: string | null): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/status`, "POST", { statusId });
+  }
+
+  /**
+   * Place (or re-place) a table on the FP-2 spatial floor plan → `PUT /api/tables/:tableId/placement`
+   * (Task 4's ON-TILL route, gated by the operator's OWN `till.configure` role — NOT the management-api
+   * route). Writes the four placement columns + the target zone; the server re-checks the manager gate
+   * (client hiding is convenience only) and re-validates the values (`placement.invalid` /
+   * `zone.not_found` / `table.not_found` surface as a rejected `{ code }`). The route answers an empty
+   * 204, so this resolves void. The live-floor screen re-reads `getTablesState` after a successful call.
+   */
+  async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/placement`, "PUT", placement);
+  }
+
+  /**
+   * Un-place a table (NULL its four placement columns, leaving `zone_id` as-is) →
+   * `DELETE /api/tables/:tableId/placement` (Task 4's on-till route). Same manager gate as
+   * {@link setTablePlacement}; the route answers an empty 204, so this resolves void. `table.not_found`
+   * (a bad/absent id) surfaces as a rejected `{ code }`.
+   */
+  async clearPlacement(tableId: string): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/placement`, "DELETE");
   }
 
   // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The

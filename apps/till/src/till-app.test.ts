@@ -65,6 +65,11 @@ const freeTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 0,
   status: null,
+  // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
 };
 
 const openTable: TableState = {
@@ -80,6 +85,10 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   status: null,
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
 };
 
 const saleResult: TillSaleResult = {
@@ -1157,6 +1166,65 @@ describe("till-app", () => {
       // A failed read shows the floor anyway (degrade gracefully), with tables left at their default.
       expect(floor(el)).not.toBeNull();
       expect(floor(el)!.tables).toEqual([]);
+    });
+
+    it("threads the api + the canEdit gate to the floor screen (FP-2)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      // The floor screen gets the app's api (for the on-till placement writes) and the manager gate.
+      // `canEdit` defaults false — the server exposes no operator role to the client yet (a documented
+      // follow-up), and the on-till route re-checks the gate regardless.
+      expect(floor(el)!.api).toBe(currentApi);
+      expect(floor(el)!.canEdit).toBe(false);
+    });
+
+    it("floor-refresh re-reads the tables + zones after an on-till placement write (FP-2)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+      // The initial floor load read each once.
+      expect(currentApi.getTablesState).toHaveBeenCalledOnce();
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+
+      // The refresh re-read both (twice total) so the map reflects the just-persisted placement.
+      expect(currentApi.getTablesState).toHaveBeenCalledTimes(2);
+      expect(currentApi.listZones).toHaveBeenCalledTimes(2);
+    });
+
+    it("floor-refresh degrades gracefully when the re-read fails (keeps the last-known floor)", async () => {
+      // The first load succeeds; the refresh re-read rejects. A failed refresh must NOT blank the floor
+      // or throw (the floor touches no fiscal path) — the last-known tables stay put.
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockRejectedValue({ code: "server.internal" }),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([freeTable]);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+
+      // Still on the floor, tables unchanged from the last good load.
+      expect(floor(el)).not.toBeNull();
+      expect(floor(el)!.tables).toEqual([freeTable]);
     });
 
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {

@@ -790,6 +790,11 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 2,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
+        // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
+        posX: 250,
+        posY: 400,
+        shape: "round",
+        rotation: 15,
       },
       {
         id: "t2",
@@ -801,6 +806,11 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 0,
         status: null,
+        // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
+        posX: null,
+        posY: null,
+        shape: null,
+        rotation: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -812,8 +822,10 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(rows);
-    // The two badge signals the floor screen renders survive the round-trip decoded.
-    expect(r[0]).toMatchObject({ zoneId: "z1", pendingToServe: 2 });
+    // The two badge signals the floor screen renders survive the round-trip decoded, as do the FP-2
+    // placement fields (a placed table's coordinates, an unplaced table's nulls).
+    expect(r[0]).toMatchObject({ zoneId: "z1", pendingToServe: 2, posX: 250, shape: "round" });
+    expect(r[1]).toMatchObject({ posX: null, shape: null });
   });
 
   it("markLineServed POSTs the served path (empty 200 body, no request body)", async () => {
@@ -1011,5 +1023,69 @@ describe("TillApi", () => {
     await expect(new TillApi("", fetchStub).setTableStatus("tbl-1", "gone")).rejects.toMatchObject({
       code: "status.not_found",
     });
+  });
+
+  // --- Spatial floor-plan placement (FP-2, Task 4's on-till routes — NOT the management ones) ---
+
+  it("setTablePlacement PUTs the placement body to the TABLE's /placement route (empty 204 body)", async () => {
+    // The on-till route (`PUT /api/tables/:id/placement`) answers a 204 with no body, so the client
+    // resolves void without JSON-parsing nothing. The body carries the four placement columns + the
+    // target zone (the server re-validates each — `placement.invalid` / `zone.not_found`).
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(
+      api.setTablePlacement("tbl-1", {
+        posX: 100,
+        posY: 200,
+        shape: "round",
+        rotation: 0,
+        zoneId: "z1",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/placement",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ posX: 100, posY: 200, shape: "round", rotation: 0, zoneId: "z1" }),
+      }),
+    );
+  });
+
+  it("clearPlacement DELETEs the TABLE's /placement route (empty 204 body, no request body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.clearPlacement("tbl-1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/placement",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    );
+    // An un-place carries neither a request body nor a content-type header.
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("setTablePlacement surfaces { code } when the placement value is invalid", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "placement.invalid" } }), { status: 400 }),
+      );
+
+    await expect(
+      new TillApi("", fetchStub).setTablePlacement("tbl-1", {
+        posX: 9999,
+        posY: 0,
+        shape: "round",
+        rotation: 0,
+        zoneId: "z1",
+      }),
+    ).rejects.toMatchObject({ code: "placement.invalid" });
   });
 });

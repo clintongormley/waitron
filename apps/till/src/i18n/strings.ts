@@ -131,6 +131,20 @@ export const en = {
   "floor.line_count": "items",
   "floor.pending_delivery": "to deliver",
   "floor.free": "Free",
+  // Spatial floor plan (FP-2): the map/list toggle, the manager-only edit toggle, the unplaced tray,
+  // and the edit-mode inspector copy threaded into `<wt-floor-canvas>`. `floor.view_map`/`view_list`
+  // label the toggle with the view it SWITCHES TO. `floor.shape_*` name the three canvas shapes.
+  "floor.view_map": "Map",
+  "floor.view_list": "List",
+  "floor.edit_plan": "Edit plan",
+  "floor.unplaced": "Unplaced",
+  "floor.zone": "Zone",
+  "floor.rotate": "Rotate",
+  "floor.remove": "Remove from plan",
+  "floor.shape": "Shape",
+  "floor.shape_round": "Round",
+  "floor.shape_square": "Square",
+  "floor.shape_rect": "Rectangular",
   // Table-ordering screen (FP-1) — one open table's tab: the round bar, the pull-out tab drawer, and
   // its actions. `table.open_drawer` names the badged drawer handle; `table.pay_title`/`action.pay` both
   // render "Cobrar" (the reused tender-pay's own Pay button carries the tender). Spanish per design §5b.
@@ -268,6 +282,17 @@ export const es: Record<StringKey, string> = {
   "floor.line_count": "art.",
   "floor.pending_delivery": "por entregar",
   "floor.free": "Libre",
+  "floor.view_map": "Mapa",
+  "floor.view_list": "Lista",
+  "floor.edit_plan": "Editar plano",
+  "floor.unplaced": "Sin colocar",
+  "floor.zone": "Zona",
+  "floor.rotate": "Girar",
+  "floor.remove": "Quitar del plano",
+  "floor.shape": "Forma",
+  "floor.shape_round": "Redonda",
+  "floor.shape_square": "Cuadrada",
+  "floor.shape_rect": "Rectangular",
   "table.title": "Comanda",
   "table.back": "Volver a la sala",
   "table.open_drawer": "Cuenta",
