@@ -25,12 +25,13 @@ import "./wt-table-token.js";
  */
 export interface FloorCanvasCopy {
   floor: string;
-  table: string;
   covers: string;
   toServe: string;
   zone: string;
   rotate: string;
   remove: string;
+  /** The name of the shape-picker GROUP (not one shape) — what a screen reader announces for it. */
+  shape: string;
   shapeRound: string;
   shapeSquare: string;
   shapeRect: string;
@@ -38,12 +39,12 @@ export interface FloorCanvasCopy {
 
 const DEFAULT_COPY: FloorCanvasCopy = {
   floor: "Floor plan",
-  table: "Table",
   covers: "covers",
   toServe: "to serve",
   zone: "Zone",
   rotate: "Rotate",
   remove: "Remove from plan",
+  shape: "Shape",
   shapeRound: "Round",
   shapeSquare: "Square",
   shapeRect: "Rect",
@@ -57,6 +58,8 @@ const NUDGE_STEP = 10;
 
 interface DragState {
   table: FloorTable;
+  /** The pointer that started the gesture; move/up events from any other pointer are ignored. */
+  pointerId: number;
   startX: number;
   startY: number;
   moved: boolean;
@@ -148,7 +151,7 @@ export class WtFloorCanvas extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .meta .plazas {
+      .meta .covers {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -258,13 +261,18 @@ export class WtFloorCanvas extends LitElement {
       top: `${pos.posY / 10}%`,
       transform: `translate(-50%, -50%) rotate(${t.rotation ?? 0}deg)`,
     });
+    // No aria-label: an aria-label would OVERRIDE the descendant content per the accessible-name
+    // algorithm, flattening every table to a bare label and erasing the occupancy state a sighted user
+    // reads from colour/total/badges. Matching FP-1's card button (which carries none), the button's
+    // accessible name is computed from the <wt-table-token> content — label + total + badges — so a
+    // screen reader hears the same state the map shows.
     return html`
       <button
+        type="button"
         class="table state-${t.state}"
         data-table=${t.id}
         data-size=${sizeForCapacity(t.capacity)}
         style=${style}
-        aria-label=${`${copy.table} ${t.label}`}
         @click=${() => this.#onTap(t)}
         @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t)}
         @keydown=${(e: KeyboardEvent) => this.#onKeyDown(e, t)}
@@ -284,11 +292,11 @@ export class WtFloorCanvas extends LitElement {
           <span class="name">${t.label}</span>
           ${
             t.capacity != null
-              ? html`<span class="plazas">${t.capacity} ${copy.covers}</span>`
+              ? html`<span class="covers">${t.capacity} ${copy.covers}</span>`
               : nothing
           }
         </div>
-        <div class="palette" role="group" aria-label=${copy.shapeRound}>
+        <div class="palette" role="group" aria-label=${copy.shape}>
           ${SHAPES.map(
             (shape) => html`
               <button
@@ -348,19 +356,27 @@ export class WtFloorCanvas extends LitElement {
   #onPointerDown(e: PointerEvent, t: FloorTable): void {
     if (!this.editable) return;
     e.preventDefault();
-    this.#drag = { table: t, startX: e.clientX, startY: e.clientY, moved: false };
+    this.#drag = {
+      table: t,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+    };
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
   }
 
   readonly #onPointerMove = (e: PointerEvent): void => {
-    if (this.#drag === null) return;
+    // Ignore a stray second pointer (multi-touch): only the pointer that started the drag moves it.
+    if (this.#drag === null || e.pointerId !== this.#drag.pointerId) return;
     this.#drag.moved = true;
     this.draft = { id: this.#drag.table.id, ...this.#pointerToPos(e.clientX, e.clientY) };
   };
 
   readonly #onPointerUp = (e: PointerEvent): void => {
     const drag = this.#drag;
+    if (drag !== null && e.pointerId !== drag.pointerId) return;
     if (drag === null || !drag.moved) {
       this.#endDrag();
       return;
@@ -423,7 +439,9 @@ export class WtFloorCanvas extends LitElement {
   }
 
   #onZone(t: FloorTable, value: string): void {
-    this.#emitPlacement({ ...this.#placementOf(t), zoneId: value.trim() === "" ? null : value });
+    // Emit the TRIMMED value (or null when blank) — never surrounding whitespace as a live zone id.
+    const trimmed = value.trim();
+    this.#emitPlacement({ ...this.#placementOf(t), zoneId: trimmed === "" ? null : trimmed });
   }
 
   #onDeactivate(t: FloorTable): void {

@@ -311,6 +311,110 @@ test("clearing the zone input re-homes the table to no zone", async () => {
   expect(detail.zoneId).toBeNull();
 });
 
+test("a table's accessible name comes from its occupancy content, not an aria-label override", async () => {
+  const el = await mountCanvas([
+    oneTable("t1", { label: "4", state: "open-tab", tabTotal: "47.50", pendingToServe: 3 }),
+  ]);
+  const btn = tokenEl(el, "t1");
+  // An aria-label here would flatten the name to a bare label; FP-1's card carries none, so the name
+  // is computed from the token content — which is what conveys the occupancy state to a screen reader.
+  expect(btn.hasAttribute("aria-label")).toBe(false);
+  const token = btn.querySelector("wt-table-token")!;
+  expect(token.shadowRoot!.querySelector(".label")!.textContent!.trim()).toBe("4");
+  expect(token.shadowRoot!.textContent).toContain("47.50 €");
+});
+
+test("the table button is type=button so it never submits a surrounding form", async () => {
+  const el = await mountCanvas([oneTable("t1")]);
+  expect(tokenEl(el, "t1").getAttribute("type")).toBe("button");
+});
+
+test("the shape palette is announced as a shape picker, not as one shape", async () => {
+  const el = await mountCanvas([oneTable("t1")], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const group = el.shadowRoot!.querySelector<HTMLElement>(".palette")!;
+  expect(group.getAttribute("aria-label")).toBe("Shape");
+});
+
+test("a zone edit is trimmed before it is emitted", async () => {
+  const el = await mountCanvas([oneTable("t1", { zoneId: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const detail = await withPlacementChange(el, () => {
+    const input = el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!;
+    input.value = "  terrace  ";
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  });
+  expect(detail.zoneId).toBe("terrace");
+});
+
+test("a stray second pointer does not move the dragging table", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], {
+    editable: true,
+    gridSnap: true,
+  });
+  const tok = tokenEl(el, "t1");
+  const r = tok.getBoundingClientRect();
+  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!.getBoundingClientRect();
+  let changed = false;
+  el.addEventListener("placement-change", () => {
+    changed = true;
+  });
+  // Pointer 1 owns the gesture; a wandering pointer 2 must be ignored entirely.
+  tok.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: r.left + r.width / 2,
+      clientY: r.top + r.height / 2,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 2,
+      clientX: canvas.left + canvas.width * 0.9,
+      clientY: canvas.top + canvas.height * 0.9,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerId: 2,
+      clientX: canvas.left + canvas.width * 0.9,
+      clientY: canvas.top + canvas.height * 0.9,
+    }),
+  );
+  expect(changed).toBe(false);
+});
+
+test("a drag past the edge clamps the coordinates into [0, 1000]", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 1000, posY: 0 })], { editable: true });
+  const detail = await drag(el, "t1", { xFrac: 1.4, yFrac: -0.4 });
+  expect(detail.posX).toBe(1000);
+  expect(detail.posY).toBe(0);
+});
+
+test("an arrow-key nudge at the edge stays clamped in range", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 1000, posY: 0 })], {
+    editable: true,
+    gridSnap: true,
+  });
+  const right = await withPlacementChange(el, () => {
+    tokenEl(el, "t1").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, composed: true }),
+    );
+  });
+  expect(right.posX).toBe(1000);
+  const up = await withPlacementChange(el, () => {
+    tokenEl(el, "t1").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, composed: true }),
+    );
+  });
+  expect(up.posY).toBe(0);
+});
+
 // --- helpers ---
 
 /** Runs `act`, then resolves with the next placement-change detail it triggers. */
