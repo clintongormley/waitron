@@ -218,36 +218,42 @@ export async function deactivateTable(
 /**
  * Place a table on the FP-2 spatial floor plan (design §placement): write its zone + canvas
  * coordinates + shape + rotation. Runs on the CALLER's transaction under its tenant/app_user scope.
- * Validates IN ORDER, each with its own precise code:
- *  1. the table is ACTIVE (an absent, deactivated, or foreign/RLS-hidden row → `table.not_found`, the
- *     same "must be active" shape {@link setTableStatus} enforces);
- *  2. the `zoneId` is a LIVE zone — present AND `active` for this tenant (else `zone.not_found`; an
- *     inactive/absent/foreign zone folds into the one code, matching the spec's "a live zone"). The
- *     `dining_tables_zone_fk` {@link createTable}/{@link updateTable} lean on cannot see `active`, so
- *     this is an explicit read rather than a caught FK violation;
+ * LOCATION-scoped to `cfg.locationId` (like the sibling read {@link listTables}): RLS confines every
+ * read/write to the tenant, but a tenant can hold several venues, so both the table and the zone must
+ * belong to THIS venue — a caller supplying another location's table or zone UUID is refused, not
+ * allowed to reach across venues. Validates IN ORDER, each with its own precise code:
+ *  1. the table is ACTIVE and in this LOCATION (an absent, deactivated, foreign/RLS-hidden, or
+ *     cross-location row → `table.not_found`, the same "must be active" shape {@link setTableStatus}
+ *     enforces);
+ *  2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
+ *     cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds into
+ *     the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk`
+ *     {@link createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither
+ *     `active` nor the location — so this is an explicit read rather than a caught FK violation;
  *  3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation` integer
  *     in `0..359` — each failure is `placement.invalid` naming THAT field, never the value.
  * Steps 1–2 are ONE round trip (two scalar subqueries, NULL when no row matches), the shape
- * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`.
+ * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`,
+ * itself re-scoped to (id, location) so a zero-row UPDATE (the table is not this venue's) is
+ * `table.not_found` rather than a silent no-op.
  */
 export async function setTablePlacement(
   tx: Transaction,
-  // Unused here for the same reason as {@link updateTable}/{@link setTableStatus} — this by-id verb
-  // relies on RLS for the tenant scope, so the config is kept only for the uniform `(tx, cfg, …)` surface.
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tableId: string,
   p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
 ): Promise<void> {
   // One round trip: the table's `active` flag and the target zone's `active` flag, each NULL when no
-  // row matches (RLS confines both reads to this tenant). NULL-or-false distinguishes missing from
-  // inactive but both map to the one code here — a placement needs a live table AND a live zone.
+  // row matches (RLS confines both reads to this tenant; the `location_id` predicate narrows each to
+  // THIS venue). NULL-or-false distinguishes missing from inactive but both map to the one code here —
+  // a placement needs a live table AND a live zone, both in this location.
   const { rows } = await tx.execute<{
     table_active: boolean | null;
     zone_active: boolean | null;
   }>(
     sql`select
-      (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active,
-      (select ${floorZones.active} from ${floorZones} where ${floorZones.id} = ${p.zoneId}) as zone_active`,
+      (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId} and ${diningTables.locationId} = ${cfg.locationId}) as table_active,
+      (select ${floorZones.active} from ${floorZones} where ${floorZones.id} = ${p.zoneId} and ${floorZones.locationId} = ${cfg.locationId}) as zone_active`,
   );
   const row = rows[0]!;
   if (!row.table_active) {
@@ -264,30 +270,35 @@ export async function setTablePlacement(
   }
   requirePlacementInt(p.rotation, ROTATION_MAX, "rotation");
 
-  await tx
+  const updated = await tx
     .update(diningTables)
     .set({ zoneId: p.zoneId, posX: p.posX, posY: p.posY, shape: p.shape, rotation: p.rotation })
-    .where(eq(diningTables.id, tableId));
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
+    .returning({ id: diningTables.id });
+  if (updated.length === 0) {
+    throw new AppError("table.not_found", { tableId });
+  }
 }
 
 /**
  * Remove a table from the floor plan: NULL the four placement columns (`pos_x`/`pos_y`/`shape`/
  * `rotation`). `zone_id` is left AS-IS — it is an FP-1 assignment, not one of the four placement
- * columns, and a table may belong to a zone without being spatially placed. An absent id (or another
- * tenant's, RLS-hidden) throws `table.not_found`, the by-id shape {@link updateTable}/
- * {@link deactivateTable} use. No `active` check — like those two, `clearPlacement` operates on the
- * row by id regardless of its `active` flag.
+ * columns, and a table may belong to a zone without being spatially placed. LOCATION-scoped to
+ * `cfg.locationId` (like {@link setTablePlacement} and the sibling read {@link listTables}): an absent
+ * id, another tenant's (RLS-hidden), or another VENUE's (same tenant, different `location_id`) matches
+ * no row and throws `table.not_found`, the by-id shape {@link updateTable}/{@link deactivateTable} use.
+ * No `active` check — like those two, `clearPlacement` operates on the row regardless of its `active`
+ * flag.
  */
 export async function clearPlacement(
   tx: Transaction,
-  // Unused for the same reason as {@link setTablePlacement} — kept for the uniform verb surface.
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tableId: string,
 ): Promise<void> {
   const updated = await tx
     .update(diningTables)
     .set({ posX: null, posY: null, shape: null, rotation: null })
-    .where(eq(diningTables.id, tableId))
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
     .returning({ id: diningTables.id });
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId });
