@@ -287,7 +287,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
       });
       setSessionCookie(c, session.id, deps.secureCookies);
-      return c.json({ personId: session.personId });
+      // Surface the operator's OWN role so the till can gate its manager-only affordances (FP-2's
+      // on-till "Editar plano"). Convenience only — every server gate re-derives the role from the
+      // session and re-checks the permission via `authorize` (e.g. the placement route below), so a
+      // tampered client value grants nothing.
+      return c.json({ personId: session.personId, role: session.role });
     }),
   );
 

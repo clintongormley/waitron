@@ -232,7 +232,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: ana.id });
+    // The response carries the operator's OWN role (Ana is `staff`) so the till can gate manager-only
+    // affordances client-side; the on-till placement route (Task 4) still re-checks the gate.
+    expect(await res.json()).toEqual({ personId: ana.id, role: "staff" });
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -251,6 +253,29 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       sql`select ended_at is not null as ended from sessions where id = ${sessionId}`,
     );
     expect(rows.rows).toEqual([{ ended: true }]);
+  });
+
+  it("POST carries a MANAGER operator's role in the session response (not hardcoded to staff)", async () => {
+    // Seed + log in a manager to prove the response reflects the person's ACTUAL role — a mutant that
+    // hardcoded "staff" (or dropped the field) fails here. Cleaned up so the roster's exact ordering
+    // assertions elsewhere stay untouched.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const mgr = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${cfg.tenantId}, 'Marta', ${hashPin("9999")}, 'manager') returning id`);
+    const managerId = mgr.rows[0]!.id;
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: managerId, pin: "9999" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ personId: managerId, role: "manager" });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
+    await suite.db.execute(sql`delete from persons where id = ${managerId}`);
   });
 
   it("POST rejects a bad pin with 401 and a code", async () => {

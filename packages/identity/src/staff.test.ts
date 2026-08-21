@@ -90,7 +90,13 @@ describe("createPerson", () => {
     const session = await run((tx) =>
       loginWithPin(tx, { tenantId, tillId, personId: id, pin: "5678" }),
     );
-    expect(session).toEqual({ id: expect.any(String), tenantId, personId: id, tillId });
+    expect(session).toEqual({
+      id: expect.any(String),
+      tenantId,
+      personId: id,
+      tillId,
+      role: "supervisor",
+    });
   });
 
   it("throws authorization.not_permitted for a staff actor, writing nothing", async () => {
@@ -196,7 +202,13 @@ describe("resetPin", () => {
     const session = await run((tx) =>
       loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "8765" }),
     );
-    expect(session).toEqual({ id: expect.any(String), tenantId, personId: targetId, tillId });
+    expect(session).toEqual({
+      id: expect.any(String),
+      tenantId,
+      personId: targetId,
+      tillId,
+      role: "staff",
+    });
 
     const oldPin = await codeOf(() =>
       run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" })),
@@ -307,7 +319,13 @@ describe("suspendPerson / reactivatePerson", () => {
     const session = await run((tx) =>
       loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }),
     );
-    expect(session).toEqual({ id: expect.any(String), tenantId, personId: targetId, tillId });
+    expect(session).toEqual({
+      id: expect.any(String),
+      tenantId,
+      personId: targetId,
+      tillId,
+      role: "staff",
+    });
   });
 
   it("suspendPerson throws authorization.not_permitted for a staff actor, leaving status active", async () => {

@@ -348,11 +348,62 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).toBeNull();
   });
 
-  it("emits open-table (with the resolved hasOpenTab) when a tray table is tapped", async () => {
+  it("emits open-table (with the resolved hasOpenTab) when a tray table is tapped in VIEW mode", async () => {
     const el = await mountFloor({ tables: [placed("t1"), table({ id: "t9", label: "9" })] });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
     expect(seen.detail).toEqual({ tableId: "t9", hasOpenTab: false });
+  });
+
+  it("in EDIT mode, tapping an unplaced tray table PLACES it (not opens it)", async () => {
+    // Tap-to-place (owner's chosen UX): in edit mode a tray tap gives the table a default position via
+    // the on-till route — its own zone, round, no rotation, in-range coords — so it appears on the
+    // canvas for repositioning. It must NOT emit open-table in this mode.
+    const api = fakeTillApi();
+    const el = await mountFloor({
+      role: "manager",
+      api,
+      editing: true,
+      zones: [zone({ id: "z1" })],
+      tables: [placed("t1", { zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: "z1" })],
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
+    expect(api.setTablePlacement).toHaveBeenCalledWith(
+      "t9",
+      expect.objectContaining({
+        zoneId: "z1",
+        shape: "round",
+        rotation: 0,
+        posY: 500,
+        posX: expect.any(Number),
+      }),
+    );
+    // The default coords are in the canvas's 0..1000 permille range.
+    const placement = (api.setTablePlacement as ReturnType<typeof vi.fn>).mock.calls[0]![1] as {
+      posX: number;
+    };
+    expect(placement.posX).toBeGreaterThanOrEqual(0);
+    expect(placement.posX).toBeLessThanOrEqual(1000);
+    expect(seen.detail).toBeUndefined();
+  });
+
+  it("swallows a rejected tap-to-place and still refreshes", async () => {
+    const api = fakeTillApi({
+      setTablePlacement: vi.fn().mockRejectedValue({ code: "zone.not_found" }),
+    });
+    const el = await mountFloor({
+      role: "manager",
+      api,
+      editing: true,
+      zones: [zone({ id: "z1" })],
+      tables: [placed("t1", { zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: "z1" })],
+    });
+    let refreshed = false;
+    el.addEventListener("floor-refresh", () => (refreshed = true));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).toBe(true);
   });
 
   it("re-emits a canvas open-table with hasOpenTab resolved from the read-model", async () => {

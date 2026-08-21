@@ -210,7 +210,9 @@ function emit(source: Element, type: string, detail?: unknown): void {
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana" });
+  // Log in as a STAFF operator by default (the common case) — the FP-2 role tests below drive a
+  // manager explicitly. The role rides the `logged-in` event exactly as the lock screen sends it.
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", role: "staff" });
   await flush(el);
   return counter(el)!;
 }
@@ -1178,10 +1180,51 @@ describe("till-app", () => {
       await flush(el);
 
       // The floor screen gets the app's api (for the on-till placement writes) and the manager gate.
-      // `canEdit` defaults false — the server exposes no operator role to the client yet (a documented
-      // follow-up), and the on-till route re-checks the gate regardless.
+      // `toCounter` logged in as STAFF, so `canEdit` is false here (the manager path is covered below).
       expect(floor(el)!.api).toBe(currentApi);
       expect(floor(el)!.canEdit).toBe(false);
+    });
+
+    it("a MANAGER login lights up the on-till floor editor (Editar plano), end-to-end", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      // The lock screen sends the session role; a manager holds `till.configure`.
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Marta", role: "manager" });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+
+      expect(floor(el)!.canEdit).toBe(true);
+      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).not.toBeNull();
+
+      // Logging out drops the privilege so the next operator starts un-privileged.
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+      emit(counter(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", role: "staff" });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+      expect(floor(el)!.canEdit).toBe(false);
+    });
+
+    it("a STAFF login keeps the on-till floor editor hidden, end-to-end", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", role: "staff" });
+      await flush(el);
+      emit(counter(el)!, "show-floor");
+      await flush(el);
+
+      expect(floor(el)!.canEdit).toBe(false);
+      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
     });
 
     it("floor-refresh re-reads the tables + zones after an on-till placement write (FP-2)", async () => {

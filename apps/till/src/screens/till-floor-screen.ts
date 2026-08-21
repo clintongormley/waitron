@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 // `baseStyles` also loads the `@waitron/ui` barrel, which registers `<wt-floor-canvas>` and
 // `<wt-table-token>` (self-registering `wt-*` components) — the map view and the tray consume them by
 // tag below. The type-only imports carry the canvas's copy/table/placement-event shapes.
-import { baseStyles } from "@waitron/ui";
+import { GRID_STEP, baseStyles, clampPermille } from "@waitron/ui";
 import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
@@ -512,7 +512,7 @@ export class TillFloorScreen extends LitElement {
           unplaced.length > 0
             ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
                 <span class="tray-label">${t("floor.unplaced")}</span>
-                ${unplaced.map((table) => this.#trayItem(table))}
+                ${unplaced.map((table) => this.#trayItem(table, placed))}
               </div>`
             : nothing
         }
@@ -520,19 +520,58 @@ export class TillFloorScreen extends LitElement {
     `;
   }
 
-  /** One unplaced table in the tray: a tappable button wrapping the shared `<wt-table-token>` (Ruling
-   * FP2-A — the same token the map draws, so the tray can never drift from it). Tap → `open-table`. */
-  #trayItem(table: TableState): TemplateResult {
+  /**
+   * One unplaced table in the tray: a tappable button wrapping the shared `<wt-table-token>` (Ruling
+   * FP2-A — the same token the map draws, so the tray can never drift from it). A tap OPENS the table in
+   * view mode, or PLACES it (tap-to-place, {@link #placeFromTray}) in edit mode — `placed` is the
+   * active zone's already-placed tables, so the default slot can dodge them.
+   */
+  #trayItem(table: TableState, placed: TableState[]): TemplateResult {
     return html`<button
       class="tray-item"
       data-tray-table=${table.id}
-      @click=${() => this.#openTable(table)}
+      @click=${() => this.#onTrayTap(table, placed)}
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
         .labels=${{ covers: t("floor.capacity"), toServe: t("floor.to_serve") }}
       ></wt-table-token>
     </button>`;
+  }
+
+  /** A tray tap: PLACE the table onto the map in edit mode, else OPEN it (view mode) — the FP-1 tap. */
+  #onTrayTap(table: TableState, placed: TableState[]): void {
+    if (this.editing) {
+      void this.#placeFromTray(table, placed);
+    } else {
+      this.#openTable(table);
+    }
+  }
+
+  /**
+   * Tap-to-place (FP-2, the owner's chosen UX — no drag-onto-canvas): give an unplaced tray table a
+   * DEFAULT position through the on-till route, then refresh so it appears on the canvas for the
+   * operator to reposition with the canvas's own drag / keyboard controls. The slot is the centre nudged
+   * right by 50‰ per already-placed table (clamped into range) so successive placements don't stack
+   * exactly; `shape` defaults to `round` and `rotation` to 0 (the canvas defaults), and `zoneId` is the
+   * table's own zone. A rejected write (e.g. a zoneless table the server refuses) is swallowed and the
+   * refresh reconciles the view — same shape as {@link #onPlacementChange}.
+   */
+  async #placeFromTray(table: TableState, placed: TableState[]): Promise<void> {
+    if (this.api === undefined) return;
+    const posX = clampPermille(500 + placed.length * GRID_STEP);
+    try {
+      await this.api.setTablePlacement(table.id, {
+        posX,
+        posY: 500,
+        shape: "round",
+        rotation: 0,
+        zoneId: table.zoneId,
+      });
+    } catch {
+      // Non-fatal — the refresh reconciles the view to server truth (see #onPlacementChange).
+    }
+    this.#requestFloorRefresh();
   }
 
   #tab(

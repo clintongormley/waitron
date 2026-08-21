@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
@@ -129,15 +129,28 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations rendering the MAP view with the tray + Editar plano (edit mode)", async () => {
+  it("has no violations rendering the MAP view with the tray + Editar plano + the Spanish edit inspector", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
       { zones, tables: placedTables, canEdit: true },
       theme,
     );
-    // Enter edit mode so the canvas exposes its edit inspector chrome to axe as well.
+    // Enter edit mode so the canvas is `.editable`…
     el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
     await el.updateComplete;
+    // …then SELECT a table on the canvas so its edit inspector (shape palette / zone / rotate / remove),
+    // rendered with the till's SPANISH copy, is in the tree for axe. The inspector needs the canvas's
+    // own `selectedId`, which its `#onTap` sets — so click a `[data-table]` inside the canvas's shadow
+    // root (mirrors wt-floor-canvas.a11y.test.ts's edit-mode case).
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas") as HTMLElement & {
+      shadowRoot: ShadowRoot;
+      updateComplete: Promise<unknown>;
+    };
+    canvas.shadowRoot.querySelector<HTMLElement>("[data-table]")!.click();
+    await canvas.updateComplete;
+    await el.updateComplete;
+    // The inspector is present (so axe is scanning the real Spanish chrome, not an empty canvas).
+    expect(canvas.shadowRoot.querySelector(".inspector")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

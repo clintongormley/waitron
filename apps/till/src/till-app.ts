@@ -47,6 +47,14 @@ import type {
 type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order";
 
 /**
+ * The operator roles that hold `till.configure` — manager + admin, mirroring
+ * `packages/identity/src/permissions.ts` (supervisor and staff do NOT). This is the CLIENT-side gate for
+ * the on-till "Editar plano" affordance only; the on-till placement route re-derives the role from the
+ * session and re-checks the permission server-side (FP-2 Task 4), so this hiding is convenience.
+ */
+const ROLES_WITH_TILL_CONFIGURE: ReadonlySet<string> = new Set(["manager", "admin"]);
+
+/**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
  * quantity at numeric(_,3) scale, so an EACH product's whole count arrives as "2.000" — which the
  * basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so an
@@ -178,13 +186,9 @@ export class TillApp extends LitElement {
    * "Editar plano" toggle. Client hiding is convenience only; the on-till placement route re-checks the
    * gate server-side (FP-2 Task 4).
    *
-   * DEFAULTS `false` and, for now, STAYS false: the server exposes no operator role to the client — the
-   * login route answers `{ personId }` only (`POST /api/session`, `apps/server/src/till-api.ts`), and
-   * neither `getTill` nor the `logged-in` event carries a role. Lighting this up is a one-line
-   * follow-up once the session response returns the role: set
-   * `canEdit = ["manager", "admin"].includes(role)` in {@link #onLoggedIn} (mirroring the server's
-   * `till.configure` = manager + admin). Left as the safe default rather than reaching into the server,
-   * which is out of this task's scope.
+   * Computed at login from the session's `role` ({@link #onLoggedIn}, mirroring the server's
+   * `till.configure` = manager + admin — `packages/identity/src/permissions.ts`), and reset to `false`
+   * on logout so the next operator starts un-privileged until their own login recomputes it.
    */
   @state() private canEdit = false;
   /**
@@ -369,11 +373,14 @@ export class TillApp extends LitElement {
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
    * and (Modes I/T) the prep queue, then load the colleague roster for the schedule screen. */
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName } = (event as CustomEvent<LoggedInDetail>).detail;
+    const { personId, displayName, role } = (event as CustomEvent<LoggedInDetail>).detail;
     const products = await this.api.listProducts();
     this.products = products;
     this.operatorName = displayName;
     this.operatorPersonId = personId;
+    // FP-2: gate the on-till floor editor on the operator's own role (manager/admin hold
+    // `till.configure`). Convenience only — the placement route re-checks server-side.
+    this.canEdit = ROLES_WITH_TILL_CONFIGURE.has(role);
     this.errorKey = undefined;
     this.screen = "counter";
     await this.#refreshHeldOrders();
@@ -989,6 +996,9 @@ export class TillApp extends LitElement {
   async #onLogout(): Promise<void> {
     await this.api.logout();
     this.operatorName = "";
+    // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
+    // recomputes it (FP-2).
+    this.canEdit = false;
     this.errorKey = undefined;
     this.screen = "lock";
   }
