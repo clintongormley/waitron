@@ -521,11 +521,10 @@ declare module "@waitron/shared" {
      *
      * `placement.*` names the DOMAIN CONCEPT (a table's spatial placement), never the throwing
      * package (the rule `tenant.not_found`'s note gives); venue layout only, nowhere near the fiscal
-     * huella. A request-shape fault → HTTP 400: it is not listed in either route `STATUS` map yet
-     * (the route wiring is a later FP-2 task), and 400 is the DEFAULT a registered code takes when
-     * absent from a map (`till-api.ts`'s `STATUS` note), so the mapping already holds; the route task
-     * will list it explicitly beside `management.request_invalid` when it wires the placement routes.
-     * Never renamed once shipped.
+     * huella. A request-shape fault → HTTP 400: it is listed explicitly as 400 in BOTH route `STATUS`
+     * maps (`till-api.ts`, `management-api.ts`), beside `management.request_invalid`, per house style —
+     * though 400 is also the DEFAULT a registered code takes when absent from a map (`till-api.ts`'s
+     * `STATUS` note), so the mapping would hold either way. Never renamed once shipped.
      */
     "placement.invalid": { field: string };
     /**
