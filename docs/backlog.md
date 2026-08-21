@@ -1472,11 +1472,24 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   - **Dashboard floor-config zone `<select>` shows the wrong (first) zone for a table whose zone was DEACTIVATED.**
     A table still pointing at a now-inactive zone has no matching `<option>`, so the native select falls back to its
     first entry (mis-displaying the assignment). Same **deactivated-zone-with-assigned-tables** family the till floor
-    screen already handles (orphan-zone rescue); pairs with the "clear a table's zone" item above.
+    screen already handles (orphan-zone rescue); pairs with the "clear a table's zone" item above. **When fixed, hoist
+    the orphan-zone rule** (the till's private `#isZoneless` = "a `zoneId` not among the active zones counts as
+    unassigned") **to a shared home** — `@waitron/shared`, or resolve it server-side by having `listTables`/`listTablesWithState`
+    report orphan status — rather than pasting a second private copy into the dashboard screen (a whole-branch altitude note).
   - **`english-only` guard does not cover `apps/*` identifiers.** It scans the generic packages' `src/`, but Spanish
     identifiers in app UI — screen keys, i18n key namespaces, CSS classes, `data-*` attrs — slip through unchecked
     (FP-1 shipped `sala`/`por-servir` identifiers, since renamed to `floor`/`to-serve`). Consider extending the guard
     to app identifiers, or documenting the carve-out (`apps/*` is currently out of scope by a recorded decision).
+  - **The un-serve (mis-tap undo) control is unwired.** `unmarkLineServed` exists end-to-end — the verb
+    (`working-order.ts`), the `DELETE /api/working-orders/:id/lines/:lineNo/served` route, and `TillApi.unmarkLineServed`
+    — each doc-commented and unit-tested, but the table-order drawer dispatches only `serve-line` (mark), never an
+    un-serve. So a line ticked served by mistake can't be un-ticked from the UI. The plumbing is deliberate + tested
+    (kept, not dropped, in the finish-branch simplify pass); the follow-up is a tick-to-untick control on a served line.
+  - **`parseCapacity` (management-api) and `requireCapacity` (till-api) duplicate the int4 capacity check.** Same
+    `Number.isInteger && >=0 && <=2147483647 → management.request_invalid` rule in two files; the duplication is
+    cross-referenced in `parseCapacity`'s own doc but not extracted (deliberately left in the simplify pass — a shared
+    module for one 4-line validator wasn't judged worth it). Consolidate into one shared capacity validator if a third
+    caller appears.
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
