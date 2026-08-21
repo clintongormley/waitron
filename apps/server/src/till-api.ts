@@ -17,6 +17,7 @@ import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-s
 import {
   createTable,
   deactivateTable,
+  listServiceStatuses,
   listTables,
   listZones,
   setTableStatus,
@@ -706,6 +707,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listZones(tx, deps.cfg);
       });
       return c.json(zones);
+    }),
+  );
+
+  // The venue's ACTIVE service statuses (FP-1, TS-2), for the table-order screen's Estado picker.
+  // SESSION-GUARDED (operator PIN, NOT the manager-only `listStatuses`): `requireSession` runs FIRST, and
+  // RLS scopes `listServiceStatuses` to this till's tenant. LIST-ONLY, active-only (a deactivated status
+  // can't be applied); status CRUD is the management API's, so this surface throws no domain code.
+  app.get("/api/statuses", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const statuses = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listServiceStatuses(tx);
+      });
+      return c.json(statuses);
     }),
   );
 

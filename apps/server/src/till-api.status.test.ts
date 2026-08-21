@@ -257,3 +257,25 @@ describe("POST /api/tables/:id/status", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 });
+
+describe("GET /api/statuses", () => {
+  it("returns the tenant's ACTIVE statuses as pickable options, excluding a deactivated one", async () => {
+    const res = await request("/api/statuses");
+    expect(res.status).toBe(200);
+    const options = (await res.json()) as { id: string; label: string; color: string }[];
+    // The active status is offered with exactly { id, label, color }; the inactive "Retired" is not —
+    // a status you cannot apply must not be offered (the active-only predicate, proven by deletion).
+    expect(options).toContainEqual({ id: STATUS_ID, label: "Bill requested", color: "#ef4444" });
+    expect(options.some((o) => o.id === INACTIVE_STATUS_ID)).toBe(false);
+  });
+
+  it("REJECTS with 401 session.required when no cookie is present", async () => {
+    // `requireSession` runs FIRST (before any DB touch), so an unauthenticated read 401s. Deleting the
+    // `requireSession` call flips this to a 200 — the deletion proof of the guard.
+    const noAuth = new Hono();
+    mountTillApi(noAuth, deps(suite.db), collect([]));
+    const res = await noAuth.request("/api/statuses");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});

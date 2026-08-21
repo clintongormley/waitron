@@ -352,6 +352,37 @@ export async function createStatus(
   }
 }
 
+/** A pickable ACTIVE service status for the till's Estado picker (FP-1) — the slim `{ id, label, color }`
+ *  the floor-plan picker needs, DISTINCT from the config-CRUD {@link ServiceStatus} (which also carries
+ *  `displayOrder`/`active`/`createdAt` for the editor). */
+export interface ServiceStatusOption {
+  id: string;
+  label: string;
+  color: string;
+}
+
+/**
+ * The tenant's ACTIVE service statuses as pickable options for the till's Estado picker (FP-1) —
+ * `{ id, label, color }` only, ordered by `display_order` then `label`. Deactivated statuses are EXCLUDED
+ * (`active = true`): a status the operator cannot apply (`setTableStatus` rejects `status.inactive`) must
+ * not be offered. SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only
+ * {@link listStatuses}: an operator holds a till session, not a management one, so it takes no
+ * `managementSessionId`. Takes NO `cfg`: the statuses table is tenant-wide with no location column, so
+ * RLS (`asAppUser` under `withTenant`) is the whole scope — there is nothing to narrow by, unlike
+ * {@link listZones}'s location filter.
+ */
+export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
+  return tx
+    .select({
+      id: tableServiceStatuses.id,
+      label: tableServiceStatuses.label,
+      color: tableServiceStatuses.color,
+    })
+    .from(tableServiceStatuses)
+    .where(eq(tableServiceStatuses.active, true))
+    .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
+}
+
 /**
  * The tenant's WHOLE status set — active AND inactive, ordered by `display_order` then `label` — so the
  * editor can reactivate a deactivated one. Manager/admin only (`till.configure`), gated here rather than

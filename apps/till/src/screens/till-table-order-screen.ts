@@ -20,19 +20,13 @@ import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
-import type { TabLine, TillProduct } from "../api/client.js";
+import type { TabLine, TableServiceStatus, TillProduct } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 
-/**
- * One selectable table service status (TS-2) — a LOCAL mirror of {@link TableState.status}'s non-null
- * shape, decoupled from the read-model like every other client type. The Estado picker offers these;
- * the app derives the set it knows and threads it in via {@link TillTableOrderScreen.statuses}.
- */
-export interface TableServiceStatus {
-  id: string;
-  label: string;
-  color: string;
-}
+// The Estado picker's option type is the shape `GET /api/statuses` returns (`{ id, label, color }`),
+// defined once in the API client and re-exported here so the screen's `.statuses` element type — and
+// the existing test/app imports of `TableServiceStatus` from this module — stay stable.
+export type { TableServiceStatus };
 
 /**
  * A read-only store whose total + line count are the tab's LOCKED figures, computed ONCE from the tab

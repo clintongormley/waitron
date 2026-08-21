@@ -14,7 +14,6 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { TableServiceStatus } from "./screens/till-table-order-screen.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -24,6 +23,7 @@ import type {
   PrepState,
   StaffMember,
   TabLine,
+  TableServiceStatus,
   TableState,
   TillInfo,
   TillProduct,
@@ -172,6 +172,13 @@ export class TillApp extends LitElement {
   /** The live-floor occupancy read-model (FP-1), loaded on entering the floor screen and handed to it.
    * Owned and refreshed by the app, like {@link heldOrders}. */
   @state() private tables: TableState[] = [];
+  /**
+   * The venue's ACTIVE service statuses (FP-1, TS-2) — the catalogue the table-order screen's Estado
+   * picker offers, loaded from `GET /api/statuses` on entering the floor and threaded to the screen.
+   * The FULL active set (not derived from which statuses happen to be applied to a table), so a
+   * configured-but-never-yet-applied status can still be picked. Owned and refreshed by the app.
+   */
+  @state() private statuses: TableServiceStatus[] = [];
   /**
    * The working-order id of the tab the operator just opened or resumed from the floor (FP-1) — the
    * `orderId` Task 9's table-ordering screen reads. Set by {@link TillApp.#onOpenTable}: `openTab`'s new
@@ -804,11 +811,18 @@ export class TillApp extends LitElement {
   async #onShowFloor(): Promise<void> {
     this.errorKey = undefined;
     try {
-      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
+      const [tables, zones, statuses] = await Promise.all([
+        this.api.getTablesState(),
+        this.api.listZones(),
+        this.api.listStatuses(),
+      ]);
       this.tables = tables;
       this.zones = zones;
+      // The Estado picker's catalogue (FP-1) — loaded here so the table-order screen (reached from the
+      // floor) has the full ACTIVE status set to offer, including statuses applied to no table yet.
+      this.statuses = statuses;
     } catch {
-      // Non-fatal: leave zones/tables at their last values (or empty), degrade gracefully (never rethrow).
+      // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
     }
     this.screen = "floor";
   }
@@ -857,21 +871,6 @@ export class TillApp extends LitElement {
     } catch {
       this.tabLines = [];
     }
-  }
-
-  /**
-   * The distinct table service statuses (TS-2) the app currently knows, derived from the loaded
-   * occupancy read-model (each table's manual `status`) — the table-order screen's Estado picker offers
-   * these WITHOUT a dedicated statuses read (the till client has none, and this task adds no client
-   * method). A status not currently applied to any table is not offered until it is; clearing is always
-   * available. A `listStatuses` till method is a clean follow-up if the full set is ever needed here.
-   */
-  #tabStatuses(): TableServiceStatus[] {
-    const byId = new Map<string, TableServiceStatus>();
-    for (const table of this.tables) {
-      if (table.status !== null) byId.set(table.status.id, table.status);
-    }
-    return [...byId.values()];
   }
 
   /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. A failed
@@ -1059,7 +1058,7 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           .lines=${this.tabLines}
           .products=${this.products}
-          .statuses=${this.#tabStatuses()}
+          .statuses=${this.statuses}
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
         ></till-table-order-screen>`;

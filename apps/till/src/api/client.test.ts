@@ -6,6 +6,7 @@ import {
   type MyShift,
   type MySwap,
   type TabLine,
+  type TableServiceStatus,
   type TableState,
   type TillProduct,
 } from "./client.js";
@@ -750,6 +751,24 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(zones);
+  });
+
+  it("listStatuses GETs the venue's ACTIVE service statuses and returns them", async () => {
+    // Typed `TableServiceStatus[]` so the mock is a compile-time proof the client mirror carries every
+    // field the `GET /api/statuses` route sends (`id`, `label`, `color`).
+    const statuses: TableServiceStatus[] = [
+      { id: "s1", label: "Bill requested", color: "#ef4444" },
+      { id: "s2", label: "Needs cleaning", color: "amber" },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(statuses));
+
+    const r = await new TillApi("", fetchStub).listStatuses();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/statuses",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(statuses);
   });
 
   it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe and the tab fields", async () => {

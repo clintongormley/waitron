@@ -319,6 +319,19 @@ export interface TableState {
 }
 
 /**
+ * One pickable table service status (FP-1, TS-2) from `GET /api/statuses` — the ACTIVE-only
+ * `{ id, label, color }` the table-order screen's Estado picker offers. A LOCAL mirror of the server's
+ * `ServiceStatusOption` (`apps/server/src/tables.ts`), deliberately NOT imported — same bundle-decoupling
+ * rationale as every other type in this file. Structurally identical to the inline `TableState.status`
+ * shape, and re-exported by `till-table-order-screen` as its `.statuses` element type.
+ */
+export interface TableServiceStatus {
+  id: string;
+  label: string;
+  color: string;
+}
+
+/**
  * `POST /api/tables/:id/tab` success (FP-1) — the newly opened tab's working-order id plus the per-node
  * order number the counter sees. Mirrors the server's `openTab` return (`apps/server/src/working-order.ts`).
  * `tabId` is the working-order id the live floor threads to `addTabRound`/`markLineServed`.
@@ -522,6 +535,15 @@ export class TillApi {
   /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones` (FP-1). LIST-ONLY. */
   listZones(): Promise<FloorZone[]> {
     return this.#request<FloorZone[]>("/api/zones", "GET");
+  }
+
+  /**
+   * The venue's ACTIVE service statuses for the table-order screen's Estado picker (FP-1) →
+   * `GET /api/statuses`. LIST-ONLY and active-only (a deactivated status can't be applied); status CRUD
+   * is the management API's. Operator-session-gated like the other floor reads.
+   */
+  listStatuses(): Promise<TableServiceStatus[]> {
+    return this.#request<TableServiceStatus[]>("/api/statuses", "GET");
   }
 
   /**

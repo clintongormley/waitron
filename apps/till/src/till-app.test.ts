@@ -164,6 +164,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     addTabRound: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
+    listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -1251,11 +1252,6 @@ describe("till-app", () => {
         unitPriceGross: "1.50",
         servedAt: null,
       };
-      const statusTable: TableState = {
-        ...openTable,
-        status: { id: "s1", label: "Reservada", color: "#cc0000" },
-      };
-
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue([tabLine]);
         const { el } = await mountApp({
@@ -1270,13 +1266,22 @@ describe("till-app", () => {
         expect(screen.products).toEqual([cafe]);
       });
 
-      it("offers the Estado picker the statuses currently in use on the floor", async () => {
+      it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {
+        const catalogue = [
+          { id: "s1", label: "Reservada", color: "#cc0000" },
+          { id: "s2", label: "Cuenta pedida", color: "#0a8a0a" },
+        ];
+        const listStatuses = vi.fn().mockResolvedValue(catalogue);
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([statusTable]),
+          // openTable carries `status: null`, so a list DERIVED from the occupancy read-model would be
+          // empty — the picker must be fed the loaded catalogue (incl. a status applied to no table).
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
+          listStatuses,
         });
-        const screen = await toTableOrder(el, statusTable);
-        expect(screen.statuses).toEqual([{ id: "s1", label: "Reservada", color: "#cc0000" }]);
+        const screen = await toTableOrder(el, openTable);
+        expect(listStatuses).toHaveBeenCalled();
+        expect(screen.statuses).toEqual(catalogue);
       });
 
       it("send-round appends the round to the tab then reloads its lines", async () => {
