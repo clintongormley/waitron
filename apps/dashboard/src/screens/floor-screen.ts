@@ -26,7 +26,7 @@ interface EditableTable {
 }
 
 /**
- * The management dashboard's SALA (floor-plan) SCREEN: configures the venue's floor zones and dining
+ * The management dashboard's FLOOR-PLAN SCREEN: configures the venue's floor zones and dining
  * tables (FP-1, design §3d), mirroring `service-status-screen.ts`/`layout-screen.ts`. On connect it
  * loads `api.listZones()` + `api.listTables()` into editable rows across two panels — Zonas and Mesas.
  * A Zona row edits its name + display order and Guardar-s it; a Mesa row edits its label + seat count
@@ -56,8 +56,8 @@ interface EditableTable {
  * shows a sentence and never the raw wire code (`zone.name_taken`, `table.label_taken`, `zone.not_found`,
  * `table.not_found`).
  */
-@customElement("dashboard-sala-screen")
-export class SalaScreen extends LitElement {
+@customElement("dashboard-floor-screen")
+export class FloorScreen extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
@@ -300,7 +300,7 @@ export class SalaScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
-            label=${t("sala.zone_name")}
+            label=${t("floor.zone_name")}
             data-test="zone-name-${z.id}"
             .value=${z.name}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -310,7 +310,7 @@ export class SalaScreen extends LitElement {
           ></wt-input>
           <wt-input
             type="number"
-            label=${t("sala.zone_order")}
+            label=${t("floor.zone_order")}
             data-test="zone-order-${z.id}"
             .value=${String(z.displayOrder)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -343,7 +343,7 @@ export class SalaScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
-            label=${t("sala.table_label")}
+            label=${t("floor.table_label")}
             data-test="table-label-${tbl.id}"
             .value=${tbl.label}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -353,7 +353,7 @@ export class SalaScreen extends LitElement {
           ></wt-input>
           <wt-input
             type="number"
-            label=${t("sala.table_capacity")}
+            label=${t("floor.table_capacity")}
             data-test="table-capacity-${tbl.id}"
             .value=${tbl.capacity === null ? "" : String(tbl.capacity)}
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
@@ -365,7 +365,7 @@ export class SalaScreen extends LitElement {
             }}
           ></wt-input>
           <label class="field"
-            >${t("sala.table_zone")}
+            >${t("floor.table_zone")}
             <select
               data-test="table-zone-${tbl.id}"
               @change=${(e: Event) => this.#onAssignZone(tbl.id, e)}
@@ -377,7 +377,7 @@ export class SalaScreen extends LitElement {
                 // no null — a deferred backlog follow-up): a selectable blank on an assigned table would
                 // visually clear it while the assignment persisted, desyncing the DOM from state.
                 tbl.zoneId === null
-                  ? html`<option value="" selected>${t("sala.no_zone")}</option>`
+                  ? html`<option value="" selected>${t("floor.no_zone")}</option>`
                   : nothing
               }
               ${this.zones.map(
@@ -407,48 +407,48 @@ export class SalaScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("sala.title")}</h1>
+      <h1 class="title">${t("floor.title")}</h1>
       <div class="panels">
         <section class="panel" data-test="zones-panel">
-          <h2 class="panel-title">${t("sala.zones_title")}</h2>
+          <h2 class="panel-title">${t("floor.zones_title")}</h2>
           ${
             this.zones.length === 0
-              ? html`<p class="empty">${t("sala.no_zones")}</p>`
+              ? html`<p class="empty">${t("floor.no_zones")}</p>`
               : html`<ol>
                   ${this.zones.map((z) => this.#renderZone(z))}
                 </ol>`
           }
           <div class="new">
             <wt-input
-              label=${t("sala.new_zone")}
+              label=${t("floor.new_zone")}
               data-new-zone
               .value=${this.newZone}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewZone(e)}
             ></wt-input>
             <wt-button variant="primary" data-add-zone @click=${() => void this.#createZone()}
-              >${t("sala.add_zone")}</wt-button
+              >${t("floor.add_zone")}</wt-button
             >
           </div>
         </section>
 
         <section class="panel" data-test="tables-panel">
-          <h2 class="panel-title">${t("sala.tables_title")}</h2>
+          <h2 class="panel-title">${t("floor.tables_title")}</h2>
           ${
             this.tables.length === 0
-              ? html`<p class="empty">${t("sala.no_tables")}</p>`
+              ? html`<p class="empty">${t("floor.no_tables")}</p>`
               : html`<ol>
                   ${this.tables.map((tbl) => this.#renderTable(tbl))}
                 </ol>`
           }
           <div class="new">
             <wt-input
-              label=${t("sala.table_label")}
+              label=${t("floor.table_label")}
               data-new-table
               .value=${this.newTable}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewTable(e)}
             ></wt-input>
             <wt-button variant="primary" data-add-table @click=${() => void this.#createTable()}
-              >${t("sala.add_table")}</wt-button
+              >${t("floor.add_table")}</wt-button
             >
           </div>
         </section>
@@ -461,6 +461,6 @@ export class SalaScreen extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-sala-screen": SalaScreen;
+    "dashboard-floor-screen": FloorScreen;
   }
 }

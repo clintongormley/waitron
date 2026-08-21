@@ -90,7 +90,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That status is deactivated",
     es: "Ese estado está desactivado",
   },
-  // Floor-plan zone + table configuration (apps/server/src/tables.ts, FP-1). The Sala editor's
+  // Floor-plan zone + table configuration (apps/server/src/tables.ts, FP-1). The floor-plan editor's
   // per-item mutations reject with these when a zone name / table label collides, or when a zone or
   // table (or a `zoneId` naming no zone) can no longer be found.
   "zone.name_taken": {

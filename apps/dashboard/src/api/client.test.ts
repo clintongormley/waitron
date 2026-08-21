@@ -1018,8 +1018,8 @@ describe("DashboardApi — ingredients + product recipe", () => {
   });
 });
 
-describe("DashboardApi — sala (floor zones + tables)", () => {
-  // The eight per-item verbs the Sala config screen drives (FP-1's /management-api/zones +
+describe("DashboardApi — floor plan (zones + tables)", () => {
+  // The eight per-item verbs the floor-plan config screen drives (FP-1's /management-api/zones +
   // /management-api/tables routes, till.configure-gated). Mirrors the service-status method tests:
   // GET decodes a list, POST returns the minted id (201), PATCH/DELETE resolve undefined on an
   // empty 204. Paths/bodies asserted against apps/server/src/management-api.ts.

@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
-import { SalaScreen } from "./sala-screen.js";
+import { FloorScreen } from "./floor-screen.js";
 
 /**
- * The Sala (floor-plan) config screen. Its `api` is a stub: `listZones`/`listTables` return known
+ * The floor-plan config screen. Its `api` is a stub: `listZones`/`listTables` return known
  * lists the screen loads on connect, and the eight CRUD verbs are spies the per-item mutation paths
  * call (each followed by a reload). Assertions cover each behaviour on its own: the two panels LOAD
  * from `listZones`/`listTables`; the new-zone form calls `createZone({ name })` and reloads; an empty
@@ -78,33 +78,33 @@ function stubApi(
 }
 
 /** Settles the in-flight listZones/listTables and the follow-up render. */
-async function flush(el: SalaScreen): Promise<void> {
+async function flush(el: FloorScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
 
-const q = (el: SalaScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
-const errorKey = (el: SalaScreen): string | null =>
+const q = (el: FloorScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const errorKey = (el: FloorScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
 /** Fire a wt-input's composed change, exactly as `wt-input` dispatches it. */
-function type(el: SalaScreen, sel: string, value: string): void {
+function type(el: FloorScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
 /** Set a native <select>'s value and fire its `change`, exactly as the browser does on a pick. */
-function selectValue(el: SalaScreen, sel: string, value: string): void {
+function selectValue(el: FloorScreen, sel: string, value: string): void {
   const node = q(el, sel) as HTMLSelectElement;
   node.value = value;
   node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 }
 
-describe("sala-screen", () => {
+describe("floor-screen", () => {
   it("loads and lists the zones and tables on connect", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     expect(api.listZones).toHaveBeenCalledTimes(1);
     expect(api.listTables).toHaveBeenCalledTimes(1);
@@ -115,7 +115,7 @@ describe("sala-screen", () => {
 
   it("creates a zone from the new-zone form (createZone with the name), then reloads", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-new-zone]", "Comedor");
     q(el, "[data-add-zone]")!.click();
@@ -126,7 +126,7 @@ describe("sala-screen", () => {
 
   it("does not create an empty-name zone", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-add-zone]")!.click();
     await flush(el);
@@ -136,7 +136,7 @@ describe("sala-screen", () => {
   it("saves an edited zone row (updateZone with the row's current name + order), then reloads", async () => {
     // Two rows, so editing z1 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, TWO_ZONES);
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=zone-name-z1]", "Salón");
     // A non-numeric order coerces to 0 (the falsy `|| 0` branch); then a real number.
@@ -151,7 +151,7 @@ describe("sala-screen", () => {
 
   it("deactivates a zone row", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-test=zone-deactivate-z1]")!.click();
     await flush(el);
@@ -161,7 +161,7 @@ describe("sala-screen", () => {
 
   it("assigns a table's zone (updateTable with only the zoneId), then reloads", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     selectValue(el, "[data-test=table-zone-t1]", "z1");
     await flush(el);
@@ -174,7 +174,7 @@ describe("sala-screen", () => {
     // that would visually clear it (while the assignment stays) must not be selectable — the select
     // shows only real zones, with the current one selected.
     const api = stubApi({}, ZONES, TWO_TABLES);
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     const select = q(el, "[data-test=table-zone-t2]") as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
@@ -187,7 +187,7 @@ describe("sala-screen", () => {
     // selected. Picking it again changes nothing and never calls updateTable (the route takes no null),
     // and the select still reflects the real unassigned state (no desync).
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     const select = q(el, "[data-test=table-zone-t1]") as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.value)).toContain("");
@@ -201,7 +201,7 @@ describe("sala-screen", () => {
   it("saves an edited table row (updateTable with the row's label + capacity), then reloads", async () => {
     // Two rows, so editing t1 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, ZONES, TWO_TABLES);
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=table-label-t1]", "6");
     // Non-numeric → 0 (the `|| 0` branch); blank → null (the "clear capacity" branch); then a number.
@@ -218,7 +218,7 @@ describe("sala-screen", () => {
   it("saves a table whose capacity is left blank (updateTable with the label only)", async () => {
     // t1's capacity is null; editing only the label sends no capacity key at all.
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=table-label-t1]", "9");
     q(el, "[data-test=table-save-t1]")!.click();
@@ -228,7 +228,7 @@ describe("sala-screen", () => {
 
   it("creates a table from the new-table form (createTable with the label), then reloads", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-new-table]", "7");
     q(el, "[data-add-table]")!.click();
@@ -239,7 +239,7 @@ describe("sala-screen", () => {
 
   it("does not create an empty-label table", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-add-table]")!.click();
     await flush(el);
@@ -248,7 +248,7 @@ describe("sala-screen", () => {
 
   it("deactivates a table row", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-test=table-deactivate-t1]")!.click();
     await flush(el);
@@ -258,7 +258,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected zone create as a localised role=alert (never the raw code)", async () => {
     const api = stubApi({ createZone: vi.fn().mockRejectedValue({ code: "zone.name_taken" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-new-zone]", "Comedor");
     q(el, "[data-add-zone]")!.click();
@@ -271,7 +271,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected table zone-assign as a localised role=alert", async () => {
     const api = stubApi({ updateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     selectValue(el, "[data-test=table-zone-t1]", "z1");
     await flush(el);
@@ -282,7 +282,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected table create as a localised role=alert", async () => {
     const api = stubApi({ createTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-new-table]", "4");
     q(el, "[data-add-table]")!.click();
@@ -294,7 +294,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected zone deactivate as a localised role=alert", async () => {
     const api = stubApi({ deactivateZone: vi.fn().mockRejectedValue({ code: "zone.not_found" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-test=zone-deactivate-z1]")!.click();
     await flush(el);
@@ -305,7 +305,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected zone save as a localised role=alert", async () => {
     const api = stubApi({ updateZone: vi.fn().mockRejectedValue({ code: "zone.not_found" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=zone-name-z1]", "Salón");
     q(el, "[data-test=zone-save-z1]")!.click();
@@ -317,7 +317,7 @@ describe("sala-screen", () => {
 
   it("surfaces a rejected table save as a localised role=alert", async () => {
     const api = stubApi({ updateTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=table-label-t1]", "4");
     q(el, "[data-test=table-save-t1]")!.click();
@@ -331,7 +331,7 @@ describe("sala-screen", () => {
     const api = stubApi({
       deactivateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }),
     });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     q(el, "[data-test=table-deactivate-t1]")!.click();
     await flush(el);
@@ -342,7 +342,7 @@ describe("sala-screen", () => {
 
   it("falls back to server.internal when a rejected mutation carries no code", async () => {
     const api = stubApi({ createZone: vi.fn().mockRejectedValue({}) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-new-zone]", "Whatever");
     q(el, "[data-add-zone]")!.click();
@@ -352,14 +352,14 @@ describe("sala-screen", () => {
 
   it("a rejected initial load shows the error banner and does not throw", async () => {
     const api = stubApi({ listZones: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-    const { el } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     expect(errorKey(el)).toBe("server.internal");
   });
 
   it("field-change events do not leak past the host (stopPropagation)", async () => {
     const api = stubApi();
-    const { el, host } = await mountWidget<SalaScreen>("dashboard-sala-screen", { api });
+    const { el, host } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     let leaked = false;
     host.addEventListener("wt-change", () => (leaked = true));

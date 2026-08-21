@@ -265,7 +265,7 @@ export interface ServiceStatus {
 // LOCAL copies of the server's floor-zone/dining-table JSON shapes (`apps/server/src/tables.ts`'s
 // `FloorZone`/`DiningTable`, wrapped by the `/management-api/zones` + `/management-api/tables`
 // routes), deliberately NOT imported from `apps/server` (the #70 rule the staff/catalogue/layout
-// shapes above follow). These are the CONTRACT the Sala config screen builds on; the server shapes
+// shapes above follow). These are the CONTRACT the floor-plan config screen builds on; the server shapes
 // stay the source of truth, and a mismatch surfaces as a runtime shape error a view test catches.
 
 /** One `floor_zones` row as the config surface returns it (`GET /management-api/zones`, active only,
@@ -823,7 +823,7 @@ export class DashboardApi {
   }
 
   // ── Floor-plan zone + table configuration (FP-1) ────────────────────────────────────────────────
-  // The per-item CRUD the Sala config screen drives (the `/management-api/zones` + `/management-api/
+  // The per-item CRUD the floor-plan config screen drives (the `/management-api/zones` + `/management-api/
   // tables` routes in `apps/server/src/management-api.ts`, `till.configure`-gated). One endpoint per
   // mutation and a reload (`listZones`/`listTables`) after each — the routes are per-item
   // POST/PATCH/DELETE, not a single bulk PUT (the service-status shape above). Creates return the

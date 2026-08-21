@@ -12,7 +12,7 @@ import "./screens/catalogue-screen.js";
 import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/service-status-screen.js";
-import "./screens/sala-screen.js";
+import "./screens/floor-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
@@ -26,7 +26,7 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * statuses, arrange the floor plan (zones + tables), author the roster, work the approvals queues,
  * review planned vs actual worked time, record received purchase invoices, or author ingredients and
  * product recipes. Exactly one shows at a time. `staff`, `catalogue`, `layout`, `receipt`, `statuses`,
- * `sala`, `roster`, `approvals`, `planned-actual`, `purchases` and `recipe` are the eleven MANAGER faces
+ * `floor`, `roster`, `approvals`, `planned-actual`, `purchases` and `recipe` are the eleven MANAGER faces
  * the nav switches between; `my-schedule` is the sole face of a `staff`-role session and carries no nav.
  * All logged-in faces share the same chrome (logout, plus the nav for a non-staff session).
  */
@@ -38,7 +38,7 @@ type Screen =
   | "layout"
   | "receipt"
   | "statuses"
-  | "sala"
+  | "floor"
   | "roster"
   | "approvals"
   | "planned-actual"
@@ -50,7 +50,7 @@ type Screen =
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
  * machine (`login` | `my-schedule` | `staff` | `catalogue` | `layout` | `receipt` | `statuses` |
- * `sala` | `roster` | `approvals` | `planned-actual` | `purchases` | `recipe`) and does the event
+ * `floor` | `roster` | `approvals` | `planned-actual` | `purchases` | `recipe`) and does the event
  * wiring the screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.getMe()` (WHOAMI); a
@@ -63,7 +63,7 @@ type Screen =
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `staff` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the eleven manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `sala`, `roster`,
+ *    the eleven manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`, `roster`,
  *    `approvals`, `planned-actual`, `purchases` and `recipe` — a plain local state change, no server
  *    call. A `staff` session has no nav (the self-service view is its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
@@ -77,7 +77,7 @@ type Screen =
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
  * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
- * `dashboard-sala-screen` the sole `<h1>Sala</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
+ * `dashboard-floor-screen` the sole `<h1>Sala</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
  * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
  * the sole `<h1>Previsto vs real</h1>`, `dashboard-purchases-screen` the sole `<h1>Compras</h1>`,
  * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, and `dashboard-login-screen`
@@ -248,10 +248,10 @@ export class DashboardApp extends LitElement {
           >${t("nav.statuses")}</wt-button
         >
         <wt-button
-          variant=${this.screen === "sala" ? "primary" : "secondary"}
-          data-test="nav-sala"
-          @click=${() => (this.screen = "sala")}
-          >${t("nav.sala")}</wt-button
+          variant=${this.screen === "floor" ? "primary" : "secondary"}
+          data-test="nav-floor"
+          @click=${() => (this.screen = "floor")}
+          >${t("nav.floor")}</wt-button
         >
         <wt-button
           variant=${this.screen === "roster" ? "primary" : "secondary"}
@@ -310,8 +310,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-service-status-screen
           .api=${this.api}
         ></dashboard-service-status-screen>`;
-      case "sala":
-        return html`<dashboard-sala-screen .api=${this.api}></dashboard-sala-screen>`;
+      case "floor":
+        return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":
