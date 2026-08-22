@@ -54,7 +54,7 @@ export async function seedNode(
  * named station override `isDefault`/`name`. */
 export async function seedKitchenStation(
   db: Database,
-  opts: { tenantId: TenantId; locationId: LocationId | string; name?: string; isDefault?: boolean },
+  opts: { tenantId: TenantId; locationId: LocationId; name?: string; isDefault?: boolean },
 ): Promise<string> {
   const { tenantId, locationId, name = "Cocina", isDefault = true } = opts;
   const result = await db.execute<{ id: string }>(sql`

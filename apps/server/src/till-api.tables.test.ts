@@ -58,7 +58,7 @@ const suite = usePgliteDb({
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as
     // the PGlite superuser here, as the surrounding venue rows are (RLS bypassed in setup).
-    await seedKitchenStation(db, { tenantId, locationId: loc.rows[0]!.id });
+    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);

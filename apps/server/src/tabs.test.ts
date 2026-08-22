@@ -60,7 +60,7 @@ async function setupVenue(): Promise<Seeded> {
   const locationId = loc.rows[0]!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
   // superuser here, as the surrounding venue rows are (RLS bypassed in this pure setup).
-  await seedKitchenStation(db, { tenantId, locationId });
+  await seedKitchenStation(db, { tenantId, locationId: brandLocationId(locationId) });
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));

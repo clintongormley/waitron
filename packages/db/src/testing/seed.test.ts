@@ -98,7 +98,7 @@ describeEachTarget("seedKitchenStation", (target) => {
     const locResult = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
-    return { tenant, location: locResult.rows[0]!.id };
+    return { tenant, location: brandLocationId(locResult.rows[0]!.id) };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
