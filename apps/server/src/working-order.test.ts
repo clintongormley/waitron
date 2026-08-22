@@ -909,6 +909,34 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
+  it("a re-fire of an already-fired line is refused ticket.already_fired, not a raw 23505", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const orderId = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const p = await makeProduct(tx, cfg, catalogueId, {});
+      const { id } = await placeOrderWith(tx, cfg, [line(p)]);
+      return id;
+    });
+    // A SECOND fire of the same lines collides on `ticket_items`' per-line
+    // `(tenant_id, working_order_line_id)` unique. `fireLines` maps that 23505 to the domain code
+    // (naming the order) rather than leaking the raw constraint error as an opaque 500. The re-fire runs
+    // in its OWN transaction so the 23505 poisons that one and the mapped AppError rolls it back cleanly.
+    await expect(
+      withTenant(db, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const fired = await tx
+          .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        await fireLines(tx, cfg, orderId, fired);
+      }),
+    ).rejects.toMatchObject({
+      code: "ticket.already_fired",
+      params: { workingOrderId: orderId },
+    });
+  });
+
   it("addTabRound fires the appended round's lines to the resolved station (the tab round-send)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {

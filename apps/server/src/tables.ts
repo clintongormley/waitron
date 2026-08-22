@@ -21,7 +21,7 @@ const ZONE_FK = "dining_tables_zone_fk";
  * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
  * enum rather than hand-re-declared as a string union — so this and the DB stay in lockstep if a
  * member is ever added/removed (the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow`
- * and `working-order.ts`'s `PrepState` use). `working-order.ts`'s `TableState` imports this for the
+ * and `working-order.ts`'s `TicketState` use). `working-order.ts`'s `TableState` imports this for the
  * read side, so the write verb and the read model share one source of truth.
  */
 export type FloorTableShape = (typeof floorTableShape.enumValues)[number];

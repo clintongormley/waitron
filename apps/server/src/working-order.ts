@@ -566,7 +566,19 @@ export async function fireLines(
       state: "queued",
     };
   });
-  await tx.insert(ticketItems).values(values);
+  try {
+    await tx.insert(ticketItems).values(values);
+  } catch (error) {
+    // A line already fired collides on `ticket_items`' per-line `(tenant_id, working_order_line_id)`
+    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
+    // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
+    // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
+    // path (placeOrder / sendToPrep / addTabRound) is covered by construction. Any other error re-throws.
+    if (isUniqueViolation(error)) {
+      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    }
+    throw error;
+  }
 }
 
 /**

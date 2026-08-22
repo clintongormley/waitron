@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -1042,5 +1043,327 @@ describe("/management-api/tables/:id/placement", () => {
     expect(await res.json()).toMatchObject({
       error: { code: "placement.invalid", params: { field: "posX" } },
     });
+  });
+});
+
+// KDS-1 kitchen-station + routing config (design §3a/§3f), mirroring the FP-1 zone routes above: real
+// Postgres because each route AUTHORIZES (`authorizeManager` under RLS) and writes `kitchen_stations` /
+// `categories.station_id` / `products.station_id` / `locations.bump_mode` under FORCE ROW LEVEL SECURITY.
+describe("/management-api/stations (KDS-1 config)", () => {
+  /** Create a station as the manager and return its id. */
+  async function createStation(
+    name: string,
+    extra: { isDefault?: boolean; displayOrder?: number } = {},
+  ): Promise<string> {
+    const res = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name, ...extra }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  /** The venue's ACTIVE stations, as the manager sees them. */
+  async function listStations(): Promise<
+    { id: string; name: string; displayOrder: number; isDefault: boolean; active: boolean }[]
+  > {
+    return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
+      id: string;
+      name: string;
+      displayOrder: number;
+      isDefault: boolean;
+      active: boolean;
+    }[];
+  }
+
+  it("POST creates (201 { id }) + GET lists it, active, at its display order (manager)", async () => {
+    const name = unique("Cocina");
+    const id = await createStation(name, { displayOrder: 2 });
+    const found = (await listStations()).find((s) => s.id === id);
+    expect(found).toMatchObject({ name, displayOrder: 2, isDefault: false, active: true });
+  });
+
+  it("POST with a duplicate name → 409 station.name_taken", async () => {
+    const name = unique("dup");
+    await createStation(name);
+    const dup = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name }) },
+      managerCookie,
+    );
+    expect(dup.status).toBe(409);
+    expect(await dup.json()).toMatchObject({ error: { code: "station.name_taken" } });
+  });
+
+  it("POST body-shape faults → 400 management.request_invalid (non-object, missing name, bad isDefault)", async () => {
+    const nullBody = await req("/stations", { method: "POST", body: "null" }, managerCookie);
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+    const arrayBody = await req("/stations", { method: "POST", body: "[]" }, managerCookie);
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    const badDefault = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name: unique("X"), isDefault: "yes" }) },
+      managerCookie,
+    );
+    expect(badDefault.status).toBe(400);
+    expect(await badDefault.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "isDefault" } },
+    });
+  });
+
+  it("POST { isDefault:true } adopts the default; POST /:id/default flips it atomically to another", async () => {
+    const first = await createStation(unique("Def1"), { isDefault: true });
+    // A second default clears the prior (the `WHERE is_default` partial unique tolerates only one).
+    const second = await createStation(unique("Def2"), { isDefault: true });
+    let list = await listStations();
+    expect(list.find((s) => s.id === first)!.isDefault).toBe(false);
+    expect(list.find((s) => s.id === second)!.isDefault).toBe(true);
+
+    // set-default route flips it back to `first`.
+    const setDefault = await req(`/stations/${first}/default`, { method: "POST" }, managerCookie);
+    expect(setDefault.status).toBe(204);
+    list = await listStations();
+    expect(list.find((s) => s.id === first)!.isDefault).toBe(true);
+    expect(list.find((s) => s.id === second)!.isDefault).toBe(false);
+  });
+
+  it("POST /:id/default on an unknown or malformed id → 404 station.not_found", async () => {
+    const unknown = await req(
+      `/stations/${randomUUID()}/default`,
+      { method: "POST" },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "station.not_found" } });
+    const malformed = await req("/stations/not-a-uuid/default", { method: "POST" }, managerCookie);
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
+  });
+
+  it("PATCH edits name/displayOrder/active; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
+    const id = await createStation(unique("Edit"));
+    const patch = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ displayOrder: 7, active: false }) },
+      managerCookie,
+    );
+    expect(patch.status).toBe(204);
+    // Deactivated → drops off the active list; read the row back directly to see the edit landed.
+    const row = await suite.admin.execute<{ display_order: number; active: boolean }>(
+      sql`select display_order, active from kitchen_stations where id = ${id}`,
+    );
+    expect(row.rows[0]).toMatchObject({ display_order: 7, active: false });
+
+    // A rename onto an existing name collides.
+    const taken = unique("Taken");
+    await createStation(taken);
+    const active = await createStation(unique("Active"));
+    const collide = await req(
+      `/stations/${active}`,
+      { method: "PATCH", body: JSON.stringify({ name: taken }) },
+      managerCookie,
+    );
+    expect(collide.status).toBe(409);
+    expect(await collide.json()).toMatchObject({ error: { code: "station.name_taken" } });
+
+    // An empty patch is a 204 no-op (never reaches updateStation's empty `.set()`).
+    const empty = await req(`/stations/${active}`, { method: "PATCH", body: "{}" }, managerCookie);
+    expect(empty.status).toBe(204);
+
+    const unknown = await req(
+      `/stations/${randomUUID()}`,
+      { method: "PATCH", body: JSON.stringify({ name: unique("Y") }) },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "station.not_found" } });
+    const malformed = await req(
+      "/stations/not-a-uuid",
+      { method: "PATCH", body: JSON.stringify({ name: unique("Z") }) },
+      managerCookie,
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
+  });
+
+  it("DELETE deactivates a station (drops off the active list); unknown/malformed :id → 404", async () => {
+    const id = await createStation(unique("Del"));
+    expect((await listStations()).find((s) => s.id === id)).toBeDefined();
+    const del = await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
+    expect(del.status).toBe(204);
+    expect((await listStations()).find((s) => s.id === id)).toBeUndefined();
+
+    const unknown = await req(`/stations/${randomUUID()}`, { method: "DELETE" }, managerCookie);
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "station.not_found" } });
+    const malformed = await req("/stations/not-a-uuid", { method: "DELETE" }, managerCookie);
+    expect(malformed.status).toBe(404);
+  });
+
+  it("PUT /bump-mode sets the venue's whole-ticket bump mode; a bad value → 400", async () => {
+    const set = await req(
+      "/bump-mode",
+      { method: "PUT", body: JSON.stringify({ mode: "ticket" }) },
+      managerCookie,
+    );
+    expect(set.status).toBe(204);
+    const row = await suite.admin.execute<{ bump_mode: string }>(
+      sql`select bump_mode from locations where id = ${venue.locationId}`,
+    );
+    expect(row.rows[0]!.bump_mode).toBe("ticket");
+    // Reset to the default so a later assertion on the shared venue is unaffected.
+    await req(
+      "/bump-mode",
+      { method: "PUT", body: JSON.stringify({ mode: "line" }) },
+      managerCookie,
+    );
+
+    const bad = await req(
+      "/bump-mode",
+      { method: "PUT", body: JSON.stringify({ mode: "banana" }) },
+      managerCookie,
+    );
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "mode" } },
+    });
+  });
+
+  it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
+    const stationId = await createStation(unique("Route"));
+    // Seed a real category + product to route, on the app role under this venue's tenant.
+    const { categoryId, productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const category = await createCategory(tx, { name: unique("Cat") });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: category.id,
+        descriptions: { [LOCALE]: unique("Prod") },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      return { categoryId: category.id, productId: product.id };
+    });
+
+    const stationOf = async (
+      table: "categories" | "products",
+      id: string,
+    ): Promise<string | null> => {
+      // Two explicit reads rather than an interpolated table name (no `sql.raw`): the value is a
+      // compile-time literal here, but the house rule is uniform (never build SQL by concatenation).
+      const r =
+        table === "categories"
+          ? await suite.admin.execute<{ station_id: string | null }>(
+              sql`select station_id from categories where id = ${id}`,
+            )
+          : await suite.admin.execute<{ station_id: string | null }>(
+              sql`select station_id from products where id = ${id}`,
+            );
+      return r.rows[0]!.station_id;
+    };
+
+    // The two routes are near-identical; run the same battery against each.
+    for (const [base, table, targetId] of [
+      ["categories", "categories", categoryId],
+      ["products", "products", productId],
+    ] as const) {
+      const put = (body: unknown, id = targetId) =>
+        req(`/${base}/${id}/station`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
+
+      // Set → the column carries the station.
+      expect((await put({ stationId })).status).toBe(204);
+      expect(await stationOf(table, targetId)).toBe(stationId);
+      // Clear (null) → the column nulls.
+      expect((await put({ stationId: null })).status).toBe(204);
+      expect(await stationOf(table, targetId)).toBeNull();
+      // A non-string stationId is a request-shape fault.
+      const badType = await put({ stationId: 5 });
+      expect(badType.status).toBe(400);
+      expect(await badType.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "stationId" } },
+      });
+      // A malformed stationId names no station.
+      const badStation = await put({ stationId: "not-a-uuid" });
+      expect(badStation.status).toBe(404);
+      expect(await badStation.json()).toMatchObject({ error: { code: "station.not_found" } });
+      // A malformed TARGET id names nothing — the verb's unknown-id no-op, a clean 204 (no code exists).
+      expect((await put({ stationId }, "not-a-uuid")).status).toBe(204);
+    }
+  });
+
+  it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
+    // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager` refuses
+    // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
+    // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
+    const someId = randomUUID();
+    const cases = [
+      req("/stations", { method: "GET" }, staffCookie),
+      req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: unique("N") }) },
+        staffCookie,
+      ),
+      req(
+        `/stations/${someId}`,
+        { method: "PATCH", body: JSON.stringify({ name: unique("Z") }) },
+        staffCookie,
+      ),
+      req(`/stations/${someId}`, { method: "DELETE" }, staffCookie),
+      req(`/stations/${someId}/default`, { method: "POST" }, staffCookie),
+      req(
+        `/categories/${someId}/station`,
+        { method: "PUT", body: JSON.stringify({ stationId: null }) },
+        staffCookie,
+      ),
+      req(
+        `/products/${someId}/station`,
+        { method: "PUT", body: JSON.stringify({ stationId: null }) },
+        staffCookie,
+      ),
+      req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, staffCookie),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    }
+  });
+
+  it("no session → 401 management_session.required on every station/routing route", async () => {
+    const someId = randomUUID();
+    const cases = [
+      req("/stations", { method: "GET" }, undefined),
+      req("/stations", { method: "POST", body: JSON.stringify({ name: "N" }) }, undefined),
+      req(
+        `/stations/${someId}`,
+        { method: "PATCH", body: JSON.stringify({ name: "Z" }) },
+        undefined,
+      ),
+      req(`/stations/${someId}`, { method: "DELETE" }, undefined),
+      req(`/stations/${someId}/default`, { method: "POST" }, undefined),
+      req(
+        `/categories/${someId}/station`,
+        { method: "PUT", body: JSON.stringify({ stationId: null }) },
+        undefined,
+      ),
+      req(
+        `/products/${someId}/station`,
+        { method: "PUT", body: JSON.stringify({ stationId: null }) },
+        undefined,
+      ),
+      req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, undefined),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
+    }
   });
 });

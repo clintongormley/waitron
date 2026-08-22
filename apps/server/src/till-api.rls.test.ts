@@ -687,7 +687,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 // which never reaches the backend at all). `place`/`prep-queue`/`prep`-advance need no fiscal write
 // under Mode T (no doc issues until collect), but are driven through the SAME real venue here so the
 // one test walks the whole route surface end to end, the way an actual till session would.
-describe("/api/working-orders/:id/place → :id/prep → GET /api/prep-queue → :id/collect (Task 9, over HTTP)", () => {
+describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // Flip this venue's location to `ticket_then_pay` (Mode T) — `setupVenue` provisions the DEFAULT
@@ -736,31 +736,53 @@ describe("/api/working-orders/:id/place → :id/prep → GET /api/prep-queue →
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
-    // 3. The NODE-SCOPED prep queue shows it `queued` — send-to-prep = placing (design §5).
-    const queue1 = await app.request("/api/prep-queue", { headers: { cookie } });
+    // 3. The per-station kitchen queue shows the fired line `queued` — placing fires the order's lines
+    //    to the kitchen (KDS-1, `placeOrder` → `fireLines`), routed to the venue's DEFAULT station
+    //    (provisioning seeds one). The display picker reads its stations, then that station's queue,
+    //    grouped by order.
+    const stations = (await (
+      await app.request("/api/stations", { headers: { cookie } })
+    ).json()) as { id: string; isDefault: boolean }[];
+    const defaultStation = stations.find((s) => s.isDefault)!;
+    const queueUrl = `/api/stations/${defaultStation.id}/queue`;
+    const queue1 = await app.request(queueUrl, { headers: { cookie } });
     expect(queue1.status).toBe(200);
-    expect(await queue1.json()).toEqual([
+    const groups1 = (await queue1.json()) as {
+      orderId: string;
+      orderNumber: number;
+      label: string | null;
+      queuedAt: string;
+      items: { id: string; workingOrderLineId: string; state: string }[];
+    }[];
+    expect(groups1).toEqual([
       {
-        id: workingOrderId,
+        orderId: workingOrderId,
         orderNumber: expect.any(Number),
         label: "Mesa 9",
-        state: "queued",
         queuedAt: expect.any(String),
+        items: [
+          { id: expect.any(String), workingOrderLineId: expect.any(String), state: "queued" },
+        ],
       },
     ]);
 
-    // 4. Advance the prep state over HTTP: queued → preparing → ready → collected.
-    for (const to of ["preparing", "ready", "collected"]) {
-      const advance = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready. (`collected` is no
+    //    longer a kitchen state — the handover is order-level `collected_at`, set at collect below.)
+    const itemId = groups1[0]!.items[0]!.id;
+    for (const to of ["preparing", "ready"]) {
+      const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({ to }),
       });
       expect(advance.status).toBe(200);
     }
-    // Collected leaves the ACTIVE queue.
-    const queue2 = await app.request("/api/prep-queue", { headers: { cookie } });
-    expect(await queue2.json()).toEqual([]);
+    // A `ready` line stays on the queue until its order collects — the display drops it on handover.
+    const groupsReady = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+      orderId: string;
+      items: { state: string }[];
+    }[];
+    expect(groupsReady.find((g) => g.orderId === workingOrderId)!.items[0]!.state).toBe("ready");
 
     // 5. COLLECT: Mode T files `recordSale` IMMEDIATE here, placed → settled — the genuine chained
     // fiscal write this real-Postgres suite exists to prove.
@@ -788,15 +810,22 @@ describe("/api/working-orders/:id/place → :id/prep → GET /api/prep-queue →
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
     expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
+
+    // 6. Collect stamped `collected_at`, so the handed-over order drops off the station's display —
+    //    `listStationQueue` filters `collected_at IS NULL` (the KDS-1 successor to the old `collected`
+    //    prep state).
+    const queueAfterCollect = await app.request(queueUrl, { headers: { cookie } });
+    expect(await queueAfterCollect.json()).toEqual([]);
   });
 });
 
 // Fix round 1 (review): `sendToPrep` (a `{}` body to `POST /:id/prep`) is Mode P's own pickup — it
 // needs a genuinely SETTLED order, which under this suite's `prepay` cfg means a real fiscal write
 // (`POST /api/sales`, Mode P's walk-up path) that `till-api.test.ts`'s stub `FiscalBackend` cannot
-// make. Real Postgres, so this is the one place the SUCCESS path is proven end to end.
-describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix round 1)", () => {
-  it("sends a genuinely SETTLED walk-up order to prep; a still-OPEN parked order is refused 409", async () => {
+// make. Real Postgres, so this is the one place the SUCCESS path — and (KDS-1) the double-send
+// collision → `ticket.already_fired` — is proven end to end.
+describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", () => {
+  it("fires a genuinely SETTLED walk-up order to the kitchen; a re-send is refused ticket.already_fired; a still-OPEN parked order is refused working_order.not_settled", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
     const each = available.find((p) => p.pricingUnit === "each")!;
 
@@ -825,7 +854,8 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix
     });
     expect(sale.status).toBe(200);
 
-    // NOW send it to prep — the SETTLED-order pickup the fix's guard exists to allow.
+    // NOW send it to prep — the SETTLED-order pickup the guard exists to allow. It fires the line to the
+    // kitchen (KDS-1 `fireLines`), routed to the venue's provisioned default station.
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -833,12 +863,34 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix
     });
     expect(sent.status).toBe(200);
 
-    const queue = await app.request("/api/prep-queue", { headers: { cookie } });
+    // It appears on that station's kitchen queue, queued.
+    const stations = (await (
+      await app.request("/api/stations", { headers: { cookie } })
+    ).json()) as { id: string; isDefault: boolean }[];
+    const defaultStation = stations.find((s) => s.isDefault)!;
+    const queue = await app.request(`/api/stations/${defaultStation.id}/queue`, {
+      headers: { cookie },
+    });
     expect(await queue.json()).toEqual([
-      expect.objectContaining({ id: workingOrderId, state: "queued" }),
+      expect.objectContaining({
+        orderId: workingOrderId,
+        items: [expect.objectContaining({ state: "queued" })],
+      }),
     ]);
 
-    // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the fix, over the
+    // A DOUBLE send-to-prep re-fires the already-sent line and collides on `ticket_items`' per-line
+    // unique — mapped to the domain code (409), never leaking the raw 23505 as an opaque 500 (KDS-1).
+    const reSend = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(reSend.status).toBe(409);
+    expect(await reSend.json()).toMatchObject({
+      error: { code: "ticket.already_fired", params: { workingOrderId } },
+    });
+
+    // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the guard, over the
     // real route rather than the library function directly.
     const openId = randomUUID();
     const park = await app.request("/api/working-orders", {
@@ -856,10 +908,10 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix
     expect(await refused.json()).toMatchObject({
       error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
     });
-    // Refused before any write — never appears on the prep queue.
+    // Refused before any write — never appears on the kitchen queue.
     const queueAfterRefusal = (await (
-      await app.request("/api/prep-queue", { headers: { cookie } })
-    ).json()) as { id: string }[];
-    expect(queueAfterRefusal.find((e) => e.id === openId)).toBeUndefined();
+      await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
+    ).json()) as { orderId: string }[];
+    expect(queueAfterRefusal.find((g) => g.orderId === openId)).toBeUndefined();
   });
 });

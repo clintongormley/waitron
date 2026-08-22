@@ -47,6 +47,17 @@ import {
   updateTable,
   updateZone,
 } from "./tables.js";
+import {
+  createStation,
+  deactivateStation,
+  listStations,
+  setBumpMode,
+  setCategoryStation,
+  setDefaultStation,
+  setProductStation,
+  updateStation,
+  type BumpMode,
+} from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import {
@@ -186,6 +197,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // in `errors.ts` (Task 2) where it already defaults to 400; listed explicitly as the house style
   // requires (see this map's doc, and `errors.ts`'s note that the route task would list it here).
   "placement.invalid": 400,
+  // Kitchen-station config CRUD (KDS-1). An unknown station id (or a malformed one screened to it at the
+  // PATCH/DELETE/default routes), OR a deactivated station named as a routing/default target, names no
+  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(tenant, location, name)`
+  // unique → 409 (`station.name_taken`), the same conflict shape a taken zone name has. (`station.no_default`
+  // is a FIRE-time code on the till surface, never thrown by these config routes, so it is absent here.)
+  "station.not_found": 404,
+  "station.name_taken": 409,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -245,6 +263,17 @@ function requireZoneId(id: string): string {
  */
 function requireTableId(id: string): string {
   if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+  return id;
+}
+
+/**
+ * Screen a `/management-api/stations/:id` path param as a UUID, returning it. Mirrors `requireZoneId`
+ * for the kitchen-station routes: a malformed id → `22P02` → opaque 500 without this, so it is refused
+ * as `station.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
+ * station gets from the by-id station verbs. Shared by the PATCH, DELETE and set-default `:id` routes.
+ */
+function requireStationId(id: string): string {
+  if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
   return id;
 }
 
@@ -1097,6 +1126,194 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, cfg, sessionId, (tx) => clearPlacement(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Kitchen-station + routing configuration (KDS-1, design §3a/§3f) ────────────────────────────────
+  // The dashboard "Cocina" config screen: CRUD the venue's kitchen stations, pick the default, route
+  // categories/products to a station, and set the whole-ticket `bump_mode`. All gated exactly like the
+  // FP-1 zone/table routes above — `requireManagementSession` first (401 before any DB work), then
+  // `withVenueAuth` runs the verb under `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`,
+  // so a staff session is refused 403 before any write (proven by dropping the authorize in `withVenueAuth`,
+  // the deletion-proof the tests name). The verbs are location-scoped, so each reads the venue's config via
+  // `requireVenueCfg`. Body-shape screens mirror the service-status / zone routes above.
+
+  // Create a station. Body { name, displayOrder?, isDefault? }; a bad shape → management.request_invalid
+  // naming the FIELD; a duplicate name → station.name_taken (409). Marking it default ADOPTS it as THE
+  // default (the verb clears any prior default in the same tx). Returns the new id at 201.
+  app.post("/management-api/stations", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ name?: unknown; displayOrder?: unknown; isDefault?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string")
+        throw new AppError("management.request_invalid", { field: "name" });
+      const displayOrder = parseDisplayOrder(body.displayOrder);
+      let isDefault: boolean | undefined;
+      if (body.isDefault !== undefined) {
+        if (typeof body.isDefault !== "boolean")
+          throw new AppError("management.request_invalid", { field: "isDefault" });
+        isDefault = body.isDefault;
+      }
+      // Bind the validated `name` to a local: the `typeof` guard narrows `body.name` to `string` HERE,
+      // but that narrowing does not survive into the `withVenueAuth` closure (a captured property resets
+      // to its declared type), so the closure reads this local — the login/create-person pattern above.
+      const { name } = body;
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createStation(tx, cfg, { name, displayOrder, isDefault }),
+      );
+      return c.json(result, 201);
+    }),
+  );
+
+  // The venue's ACTIVE stations, by display order then name (the picker's own read shape). Gated on
+  // till.configure.
+  app.get("/management-api/stations", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const stations = await withVenueAuth(deps, cfg, sessionId, (tx) => listStations(tx, cfg));
+      return c.json(stations);
+    }),
+  );
+
+  // Edit a station (name/displayOrder/active — any subset; NOT is_default, which only the set-default
+  // route flips). Malformed :id → station.not_found (a bad id names no station), not a 500; an unknown id
+  // → station.not_found; a name collision → station.name_taken. A present field with the wrong type →
+  // management.request_invalid; a patch carrying no mutable field is a 204 no-op (the sibling zone PATCH
+  // shape) — returned WITHOUT reaching updateStation's empty `.set()`, which Drizzle rejects.
+  app.patch("/management-api/stations/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireStationId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      if (body.name !== undefined) {
+        if (typeof body.name !== "string")
+          throw new AppError("management.request_invalid", { field: "name" });
+        patch.name = body.name;
+      }
+      if (body.displayOrder !== undefined) {
+        patch.displayOrder = parseDisplayOrder(body.displayOrder);
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean")
+          throw new AppError("management.request_invalid", { field: "active" });
+        patch.active = body.active;
+      }
+      if (
+        patch.name === undefined &&
+        patch.displayOrder === undefined &&
+        patch.active === undefined
+      ) {
+        return c.body(null, 204);
+      }
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateStation(tx, cfg, id, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Deactivate a station (DELETE = deactivate; app_user holds no hard DELETE — a `ticket_items.station_id`
+  // snapshot may reference it). Malformed :id → station.not_found; an unknown id → station.not_found.
+  app.delete("/management-api/stations/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireStationId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateStation(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Make a station the venue's single default (the counter/pass fallback). Malformed :id →
+  // station.not_found; a retired or foreign station → station.not_found (the verb's live-station check,
+  // which runs BEFORE any write so a bad id never clears the existing default). Returns 204.
+  app.post("/management-api/stations/:id/default", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireStationId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => setDefaultStation(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Route a CATEGORY to a station (its default route) — body { stationId: string | null } (null clears
+  // it). A non-null stationId must be a LIVE station of this venue (the verb → station.not_found); a
+  // malformed one is screened to that SAME code before the DB touch. A malformed CATEGORY :id names no
+  // category — the verb no-ops on an unknown one, so it is the same no-op (INSIDE `withVenueAuth`, so the
+  // gate still runs first for a validly-shaped request), never a 22P02 500. KDS-1 mints no
+  // `category.not_found` (spec §6). Returns 204.
+  app.put("/management-api/categories/:id/station", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const categoryId = c.req.param("id");
+      const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
+      if (typeof body.stationId !== "string" && body.stationId !== null) {
+        throw new AppError("management.request_invalid", { field: "stationId" });
+      }
+      const stationId = body.stationId;
+      if (stationId !== null && !isUuid(stationId)) {
+        throw new AppError("station.not_found", { stationId });
+      }
+      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+        if (!isUuid(categoryId)) return; // malformed id names no category → the verb's unknown-id no-op
+        await setCategoryStation(tx, cfg, categoryId, stationId);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Route a PRODUCT to a station (its override, winning over the category default) — same body + screens
+  // as the category route above. A malformed PRODUCT :id is the verb's unknown-id no-op (inside the gate);
+  // KDS-1 mints no `product.not_found`. Returns 204.
+  app.put("/management-api/products/:id/station", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const productId = c.req.param("id");
+      const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
+      if (typeof body.stationId !== "string" && body.stationId !== null) {
+        throw new AppError("management.request_invalid", { field: "stationId" });
+      }
+      const stationId = body.stationId;
+      if (stationId !== null && !isUuid(stationId)) {
+        throw new AppError("station.not_found", { stationId });
+      }
+      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+        if (!isUuid(productId)) return; // malformed id names no product → the verb's unknown-id no-op
+        await setProductStation(tx, cfg, productId, stationId);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Set the venue's whole-ticket bump mode (KDS-1 §2e) — body { mode: "line" | "ticket" }. A missing or
+  // non-{line,ticket} value is a request-shape fault → management.request_invalid naming the FIELD (which
+  // also keeps a bad value off the `bump_mode` enum column). `setBumpMode` writes `locations.bump_mode`
+  // scoped to this venue. Returns 204.
+  app.put("/management-api/bump-mode", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
+      if (body.mode !== "line" && body.mode !== "ticket") {
+        throw new AppError("management.request_invalid", { field: "mode" });
+      }
+      // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
+      const mode: BumpMode = body.mode;
+      await withVenueAuth(deps, cfg, sessionId, (tx) => setBumpMode(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );

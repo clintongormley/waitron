@@ -577,6 +577,32 @@ declare module "@waitron/shared" {
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
+     * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
+     * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
+     * line; a second fire of a line already sent collides on `ticket_items`' per-line
+     * `(tenant_id, working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
+     * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
+     * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
+     * open→placed guard blocks a second call) and `addTabRound` fires only its freshly-inserted lines, so
+     * neither reaches this in practice — but the catch lives at the shared `fireLines` choke point so ALL
+     * fire paths are covered by construction.
+     *
+     * Deliberately NOT `ticket.invalid_transition`: that code is `advanceTicketItem`'s per-ITEM state-bump
+     * refusal and carries the failed item's own `ticketItemId`, which a re-fire has no clean handle on (the
+     * INSERT of N items fails atomically; the colliding row is a PRE-EXISTING item this catch never reads).
+     * Broadening it would stretch a shipped code's documented meaning and force a wrong/looked-up param, the
+     * §1 defect class — so a re-fire gets its own code. Nor is it the RETIRED `order_prep.invalid_transition`,
+     * whose double-send throw site the KDS-1 rework removes (spec §6). `workingOrderId` names the order whose
+     * fire was refused — the caller-supplied uuid `sendToPrep`'s route already holds, not a secret, so echoing
+     * it is what makes the error actionable (the rule `tenant.not_found`'s note gives); an order-scoped param
+     * on a `ticket.*` code exactly as `tab.already_open` carries a `tableId`. A state conflict (the order's
+     * lines are already in the kitchen) → mapped to 409 by the fire route's surface (Task 7), the same 409
+     * family `working_order.not_settled`/`tab.already_open` sit in. `ticket.*` names the DOMAIN CONCEPT (a
+     * kitchen ticket item), never the throwing package (`tenant.not_found`'s note). Never renamed once shipped.
+     */
+    "ticket.already_fired": { workingOrderId: string };
+    /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
      * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this

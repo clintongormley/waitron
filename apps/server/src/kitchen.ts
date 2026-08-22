@@ -241,3 +241,24 @@ export async function setProductStation(
   }
   await tx.update(products).set({ stationId }).where(eq(products.id, productId));
 }
+
+/** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
+ *  ALSO offers a whole-ticket "bump all". The per-line ticket-item state is always the source of truth;
+ *  this flag governs only the display convenience. Mirrors `locations.bump_mode`'s pgEnum
+ *  (`packages/db/src/schema/tenants.ts`), spelled as a literal union here because `@waitron/db`'s
+ *  enumerated exports do NOT publish the `bumpMode` enum object (CLAUDE.md §3). */
+export type BumpMode = "line" | "ticket";
+
+/**
+ * Set the venue's whole-ticket bump mode (KDS-1 §2e) — a single per-location flag on `locations.bump_mode`
+ * (`line` default / `ticket`), scoped to `cfg.locationId` under RLS. Written via a parameterised `sql`
+ * update rather than a Drizzle `.update(locations)` because `@waitron/db`'s enumerated exports map does
+ * NOT publish the `locations` table object (CLAUDE.md §3) — the same raw-`sql` shape the `order_flow`
+ * flip uses in the till suites. `mode` is a typed `BumpMode`, so the value reaching the enum column is
+ * always one of its two members (the route validates the request field before calling); `${mode}` binds
+ * as a parameter (never string-concatenated) and PostgreSQL coerces it to the `bump_mode` enum in the
+ * assignment context. `till.configure`-gated at the ROUTE (Task 7), as the other config verbs are.
+ */
+export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
+  await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
+}
