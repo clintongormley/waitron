@@ -300,8 +300,11 @@ export interface Course {
  * as {@link requireLiveStation} does for a station. The tenant-consistent `products_course_fk` enforces
  * only same-TENANT existence — it can see neither `active` nor the location — so this explicit read is
  * what rejects a retired or cross-venue course the FK would accept. One round trip via a scalar subquery.
+ *
+ * Exported so `fireCourse` (working-order.ts) validates the fired course against the SAME `course.not_found`
+ * definition the config verbs use — one meaning of "not a live course", not a second copy that could drift.
  */
-async function requireLiveCourse(
+export async function requireLiveCourse(
   tx: Transaction,
   cfg: TillConfig,
   courseId: string,

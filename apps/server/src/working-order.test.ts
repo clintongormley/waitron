@@ -35,6 +35,7 @@ import {
   advanceTicket,
   advanceTicketItem,
   createOpenOrder,
+  fireCourse,
   fireLines,
   getHeldOrder,
   listHeldOrders,
@@ -47,9 +48,11 @@ import {
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import {
+  createCourse,
   createStation,
   deactivateStation,
   setCategoryStation,
+  setProductCourse,
   setProductStation,
 } from "./kitchen.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -1215,6 +1218,243 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(group!.items[1]).toMatchObject({
         descriptions: { [LOCALE]: "Agua" },
         quantity: "3.000",
+      });
+    });
+  });
+});
+
+// KDS-2 Task 4 — hold-and-fire. `fireLines` now snapshots each line's `course_id` and decides
+// fired-vs-held: an item fires (`fired_at = now()`) when its course is the order's EARLIEST (min
+// display_order, a null course treated as earliest) OR is already fired for the order; otherwise it is
+// HELD (`fired_at NULL`). `fireCourse` releases a held course's items; `advanceTicketItem` refuses a
+// held item (`ticket.item_held`). PGlite proves the auto-fire arithmetic, the held-advance refusal and
+// `fireCourse`'s idempotency — plain SQL a single backend proves, with no privilege or concurrency
+// dimension (RLS/node isolation of `ticket_items` is real-Postgres's job, packages/db). Every write
+// runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
+ *  the item id (the bump target), its product (to key by line), its snapshotted course and — the
+ *  load-bearing one — `fired_at` (NULL = held). */
+async function courseItemsFor(
+  tx: Transaction,
+  orderId: string,
+): Promise<
+  {
+    id: string;
+    productId: string;
+    courseId: string | null;
+    firedAt: string | null;
+    state: string;
+  }[]
+> {
+  return tx
+    .select({
+      id: ticketItems.id,
+      productId: workingOrderLines.productId,
+      courseId: ticketItems.courseId,
+      firedAt: ticketItems.firedAt,
+      state: ticketItems.state,
+    })
+    .from(ticketItems)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(eq(ticketItems.workingOrderId, orderId));
+}
+
+const byLine = <T extends { productId: string }>(items: T[], productId: string): T =>
+  items.find((i) => i.productId === productId)!;
+
+describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance guard)", () => {
+  it("auto-fires the earliest course, holds later ones, and fireCourse releases a held course", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, {});
+      const steak = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, soup, ent.id);
+      await setProductCourse(tx, cfg, steak, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(steak)]);
+      const items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, soup).firedAt).not.toBeNull(); // earliest course auto-fired
+      expect(byLine(items, steak).firedAt).toBeNull(); // later course held
+
+      // A held item cannot advance — the kitchen must not bump food it has not been told to start.
+      await expect(
+        advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
+      ).rejects.toMatchObject({ code: "ticket.item_held" });
+
+      // Firing the held course releases its items.
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const afterFire = await courseItemsFor(tx, orderId);
+      expect(byLine(afterFire, steak).firedAt).not.toBeNull();
+
+      // Now advancing the (now fired) steak is allowed.
+      await advanceTicketItem(tx, cfg, byLine(afterFire, steak).id, "preparing");
+      const advanced = await courseItemsFor(tx, orderId);
+      expect(byLine(advanced, steak).state).toBe("preparing");
+    });
+  });
+
+  it("a null-course line fires immediately (treated as earliest) even while a real later course is held", async () => {
+    // §2b: a null course_id has no display_order and fires immediately. Proven alongside a genuine
+    // coursed hold: the loose (courseless) line fires at once while the later Principales line waits.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const loose = await makeProduct(tx, cfg, catalogueId, {}); // no course → null
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        line(loose),
+        line(starter),
+        line(main),
+      ]);
+      const items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, loose).firedAt).not.toBeNull(); // null course fires immediately
+      expect(byLine(items, starter).firedAt).not.toBeNull(); // earliest real course fires
+      expect(byLine(items, main).firedAt).toBeNull(); // later course held
+    });
+  });
+
+  it("fireCourse is idempotent — re-firing an already-fired course leaves its timestamps untouched", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+
+      // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
+      // (`fired_at IS NULL`) matches nothing already-fired.
+      const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
+      await fireCourse(tx, cfg, orderId, ent.id);
+      expect(byLine(await courseItemsFor(tx, orderId), starter).firedAt).toBe(beforeEnt);
+
+      // Fire the held course, capture its stamp, then fire it AGAIN — the second call is a no-op.
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const firstStamp = byLine(await courseItemsFor(tx, orderId), main).firedAt;
+      expect(firstStamp).not.toBeNull();
+      await fireCourse(tx, cfg, orderId, pri.id);
+      expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBe(firstStamp);
+    });
+  });
+
+  it("across tab rounds: a later round holds a late course, and joins one already fired for the order", async () => {
+    // The incremental tab path (addTabRound fires round by round), where the fired-vs-held decision is
+    // taken over the WHOLE order, not just the current round. Two behaviours a single-round place cannot
+    // reach: (1) a later round of ONLY a late course stays held — decided by the courses of PRIOR rounds,
+    // not the round in hand (without them the round would see itself as the sole, hence earliest, course
+    // and wrongly auto-fire); (2) a later item of a course already fired for the order joins it and fires
+    // immediately, even when that course is NOT the earliest.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const post = await createCourse(tx, cfg, { name: "Postres", displayOrder: 2 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      const dessert = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      await setProductCourse(tx, cfg, dessert, post.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // Round 1: starter (Entrantes, earliest) auto-fires; main (Principales) is held.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      let items = await courseItemsFor(tx, tabId);
+      expect(byLine(items, starter).firedAt).not.toBeNull();
+      expect(byLine(items, main).firedAt).toBeNull();
+
+      // Round 2: dessert (Postres) ALONE. It is NOT the order's earliest (Entrantes from round 1 is), so
+      // it stays held — decisive proof the earliest is taken over prior rounds, not this batch (a
+      // batch-only min would make Postres its own earliest and fire it).
+      await addTabRound(tx, cfg, tabId, [line(dessert)]);
+      items = await courseItemsFor(tx, tabId);
+      expect(byLine(items, dessert).firedAt).toBeNull();
+
+      // Release Principales explicitly — now fired for the order though it is not the earliest course.
+      await fireCourse(tx, cfg, tabId, pri.id);
+      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
+
+      // Round 3: another main. Principales is already fired for this order, so this new item joins the
+      // fired course and fires at once — the `firedCourseIds` branch, isolated (Principales is not the
+      // earliest). Dessert (Postres, still unfired) remains held.
+      await addTabRound(tx, cfg, tabId, [line(main)]);
+      items = await courseItemsFor(tx, tabId);
+      const mains = items.filter((i) => i.productId === main);
+      expect(mains).toHaveLength(2);
+      expect(mains.every((i) => i.firedAt !== null)).toBe(true);
+      expect(byLine(items, dessert).firedAt).toBeNull();
+    });
+  });
+
+  it("advanceTicket (whole-ticket bump) advances fired items and SKIPS held ones", async () => {
+    // §5a: the bulk bump acts only on fired items — a mixed ticket's fired line advances while its held
+    // line stays put (no throw, unlike the per-line verb). Both items sit at the same (default) station,
+    // so the whole-ticket sweep addresses both; only the fired one is in the match.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const before = await courseItemsFor(tx, orderId);
+      expect(byLine(before, starter).firedAt).not.toBeNull(); // Entrantes auto-fired
+      expect(byLine(before, main).firedAt).toBeNull(); // Principales held
+
+      // Whole-ticket bump to preparing: the fired starter advances; the held main is skipped.
+      await advanceTicket(tx, cfg, orderId, cocina.id, "preparing");
+
+      const after = await courseItemsFor(tx, orderId);
+      expect(byLine(after, starter).state).toBe("preparing"); // fired item advanced
+      expect(byLine(after, main).state).toBe("queued"); // held item untouched
+      expect(byLine(after, main).firedAt).toBeNull(); // and still held
+    });
+  });
+
+  it("fireCourse rejects an unknown course with course.not_found", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+
+      const missing = randomUUID();
+      await expect(fireCourse(tx, cfg, orderId, missing)).rejects.toMatchObject({
+        code: "course.not_found",
+        params: { courseId: missing },
       });
     });
   });

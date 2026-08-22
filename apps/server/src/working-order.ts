@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   compareDecimal,
@@ -23,6 +23,7 @@ import {
   diningTables,
   invoiceSeries,
   isUniqueViolation,
+  kitchenCourses,
   kitchenStations,
   products,
   sales,
@@ -39,6 +40,7 @@ import type { LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
+import { requireLiveCourse } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 
 export interface WorkingOrderDeps {
@@ -579,20 +581,87 @@ export async function fireLines(
     .where(inArray(products.id, productIds));
   const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
 
-  // Resolve + snapshot each line's station, refusing the whole fire if any line has nowhere to go.
-  const values: (typeof ticketItems.$inferInsert)[] = lines.map((line) => {
+  // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
+
+  // Each fired line's RESOLVED course, read straight from `working_order_lines` — Task 3 stored it at
+  // ring time as `<override> ?? product.course_id` (null = no course). Keyed by line id (the same id
+  // this fire snapshots as `working_order_line_id`), read HERE rather than widening the `lines` input, so
+  // the three fire callers (placeOrder / sendToPrep / addTabRound) stay `{id, productId}`.
+  const lineIds = lines.map((line) => line.id);
+  const lineCourses = await tx
+    .select({ id: workingOrderLines.id, courseId: workingOrderLines.courseId })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, lineIds));
+  const courseByLine = new Map(lineCourses.map((row) => [row.id, row.courseId]));
+
+  // The order's EXISTING ticket items (prior rounds), for two order-wide facts an auto-fire decision
+  // needs — computed over the WHOLE order, not just this batch (a tab fires round by round):
+  //  - which courses are ALREADY FIRED (some row of that course has `fired_at` set): a new item of such
+  //    a course joins food already cooking, so it fires too;
+  //  - which courses are already PRESENT on the order: so "the order's earliest course" (the min
+  //    `display_order` below) is taken over prior rounds AND this one. Without this, a later round of
+  //    only a late course would see itself as the sole — hence earliest — course and wrongly auto-fire.
+  const existing = await tx
+    .select({ courseId: ticketItems.courseId, firedAt: ticketItems.firedAt })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, orderId));
+  const firedCourseIds = new Set(
+    existing
+      .filter((row) => row.courseId !== null && row.firedAt !== null)
+      .map((row) => row.courseId),
+  );
+
+  // The order's EARLIEST course = the minimum `display_order` across every NON-NULL course on the order
+  // (existing rows and this batch together). A null course_id has no `display_order` and is treated as
+  // earliest — it fires immediately (§2b) — so it never enters this set. Empty set (all null courses) ⇒
+  // no minimum, and every line fires by the null rule below.
+  const orderCourseIds = [
+    ...new Set(
+      [...existing.map((row) => row.courseId), ...courseByLine.values()].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
+  ];
+  const courseOrderRows =
+    orderCourseIds.length === 0
+      ? []
+      : await tx
+          .select({ id: kitchenCourses.id, displayOrder: kitchenCourses.displayOrder })
+          .from(kitchenCourses)
+          .where(inArray(kitchenCourses.id, orderCourseIds));
+  const displayOrderByCourse = new Map(courseOrderRows.map((row) => [row.id, row.displayOrder]));
+  const earliestDisplayOrder =
+    courseOrderRows.length === 0
+      ? null
+      : Math.min(...courseOrderRows.map((row) => row.displayOrder));
+
+  // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
+  // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
+  // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
+  const values = lines.map((line) => {
     const route = routeByProduct.get(line.productId);
     const stationId = route?.productStationId ?? route?.categoryStationId ?? defaultStationId;
     if (stationId === null || stationId === undefined) {
       throw new AppError("station.no_default", { locationId: cfg.locationId });
     }
+    const courseId = courseByLine.get(line.id) ?? null;
+    // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
+    // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
+    // `fireCourse` stamps it. A non-null course on a line is always in `displayOrderByCourse` (the FK
+    // guarantees it exists and it is in `orderCourseIds`), so the lookup is defined here.
+    const fired =
+      courseId === null ||
+      firedCourseIds.has(courseId) ||
+      displayOrderByCourse.get(courseId) === earliestDisplayOrder;
     return {
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       workingOrderId: orderId,
       workingOrderLineId: line.id,
       stationId,
-      state: "queued",
+      courseId,
+      firedAt: fired ? sql`now()` : null,
+      state: "queued" as const,
     };
   });
   try {
@@ -608,6 +677,44 @@ export async function fireLines(
     }
     throw error;
   }
+}
+
+/**
+ * Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" verb, the release
+ * counterpart to {@link fireLines}'s auto-fire-first. Stamps `fired_at = now()` on every HELD item
+ * (`fired_at IS NULL`) of this order + course, so those items stop being greyed on the station display
+ * and become advanceable ({@link advanceTicketItem}'s held guard passes once `fired_at` is set).
+ *
+ * The course must be a LIVE course of this venue — an unknown, retired or cross-venue id is
+ * `course.not_found` ({@link requireLiveCourse}, the SAME check the config verbs use), NOT a silent
+ * no-op: a zero-match UPDATE is otherwise ambiguous between "unknown course" and "nothing held", so the
+ * existence check is what tells them apart. IDEMPOTENT: an already-fired item (`fired_at` set) is not
+ * matched by the `IS NULL` predicate, so re-firing leaves its timestamp untouched; and a course with
+ * nothing held (all already fired, or none on the order) updates zero rows and does NOT throw — the same
+ * no-op convenience {@link advanceTicket} makes for an empty bulk bump.
+ *
+ * OPERATIONAL, not fiscal: `ticket_items` is the mutable kitchen table, so this writes no sale, tender,
+ * registro or huella. The `requireSession` gate (a waiter or kitchen operator) lives at the route
+ * (Task 5), not here — this runs on the CALLER's transaction under its tenant/app_user scope, RLS
+ * confining the update to the tenant.
+ */
+export async function fireCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+): Promise<void> {
+  await requireLiveCourse(tx, cfg, courseId);
+  await tx
+    .update(ticketItems)
+    .set({ firedAt: sql`now()` })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.courseId, courseId),
+        isNull(ticketItems.firedAt),
+      ),
+    );
 }
 
 /**
@@ -2106,6 +2213,22 @@ export async function advanceTicketItem(
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
   const validTo = to as Exclude<TicketState, "queued">;
+
+  // KDS-2 hold-and-fire guard (§3c): a HELD item (`fired_at IS NULL`) cannot advance — the kitchen must
+  // not bump food it has not been told to start. Read the item's fired state first; an EXISTING held
+  // item is refused `ticket.item_held`, before the transition UPDATE could move it. An absent/foreign
+  // item (RLS-hidden) reads back `undefined` and falls through to the conditional UPDATE below, which
+  // refuses it `ticket.invalid_transition` (unchanged KDS-1 behaviour) — so this never turns a "no such
+  // item" into the held code. Placed after the `to`-validity check so a garbage/`queued` target is still
+  // a malformed request (`invalid_transition`) regardless of the item's fired state.
+  const [item] = await tx
+    .select({ firedAt: ticketItems.firedAt })
+    .from(ticketItems)
+    .where(eq(ticketItems.id, itemId));
+  if (item !== undefined && item.firedAt === null) {
+    throw new AppError("ticket.item_held", { ticketItemId: itemId });
+  }
+
   const updated = await tx
     .update(ticketItems)
     .set(advanceSet(validTo))
@@ -2132,6 +2255,13 @@ export async function advanceTicketItem(
  * and the type forbids it at the call site. Runs on the CALLER's transaction under its tenant/app_user
  * scope; RLS confines the update to the tenant, and the (orderId, stationId) pair addresses one node's
  * items (a working order is node-local), so `_cfg` is unused — the uniform tab-verb signature shape.
+ *
+ * KDS-2 hold-and-fire (§3c, §5a "bump ... only on fired items"): the `fired_at IS NOT NULL` predicate
+ * makes the bulk sweep SKIP held items, so a mixed ticket's fired lines advance while its held ones stay
+ * put. Note the deliberate asymmetry with {@link advanceTicketItem}: the per-line verb THROWS
+ * `ticket.item_held` because it is a targeted action on one item that must not be workable; the
+ * whole-ticket bump is a bulk convenience, so a held item is simply not in the match (no throw), the same
+ * way a line already past the predecessor is not in the match. Fired items behave exactly as before.
  */
 export async function advanceTicket(
   tx: Transaction,
@@ -2148,6 +2278,7 @@ export async function advanceTicket(
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.stationId, stationId),
         eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
+        isNotNull(ticketItems.firedAt),
       ),
     );
 }
