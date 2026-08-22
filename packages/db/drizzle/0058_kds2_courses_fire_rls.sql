@@ -1,5 +1,7 @@
--- Hand-written (--custom; drizzle-kit models no policies, FORCE, privileges, or the tenant-consistent
--- composite FKs), same shape as 0055_kds1_stations_tickets_rls.sql / 0052_floor_plan_fp1_rls.sql.
+-- Hand-written (--custom): drizzle-kit models no policies, FORCE, or privileges; the tenant-consistent
+-- course_id FKs are here (not in the schema) because those columns are declared BARE — drizzle emits a
+-- FK only for a column declared with a reference, and it did emit kitchen_courses_location_fk in 0057.
+-- See the composite-FK note below. Same shape as 0055_kds1_stations_tickets_rls.sql / 0052_floor_plan_fp1_rls.sql.
 -- current_tenant_id() and app_user already exist (0001_tenancy_rls.sql); current_tenant_id() fails
 -- closed — an unset app.tenant_id returns NULL, filtering every row. The inmutabilidad scan
 -- (packages/fiscal-verifactu) requires FORCE ROW LEVEL SECURITY on every tenant_id-bearing table, so
