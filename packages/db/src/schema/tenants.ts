@@ -32,10 +32,10 @@ export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
  * The per-venue FIRE CONTROL mode (KDS-2, §2c). `waiter` (default): the tab-ordering screen surfaces
  * the fire action per held course. `kitchen`: the station display surfaces it instead. Governs ONLY
  * which UI shows the affordance — `fireCourse` is the same verb either way, and all surfaces are
- * session-gated. `expo` (KDS-3, §2c): a dedicated expediter/pass display surfaces the fire action. The
- * enum value is additive (this task); its surface — the expo screen — arrives in KDS-3's later tasks. A
- * pgEnum on `locations`, matching `bump_mode` / `order_flow`'s precedent on the same table (one
- * declaration yields both the union and the constraint).
+ * session-gated. `expo` (KDS-3, §2c): a dedicated expediter/pass display surfaces the fire action — its
+ * surface, the session-gated `till-expo-screen`, ships in this same KDS-3 track. A pgEnum on `locations`,
+ * matching `bump_mode` / `order_flow`'s precedent on the same table (one declaration yields both the
+ * union and the constraint).
  */
 export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen", "expo"]);
 
@@ -116,10 +116,11 @@ export const locations = pgTable(
     // display also offers a whole-ticket bump. NOT NULL DEFAULT 'line' so existing location fixtures
     // stay inert, exactly as `order_flow` above defaults. Governs only the display convenience.
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
-    // The per-venue KDS fire-control mode (KDS-2, §2c): `waiter` (default) = the tab surfaces the fire
-    // action; `kitchen` = the station display surfaces it. NOT NULL DEFAULT 'waiter' so existing
-    // location fixtures stay inert, exactly as `bump_mode` / `order_flow` above default. Governs only
-    // which UI shows the affordance — the `fireCourse` verb is unchanged by it.
+    // The per-venue KDS fire-control mode: `waiter` (default, KDS-2) = the tab surfaces the fire action;
+    // `kitchen` (KDS-2) = the station display surfaces it; `expo` (KDS-3) = the expediter/pass display
+    // surfaces it. NOT NULL DEFAULT 'waiter' so existing location fixtures stay inert, exactly as
+    // `bump_mode` / `order_flow` above default. Governs only which UI shows the affordance — the
+    // `fireCourse` verb is unchanged by it.
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
