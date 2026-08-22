@@ -16,7 +16,15 @@ const cocinaQueue: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
-    items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" }],
+    items: [
+      {
+        id: "ti-1",
+        workingOrderLineId: "wol-1",
+        state: "queued",
+        descriptions: { "es-ES": "Paella" },
+        quantity: "2.000",
+      },
+    ],
   },
 ];
 
@@ -26,7 +34,15 @@ const barraQueue: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
-    items: [{ id: "ti-2", workingOrderLineId: "wol-2", state: "preparing" }],
+    items: [
+      {
+        id: "ti-2",
+        workingOrderLineId: "wol-2",
+        state: "preparing",
+        descriptions: { "es-ES": "Vino" },
+        quantity: "1.000",
+      },
+    ],
   },
 ];
 

@@ -259,10 +259,10 @@ export class TillApp extends LitElement {
   @state() private stationQueue: StationQueueGroup[] = [];
   /**
    * The venue's whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — `line` (per-line, the source
-   * of truth) or `ticket` (advance the whole order at a station). Threaded to the station-display screen.
-   * Defaults `line`; the server does NOT yet expose it via `GET /api/till` (Task 7 left `TillInfo`
-   * unchanged), so today it is always the default — wiring the real venue setting through boot is a
-   * follow-up, and the screen already honours whatever value it is handed.
+   * of truth) or `ticket` (advance the whole order at a station). Read once from `GET /api/till` on boot
+   * ({@link TillInfo.bumpMode}) and threaded to the station-display screen, which enables its whole-ticket
+   * affordance for a `ticket` venue. Defaults `line` until boot resolves — the fail-safe default (per-line
+   * bump is always correct), so a boot that has not yet answered never shows the convenience by accident.
    */
   @state() private bumpMode: BumpMode = "line";
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
@@ -368,6 +368,7 @@ export class TillApp extends LitElement {
       this.invoiceLocale = till.locale;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
+      this.bumpMode = till.bumpMode;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
       // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives

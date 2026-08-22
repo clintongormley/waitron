@@ -2022,11 +2022,17 @@ export async function advanceTicket(
 }
 
 /** One ticket item on a station's queue — its id (the bump target for {@link advanceTicketItem}), the
- *  line it was fired from, and its current kitchen state. */
+ *  line it was fired from, its current kitchen state, and the DISPLAY fields a cook reads: the line's
+ *  snapshotted `descriptions` (locale → text, the dish name — so the kitchen shows "2× Paella", not a
+ *  bare line number) and its `quantity` (numeric(12,3) as text, e.g. "2.000"). Both are carried from
+ *  the joined `working_order_lines` row; the description is the SNAPSHOT frozen at fire, never a live
+ *  catalogue lookup. */
 export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
+  descriptions: Record<string, string>;
+  quantity: string;
 }
 
 /** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
@@ -2073,6 +2079,11 @@ export async function listStationQueue(
       workingOrderLineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
+      // The DISPLAY fields the kitchen renders — the line's snapshotted dish description + quantity,
+      // carried from the joined working_order_lines row (the snapshot, never a live catalogue lookup).
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      lineNo: workingOrderLines.lineNo,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
@@ -2087,6 +2098,15 @@ export async function listStationQueue(
         eq(ticketItems.tenantId, workingOrders.tenantId),
       ),
     )
+    // The line this item was fired from, for its display name + quantity. Composite (tenant_id too),
+    // mirroring the tenant-consistent (tenant_id, working_order_line_id) FK ticket_items carries.
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
     .where(
       and(
         eq(ticketItems.nodeId, cfg.nodeId),
@@ -2095,7 +2115,10 @@ export async function listStationQueue(
         isNull(workingOrders.collectedAt),
       ),
     )
-    .orderBy(ticketItems.queuedAt);
+    // Primary `queued_at` keeps the oldest-order-first grouping (each group's position + `queuedAt`
+    // anchor is its oldest line, unchanged), with `line_no` breaking the tie so an order's lines —
+    // fired together with an identical `queued_at` — render in a stable line order within the group.
+    .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
   // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
   // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
@@ -2116,6 +2139,8 @@ export async function listStationQueue(
       id: row.itemId,
       workingOrderLineId: row.workingOrderLineId,
       state: row.state,
+      descriptions: row.descriptions,
+      quantity: row.quantity,
     });
   }
   return [...groups.values()];

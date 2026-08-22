@@ -164,6 +164,7 @@ describe("TillApi", () => {
       venueName: "Deli",
       nif: "B12345678",
       orderFlow: "prepay",
+      bumpMode: "line",
       cardProvider: "none",
       tipsEnabled: false,
       layout: [
@@ -497,8 +498,20 @@ describe("TillApi", () => {
         label: "Mesa 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
         items: [
-          { id: "ti-1", workingOrderLineId: "wol-1", state: "queued" },
-          { id: "ti-2", workingOrderLineId: "wol-2", state: "preparing" },
+          {
+            id: "ti-1",
+            workingOrderLineId: "wol-1",
+            state: "queued",
+            descriptions: { "es-ES": "Paella" },
+            quantity: "2.000",
+          },
+          {
+            id: "ti-2",
+            workingOrderLineId: "wol-2",
+            state: "preparing",
+            descriptions: { "es-ES": "Agua" },
+            quantity: "1.000",
+          },
         ],
       },
     ];

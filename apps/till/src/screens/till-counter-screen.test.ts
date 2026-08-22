@@ -65,7 +65,15 @@ describe("till-counter-screen", () => {
         orderNumber: 5,
         label: "Mesa 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
-        items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" as const }],
+        items: [
+          {
+            id: "ti-1",
+            workingOrderLineId: "wol-1",
+            state: "queued" as const,
+            descriptions: { "es-ES": "Paella" },
+            quantity: "2.000",
+          },
+        ],
       },
     ];
     const { el } = await mount({ stationQueue, defaultStationId: "st-1" });

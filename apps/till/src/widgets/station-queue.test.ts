@@ -13,8 +13,20 @@ const groupA: StationQueueGroup = {
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   items: [
-    { id: "ti-1", workingOrderLineId: "wol-1", state: "queued" },
-    { id: "ti-2", workingOrderLineId: "wol-2", state: "preparing" },
+    {
+      id: "ti-1",
+      workingOrderLineId: "wol-1",
+      state: "queued",
+      descriptions: { "es-ES": "Paella" },
+      quantity: "2.000",
+    },
+    {
+      id: "ti-2",
+      workingOrderLineId: "wol-2",
+      state: "preparing",
+      descriptions: { "es-ES": "Agua" },
+      quantity: "1.000",
+    },
   ],
 };
 
@@ -23,7 +35,15 @@ const groupB: StationQueueGroup = {
   orderNumber: 6,
   label: null,
   queuedAt: "2026-08-17T10:05:00.000Z",
-  items: [{ id: "ti-3", workingOrderLineId: "wol-3", state: "ready" }],
+  items: [
+    {
+      id: "ti-3",
+      workingOrderLineId: "wol-3",
+      state: "ready",
+      descriptions: { "es-ES": "Café" },
+      quantity: "3.000",
+    },
+  ],
 };
 
 const groups = [groupA, groupB];
@@ -71,6 +91,52 @@ describe("till-station-queue", () => {
     // Both of order 5's lines render inside its own card.
     expect(tickets[0]!.querySelector('[data-item="ti-1"]')).not.toBeNull();
     expect(tickets[0]!.querySelector('[data-item="ti-2"]')).not.toBeNull();
+  });
+
+  it("rail: each line shows its quantity × dish name (the cook's line), not a bare line number", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain("2× Paella");
+    expect(el.shadowRoot!.querySelector('[data-item="ti-2"]')!.textContent).toContain("1× Agua");
+  });
+
+  it("kanban: each cell shows its quantity × dish name alongside the order number", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]')!;
+    expect(cell.textContent).toContain("2× Paella");
+    // The order-number context (which order this dish belongs to) is preserved for the cook.
+    expect(cell.textContent).toContain("5");
+  });
+
+  it("resolves the dish name in the operator locale, falling back to the first available description", async () => {
+    const group: StationQueueGroup = {
+      orderId: "wo-9",
+      orderNumber: 9,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      items: [
+        {
+          id: "ti-x",
+          workingOrderLineId: "wol-x",
+          state: "queued",
+          // No es-ES key (the operator locale) — the widget degrades to the only value present,
+          // matching `productName`'s first-available fallback rather than blanking the cell.
+          descriptions: { en: "Fish" },
+          quantity: "1.000",
+        },
+      ],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [group],
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector('[data-item="ti-x"]')!.textContent).toContain("1× Fish");
   });
 
   it("line mode: tapping a queued line emits advance-ticket-item { itemId, to: 'preparing' }", async () => {

@@ -478,6 +478,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
+      // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
+      // location never set it, so the column default `line` reaches the wire (per-line bump only).
+      bumpMode: "line",
       cardProvider: "none",
       tipsEnabled: false,
       layout: DEFAULT_LAYOUT,
@@ -505,6 +508,28 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
+  });
+
+  it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {
+    // The default `line` above would pass even if the route hardcoded it, so drive the location's
+    // `bump_mode` to `ticket` and prove the boot read reflects it. Restored in `finally` so the shared
+    // location stays `line` for the order-independent default assertion above (CLAUDE.md §4).
+    await suite.db.execute(
+      sql`update locations set bump_mode = 'ticket' where id = ${cfg.locationId}`,
+    );
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ bumpMode: "ticket" });
+    } finally {
+      await suite.db.execute(
+        sql`update locations set bump_mode = 'line' where id = ${cfg.locationId}`,
+      );
+    }
   });
 
   it("GET /api/till returns the AUTHORED layout + receipt when the tenant has one, not the defaults", async () => {

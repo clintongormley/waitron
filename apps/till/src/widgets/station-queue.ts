@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StationQueueGroup, StationQueueItem, TicketState } from "../api/client.js";
 
 /** The kitchen state each ticket item advances TO next. `ready` is terminal (a counter order's handover
@@ -172,6 +172,15 @@ export class TillStationQueue extends LitElement {
         border-left-color: var(--wt-color-success);
       }
 
+      /* The dish label (qty × name) — the primary text a cook reads. Truncates rather than wrapping so
+         a long name never blows out the cell/line width (min-width:0 lets a flex child shrink). */
+      .line-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .line-state {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -257,7 +266,7 @@ export class TillStationQueue extends LitElement {
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
           <ul class="lines">
-            ${group.items.map((item, index) => html`<li>${this.#line(group, item, index)}</li>`)}
+            ${group.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
           </ul>
         </article>`;
       })}
@@ -281,15 +290,16 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** A rail line: `Línea N` + its localised state, tappable to bump unless terminal (`ready`). */
-  #line(group: StationQueueGroup, item: StationQueueItem, index: number): TemplateResult {
-    const label = `${t("station.line")} ${index + 1}`;
+  /** A rail line: the dish (`qty× name`) + its localised state, tappable to bump unless terminal
+   *  (`ready`). The card head already names the order, so a line needs only its dish + state. */
+  #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
+    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
     const state = html`<span class="line-state"
       >${t(`station.state.${item.state}` as const)}</span
     >`;
     if (NEXT[item.state] === undefined) {
       return html`<span class="line state-${item.state} terminal" data-item=${item.id}
-        >${label}${state}</span
+        >${dish}${state}</span
       >`;
     }
     return html`<button
@@ -298,18 +308,21 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${label}${state}
+      ${dish}${state}
     </button>`;
   }
 
-  /** A kanban cell: an order-tagged line, tappable to bump unless terminal (`ready`). */
+  /** A kanban cell: the dish (`qty× name`) tagged with its order — the columns cut across orders, so a
+   *  cell keeps the order number (which order this dish belongs to) beside the dish. Tappable to bump
+   *  unless terminal (`ready`). */
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
+    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
     const tag = html`<span class="number"
       >#${group.orderNumber}${group.label ? html` · ${group.label}` : nothing}</span
     >`;
     if (NEXT[item.state] === undefined) {
       return html`<span class="line state-${item.state} terminal" data-item=${item.id}
-        >${tag}</span
+        >${dish}${tag}</span
       >`;
     }
     return html`<button
@@ -318,8 +331,19 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${tag}
+      ${dish}${tag}
     </button>`;
+  }
+
+  /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name resolves in
+   *  the operator locale with a first-available fallback (matching {@link productName} — the till's own
+   *  set-at-boot `currentLocale()` is `TillInfo.locale`), degrading to "" only for an empty map; the
+   *  quantity is the line's numeric(_,3) trimmed of trailing zeros ("2.000" → "2", "0.320" → "0.32"),
+   *  the same trim `till-table-order-screen` uses. */
+  #dish(item: StationQueueItem): string {
+    const name = item.descriptions[currentLocale()] ?? Object.values(item.descriptions)[0] ?? "";
+    const qty = item.quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    return `${qty}× ${name}`;
   }
 
   /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */

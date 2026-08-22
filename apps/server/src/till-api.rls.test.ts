@@ -752,7 +752,13 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       orderNumber: number;
       label: string | null;
       queuedAt: string;
-      items: { id: string; workingOrderLineId: string; state: string }[];
+      items: {
+        id: string;
+        workingOrderLineId: string;
+        state: string;
+        descriptions: Record<string, string>;
+        quantity: string;
+      }[];
     }[];
     expect(groups1).toEqual([
       {
@@ -761,7 +767,15 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         label: "Mesa 9",
         queuedAt: expect.any(String),
         items: [
-          { id: expect.any(String), workingOrderLineId: expect.any(String), state: "queued" },
+          {
+            id: expect.any(String),
+            workingOrderLineId: expect.any(String),
+            state: "queued",
+            // The dish name + quantity the kitchen display renders, carried end to end from the fired
+            // working-order line's snapshot through the HTTP route (KDS-1 Gap 2): "2× Agua mineral".
+            descriptions: { "es-ES": "Agua mineral" },
+            quantity: "2.000",
+          },
         ],
       },
     ]);

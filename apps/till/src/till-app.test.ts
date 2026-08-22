@@ -107,6 +107,9 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
+  // The venue's KDS whole-ticket bump mode (KDS-1 §2e); `line` is the default (per-line bump only), so
+  // the station-screen tests that don't drive it exercise the per-line path. A test overrides it.
+  bumpMode: "line" as const,
   // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
   // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
   // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
@@ -133,7 +136,15 @@ const stationGroup = {
   orderNumber: 5,
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
-  items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" as const }],
+  items: [
+    {
+      id: "ti-1",
+      workingOrderLineId: "wol-1",
+      state: "queued" as const,
+      descriptions: { "es-ES": "Paella" },
+      quantity: "2.000",
+    },
+  ],
 };
 
 /** The venue's single default station — what `#refreshStationQueue` resolves to fetch the counter's
@@ -2377,6 +2388,22 @@ describe("till-app", () => {
       await flush(el);
       expect(counter(el)).not.toBeNull();
       expect(counter(el)!.store.lines).toHaveLength(1);
+    });
+
+    it("threads the venue bump_mode from boot to the station screen (a ticket-mode venue gets whole-ticket bump)", async () => {
+      // The default `till` fixture is `line`; a venue configured `ticket` must reach the station
+      // screen's `.bumpMode` so its whole-ticket affordance turns on — proving #boot reads
+      // `TillInfo.bumpMode` rather than leaving the hardcoded `line` default.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, bumpMode: "ticket" }),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-station");
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("till-station-screen") as unknown as {
+        bumpMode: string;
+      };
+      expect(screen.bumpMode).toBe("ticket");
     });
   });
 

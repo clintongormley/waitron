@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, tenants, withTenant } from "@waitron/db";
+import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   authorize,
@@ -379,17 +379,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ venueName: tenants.legalName, nif: tenants.taxId })
           .from(tenants)
           .where(eq(tenants.id, deps.cfg.tenantId));
+        // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE from
+        // the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow` rides the
+        // config because the SALE PATH dispatches on it, whereas `bump_mode` has no server-side
+        // consumer at all (it drives only the client's whole-ticket affordance), so it is read where
+        // it is used and kept off the config surface. Same `eq(id)` shape `readOrderFlow` uses, under
+        // the same RLS scope, so it selects exactly this till's location row.
+        const [loc] = await tx
+          .select({ bumpMode: locations.bumpMode })
+          .from(locations)
+          .where(eq(locations.id, deps.cfg.locationId));
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        return { issuer: row, layout: definition, receipt };
+        return { issuer: row, bumpMode: loc?.bumpMode, layout: definition, receipt };
       });
       /* v8 ignore start */
-      if (boot.issuer === undefined) {
-        // Structurally unreachable: `deps.cfg.tenantId` is the till's own tenant (provisioning
-        // stamped it), so its `tenants` row always exists and RLS returns it. A misconfigured till
-        // pointed at a nonexistent tenant becomes an opaque 500 via `run`, never a partial payload.
-        throw new Error(`GET /api/till: no tenant row for ${deps.cfg.tenantId}`);
+      if (boot.issuer === undefined || boot.bumpMode === undefined) {
+        // Structurally unreachable: `deps.cfg.tenantId`/`locationId` are the till's own tenant and
+        // location (provisioning stamped both), so their rows always exist and RLS returns them. A
+        // misconfigured till pointed at a nonexistent tenant/location becomes an opaque 500 via `run`,
+        // never a partial payload.
+        throw new Error(`GET /api/till: no tenant/location row for ${deps.cfg.tenantId}`);
       }
       /* v8 ignore stop */
       return c.json({
@@ -397,6 +408,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
+        // The venue's whole-ticket bump mode (KDS-1 §2e), read from the location above — the till app
+        // threads it to the station-display screen to enable/disable the whole-ticket bump affordance.
+        bumpMode: boot.bumpMode,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the

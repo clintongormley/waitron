@@ -13,9 +13,27 @@ const groups: StationQueueGroup[] = [
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     items: [
-      { id: "ti-1", workingOrderLineId: "wol-1", state: "queued" },
-      { id: "ti-2", workingOrderLineId: "wol-2", state: "preparing" },
-      { id: "ti-3", workingOrderLineId: "wol-3", state: "ready" },
+      {
+        id: "ti-1",
+        workingOrderLineId: "wol-1",
+        state: "queued",
+        descriptions: { "es-ES": "Paella" },
+        quantity: "2.000",
+      },
+      {
+        id: "ti-2",
+        workingOrderLineId: "wol-2",
+        state: "preparing",
+        descriptions: { "es-ES": "Agua" },
+        quantity: "1.000",
+      },
+      {
+        id: "ti-3",
+        workingOrderLineId: "wol-3",
+        state: "ready",
+        descriptions: { "es-ES": "Café" },
+        quantity: "3.000",
+      },
     ],
   },
   {
@@ -23,7 +41,15 @@ const groups: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
-    items: [{ id: "ti-4", workingOrderLineId: "wol-4", state: "queued" }],
+    items: [
+      {
+        id: "ti-4",
+        workingOrderLineId: "wol-4",
+        state: "queued",
+        descriptions: { "es-ES": "Vino" },
+        quantity: "1.000",
+      },
+    ],
   },
 ];
 

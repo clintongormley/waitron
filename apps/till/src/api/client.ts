@@ -45,6 +45,14 @@ export interface TillInfo {
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
+  /**
+   * The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`): `line` (per-line bump
+   * only, the source of truth) or `ticket` (the display also offers a whole-ticket bump). Read once
+   * from `GET /api/till` on boot and threaded to the station-display screen so it can enable the
+   * whole-ticket affordance. A LOCAL mirror of the server's `bump_mode` enum, deliberately NOT
+   * imported — same bundle-decoupling rationale as every other type in this file.
+   */
+  bumpMode: "line" | "ticket";
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
   layout: LayoutDef;
@@ -235,6 +243,14 @@ export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
+  /**
+   * The line's snapshotted dish description (locale → text), so the kitchen display renders the dish
+   * name ("2× Paella"), not a bare line number. Resolved for display in the operator's locale with a
+   * first-available fallback, exactly as `productName` resolves a product's `descriptions`.
+   */
+  descriptions: Record<string, string>;
+  /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
+  quantity: string;
 }
 
 /**

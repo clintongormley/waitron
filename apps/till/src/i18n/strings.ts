@@ -62,8 +62,9 @@ export const en = {
   // is the counter's nav control (mirrors `floor.open`); `station.title` names the screen. The two view
   // toggle labels name the view they SWITCH TO (like `floor.view_*`): shown in kanban → offer the rail,
   // shown in rail → offer the board. `station.state.*` name the three kitchen states (also the kanban column
-  // headers). `station.line`/`station.min` are suffix/prefix words, not sentences (t() takes no params, so a
-  // count-bearing label is `${n} ${t(key)}`). Spanish per design §6 (UI copy localised, identifiers English).
+  // headers). `station.min` is a suffix word, not a sentence (t() takes no params, so a count-bearing
+  // label is `${n} ${t(key)}` — the age "N min"; the dish label "qty× name" is DATA, not a translated
+  // key). Spanish per design §6 (UI copy localised, identifiers English).
   "station.open": "Kitchen",
   "station.title": "Kitchen",
   "station.back": "Back to counter",
@@ -72,7 +73,6 @@ export const en = {
   "station.empty": "Nothing in the kitchen",
   "station.view_kanban": "Board",
   "station.view_rail": "Tickets",
-  "station.line": "Line",
   "station.min": "min",
   "station.advance": "Advance",
   "station.bump_ticket": "Advance ticket",
@@ -242,7 +242,6 @@ export const es: Record<StringKey, string> = {
   "station.empty": "Nada en cocina",
   "station.view_kanban": "Tablero",
   "station.view_rail": "Comandas",
-  "station.line": "Línea",
   "station.min": "min",
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",

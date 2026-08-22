@@ -78,7 +78,15 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           orderNumber: 5,
           label: "Mesa 4",
           queuedAt: "2026-08-17T10:00:00.000Z",
-          items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" }],
+          items: [
+            {
+              id: "ti-1",
+              workingOrderLineId: "wol-1",
+              state: "queued",
+              descriptions: { "es-ES": "Paella" },
+              quantity: "2.000",
+            },
+          ],
         },
       ]),
     });

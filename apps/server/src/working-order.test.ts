@@ -1135,4 +1135,31 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(await listStationQueue(tx, cfg, cocina.id)).toEqual([]);
     });
   });
+
+  it("carries each line's snapshotted description + quantity, items ordered by line_no", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station.
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: cafeId, quantity: "2" },
+        { productId: aguaId, quantity: "3" },
+      ]);
+
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.orderId).toBe(orderId);
+      expect(group!.items).toHaveLength(2);
+      // Items in line_no order, each carrying the line's snapshotted dish description + quantity
+      // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
+      expect(group!.items[0]).toMatchObject({
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "2.000",
+      });
+      expect(group!.items[1]).toMatchObject({
+        descriptions: { [LOCALE]: "Agua" },
+        quantity: "3.000",
+      });
+    });
+  });
 });
