@@ -9,6 +9,7 @@ import { ProductForm } from "./product-form.js";
 import type {
   AllergenDeclaration,
   CategorySummary,
+  Course,
   DashboardApi,
   Product,
   Station,
@@ -24,6 +25,11 @@ const CATEGORIES: CategorySummary[] = [
 const STATIONS: Station[] = [
   { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
   { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
+];
+
+const COURSES: Course[] = [
+  { id: "k1", name: "Entrantes", displayOrder: 0, active: true },
+  { id: "k2", name: "Postres", displayOrder: 1, active: true },
 ];
 
 /** The base props every mount needs: an open dialog scoped to a catalogue, with the category list. */
@@ -488,5 +494,63 @@ describe("product-form", () => {
     );
     await setSelect(el, "product-station", "");
     expect((await routed).detail).toEqual({ productId: "prod-1", stationId: null });
+  });
+
+  // ── Product → default-course routing (KDS-2), the sibling of the station override above ─────────────
+
+  it("renders the default-course select in edit mode (a none option + one per course)", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      courses: COURSES,
+    });
+    await el.updateComplete;
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=product-course]")!;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["", "k1", "k2"]);
+  });
+
+  it("does NOT render the default-course select in create mode (no product yet)", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ courses: COURSES }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=product-course]")).toBeNull();
+  });
+
+  it("emits set-product-course with the product id + picked course on change", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      courses: COURSES,
+    });
+    await el.updateComplete;
+    const routed = nextEvent<{ productId: string; courseId: string | null }>(
+      el,
+      "set-product-course",
+    );
+    await setSelect(el, "product-course", "k2");
+    expect((await routed).detail).toEqual({ productId: "prod-1", courseId: "k2" });
+  });
+
+  it("emits set-product-course with a null courseId when the none option is picked", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      courses: COURSES,
+    });
+    await el.updateComplete;
+    const routed = nextEvent<{ productId: string; courseId: string | null }>(
+      el,
+      "set-product-course",
+    );
+    await setSelect(el, "product-course", "");
+    expect((await routed).detail).toEqual({ productId: "prod-1", courseId: null });
   });
 });

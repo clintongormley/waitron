@@ -16,6 +16,7 @@ import type { CreateProductDetail, UpdateProductDetail } from "../widgets/produc
 import type {
   CatalogueSummary,
   CategorySummary,
+  Course,
   DashboardApi,
   Product,
   ProductInput,
@@ -115,6 +116,9 @@ export class CatalogueScreen extends LitElement {
   /** The venue's active kitchen stations (KDS-1), loaded on connect and threaded to the category
    * manager + product form as the options their station-routing selects offer. */
   @state() private stations: Station[] = [];
+  /** The venue's active kitchen courses (KDS-2), loaded on connect and threaded to the product form as
+   * the options its default-course select offers. */
+  @state() private courses: Course[] = [];
   /** Which catalogue's products show; the catalogue new products are created under. */
   @state() private selectedCatalogueId = "";
   @state() private formOpen = false;
@@ -146,12 +150,14 @@ export class CatalogueScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [catalogues, categories, stations] = await Promise.all([
+      const [catalogues, categories, stations, courses] = await Promise.all([
         this.api.listCatalogues(),
         this.api.listCategories(),
         this.api.listStations(),
+        this.api.listCourses(),
       ]);
       this.stations = stations;
+      this.courses = courses;
       await this.#applyCatalogues(catalogues, categories);
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -345,6 +351,23 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
+  /**
+   * Set (or clear) a PRODUCT's default kitchen course (KDS-2) from the product form's
+   * `set-product-course` event — the same shape as {@link #onSetProductStation}. A rejection becomes the
+   * `errorKey` banner; no reload for the same reason (the product read projects no `course_id`).
+   */
+  async #onSetProductCourse(
+    event: CustomEvent<{ productId: string; courseId: string | null }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    this.errorKey = null;
+    try {
+      await this.api.setProductCourse(event.detail.productId, event.detail.courseId);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   /** Capture the new-catalogue field. `stopPropagation` keeps its composed `wt-change` inside this
    * screen (the house field-handler pattern). */
   #onNewCatalogueNameChange(event: CustomEvent<{ value: string }>): void {
@@ -448,6 +471,7 @@ export class CatalogueScreen extends LitElement {
         .catalogueId=${this.selectedCatalogueId}
         .categories=${this.categories}
         .stations=${this.stations}
+        .courses=${this.courses}
         .product=${this.editingProduct}
         .api=${this.api}
         .busy=${this.busy}
@@ -455,6 +479,8 @@ export class CatalogueScreen extends LitElement {
         @update-product=${(e: CustomEvent<UpdateProductDetail>) => void this.#onUpdateProduct(e)}
         @set-product-station=${(e: CustomEvent<{ productId: string; stationId: string | null }>) =>
           void this.#onSetProductStation(e)}
+        @set-product-course=${(e: CustomEvent<{ productId: string; courseId: string | null }>) =>
+          void this.#onSetProductCourse(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-product-form>
     `;

@@ -352,6 +352,21 @@ export interface Station {
  * = the station display ALSO offers a whole-ticket "bump all". Mirrors the server's `BumpMode`. */
 export type BumpMode = "line" | "ticket";
 
+/** One `kitchen_courses` row as the config surface returns it (`GET /management-api/courses`, active
+ * only, by `displayOrder` then `name`) — mirrors the server's `Course` (KDS-2). No `isDefault`: courses
+ * have no default (a null course simply fires earliest). The Cursos config editor + the product-course
+ * select build on this; NOT imported from `apps/server` (the #70 bundle rule the shapes above follow). */
+export interface Course {
+  id: string;
+  name: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
+ * per-course fire; `kitchen` = the station display surfaces it. Mirrors the server's `FireControl`. */
+export type FireControl = "waiter" | "kitchen";
+
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 // LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping
 // `@waitron/workforce`'s verbs), deliberately NOT imported from `@waitron/workforce`/`@waitron/db` — a
@@ -1036,6 +1051,54 @@ export class DashboardApi {
    * Answers an empty 204. */
   setBumpMode(mode: BumpMode): Promise<void> {
     return this.#request<void>("/management-api/bump-mode", "PUT", { mode });
+  }
+
+  // ── Kitchen courses + fire control (KDS-2) ─────────────────────────────────────────────────────────
+  // The Cursos config panel's CRUD + order, the product-course routing select, and the fire-control
+  // toggle (`/management-api/courses*`, `.../products/:id/course`, `.../fire-control`; all till.configure-
+  // gated). Course CRUD is per-item POST/PATCH/DELETE (a reload after each, the station idiom); the
+  // product course + fire-control are PUTs; fire-control is also readable. Mirrors the station verbs above.
+
+  /** `GET /management-api/courses` — the venue's ACTIVE kitchen courses, by display order then name. */
+  listCourses(): Promise<Course[]> {
+    return this.#request<Course[]>("/management-api/courses", "GET");
+  }
+
+  /** `POST /management-api/courses` — create a course (name, optional order); returns its id (201). No
+   * default concept (courses have none). `course.name_taken` on a duplicate surfaces as a rejected `{ code }`. */
+  createCourse(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/courses", "POST", input);
+  }
+
+  /** `PATCH /management-api/courses/:id` — patch a course's mutable slice (name, order, active). Answers
+   * an empty 204. A name collision rejects `{ code: "course.name_taken" }`; an unknown id `{ code: "course.not_found" }`. */
+  updateCourse(
+    id: string,
+    patch: { name?: string; displayOrder?: number; active?: boolean },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/courses/:id` — soft-delete (deactivate) a course. Answers an empty 204. */
+  deactivateCourse(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/courses/${id}`, "DELETE");
+  }
+
+  /** `PUT /management-api/products/:id/course` — set (or clear, with `null`) a product's default kitchen
+   * course (KDS-2). A non-null course that is not live rejects `{ code: "course.not_found" }`. Answers 204. */
+  setProductCourse(productId: string, courseId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/products/${productId}/course`, "PUT", { courseId });
+  }
+
+  /** `GET /management-api/fire-control` — the venue's fire-control setting (`{ mode }`). */
+  getFireControl(): Promise<{ mode: FireControl }> {
+    return this.#request<{ mode: FireControl }>("/management-api/fire-control", "GET");
+  }
+
+  /** `PUT /management-api/fire-control` — set the venue's fire-control setting (`waiter`/`kitchen`).
+   * Answers an empty 204. */
+  setFireControl(mode: FireControl): Promise<void> {
+    return this.#request<void>("/management-api/fire-control", "PUT", { mode });
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────
