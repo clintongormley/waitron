@@ -647,6 +647,89 @@ describe("TillApi", () => {
     });
   });
 
+  it("getExpoQueue GETs this node's cross-station pass queue (courses across stations)", async () => {
+    const queue = [
+      {
+        orderId: "wo-1",
+        orderNumber: 7,
+        openedMinutes: 3,
+        courses: [
+          {
+            courseId: "co-1",
+            courseName: "Entrantes",
+            displayOrder: 0,
+            fired: true,
+            away: false,
+            items: [
+              {
+                id: "ti-1",
+                name: { "es-ES": "Paella" },
+                qty: "2.000",
+                stationName: "Cocina",
+                state: "ready",
+                firedAt: "2026-08-17T10:00:00.000Z",
+                awayAt: null,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(queue));
+
+    const r = await new TillApi("", fetchStub).getExpoQueue();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/expo/queue",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(queue);
+  });
+
+  it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).bumpCourseReady("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/ready",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCourseAway POSTs an empty object to the order+course /away route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/away",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCourseAway surfaces { code } when the course is unknown or retired", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).rejects.toMatchObject({
+      code: "course.not_found",
+    });
+  });
+
   it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

@@ -230,6 +230,17 @@ describe("till-counter-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("labels and emits a composed, bubbling show-expo event when Pass is tapped (KDS-3)", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("wt-button.expo")!.textContent).toContain(t("expo.open"));
+    let captured: Event | undefined;
+    el.addEventListener("show-expo", (event) => (captured = event));
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.expo")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
   it("labels the Allergens control with the localised action and shows the sale body by default", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(
