@@ -9,9 +9,11 @@ const zones: FloorZone[] = [
   { id: "z2", name: "Terraza", displayOrder: 1, active: true },
 ];
 
-// A spread of occupancy states + badges + a zoneless table, so axe sees every card variant, both
-// badges and the manual-status swatch in the one mount. All UNPLACED, so the screen defaults to the
-// LIST view here (the map view is exercised by its own suite below).
+// A spread of occupancy states + a zoneless table, plus one card for EACH of the three floor service
+// hints — en camino (t1), listos (t5), por servir (t6) — so axe sees every card variant, all three
+// hint-badge styles (the floor renders only the most-advanced per card, KDS-3 §3c) and the manual-status
+// swatch in the one mount. All UNPLACED, so the screen defaults to the LIST view here (the map view is
+// exercised by its own suite below).
 const tables: TableState[] = [
   {
     id: "t1",
@@ -24,8 +26,11 @@ const tables: TableState[] = [
     tabLineCount: 3,
     tabTotal: "47.50",
     pendingDeliveries: 0,
+    // All three counts positive — a dispatched line is still ready + unserved — so en camino wins and
+    // its filled-primary chip is what axe scans (alongside the status swatch on this card).
     pendingToServe: 2,
     readyToServe: 1,
+    enRoute: 1,
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     posX: null,
     posY: null,
@@ -42,6 +47,7 @@ const tables: TableState[] = [
     pendingDeliveries: 1,
     pendingToServe: 0,
     readyToServe: 0,
+    enRoute: 0,
     status: null,
     posX: null,
     posY: null,
@@ -58,6 +64,7 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
+    enRoute: 0,
     status: null,
     posX: null,
     posY: null,
@@ -74,6 +81,49 @@ const tables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
+    enRoute: 0,
+    status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
+  },
+  {
+    // Nothing dispatched → listos wins (the success-bordered chip).
+    id: "t5",
+    label: "5",
+    zoneId: "z1",
+    capacity: 4,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabId: "wo-5",
+    tabLineCount: 2,
+    tabTotal: "18.00",
+    pendingDeliveries: 0,
+    pendingToServe: 2,
+    readyToServe: 2,
+    enRoute: 0,
+    status: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
+  },
+  {
+    // Nothing ready or dispatched → por servir (the neutral chip).
+    id: "t6",
+    label: "6",
+    zoneId: "z1",
+    capacity: 2,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabId: "wo-6",
+    tabLineCount: 3,
+    tabTotal: "25.00",
+    pendingDeliveries: 0,
+    pendingToServe: 3,
+    readyToServe: 0,
+    enRoute: 0,
     status: null,
     posX: null,
     posY: null,
@@ -99,6 +149,7 @@ const placedTables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 2,
     readyToServe: 1,
+    enRoute: 0,
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     posX: 250,
     posY: 400,
@@ -115,6 +166,7 @@ const placedTables: TableState[] = [
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
+    enRoute: 0,
     status: null,
     posX: null,
     posY: null,

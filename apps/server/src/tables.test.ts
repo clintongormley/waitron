@@ -599,3 +599,77 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });
+
+// KDS-3 §3c "en camino": the floor's most-advanced hint. `enRoute` counts the tab's lines whose ticket
+// item has been DISPATCHED by the pass (`away_at IS NOT NULL`) but the waiter has not yet acknowledged
+// (`served_at IS NULL`) — the window between the expediter sending a course away and the floor carrying
+// it out. PGlite is the right target (the same read-model shape test as readyToServe above; no
+// RLS/concurrency dimension — Task 1's real-PG suite covers ticket_items RLS).
+describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
+  it("counts away-not-served lines, reports enRoute + readyToServe together, and clears enRoute on serve", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+
+    // Open a tab with two lines and FIRE the round → two ticket items, both queued.
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+    const lines = await asApp(cfg, (tx) =>
+      tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+
+    // Nothing dispatched yet → enRoute 0; the two unserved lines still count in pendingToServe.
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === tableId,
+    )!;
+    expect(row).toMatchObject({ enRoute: 0, readyToServe: 0, pendingToServe: 2 });
+
+    // Bump BOTH lines' ticket items queued → preparing → ready → readyToServe 2, still none away.
+    const items = await asApp(cfg, (tx) =>
+      tx
+        .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    for (const item of items) {
+      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "preparing"));
+      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "ready"));
+    }
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ enRoute: 0, readyToServe: 2, pendingToServe: 2 });
+
+    // DISPATCH line 1's item — stamp `away_at` (the read-model column `markCourseAway` writes; its
+    // dispatch VERB is exercised in Task 3, this pins the read count). It stays `ready` + unserved, so it
+    // now counts in BOTH enRoute (away, unserved) AND readyToServe (ready, unserved) — a table can report
+    // both, which is exactly what lets the client apply the en-camino > listos precedence.
+    const away = items.find((i) => i.lineId === lines[0]!.id)!;
+    await asApp(cfg, (tx) =>
+      tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, away.id)),
+    );
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ enRoute: 1, readyToServe: 2, pendingToServe: 2 });
+
+    // The waiter carries out line 1 (`served_at` set) → the away item drops out of enRoute (served) AND
+    // readyToServe; pendingToServe falls to the one still-unserved line. `served_at` is the final ack.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row).toMatchObject({ enRoute: 0, readyToServe: 1, pendingToServe: 1 });
+  });
+});

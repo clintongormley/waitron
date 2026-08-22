@@ -438,8 +438,11 @@ export interface FloorZone {
  * `tabTotal` is the open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL
  * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
  * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
- * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); both are DISTINCT from
- * `pendingDeliveries` (uncollected counter deliveries).
+ * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); `enRoute` counts those
+ * the pass has DISPATCHED (`away_at IS NOT NULL`) but the waiter has not yet acknowledged (KDS-3 §3c, the
+ * floor's "en camino"). All three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ * The floor renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`)
+ * over por servir (`pendingToServe`).
  */
 export interface TableState {
   id: string;
@@ -454,6 +457,7 @@ export interface TableState {
   pendingDeliveries: number;
   pendingToServe: number;
   readyToServe: number;
+  enRoute: number;
   status: { id: string; label: string; color: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the

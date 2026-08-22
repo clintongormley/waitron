@@ -22,6 +22,7 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
+    enRoute: 0,
     status: null,
     posX: null,
     posY: null,
@@ -156,6 +157,81 @@ describe("till-floor-screen", () => {
       tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, readyToServe: 0 })],
     });
     expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
+  });
+
+  it("shows the en-camino badge with the enRoute count (KDS-3 §3c, 'en camino')", async () => {
+    const { el } = await mount({
+      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, enRoute: 2 })],
+    });
+    // The "en camino" badge (dispatched by the pass, not yet acknowledged) carries the enRoute count and
+    // its localised suffix.
+    const enRoute = el.shadowRoot!.querySelector("[data-en-route]")!;
+    expect(enRoute.textContent).toContain("2");
+    expect(enRoute.textContent).toContain(t("floor.en_route"));
+  });
+
+  it("renders no en-camino badge when enRoute is 0", async () => {
+    const { el } = await mount({
+      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, enRoute: 0 })],
+    });
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
+  });
+
+  it("renders ONLY the most-advanced hint per table: en camino wins over listos and por servir", async () => {
+    // A table with all three signals positive (a dispatched item is still ready + unserved, so all three
+    // counts can be non-zero at once) shows en camino only — the other two hints are suppressed.
+    const { el } = await mount({
+      tables: [
+        table({
+          id: "t1",
+          state: "open-tab",
+          hasOpenTab: true,
+          pendingToServe: 3,
+          readyToServe: 2,
+          enRoute: 1,
+        }),
+      ],
+    });
+    expect(el.shadowRoot!.querySelector("[data-en-route]")!.textContent).toContain("1");
+    expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")).toBeNull();
+  });
+
+  it("shows listos (not por servir) when ready but nothing dispatched", async () => {
+    // enRoute 0, readyToServe > 0 → listos wins over por servir; the to-serve hint is suppressed.
+    const { el } = await mount({
+      tables: [
+        table({
+          id: "t1",
+          state: "open-tab",
+          hasOpenTab: true,
+          pendingToServe: 3,
+          readyToServe: 2,
+          enRoute: 0,
+        }),
+      ],
+    });
+    expect(el.shadowRoot!.querySelector("[data-ready]")!.textContent).toContain("2");
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")).toBeNull();
+  });
+
+  it("shows por servir when nothing is ready or dispatched", async () => {
+    const { el } = await mount({
+      tables: [
+        table({
+          id: "t1",
+          state: "open-tab",
+          hasOpenTab: true,
+          pendingToServe: 3,
+          readyToServe: 0,
+          enRoute: 0,
+        }),
+      ],
+    });
+    expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("3");
+    expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
   });
 
   it("emits open-table with hasOpenTab:false when a free table is tapped", async () => {

@@ -65,6 +65,7 @@ const freeTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 0,
   readyToServe: 0,
+  enRoute: 0,
   status: null,
   // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
   posX: null,
@@ -86,6 +87,7 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   readyToServe: 0,
+  enRoute: 0,
   status: null,
   posX: null,
   posY: null,

@@ -2890,6 +2890,15 @@ export interface TableState {
    *  deliveries): a line is counted here only in the window between the kitchen bumping it `ready` and the
    *  waiter marking it served. `0` for a free table (no open tab — the LEFT-join branch). */
   readyToServe: number;
+  /** Count of the open tab's lines the pass has DISPATCHED to the floor but the waiter has not yet
+   *  acknowledged — the ticket item carries `away_at IS NOT NULL` (KDS-3's dispatch marker, set by
+   *  `markCourseAway`) AND the line's `served_at IS NULL` (KDS-3 §3c, the floor's "en camino"). DISTINCT
+   *  from `readyToServe` (kitchen-done, may not yet be dispatched) and `pendingToServe` (unserved lines
+   *  regardless of kitchen/pass state): counted only in the window between the expediter sending a course
+   *  away and the waiter marking it served, the same 1:1 ti-on-line join so no multiplication. The floor
+   *  renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`) over
+   *  por servir (`pendingToServe`). `0` for a free table (no open tab — the LEFT-join branch). */
+  enRoute: number;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -2937,6 +2946,7 @@ export async function listTablesWithState(
     tab_total: string | null;
     pending_to_serve: number;
     ready_to_serve: number;
+    en_route: number;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -2954,6 +2964,7 @@ export async function listTablesWithState(
       tab.tab_total,
       coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
       coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
+      coalesce(tab.en_route, 0)::int as en_route,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
@@ -2967,6 +2978,12 @@ export async function listTablesWithState(
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
+             -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
+             -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
+             -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
+             -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
+             -- en-camino > listos precedence off the two counts.
+             (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
              coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
       from working_orders wo
       left join working_order_lines wol
@@ -3009,6 +3026,7 @@ export async function listTablesWithState(
       hasOpenTab,
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
+      enRoute: Number(r.en_route),
       pendingDeliveries,
       status:
         r.status_id !== null
