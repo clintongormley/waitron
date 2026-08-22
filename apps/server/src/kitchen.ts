@@ -360,6 +360,35 @@ export async function requireLiveCourse(
 }
 
 /**
+ * Assert `courseId` names a course that EXISTS in THIS venue — present and in `cfg.locationId`, whether
+ * `active` or not. The existence-only sibling of {@link requireLiveCourse}: it drops the `active` gate so
+ * a DEACTIVATED course still passes, folding only "absent / another tenant's (RLS-hidden) / another
+ * venue's" into `course.not_found`. `kitchen_courses.active` is `NOT NULL`, so the scalar subquery yields
+ * NULL only when NO row of this venue matches — that NULL is the sole "not found" signal, and a present
+ * row (`true` OR `false`) passes.
+ *
+ * Used by `fireCourse` (working-order.ts): a course deactivated WHILE it holds items must stay fireable —
+ * the held items already carry the `course_id` snapshot, so releasing them must not need the course still
+ * OFFERED, only still real. The config/override paths ({@link setProductCourse}, the A1 ring-time
+ * override screen) keep {@link requireLiveCourse}, which additionally rejects an inactive course — a
+ * retired course is not a valid NEW routing target, but its already-held food is.
+ */
+export async function requireCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  courseId: string,
+): Promise<void> {
+  const { rows } = await tx.execute<{ active: boolean | null }>(
+    sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
+      where ${kitchenCourses.id} = ${courseId}
+        and ${kitchenCourses.locationId} = ${cfg.locationId}) as active`,
+  );
+  if (rows[0]!.active === null) {
+    throw new AppError("course.not_found", { courseId });
+  }
+}
+
+/**
  * Create a kitchen course in the till's venue (its `cfg.locationId`), returning the minted id. A
  * duplicate `(tenant, location, name)` collides on `kitchen_courses_name_key` and is surfaced as
  * `course.name_taken` rather than the raw 23505 — the same shape {@link createStation} maps

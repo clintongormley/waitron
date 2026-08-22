@@ -40,7 +40,8 @@ import type { LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
-import { requireLiveCourse } from "./kitchen.js";
+import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 
 export interface WorkingOrderDeps {
@@ -109,6 +110,29 @@ async function priceOrderLines(
     }
     return { product, quantity: line.quantity };
   });
+
+  // KDS-2 (A1): screen each non-null course OVERRIDE against the SAME live-course definition the config
+  // verbs use, so this — the ONE course-write path that skipped it — no longer accepts a crafted id. A
+  // malformed (non-uuid) override would `22P02` at `requireLiveCourse`'s own `id = $1` uuid cast, so fold
+  // it to the SAME `course.not_found` first (the shape the fire route's `isUuid` screen uses);
+  // `requireLiveCourse` then refuses an absent / DIFFERENT-venue (its FK is tenant-scoped only) / retired
+  // id — location-scoped, `course.not_found`. Only the OVERRIDE is screened: the product DEFAULT
+  // (`product.course_id`, resolved below) is an already-valid stored FK, and re-validating it would
+  // wrongly reject a legitimately-deactivated product default. Living in this shared resolver, the screen
+  // covers every caller — the round path (`addTabRound`) and the order paths (`createOpenOrder` /
+  // `updateHeldOrder`) — uniformly. Deduped so a repeated override id costs one round trip; `null`
+  // (explicit clear / fire-earliest) and `undefined` (fall to the product default) skip.
+  const overrideCourseIds = new Set(
+    lines
+      .map((line) => line.courseId)
+      .filter((courseId): courseId is string => courseId !== null && courseId !== undefined),
+  );
+  for (const courseId of overrideCourseIds) {
+    if (!isUuid(courseId)) {
+      throw new AppError("course.not_found", { courseId });
+    }
+    await requireLiveCourse(tx, cfg, courseId);
+  }
 
   const priced = priceBasket(items);
   const lineRows = priced.lines.map((line, i) => ({
@@ -583,46 +607,57 @@ export async function fireLines(
   // one round trip cheaper.
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
-  // The order's EXISTING ticket items (prior rounds), for two order-wide facts an auto-fire decision
-  // needs — computed over the WHOLE order, not just this batch (a tab fires round by round):
-  //  - which courses are ALREADY FIRED (some row of that course has `fired_at` set): a new item of such
-  //    a course joins food already cooking, so it fires too;
-  //  - which courses are already PRESENT on the order: so "the order's earliest course" (the min
-  //    `display_order` below) is taken over prior rounds AND this one. Without this, a later round of
-  //    only a late course would see itself as the sole — hence earliest — course and wrongly auto-fire.
-  const existing = await tx
-    .select({ courseId: ticketItems.courseId, firedAt: ticketItems.firedAt })
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, orderId));
-  const firedCourseIds = new Set(
-    existing
-      .filter((row) => row.courseId !== null && row.firedAt !== null)
-      .map((row) => row.courseId),
-  );
-
-  // The order's EARLIEST course = the minimum `display_order` across every NON-NULL course on the order
-  // (existing rows and this batch together). A null course_id has no `display_order` and is treated as
-  // earliest — it fires immediately (§2b) — so it never enters this set. Empty set (all null courses) ⇒
-  // no minimum, and every line fires by the null rule below.
-  const orderCourseIds = [
-    ...new Set(
-      [...existing.map((row) => row.courseId), ...courseByLine.values()].filter(
-        (id): id is string => id !== null,
+  // ONE aggregate over THIS venue's courses LEFT JOINed to the order's ticket items (E2+E3) — replacing
+  // the former `existing` (all the order's items) + `courseOrderRows` (per-course display orders) read
+  // PAIR with a single grouped read (4→3 reads on a fire, and the cost no longer scales with the whole
+  // tab's item history). It derives the SAME two order-wide facts the auto-fire decision needs, computed
+  // over the WHOLE order (a tab fires round by round), per venue course:
+  //  - `anyFired` — some EXISTING item of this order+course is fired: a new item of it joins food already
+  //    cooking, so it fires too. `bool_or(fired_at IS NOT NULL)` — and `fired_at IS NOT NULL` is `false`
+  //    (never NULL) on a course with no joined item, so an itemless course yields `false`, not NULL.
+  //  - `itemCount` — how many existing items of it the order carries (prior rounds); unioned with this
+  //    batch's courses below, this is the order's course SET the earliest is taken over. Without prior
+  //    rounds a later round of only a late course would see itself as the sole — hence earliest — course.
+  // RLS confines both tables to the tenant; the join's tenant predicate keeps the composite key aligned;
+  // the venue filter enumerates this venue's courses (the courses an order fired here carries — product
+  // defaults and A1-screened overrides are both this-venue), the set the min `display_order` runs over.
+  const courseRows = await tx
+    .select({
+      id: kitchenCourses.id,
+      displayOrder: kitchenCourses.displayOrder,
+      anyFired: sql<boolean>`bool_or(${ticketItems.firedAt} is not null)`,
+      itemCount: sql<number>`count(${ticketItems.id})::int`,
+    })
+    .from(kitchenCourses)
+    .leftJoin(
+      ticketItems,
+      and(
+        eq(ticketItems.courseId, kitchenCourses.id),
+        eq(ticketItems.tenantId, kitchenCourses.tenantId),
+        eq(ticketItems.workingOrderId, orderId),
       ),
-    ),
-  ];
-  const courseOrderRows =
-    orderCourseIds.length === 0
-      ? []
-      : await tx
-          .select({ id: kitchenCourses.id, displayOrder: kitchenCourses.displayOrder })
-          .from(kitchenCourses)
-          .where(inArray(kitchenCourses.id, orderCourseIds));
-  const displayOrderByCourse = new Map(courseOrderRows.map((row) => [row.id, row.displayOrder]));
+    )
+    .where(eq(kitchenCourses.locationId, cfg.locationId))
+    .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
+
+  // Courses with an EXISTING fired item — a new item of one joins the already-cooking course and fires.
+  const firedCourseIds = new Set(courseRows.filter((row) => row.anyFired).map((row) => row.id));
+
+  // The order's NON-NULL course set = venue courses the order already carries items of (`itemCount > 0`,
+  // prior rounds) ∪ this batch's non-null courses. A null course_id has no `display_order`, is treated as
+  // earliest — it fires immediately (§2b) — and never enters this set. The min `display_order` over it is
+  // the order's EARLIEST course, taken over prior rounds AND this batch. Empty set (all null courses) ⇒
+  // no minimum, and every line fires by the null rule below.
+  const orderCourseIds = new Set<string>([
+    ...courseRows.filter((row) => row.itemCount > 0).map((row) => row.id),
+    ...[...courseByLine.values()].filter((id): id is string => id !== null),
+  ]);
+  const displayOrderByCourse = new Map(courseRows.map((row) => [row.id, row.displayOrder]));
+  const orderDisplayOrders = courseRows
+    .filter((row) => orderCourseIds.has(row.id))
+    .map((row) => row.displayOrder);
   const earliestDisplayOrder =
-    courseOrderRows.length === 0
-      ? null
-      : Math.min(...courseOrderRows.map((row) => row.displayOrder));
+    orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
@@ -636,8 +671,9 @@ export async function fireLines(
     const courseId = courseByLine.get(line.id) ?? null;
     // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
     // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
-    // `fireCourse` stamps it. A non-null course on a line is always in `displayOrderByCourse` (the FK
-    // guarantees it exists and it is in `orderCourseIds`), so the lookup is defined here.
+    // `fireCourse` stamps it. A non-null course on a line is a course of THIS venue (a product default or
+    // an A1-screened override), and `displayOrderByCourse` is keyed by every venue course, so the lookup
+    // is defined here.
     const fired =
       courseId === null ||
       firedCourseIds.has(courseId) ||
@@ -674,10 +710,14 @@ export async function fireLines(
  * (`fired_at IS NULL`) of this order + course, so those items stop being greyed on the station display
  * and become advanceable ({@link advanceTicketItem}'s held guard passes once `fired_at` is set).
  *
- * The course must be a LIVE course of this venue — an unknown, retired or cross-venue id is
- * `course.not_found` ({@link requireLiveCourse}, the SAME check the config verbs use), NOT a silent
- * no-op: a zero-match UPDATE is otherwise ambiguous between "unknown course" and "nothing held", so the
- * existence check is what tells them apart. IDEMPOTENT: an already-fired item (`fired_at` set) is not
+ * The course must EXIST in this venue — an unknown or cross-venue id is `course.not_found`
+ * ({@link requireCourse}), NOT a silent no-op: a zero-match UPDATE is otherwise ambiguous between
+ * "unknown course" and "nothing held", so the existence check is what tells them apart. It is EXISTENCE,
+ * not LIVENESS ({@link requireCourse}, not {@link requireLiveCourse}): a course DEACTIVATED while it
+ * holds items must still be fireable — the items already carry the `course_id` snapshot, so releasing
+ * them needs the course still real, not still offered. Otherwise those held items would be stranded
+ * (can't fire, can't advance) the moment the course is retired. The config/override paths keep
+ * `requireLiveCourse`. IDEMPOTENT: an already-fired item (`fired_at` set) is not
  * matched by the `IS NULL` predicate, so re-firing leaves its timestamp untouched; and a course with
  * nothing held (all already fired, or none on the order) updates zero rows and does NOT throw — the same
  * no-op convenience {@link advanceTicket} makes for an empty bulk bump.
@@ -693,7 +733,7 @@ export async function fireCourse(
   orderId: string,
   courseId: string,
 ): Promise<void> {
-  await requireLiveCourse(tx, cfg, courseId);
+  await requireCourse(tx, cfg, courseId);
   await tx
     .update(ticketItems)
     .set({ firedAt: sql`now()` })
