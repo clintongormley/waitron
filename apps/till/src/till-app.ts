@@ -14,6 +14,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
+import "./screens/till-expo-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -48,7 +49,8 @@ import type {
  * per-table ordering screen. One at a time. `"table-order"` is added here by Task 8 so `#renderScreen`
  * stays exhaustive (Ruling FP-D) — it renders a placeholder until Task 9 supplies `<till-table-order-screen>`.
  */
-type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station";
+type Screen =
+  "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -751,6 +753,14 @@ export class TillApp extends LitElement {
     this.screen = "station";
   }
 
+  /** Show the expo/pass display screen (KDS-3) — the expediter's cross-station board, reached from the
+   * counter's "Pass" nav. Basket-preserving like the station/schedule/floor nav (the basket is
+   * till-owned); the screen owns its own fetching + levers via `.api`, so this just switches. */
+  #onShowExpo(): void {
+    this.errorKey = undefined;
+    this.screen = "expo";
+  }
+
   /**
    * Park (Hold) the current basket to pay later, then empty it for the next customer — staying on the
    * counter (a parked order is NOT a completed sale, so there is no ticket). Mirrors the ready-the-order
@@ -1138,6 +1148,7 @@ export class TillApp extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
+        @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
@@ -1225,6 +1236,14 @@ export class TillApp extends LitElement {
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
         ></till-station-screen>`;
+      // KDS-3 (design §5): the expo/pass display. Like the station screen it OWNS its own fetching +
+      // levers via `.api`, so the app just hands it the api + the venue fire-control mode (which gates
+      // the pass's Fire lever) and switches; `back-to-counter` (wired above) returns.
+      case "expo":
+        return html`<till-expo-screen
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+        ></till-expo-screen>`;
     }
   }
 }

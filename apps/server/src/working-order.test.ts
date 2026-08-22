@@ -34,12 +34,15 @@ import {
   addTabRound,
   advanceTicket,
   advanceTicketItem,
+  bumpCourseReady,
   createOpenOrder,
   fireCourse,
   fireLines,
   getHeldOrder,
+  listExpoQueue,
   listHeldOrders,
   listStationQueue,
+  markCourseAway,
   openTab,
   parkOrder,
   placeOrder,
@@ -1254,6 +1257,8 @@ async function courseItemsFor(
     productId: string;
     courseId: string | null;
     firedAt: string | null;
+    // KDS-3: the pass's dispatch marker (`null` = not away), read by the expo-verb tests.
+    awayAt: string | null;
     state: string;
   }[]
 > {
@@ -1263,6 +1268,7 @@ async function courseItemsFor(
       productId: workingOrderLines.productId,
       courseId: ticketItems.courseId,
       firedAt: ticketItems.firedAt,
+      awayAt: ticketItems.awayAt,
       state: ticketItems.state,
     })
     .from(ticketItems)
@@ -1490,6 +1496,312 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         code: "course.not_found",
         params: { courseId: missing },
       });
+    });
+  });
+});
+
+// KDS-3 Task 2 — the cross-station expo/pass read. `listExpoQueue` aggregates every OPEN order on the
+// node (with at least one not-yet-away item), gathers its ticket items ACROSS stations, and groups them
+// by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
+// station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
+// join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
+// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.rls.test.ts).
+// Every read/write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
+  it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      // Two products in the SAME course, routed to DIFFERENT stations — the cross-station shape.
+      const soup = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
+      const olives = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
+      await setProductCourse(tx, cfg, soup, ent.id);
+      await setProductCourse(tx, cfg, olives, ent.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
+
+      const expo = await listExpoQueue(tx, cfg);
+      expect(expo).toHaveLength(1);
+      const order = expo[0]!;
+      expect(order.orderId).toBe(orderId);
+      // A single earliest course, both items auto-fired, neither away.
+      expect(order.courses).toHaveLength(1);
+      const course = order.courses[0]!;
+      expect(course.courseId).toBe(ent.id);
+      expect(course.courseName).toBe("Entrantes");
+      expect(course.displayOrder).toBe(0);
+      expect(course.fired).toBe(true);
+      expect(course.away).toBe(false);
+      // Both lines under the one course, each labelled with its OWN station — the join listStationQueue omits.
+      expect(course.items).toHaveLength(2);
+      expect(course.items.map((i) => i.stationName).sort()).toEqual(["Barra", "Cocina"]);
+      expect(course.items.every((i) => i.state === "queued")).toBe(true);
+      expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
+      expect(course.items.every((i) => i.awayAt === null)).toBe(true);
+      // The display snapshot rides through: `name` is the locale→description map, `qty` the numeric text.
+      const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
+      // `name` round-trips as the product's locale→description map (makeProduct seeds `P-<uuid>`), not a
+      // flattened string — exactly one locale key here, so toEqual pins the whole shape + value.
+      expect(soupItem.name).toEqual({ [LOCALE]: expect.stringMatching(/^P-/) });
+      expect(typeof soupItem.qty).toBe("string");
+
+      // A COLLECTED order and an ABANDONED order are both excluded, the same two listStationQueue drops.
+      const { id: collected } = await placeOrderWith(tx, cfg, [line(soup)]);
+      await tx
+        .update(workingOrders)
+        .set({ collectedAt: sql`now()` })
+        .where(eq(workingOrders.id, collected));
+      const { id: abandoned } = await placeOrderWith(tx, cfg, [line(soup)]);
+      await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, abandoned));
+
+      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+    });
+  });
+
+  it("groups by course in display_order; a held later course reads fired:false, and the away roll-up follows per course", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+
+      const order = (await listExpoQueue(tx, cfg))[0]!;
+      // Courses in display_order: Entrantes (0) then Principales (1).
+      expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
+      const [c0, c1] = order.courses;
+      expect(c0!.fired).toBe(true); // earliest course auto-fired
+      expect(c0!.away).toBe(false);
+      expect(c1!.fired).toBe(false); // later course HELD — fired_at null on its item
+      expect(c1!.items.every((i) => i.firedAt === null)).toBe(true);
+
+      // Fire the held course, and mark the earliest course AWAY (KDS-3's dispatch marker). The per-course
+      // roll-ups follow: Entrantes now `away`, Principales now `fired`; the order stays (main not away).
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const items = await courseItemsFor(tx, orderId);
+      const entItem = items.find((i) => i.courseId === ent.id)!;
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, entItem.id));
+
+      const after = await listExpoQueue(tx, cfg);
+      expect(after).toHaveLength(1);
+      const c0b = after[0]!.courses.find((c) => c.courseId === ent.id)!;
+      const c1b = after[0]!.courses.find((c) => c.courseId === pri.id)!;
+      expect(c0b.away).toBe(true);
+      expect(c0b.items[0]!.awayAt).not.toBeNull();
+      expect(c1b.fired).toBe(true); // released
+      expect(c1b.away).toBe(false);
+    });
+  });
+
+  it("drops a FULLY-away order but keeps one that still has a not-yet-away item", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const a = await makeProduct(tx, cfg, catalogueId, {});
+      const b = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, a, ent.id);
+      await setProductCourse(tx, cfg, b, ent.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(a), line(b)]);
+      const items = await courseItemsFor(tx, orderId);
+
+      // One item away → the order stays (a not-yet-away item remains).
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, items[0]!.id));
+      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+
+      // The last item away → the whole order is fully dispatched and leaves the pass.
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, items[1]!.id));
+      expect(await listExpoQueue(tx, cfg)).toEqual([]);
+    });
+  });
+
+  it("surfaces the dining-table label for a tab and omits it for a walk-up; openedMinutes is derived from opened_at", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {}); // null course → fires immediately
+
+      // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Mesa 5') returning id`);
+      const tableId = rows[0]!.id;
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+
+      // A WALK-UP counter order, no table → tableLabel omitted.
+      const { id: walkup } = await placeOrderWith(tx, cfg, [line(cafe)]);
+
+      const expo = await listExpoQueue(tx, cfg);
+      const tab = expo.find((o) => o.orderId === tabId)!;
+      expect(tab.tableLabel).toBe("Mesa 5");
+      expect(tab.openedMinutes).toBeGreaterThanOrEqual(0);
+      const walk = expo.find((o) => o.orderId === walkup)!;
+      expect(walk.tableLabel).toBeUndefined();
+    });
+  });
+});
+
+// KDS-3 Task 3 — the pass's two coordination verbs. `bumpCourseReady` is the whole-course "it's all
+// plated" bump: {@link advanceTicket}'s set-based shape keyed on COURSE (order + course_id) not station,
+// advancing every FIRED, not-yet-ready item across ALL its stations straight to `ready` (skipping HELD
+// items and no-op when none match). `markCourseAway` stamps `away_at = now()` on every READY item of the
+// course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
+// idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
+// dispatch — plain SQL a single backend proves; the RLS/node scoping is real-Postgres's job
+// (working-order.rls.test.ts, the folded-in listExpoQueue RLS test). Every write runs through
+// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
+ *  course routed to DIFFERENT stations, placed so both items fire and sit `queued`. The cross-station
+ *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
+async function firedCourseAcrossTwoStations(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+): Promise<{ orderId: string; courseId: string }> {
+  await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+  const barra = await createStation(tx, cfg, { name: "Barra" });
+  const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+  const soup = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
+  const olives = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
+  await setProductCourse(tx, cfg, soup, ent.id);
+  await setProductCourse(tx, cfg, olives, ent.id);
+  const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
+  return { orderId, courseId: ent.id };
+}
+
+describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)", () => {
+  it("bumps a whole course ready across stations, then marks it away", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+
+      // Both items start fired + queued, across two stations, under the one course.
+      let items = await courseItemsFor(tx, orderId);
+      expect(items).toHaveLength(2);
+      expect(items.every((i) => i.state === "queued")).toBe(true);
+      expect(items.every((i) => i.firedAt !== null)).toBe(true);
+
+      // One set-based bump plates the whole course ready — both stations' items reach `ready`.
+      await bumpCourseReady(tx, cfg, orderId, courseId);
+      items = await courseItemsFor(tx, orderId);
+      expect(items.every((i) => i.state === "ready")).toBe(true);
+
+      // Dispatch the plated course — every ready item goes away.
+      await markCourseAway(tx, cfg, orderId, courseId);
+      items = await courseItemsFor(tx, orderId);
+      expect(items.every((i) => i.awayAt !== null)).toBe(true);
+    });
+  });
+
+  it("bumpCourseReady skips held items; markCourseAway only aways ready items", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+
+      // Principales is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
+      // `fired_at IS NOT NULL` predicate skips held items (deletion-proof: drop it and the held main bumps
+      // to `ready`, failing the `queued` assertion below).
+      await bumpCourseReady(tx, cfg, orderId, pri.id);
+      let items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, main).state).toBe("queued"); // held → skipped
+      expect(byLine(items, main).firedAt).toBeNull(); // and still held
+
+      // Entrantes IS fired, so bumping it plates its item straight to `ready` (queued → ready in one step)
+      // — the OTHER answer, so the held-skip above is a real measurement, not "nothing ever advances".
+      await bumpCourseReady(tx, cfg, orderId, ent.id);
+      items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, starter).state).toBe("ready");
+
+      // markCourseAway dispatches only PLATED (ready) items: Entrantes' item is ready → away.
+      await markCourseAway(tx, cfg, orderId, ent.id);
+      items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, starter).awayAt).not.toBeNull();
+
+      // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
+      // The main is fired but NOT ready, so it does NOT go away (deletion-proof: drop `state = 'ready'` and
+      // the queued main gets `away_at`, failing the assertion below).
+      await fireCourse(tx, cfg, orderId, pri.id);
+      await markCourseAway(tx, cfg, orderId, pri.id);
+      items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, main).state).toBe("queued"); // fired but not plated
+      expect(byLine(items, main).awayAt).toBeNull(); // only ready items go away
+    });
+  });
+
+  it("markCourseAway rejects an unknown course with course.not_found (requireCourse existence check)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+
+      const missing = randomUUID();
+      await expect(markCourseAway(tx, cfg, orderId, missing)).rejects.toMatchObject({
+        code: "course.not_found",
+        params: { courseId: missing },
+      });
+    });
+  });
+
+  it("markCourseAway is idempotent (already-away untouched); bumpCourseReady no-ops on an unknown course", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+
+      // bumpCourseReady on an UNKNOWN course is a no-op (no throw, no rows) — the bulk-bump convenience,
+      // unlike markCourseAway which requires the course. The order's items are untouched.
+      await bumpCourseReady(tx, cfg, orderId, randomUUID());
+      expect((await courseItemsFor(tx, orderId)).every((i) => i.state === "queued")).toBe(true);
+
+      // Plate then dispatch the course; capture each item's away stamp.
+      await bumpCourseReady(tx, cfg, orderId, courseId);
+      await markCourseAway(tx, cfg, orderId, courseId);
+      const first = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
+      expect([...first.values()].every((a) => a !== null)).toBe(true);
+
+      // Re-dispatch — the `away_at IS NULL` predicate matches nothing already-away, so no stamp moves.
+      await markCourseAway(tx, cfg, orderId, courseId);
+      const second = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
+      for (const [id, away] of first) expect(second.get(id)).toBe(away);
     });
   });
 });

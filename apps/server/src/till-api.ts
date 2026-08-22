@@ -3,7 +3,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   endSession,
@@ -37,14 +37,17 @@ import {
   addTabRound,
   advanceTicket,
   advanceTicketItem,
+  bumpCourseReady,
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
   joinTable,
+  listExpoQueue,
   listHeldOrders,
   listStationQueue,
   listTablesWithState,
   markCollected,
+  markCourseAway,
   markLineServed,
   mergeTabs,
   moveTab,
@@ -159,11 +162,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Coursing (KDS-2). A per-line bump the item's HELD state forbids — its course has not been fired, so
   // the kitchen must not start it — is `ticket.item_held` (409, thrown by `advanceTicketItem`'s held
   // guard), the same STATE-forbids-it family as `ticket.invalid_transition` beside it. The course-fire
-  // route (`POST /api/orders/:id/courses/:courseId/fire`) surfaces `course.not_found` (404) for an
-  // unknown/retired/malformed course id — thrown by `fireCourse`'s `requireLiveCourse`, the SAME code
-  // and 404 the management config surface maps it to (courses are a management concept, but the fire
-  // verb is operational and runs here). A malformed ORDER id on that route is `working_order.not_found`
-  // (404, already mapped above), the honest "no such order" a bad id names.
+  // route (`POST /api/orders/:id/courses/:courseId/fire`) and the KDS-3 expo dispatch route
+  // (`POST /api/orders/:id/courses/:courseId/away`) surface `course.not_found` (404) for an
+  // absent/foreign/malformed course id — thrown by `fireCourse`'s / `markCourseAway`'s `requireCourse`
+  // (EXISTENCE-not-liveness: a course DEACTIVATED while it holds plated items still passes, so `retired`
+  // is NOT a 404 here), the SAME code and 404 the management config surface maps it to (courses are a
+  // management concept, but the fire/dispatch verbs are operational and run here). The expo `ready` route
+  // (`bumpCourseReady`) does NOT existence-check, so it never surfaces this. A malformed ORDER id on any
+  // of those routes is `working_order.not_found` (404, already mapped above), the honest "no such order".
   "ticket.item_held": 409,
   "course.not_found": 404,
   "station.no_default": 409,
@@ -302,6 +308,43 @@ function requireLineNo(tabId: string, raw: string): number {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
   return lineNo;
+}
+
+/**
+ * Mount ONE per-course expo/kitchen verb route — `POST /api/orders/:id/courses/:courseId/<suffix>` — the
+ * shared shape the three course verbs (`fire`/`ready`/`away`, KDS-2/3 §3c–d) are byte-for-byte identical
+ * in. SESSION-GUARDED (`requireSession`, no permission — the `fire_control` venue setting decides which UI
+ * SHOWS the button, not who may call it; every surface is session-gated, spec §3c). `:id` (the order) is
+ * `isUuid`-screened as `working_order.not_found` (404) and `:courseId` as `course.not_found` (404) BEFORE
+ * either reaches a `uuid` column — a malformed id passed straight into `eq(…, id)` would `22P02` → an
+ * opaque 500 — then `verb(tx, cfg, orderId, courseId)` runs under the till's tenant/`app_user` scope and
+ * the route returns 200 with an empty body (the display re-reads the queue). The three verbs differ only
+ * in what they stamp on `ticket_items` and whether they existence-check the course — `fireCourse`/
+ * `markCourseAway` do (via `requireCourse`, so an unknown/foreign course is `course.not_found`),
+ * `bumpCourseReady` no-throws-on-empty (an unknown course updates zero rows, 200) — but that difference
+ * lives IN the verb, not in this route shape. OPERATIONAL, not fiscal: every verb writes only the mutable
+ * `ticket_items` (§4/§5), so none can block a sale. Each call site below carries its own verb-specific note.
+ */
+function mountCourseVerb(
+  app: Hono,
+  deps: TillApiDeps,
+  log: Logger,
+  suffix: string,
+  verb: (tx: Transaction, cfg: TillConfig, orderId: string, courseId: string) => Promise<void>,
+): void {
+  app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const courseId = c.req.param("courseId");
+      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await verb(tx, deps.cfg, orderId, courseId);
+      });
+      return c.body(null, 200);
+    }),
+  );
 }
 
 /**
@@ -792,31 +835,45 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" action. SESSION-
-  // GUARDED: a WAITER or a KITCHEN operator may call it. The `fire_control` venue setting decides which UI
-  // surfaces the button, NOT who may call it — both surfaces are session-gated (spec §3c), so the gate is
-  // `requireSession`, no permission. `fireCourse` stamps `fired_at = now()` on every HELD item of this
-  // order + course, so they stop being greyed on the display and become advanceable. OPERATIONAL, not
-  // fiscal — it writes only the mutable `ticket_items`, touching no sale/registro/tender/huella (§4/§5),
-  // so nothing here can block a sale. `:courseId` is `isUuid`-screened first, refused as `course.not_found`
-  // (404) — a malformed id names no live course, the SAME code `requireLiveCourse` throws for an
-  // unknown/retired one — rather than reaching the `uuid` column and raising `22P02` → an opaque 500. `:id`
-  // (the order) is `isUuid`-screened as `working_order.not_found` (404): a malformed one names no order,
-  // while a well-formed-but-absent order is `fireCourse`'s idempotent no-op (200, nothing held to fire).
-  // Returns 200 with an empty body; the display re-reads the queue.
-  app.post("/api/orders/:id/courses/:courseId/fire", (c) =>
+  // Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" action. `fireCourse`
+  // stamps `fired_at = now()` on every HELD item of this order + course, so they stop being greyed on the
+  // display and become advanceable. EXISTENCE-checks the course (`requireCourse`, EXISTENCE-not-liveness),
+  // so a DEACTIVATED course still fires and an absent/foreign one is `course.not_found` (404). Shared route
+  // shape, session gate and id screens are `mountCourseVerb`'s.
+  mountCourseVerb(app, deps, log, "fire", fireCourse);
+
+  // The expo (pass) queue (KDS-3 §3d) — this node's live orders, aggregated into courses ACROSS stations,
+  // for the expediter's display. SESSION-GUARDED (kitchen/pass staff log in with a PIN, §0). `listExpoQueue`
+  // is node- + (via RLS) tenant-scoped from `deps.cfg` — the SAME LIST-ONLY, session-gated shape the
+  // station queue (`GET /api/stations/:id/queue`) and the station list (`GET /api/stations`) use, minus a
+  // path param: the pass is the whole node's, so there is nothing to screen. Returns the `ExpoOrder[]`
+  // aggregation (orders oldest-first, courses by display_order, each item carrying its station name +
+  // fired/away roll-ups); the display re-reads it after each bump/dispatch. READ-ONLY, no fiscal touch.
+  app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const courseId = c.req.param("courseId");
-      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await fireCourse(tx, deps.cfg, orderId, courseId);
+        return listExpoQueue(tx, deps.cfg);
       });
-      return c.body(null, 200);
+      return c.json(queue);
     }),
   );
+
+  // Bump a WHOLE course to `ready` across every station (KDS-3 §3d) — the expediter's "this course is all
+  // plated" lever on the pass. UNLIKE the fire/away verbs, `bumpCourseReady` does NOT existence-check the
+  // course (it is `advanceTicket`'s no-throw-on-empty bulk shape): a well-formed-but-unknown course, or one
+  // with nothing fired left to bump, updates zero rows and returns 200. Shared route shape, session gate
+  // and id screens are `mountCourseVerb`'s.
+  mountCourseVerb(app, deps, log, "ready", bumpCourseReady);
+
+  // Dispatch a plated course to the floor (KDS-3 §3d) — the expediter's "this course is away" verb, the
+  // pass counterpart to `ready`. Like `fire`, `markCourseAway` EXISTENCE-checks the course (`requireCourse`,
+  // EXISTENCE-not-liveness — a course deactivated while holding plated items is still dispatchable), so a
+  // well-formed-but-unknown/foreign course is `course.not_found` (404). It stamps `away_at = now()` on this
+  // course's `ready` items (idempotent: already-away items are skipped). Shared route shape, session gate
+  // and id screens are `mountCourseVerb`'s.
+  mountCourseVerb(app, deps, log, "away", markCourseAway);
 
   // Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e). SESSION-GUARDED.
   // `markCollected` stamps the order-level `collected_at`, which drops the order off `listStationQueue`

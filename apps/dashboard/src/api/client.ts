@@ -364,8 +364,9 @@ export interface Course {
 }
 
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
- * per-course fire; `kitchen` = the station display surfaces it. Mirrors the server's `FireControl`. */
-export type FireControl = "waiter" | "kitchen";
+ * per-course fire; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass display
+ * surfaces it. Mirrors the server's `FireControl`. */
+export type FireControl = "waiter" | "kitchen" | "expo";
 
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 // LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping

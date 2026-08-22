@@ -35,8 +35,12 @@ import "./errors.js";
 // backend in `working-order.test.ts`; RLS / node isolation of `ticket_items` is real-Postgres's job
 // (`working-order.rls.test.ts`). This file proves the HTTP SHAPE: the fire route fires a held course,
 // the queue read carries each item's `course` + `firedAt`, and the advance route refuses a held item.
-// The schema is CORE_MIGRATIONS (kitchen_courses / course_id / fired_at land in the KDS-2 migrations,
-// part of CORE) + IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
+// The KDS-3 block at the foot proves the expo (pass) HTTP shape on the SAME seed — the cross-station
+// `GET /api/expo/queue` aggregates the node's live orders into courses, and the `ready`/`away` routes
+// bump/dispatch a whole course; the aggregation, roll-ups, no-throw-on-empty and `requireCourse`
+// semantics are the verbs' (`working-order.test.ts`), the routes only the session guard + id screens.
+// The schema is CORE_MIGRATIONS (kitchen_courses / course_id / fired_at / away_at land in the KDS-2/3
+// migrations, part of CORE) + IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
 let cfg: TillConfig;
 let ana: { id: string };
 // The two courses seeded on the counter location: Entrantes (earliest, display_order 0) auto-fires;
@@ -354,5 +358,156 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+// KDS-3 expo (pass) routes: the cross-station queue read + the whole-course `ready`/`away` verbs, over
+// the SAME seeded courses/products/station as the KDS-2 block above (shared `suite`/`app`/`cookie`).
+type ExpoItem = {
+  name: Record<string, string>;
+  stationName: string;
+  state: string;
+  firedAt: string | null;
+  awayAt: string | null;
+};
+type ExpoCourse = {
+  courseId: string | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+};
+type ExpoOrder = {
+  orderId: string;
+  courses: ExpoCourse[];
+};
+
+/** One order located by id in the expo queue read back through `GET /api/expo/queue`. The queue returns
+ *  EVERY live order on the node, so tests find their own by id (the KDS-2 block leaves orders behind). */
+async function expoOrder(orderId: string): Promise<ExpoOrder> {
+  const res = await app.request("/api/expo/queue", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  const orders = (await res.json()) as ExpoOrder[];
+  return orders.find((o) => o.orderId === orderId)!;
+}
+
+/** An expo order's items across ALL its courses, keyed by their `es-ES` description. */
+function itemsByDescription(order: ExpoOrder): Map<string, ExpoItem> {
+  return new Map(order.courses.flatMap((c) => c.items).map((i) => [i.name["es-ES"]!, i]));
+}
+
+describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away", () => {
+  it("GET /api/expo/queue aggregates the node's order into courses; each item carries its station name + fired/away roll-ups", async () => {
+    const orderId = await placeOrder([SOPA, FILETE, PAN]);
+    const order = await expoOrder(orderId);
+    const items = itemsByDescription(order);
+    expect(items.size).toBe(3);
+
+    // Every item carries the cross-station label the station-scoped read omits (the seeded default "Cocina").
+    expect(items.get(SOPA)!.stationName).toBe("Cocina");
+    expect(items.get(FILETE)!.stationName).toBe("Cocina");
+
+    // Entrantes auto-fired → its course rolls up fired:true; the held Principales rolls up fired:false.
+    const ent = order.courses.find((c) => c.courseId === entCourseId)!;
+    const pri = order.courses.find((c) => c.courseId === priCourseId)!;
+    expect(ent.fired).toBe(true);
+    expect(pri.fired).toBe(false);
+    expect(items.get(SOPA)!.firedAt).not.toBeNull();
+    expect(items.get(FILETE)!.firedAt).toBeNull();
+
+    // Nothing dispatched yet → away:false everywhere, and the loose PAN line sits in the null course.
+    expect(ent.away).toBe(false);
+    expect(items.get(SOPA)!.awayAt).toBeNull();
+    expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name["es-ES"]).toBe(PAN);
+  });
+
+  it("the ready route bumps a fired course to `ready` across stations; the away route then dispatches it", async () => {
+    const orderId = await placeOrder([SOPA, FILETE]);
+
+    // Entrantes auto-fired but its items are `queued`; the pass bumps the WHOLE course to ready.
+    const ready = await app.request(`/api/orders/${orderId}/courses/${entCourseId}/ready`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(ready.status).toBe(200);
+    expect(await ready.text()).toBe("");
+    expect(itemsByDescription(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
+
+    // Dispatch the plated course to the floor → away_at stamped on its ready items.
+    const away = await app.request(`/api/orders/${orderId}/courses/${entCourseId}/away`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(away.status).toBe(200);
+    expect(await away.text()).toBe("");
+    // The order survives the read (its held Principales is not away), so the dispatched item is still visible.
+    expect(itemsByDescription(await expoOrder(orderId)).get(SOPA)!.awayAt).not.toBeNull();
+  });
+
+  it("away → 404 course.not_found for an unknown/malformed course; ready no-ops (200) on an unknown course; a malformed order → 404 working_order.not_found", async () => {
+    const orderId = await placeOrder([SOPA]);
+
+    // `away` existence-checks (markCourseAway → requireCourse): an unknown well-formed course → 404.
+    const unknownAway = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/away`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(unknownAway.status).toBe(404);
+    expect(await unknownAway.json()).toMatchObject({ error: { code: "course.not_found" } });
+
+    // A malformed course id is isUuid-screened to the SAME code on BOTH routes (never a 22P02 → 500).
+    const malformedAway = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/away`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(malformedAway.status).toBe(404);
+    expect(await malformedAway.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
+    });
+    const malformedReady = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/ready`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(malformedReady.status).toBe(404);
+    expect(await malformedReady.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
+    });
+
+    // `ready` does NOT existence-check (bumpCourseReady no-throws-on-empty): an unknown well-formed course
+    // updates zero rows and returns 200, the same convenience `advanceTicket` makes.
+    const unknownReady = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/ready`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(unknownReady.status).toBe(200);
+
+    // A malformed ORDER id on either route → 404 working_order.not_found (never a 22P02 → 500).
+    const malformedOrder = await app.request(`/api/orders/not-a-uuid/courses/${entCourseId}/away`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(malformedOrder.status).toBe(404);
+    expect(await malformedOrder.json()).toMatchObject({
+      error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+
+  it("REJECTS the queue read + ready + away with 401 session.required when no cookie is present", async () => {
+    // The `requireSession` guard runs FIRST on each route, before any id screen or DB touch; deleting it
+    // flips these to a 2xx/4xx — the deletion proof (run manually, CLAUDE.md §4).
+    const queue = await app.request("/api/expo/queue");
+    expect(queue.status).toBe(401);
+    expect(await queue.json()).toMatchObject({ error: { code: "session.required" } });
+
+    const ready = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/ready`, {
+      method: "POST",
+    });
+    expect(ready.status).toBe(401);
+    expect(await ready.json()).toMatchObject({ error: { code: "session.required" } });
+
+    const away = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/away`, {
+      method: "POST",
+    });
+    expect(away.status).toBe(401);
+    expect(await away.json()).toMatchObject({ error: { code: "session.required" } });
   });
 });

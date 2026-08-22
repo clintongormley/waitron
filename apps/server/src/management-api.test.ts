@@ -1586,6 +1586,30 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
   });
 
+  it("PUT /fire-control accepts the KDS-3 'expo' mode and round-trips it", async () => {
+    // The third fire_control_mode member (KDS-3): under `expo` the fire action lives on the expo display
+    // (Task 6), not the tab or the station queue. The validator must accept it (until it did not — the
+    // union-drift the plan flagged) and it must land on the location row.
+    const set = await req(
+      "/fire-control",
+      { method: "PUT", body: JSON.stringify({ mode: "expo" }) },
+      managerCookie,
+    );
+    expect(set.status).toBe(204);
+    const after = await req("/fire-control", { method: "GET" }, managerCookie);
+    expect(await after.json()).toEqual({ mode: "expo" });
+    const row = await suite.admin.execute<{ fire_control: string }>(
+      sql`select fire_control from locations where id = ${venue.locationId}`,
+    );
+    expect(row.rows[0]!.fire_control).toBe("expo");
+    // Reset to the default so a later assertion on the shared venue is unaffected.
+    await req(
+      "/fire-control",
+      { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
+      managerCookie,
+    );
+  });
+
   it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
     // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager` refuses
     // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call

@@ -54,13 +54,14 @@ export interface TillInfo {
    */
   bumpMode: "line" | "ticket";
   /**
-   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`): `waiter` (the tab surfaces
-   * the fire action) or `kitchen` (the station display surfaces it). Read once from `GET /api/till` on
-   * boot and threaded to the station-display screen so it shows the per-course kitchen-fire action only
-   * for a `kitchen` venue. A LOCAL mirror of the server's `fire_control` enum, deliberately NOT imported
-   * — same bundle-decoupling rationale as `bumpMode` above and every other type in this file.
+   * The venue's KDS fire-control mode (KDS-2/3 §2c, `locations.fire_control`): `waiter` (the tab surfaces
+   * the fire action), `kitchen` (the station display surfaces it) or `expo` (KDS-3 — the expo/pass display
+   * surfaces it). Read once from `GET /api/till` on boot and threaded to the station-display screen so it
+   * shows the per-course kitchen-fire action only for a `kitchen` venue. A LOCAL mirror of the server's
+   * `fire_control` enum, deliberately NOT imported — same bundle-decoupling rationale as `bumpMode` above
+   * and every other type in this file.
    */
-  fireControl: "waiter" | "kitchen";
+  fireControl: "waiter" | "kitchen" | "expo";
   /**
    * The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` — the options the tab-order
    * screen's per-line course picker offers, and the id→name source its "Fire <course>" actions read.
@@ -352,6 +353,63 @@ export interface StationQueueGroup {
 }
 
 /**
+ * One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item carrying the
+ * display fields the pass renders: the line's snapshotted `name` map + `qty`, the RESOLVED station name
+ * (the cross-station label {@link StationQueueItem} deliberately omits, so the expediter sees the grill
+ * lagging the cold station), the kitchen `state`, and the `firedAt`/`awayAt` lifecycle stamps. A LOCAL
+ * mirror of the server's `ExpoItem` (`apps/server/src/working-order.ts`), NOT imported — same
+ * bundle-decoupling rationale as every other type in this file. `name` is the locale→description map
+ * (localised client-side, per the never-store-formatted rule), like {@link StationQueueItem.descriptions}.
+ */
+export interface ExpoItem {
+  id: string;
+  name: Record<string, string>;
+  qty: string;
+  stationName: string;
+  state: TicketState;
+  /** `null` while the item's course is HELD (the pass greys it); a timestamp once fired. */
+  firedAt: string | null;
+  /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
+  awayAt: string | null;
+}
+
+/**
+ * One course section of an expo order (KDS-3 §3a) — the order's items for one course, ordered by
+ * `displayOrder` (a null course has `courseId`/`courseName`/`displayOrder` null and sorts EARLIEST, the
+ * same null-first coursing {@link StationQueueGroup} renders). Two roll-up flags drive the pass's
+ * per-course lever: `fired` is true once EVERY item carries `firedAt` (so a held course reads `false` and
+ * the pass offers Fire under `fire_control = 'expo'`); `away` is true once every item carries `awayAt`
+ * (the drop-off signal the screen uses to retire the course). A LOCAL mirror of the server's `ExpoCourse`
+ * (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling rationale as every type here.
+ */
+export interface ExpoCourse {
+  courseId: string | null;
+  courseName: string | null;
+  displayOrder: number | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+}
+
+/**
+ * One open order on the cross-station expo/pass board (KDS-3 §3a) — its id, the human `orderNumber` and
+ * optional dining-table label, how long it has been open (`openedMinutes`, the pass's urgency clock), and
+ * its ticket items grouped BY COURSE in `displayOrder`. `tableLabel` is present only when the order maps
+ * to a table (a tab back-pointer or a counter delivery); it is omitted for a bare walk-up (the `?`). A
+ * LOCAL mirror of the server's `ExpoOrder` (`apps/server/src/working-order.ts`), NOT imported — same
+ * bundle-decoupling rationale as every other type in this file. The server excludes abandoned/collected
+ * and FULLY-away orders; a surviving order still carries all its items (away ones included), so the
+ * SCREEN hides fully-away courses (via {@link ExpoCourse.away}), the read does not.
+ */
+export interface ExpoOrder {
+  orderId: string;
+  tableLabel?: string;
+  orderNumber: number;
+  openedMinutes: number;
+  courses: ExpoCourse[];
+}
+
+/**
  * `POST /api/pay` outcome (integrated card terminal, sub-project 7 Task 8). Mirrors the server's
  * `IntegratedPayOutcome` (`apps/server/src/till-sale.ts`) as a LOCAL copy — same decoupling rationale
  * as every other type in this file. A DELIBERATE divergence from {@link TillSaleResult}'s
@@ -438,8 +496,11 @@ export interface FloorZone {
  * `tabTotal` is the open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL
  * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
  * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
- * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); both are DISTINCT from
- * `pendingDeliveries` (uncollected counter deliveries).
+ * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); `enRoute` counts those
+ * the pass has DISPATCHED (`away_at IS NOT NULL`) but the waiter has not yet acknowledged (KDS-3 §3c, the
+ * floor's "en camino"). All three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ * The floor renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`)
+ * over por servir (`pendingToServe`).
  */
 export interface TableState {
   id: string;
@@ -454,6 +515,7 @@ export interface TableState {
   pendingDeliveries: number;
   pendingToServe: number;
   readyToServe: number;
+  enRoute: number;
   status: { id: string; label: string; color: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
@@ -758,6 +820,43 @@ export class TillApi {
    */
   async fireCourse(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
+  }
+
+  /**
+   * The cross-station EXPO/PASS queue (KDS-3 §3a) → `GET /api/expo/queue`. This node's OPEN orders,
+   * aggregated into courses ACROSS all stations (each item labelled with its station), oldest order
+   * first — what the pass/expo display renders as a card per order. The server excludes abandoned,
+   * collected and FULLY-away orders; the display re-reads after each fire/ready/away. READ-ONLY, no
+   * fiscal touch, no path param (the pass is the whole node's, so there is nothing to screen).
+   */
+  getExpoQueue(): Promise<ExpoOrder[]> {
+    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");
+  }
+
+  /**
+   * Bump a WHOLE course to `ready` across every station (KDS-3 §3b) → `POST
+   * /api/orders/:id/courses/:courseId/ready` with an empty body — the expediter's "this course is all
+   * plated" lever on the pass. NON-FISCAL: the server advances every FIRED, not-yet-`ready` item of this
+   * order + course to `ready`; it touches no sale/registro/tender. It is `advanceTicket`'s
+   * no-throw-on-empty bulk shape, so a course with nothing left to bump is a 200 no-op (a malformed
+   * order id is `working_order.not_found`, a malformed course id `course.not_found`). The server answers
+   * an empty 200; re-read {@link getExpoQueue} for the bumped items.
+   */
+  async bumpCourseReady(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
+  }
+
+  /**
+   * DISPATCH a plated course to the floor (KDS-3 §3b) → `POST /api/orders/:id/courses/:courseId/away`
+   * with an empty body — the expediter's "this course is away" lever, the pass counterpart to
+   * {@link bumpCourseReady}. NON-FISCAL: the server stamps `away_at = now()` on every `ready` item of
+   * this order + course (idempotent — already-away items are skipped), which retires the course from the
+   * pass; it touches no sale/registro/tender. UNLIKE `ready`, it EXISTENCE-checks the course, so a
+   * malformed/unknown course id rejects `course.not_found` (404); a malformed order id
+   * `working_order.not_found`. The server answers an empty 200; re-read {@link getExpoQueue}.
+   */
+  async markCourseAway(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/away`, "POST", {});
   }
 
   /**

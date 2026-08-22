@@ -190,6 +190,12 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-station", { bubbles: true, composed: true }));
   }
 
+  /** Announce that the operator (or pass/expo staff) wants the expo/pass display screen (KDS-3). The
+   * app switches to it WITHOUT clearing the basket — mirrors {@link #showStation}. */
+  #showExpo(): void {
+    this.dispatchEvent(new CustomEvent("show-expo", { bubbles: true, composed: true }));
+  }
+
   /** Reveal the allergen lookup screen in place of the sale body. */
   #openAllergens(): void {
     this.showAllergens = true;
@@ -263,6 +269,9 @@ export class TillCounterScreen extends LitElement {
             </wt-button>
             <wt-button class="station" variant="secondary" @click=${() => this.#showStation()}>
               ${t("station.open")}
+            </wt-button>
+            <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
+              ${t("expo.open")}
             </wt-button>
             <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
               ${t("schedule.open")}

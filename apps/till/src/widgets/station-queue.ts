@@ -26,10 +26,11 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  convenience the `bump_mode = 'ticket'` venue setting drives) advances the whole order at the station. */
 export type BumpMode = "line" | "ticket";
 
-/** Which surface owns the per-course fire action (KDS-2 §2c, `locations.fire_control`): `kitchen` (the
- *  station display shows "Empezar curso" on a held course) or `waiter` (the tab screen does — Task 7 —
- *  so this widget shows no fire affordance). Threaded from the app via the boot payload. */
-export type FireControlMode = "waiter" | "kitchen";
+/** Which surface owns the per-course fire action (KDS-2/3 §2c, `locations.fire_control`): `kitchen` (the
+ *  station display shows "Empezar curso" on a held course), `waiter` (the tab screen does — so this widget
+ *  shows no fire affordance) or `expo` (KDS-3 — the expo/pass display owns it, so again not this widget).
+ *  Threaded from the app via the boot payload. */
+export type FireControlMode = "waiter" | "kitchen" | "expo";
 
 /** A line paired with the order it belongs to — what a kanban column renders (its cells cut across
  *  orders, so each carries back its order's number + queued-time for the label and the age accent). */

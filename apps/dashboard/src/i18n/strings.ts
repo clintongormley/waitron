@@ -139,6 +139,7 @@ export const en = {
   "kitchen.fire_mode": "Fire control",
   "kitchen.fire_waiter": "Waiter",
   "kitchen.fire_kitchen": "Kitchen",
+  "kitchen.fire_expo": "Expo",
   // Person form
   "person.new": "New user",
   "person.name": "Name",
@@ -398,6 +399,7 @@ export const es: Record<StringKey, string> = {
   "kitchen.fire_mode": "Control de marcha",
   "kitchen.fire_waiter": "Camarero",
   "kitchen.fire_kitchen": "Cocina",
+  "kitchen.fire_expo": "Pase",
   "person.new": "Nuevo usuario",
   "person.name": "Nombre",
   "person.role": "Rol",

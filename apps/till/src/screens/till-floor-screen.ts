@@ -214,6 +214,15 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      /* "N en camino" -- dispatched by the pass, awaiting the waiter (KDS-3 §3c). The TOP-precedence hint,
+         so it carries the strongest weight: the filled primary chip (the primary/on-primary token pair
+         guarantees contrast in both themes), a step up from the ready chip's border and the to-serve
+         chip's neutral fill. Only one hint renders per card (see #hint), so this never sits beside them. */
+      .badge.en-route {
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
          neutral chip (the a11y-safe pattern the status chip uses); there is no on-success token. */
@@ -569,20 +578,7 @@ export class TillFloorScreen extends LitElement {
       </span>
       ${this.#occupancy(table)}
       <span class="badges">
-        ${
-          table.pendingToServe > 0
-            ? html`<span class="badge to-serve" data-to-serve
-                >${table.pendingToServe} ${t("floor.to_serve")}</span
-              >`
-            : nothing
-        }
-        ${
-          table.readyToServe > 0
-            ? html`<span class="badge ready" data-ready
-                >${table.readyToServe} ${t("floor.ready")}</span
-              >`
-            : nothing
-        }
+        ${this.#hint(table)}
         ${
           table.status !== null
             ? html`<span
@@ -597,6 +593,31 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
     </button>`;
+  }
+
+  /** The card's ONE service hint — the MOST ADVANCED of the three floor signals (KDS-3 §3c): en camino
+   * (`enRoute`, dispatched by the pass and awaiting the waiter) over listos (`readyToServe`, kitchen-done,
+   * KDS-1 §3d) over por servir (`pendingToServe`, unserved). Exactly one renders: a dispatched line is
+   * still `ready` + unserved, so all three counts can be positive at once, and the floor shows the
+   * furthest-along state rather than stacking chips. The manual-status badge is independent — rendered
+   * separately in {@link #card}. Returns `nothing` when the table has no open tab / no pending lines. */
+  #hint(table: TableState): TemplateResult | typeof nothing {
+    if (table.enRoute > 0) {
+      return html`<span class="badge en-route" data-en-route
+        >${table.enRoute} ${t("floor.en_route")}</span
+      >`;
+    }
+    if (table.readyToServe > 0) {
+      return html`<span class="badge ready" data-ready
+        >${table.readyToServe} ${t("floor.ready")}</span
+      >`;
+    }
+    if (table.pendingToServe > 0) {
+      return html`<span class="badge to-serve" data-to-serve
+        >${table.pendingToServe} ${t("floor.to_serve")}</span
+      >`;
+    }
+    return nothing;
   }
 
   /** The state-specific body of a card. The switch is exhaustive over {@link TableState.state}'s three

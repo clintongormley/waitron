@@ -88,6 +88,19 @@ export const en = {
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
+  // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
+  // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
+  // names the screen. The three per-course levers name the state they ADVANCE the course to: `expo.fire`
+  // releases a HELD course (shown only when `fire_control = 'expo'`), `expo.ready` bumps a FIRED course to
+  // ready ("all plated"), `expo.away` dispatches a READY course to the floor. Item station names + the
+  // "N min" age reuse DATA / `station.min`; item states reuse `station.state.*`. Spanish per design §6.
+  "expo.open": "Pass",
+  "expo.title": "Pass",
+  "expo.back": "Back to counter",
+  "expo.empty": "Nothing on the pass",
+  "expo.fire": "Fire",
+  "expo.ready": "Course ready",
+  "expo.away": "Away",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal (sub-project 7 Task 9)
   "card.collecting": "Tap or insert card…",
@@ -153,6 +166,7 @@ export const en = {
   "floor.capacity": "pax",
   "floor.to_serve": "to serve",
   "floor.ready": "ready",
+  "floor.en_route": "en route",
   "floor.line_count": "items",
   "floor.pending_delivery": "to deliver",
   "floor.free": "Free",
@@ -270,6 +284,13 @@ export const es: Record<StringKey, string> = {
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
+  "expo.open": "Pase",
+  "expo.title": "Pase",
+  "expo.back": "Volver al mostrador",
+  "expo.empty": "Nada en el pase",
+  "expo.fire": "Marchar",
+  "expo.ready": "Curso listo",
+  "expo.away": "En camino",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
   "card.cancel": "Cancelar",
@@ -325,6 +346,7 @@ export const es: Record<StringKey, string> = {
   "floor.capacity": "pax",
   "floor.to_serve": "por servir",
   "floor.ready": "listos",
+  "floor.en_route": "en camino",
   "floor.line_count": "art.",
   "floor.pending_delivery": "por entregar",
   "floor.free": "Libre",

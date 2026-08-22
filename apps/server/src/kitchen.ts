@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   categories,
+  fireControlMode,
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
@@ -275,21 +276,29 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
 }
 
-/** The KDS-2 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
- *  per-course fire action; `kitchen` = the station display surfaces it. Governs only which UI shows the
- *  button — `fireCourse` is the same either way, and both surfaces are session-gated. Mirrors
- *  `locations.fire_control`'s pgEnum (`packages/db/src/schema/tenants.ts`), spelled as a literal union
- *  here because `@waitron/db`'s enumerated exports do NOT publish the `fireControlMode` enum object
- *  (CLAUDE.md §3). Extends to `expo` in KDS-3. */
-export type FireControl = "waiter" | "kitchen";
+/** The KDS-2/3 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
+ *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
+ *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
+ *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` pgEnum (which backs
+ *  `locations.fire_control`, `packages/db/src/schema/tenants.ts`) so the two can never drift — add a mode
+ *  to the enum and this widens with it, exactly as the sibling {@link OrderFlow}/`TicketState` server types
+ *  derive from `orderFlow`/`ticketState`. The RUNTIME `fire-control` route validator derives its valid set
+ *  from the SAME `fireControlMode.enumValues`. The dashboard/till CLIENT types keep a hand-maintained
+ *  literal mirror instead, because the browser bundle cannot import `@waitron/db` to derive it — so a
+ *  server-ahead enum addition is NOT caught at the client automatically (a stale client mirror only fails
+ *  to typecheck if the client itself references the unlisted mode); add a mode to each client mirror by
+ *  hand. */
+export type FireControl = (typeof fireControlMode.enumValues)[number];
 
 /**
  * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` under RLS.
  * The read counterpart of {@link setFireControl}, for the dashboard config surface's toggle (spec §3a:
  * the setting is read AND written with the other venue config). Read via a parameterised `sql` select
- * rather than a Drizzle `.select(locations)` for the same reason {@link setBumpMode} writes with raw
- * `sql` — `@waitron/db`'s enumerated exports map does NOT publish the `locations` table object. The
- * column is `NOT NULL DEFAULT 'waiter'`, so a row always yields one of the two enum members.
+ * via a parameterised `sql` select — the house shape the sibling venue-config verbs ({@link setBumpMode})
+ * use for these single-column `locations` read/writes. (A Drizzle `.select(locations)` is available too:
+ * `@waitron/db`'s barrel DOES re-export `locations`, imported at e.g. till-api.ts:5 — the raw `sql` is a
+ * style choice, not a necessity.) The column is `NOT NULL DEFAULT 'waiter'`, so a row always yields one
+ * of its enum members.
  */
 export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<FireControl> {
   const { rows } = await tx.execute<{ fire_control: FireControl }>(
@@ -300,9 +309,10 @@ export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<
 
 /**
  * Set the venue's fire-control setting (`locations.fire_control`, `waiter` default / `kitchen`), scoped
- * to `cfg.locationId` under RLS. The exact shape of {@link setBumpMode}: written via a parameterised
- * `sql` update because `@waitron/db`'s enumerated exports map does NOT publish the `locations` table
- * object (CLAUDE.md §3). `mode` is a typed {@link FireControl}, so the value reaching the enum column is
+ * to `cfg.locationId` under RLS. The exact shape of {@link setBumpMode}: a parameterised `sql` update —
+ * the house style for these single-column `locations` config writes (a Drizzle `.update(locations)` is
+ * available too; `@waitron/db`'s barrel re-exports `locations`, so raw `sql` is a choice, not a
+ * necessity). `mode` is a typed {@link FireControl}, so the value reaching the enum column is
  * always one of its members (the route validates the request field before calling); `${mode}` binds as a
  * parameter (never string-concatenated) and PostgreSQL coerces it to the `fire_control_mode` enum in the
  * assignment context. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs are.

@@ -206,6 +206,29 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
     expect(row!.nodeId).toBe(nodeA);
     expect(row!.queuedAt).not.toBeNull();
     expect(row!.readyAt).not.toBeNull();
+    // The new away_at column (KDS-3, §2a) resolves under the app role and is NULL before the pass
+    // dispatches the item — a missing column would be 42703 (undefined_column) rather than a null value.
+    expect(row!.awayAt).toBeNull();
+  });
+
+  it("app_user can stamp away_at (the pass dispatch) and read it back through the Drizzle export", async () => {
+    // The KDS-3 §2a terminal display step: after `ready`, the expo/pass stamps `away_at = now()`. It is
+    // an additive nullable timestamptz on ticket_items, so the existing SELECT/INSERT/UPDATE grant to
+    // app_user (0055) covers it with no grant change — a write that raised 42501 would mean the column
+    // was somehow outside the table grant, and a read that raised 42703 would mean the migration's ADD
+    // COLUMN never applied. This is the Task-1 receipt that the added column is visible AND writable.
+    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
+    await asApp(TENANT_A, (tx) =>
+      tx.execute(sql`update ticket_items set away_at = now() where id = ${id}`),
+    );
+    const [row] = await asApp(TENANT_A, (tx) =>
+      tx
+        .select()
+        .from(ticketItems)
+        .where(sql`id = ${id}`),
+    );
+    expect(row!.awayAt).not.toBeNull();
   });
 
   it("app_user has UPDATE on ticket_items but NOT DELETE (cancelled lines cascade via the line FK)", async () => {

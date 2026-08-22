@@ -414,6 +414,13 @@
       "when": 1787392231299,
       "tag": "0058_kds2_courses_fire_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1787415499902,
+      "tag": "0059_kds3_away_expo",
+      "breakpoints": true
     }
   ]
 }

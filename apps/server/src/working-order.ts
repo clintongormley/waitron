@@ -754,6 +754,91 @@ export async function fireCourse(
 }
 
 /**
+ * BUMP a whole course to `ready` across every station (KDS-3 §3b) — the expediter's "this course is all
+ * plated" lever on the pass. A single set-based UPDATE advances EVERY fired, not-yet-`ready` item of this
+ * order + course — regardless of which station cooked it — straight to `ready`. It is {@link advanceTicket}'s
+ * bulk shape (same `fired_at IS NOT NULL` held-skip, same no-throw-on-empty convenience, same
+ * {@link advanceSet} stamp) keyed on COURSE (order + `course_id`) rather than on one station: a course's
+ * items fan out across stations and the pass bumps them together.
+ *
+ * Two deliberate differences from {@link advanceTicket}:
+ *  - it matches `state != 'ready'` (not the single legal predecessor `TICKET_TRANSITIONS.ready.from`), so a
+ *    `queued` item jumps STRAIGHT to `ready` — a whole-course plate-up, not a one-step walk. It reuses
+ *    {@link advanceSet}("ready"), which stamps only `ready_at` (never `preparing_at`) — the SAME payload
+ *    every "reach ready" write in KDS-1 uses. A `queued`-skips-`preparing` item therefore lands with
+ *    `preparing_at` still null, exactly as an `advanceTicket`-to-`ready` leaves an item that was already
+ *    `preparing`; nothing reads `preparing_at`, so there is no ordering invariant to hold.
+ *  - HELD items (`fired_at IS NULL`) are SKIPPED (the `fired_at IS NOT NULL` predicate), so a course still
+ *    holding un-fired items bumps only what was fired; the pass releases a held course via {@link fireCourse}
+ *    first, then bumps.
+ *
+ * No existence check and no throw: an unknown course, or a course with nothing left to bump, updates zero
+ * rows and returns — the same no-op convenience {@link advanceTicket} makes (a bulk bump has no single item
+ * to name in an error, and the pass re-bumps idempotently). Contrast {@link markCourseAway}, which DOES
+ * require the course. Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the
+ * update to the tenant and (orderId, courseId) address one order's items, so `_cfg` is unused — the uniform
+ * tab-verb signature shape {@link advanceTicket} keeps. OPERATIONAL, not fiscal: writes only the mutable
+ * `ticket_items` kitchen table. The `requireSession` gate lives at the route (Task 5), not here.
+ */
+export async function bumpCourseReady(
+  tx: Transaction,
+  _cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+): Promise<void> {
+  await tx
+    .update(ticketItems)
+    .set(advanceSet("ready"))
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.courseId, courseId),
+        ne(ticketItems.state, "ready"),
+        isNotNull(ticketItems.firedAt),
+      ),
+    );
+}
+
+/**
+ * DISPATCH a plated course to the floor (KDS-3 §3b) — the expediter's "this course is away" verb, the pass
+ * counterpart to {@link bumpCourseReady}. Stamps `away_at = now()` on every `ready` item of this order +
+ * course that is not already away. `away_at` is KDS-3's dispatch marker (the item has left the pass for the
+ * floor); it is the terminal display state after `ready` (item lifecycle held → fired → queued → preparing →
+ * ready → away, `ticket-items.ts`).
+ *
+ * Only `ready` items go away (`state = 'ready'`): you dispatch what the kitchen has PLATED, never a
+ * still-cooking (`queued`/`preparing`) line — those stay on the pass until bumped. The course must EXIST in
+ * this venue — an unknown or cross-venue id is `course.not_found` ({@link requireCourse}), the same
+ * EXISTENCE-not-liveness check {@link fireCourse} uses: a course DEACTIVATED while it holds plated items must
+ * still be dispatchable (the items already carry the `course_id` snapshot), so {@link requireCourse}, not
+ * {@link requireLiveCourse}. IDEMPOTENT: the `away_at IS NULL` predicate skips already-away items, so
+ * re-dispatching leaves their timestamps untouched (and a course with nothing `ready` updates zero rows).
+ *
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the update to the tenant.
+ * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table — no sale, tender, registro
+ * or huella. The `requireSession` gate lives at the route (Task 5), not here.
+ */
+export async function markCourseAway(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+): Promise<void> {
+  await requireCourse(tx, cfg, courseId);
+  await tx
+    .update(ticketItems)
+    .set({ awayAt: sql`now()` })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.courseId, courseId),
+        eq(ticketItems.state, "ready"),
+        isNull(ticketItems.awayAt),
+      ),
+    );
+}
+
+/**
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
  * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
  * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
@@ -2542,6 +2627,246 @@ export async function listStationQueue(
   return [...groups.values()];
 }
 
+/** One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item of an order,
+ *  carrying the display fields the pass renders: the line's SNAPSHOTTED description map + quantity (the
+ *  same snapshot `StationQueueItem` serialises, never a live catalogue lookup), the resolved STATION name
+ *  (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill lagging the
+ *  cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is the
+ *  locale→description map (localised client-side, per the repo's never-store-formatted rule), mirroring
+ *  `StationQueueItem.descriptions` rather than a pre-flattened string. */
+export interface ExpoItem {
+  id: string;
+  name: Record<string, string>;
+  qty: string;
+  stationName: string;
+  state: TicketState;
+  firedAt: string | null;
+  awayAt: string | null;
+}
+
+/** One course section of an expo order (KDS-3 §3a) — the order's items for one course, grouped under the
+ *  course header and ordered by `displayOrder` (a null-course line has no course row: `courseId`/
+ *  `courseName`/`displayOrder` are null and it sorts EARLIEST, the same null-first coursing
+ *  `listStationQueue`'s client renders). Two roll-up flags drive the pass's per-course lever: `fired` is
+ *  true once EVERY item of the course carries `fired_at` (so the "Curso listo" bump is offered — a held
+ *  course reads `false`), `away` true once every item carries `away_at` (the drop-off signal the screen
+ *  uses to retire the course). */
+export interface ExpoCourse {
+  courseId: string | null;
+  courseName: string | null;
+  displayOrder: number | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+}
+
+/** One open order on the cross-station expo board (KDS-3 §3a) — its id, the human order number and
+ *  optional dining-table label, how long it has been open (`openedMinutes`, from `opened_at`), and its
+ *  `ticket_items` grouped BY COURSE in `display_order`. `tableLabel` is present only when the order maps
+ *  to a table (a tab back-pointer or a counter delivery); it is omitted for a bare walk-up (the `?`). */
+export interface ExpoOrder {
+  orderId: string;
+  tableLabel?: string;
+  orderNumber: number;
+  openedMinutes: number;
+  courses: ExpoCourse[];
+}
+
+/**
+ * The cross-station expo/pass read (KDS-3 §3a) — every OPEN order on this node with at least one
+ * not-yet-away item, its `ticket_items` gathered ACROSS all stations and grouped by course, so the
+ * expediter sees a whole order's coursing at once. The counterpart to KDS-1's per-station
+ * `listStationQueue`, which filters to ONE station and never needs the station's name; this joins
+ * `kitchen_stations` to label each item with its station, so the pass reads "the grill is lagging the
+ * cold station" off one query.
+ *
+ * Three order-level exclusions, computed at query time (there is no per-order "done" column):
+ *  - `abandoned` orders (`ne(status,"abandoned")`) and COLLECTED orders (`collected_at IS NULL`), the
+ *    same two `listStationQueue` drops;
+ *  - FULLY-AWAY orders — an order leaves the pass once the expediter has dispatched every course (every
+ *    item carries `away_at`). Expressed as an EXISTS of one still-not-away item on this node (§2a: `away`
+ *    is the KDS-3 dispatch marker; the waiter's `served_at` is a separate floor ack, not consulted here),
+ *    so the order stays while ANY item is undispatched and drops the instant the last one goes away. Done
+ *    in SQL rather than post-grouping so a venue's fully-dispatched orders are never hauled into memory.
+ *  A SURVIVING order still carries ALL its items — including away ones — so a per-course `away` flag can
+ *  be rolled up; the SCREEN (a later task) hides fully-away courses, the READ does not.
+ *
+ * Node-scoped (`ticket_items.node_id = cfg.nodeId`, spec §3a — the pass is one node's, exactly as
+ * `listStationQueue`'s queue is). `locationId` (default `cfg.locationId`) scopes only the dining-table
+ * label lookup, keeping the `(tx, cfg, locationId?)` signature symmetric with `listTablesWithState`; a
+ * node sits in one location, so the default is the till's own venue.
+ *
+ * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
+ * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the tenant. PGlite
+ * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
+ * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.rls.test.ts), the
+ * same split `listStationQueue` uses (CLAUDE.md §4).
+ */
+export async function listExpoQueue(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId?: string,
+): Promise<ExpoOrder[]> {
+  const loc = locationId ?? cfg.locationId;
+  const rows = await tx
+    .select({
+      itemId: ticketItems.id,
+      state: ticketItems.state,
+      firedAt: ticketItems.firedAt,
+      awayAt: ticketItems.awayAt,
+      // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
+      // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      lineNo: workingOrderLines.lineNo,
+      // The item's STATION name — the cross-station label listStationQueue omits (it filters by one
+      // station, so it never needs it). `station_id` is notNull, so this inner join drops nothing.
+      stationName: kitchenStations.name,
+      // The item's snapshotted course (or null) + its live header/order from the LEFT-joined
+      // kitchen_courses row — a courseless line serialises `course* : null` and sorts earliest.
+      courseId: ticketItems.courseId,
+      courseName: kitchenCourses.name,
+      courseDisplayOrder: kitchenCourses.displayOrder,
+      orderId: workingOrders.id,
+      orderNumber: workingOrders.orderNumber,
+      // Minutes since the order opened — the pass's urgency clock. `::int` so pg/PGlite hand back a
+      // number; `now()` is transaction time, so an order opened earlier in this same tx reads 0.
+      openedMinutes: sql<number>`floor(extract(epoch from (now() - ${workingOrders.openedAt})) / 60)::int`,
+      // The dining-table label, resolved by a FAN-OUT-PROOF scalar subquery (a LEFT JOIN could multiply
+      // an order's item rows if two tables pointed at it — tab_id carries no DB unique, only an app lock).
+      // Covers both directions a table binds an order: a TAB (`dining_tables.tab_id` back-points at the
+      // order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the table). Scoped to
+      // `loc` (the expo's location, the `locationId?` param defaulting to the till's own venue) — the one
+      // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
+      // listTablesWithState while the READ itself stays node-scoped. The `order by` — a seated-tab match
+      // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
+      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table AND
+      // a table it delivers to — and PostgreSQL could then return either label across calls).
+      tableLabel: sql<string | null>`(
+        select dt.label from dining_tables dt
+        where dt.tenant_id = ${workingOrders.tenantId}
+          and dt.location_id = ${loc}
+          and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
+        order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
+        limit 1)`,
+    })
+    .from(ticketItems)
+    // The owning order, for the display fields + the open/collected/abandoned exclusions. Composite
+    // (tenant_id too), the tenant-consistent shape ticket_items' FKs carry, mirroring listStationQueue.
+    .innerJoin(
+      workingOrders,
+      and(
+        eq(ticketItems.workingOrderId, workingOrders.id),
+        eq(ticketItems.tenantId, workingOrders.tenantId),
+      ),
+    )
+    // The line this item was fired from, for its display name + quantity. Composite (tenant_id too).
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    // The item's STATION, for its name — the join that makes this read cross-station. Composite
+    // (tenant_id too), mirroring the tenant-consistent (tenant_id, station_id) → kitchen_stations FK.
+    .innerJoin(
+      kitchenStations,
+      and(
+        eq(ticketItems.stationId, kitchenStations.id),
+        eq(ticketItems.tenantId, kitchenStations.tenantId),
+      ),
+    )
+    // The item's course, for the header + coursing order. LEFT join — `course_id` is nullable, and (as
+    // in listStationQueue) it is NOT filtered by `active`, so a course deactivated after the item was
+    // fired still names its header. Composite (tenant_id too).
+    .leftJoin(
+      kitchenCourses,
+      and(
+        eq(ticketItems.courseId, kitchenCourses.id),
+        eq(ticketItems.tenantId, kitchenCourses.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(ticketItems.nodeId, cfg.nodeId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+        // Fully-away exclusion, order-level, computed at query time (there is no per-order "done"
+        // column): keep the order while ANY of its items on this node is still not-away, drop it once
+        // every item carries `away_at` (§2a — `away` is KDS-3's dispatch marker; `served_at` is a
+        // separate floor ack, not consulted). A surviving order still returns ALL its items (away ones
+        // included) so a per-course `away` roll-up can be formed; the screen hides fully-away courses.
+        sql`exists (
+          select 1 from ${ticketItems} tix
+          where tix.tenant_id = ${workingOrders.tenantId}
+            and tix.working_order_id = ${workingOrders.id}
+            and tix.node_id = ${cfg.nodeId}
+            and tix.away_at is null)`,
+      ),
+    )
+    // Oldest order first (opened_at), then course display_order NULLS FIRST (the null course fires
+    // earliest), then line_no and item id for a stable within-course order. Grouping preserves this.
+    .orderBy(
+      workingOrders.openedAt,
+      sql`${kitchenCourses.displayOrder} asc nulls first`,
+      workingOrderLines.lineNo,
+      ticketItems.id,
+    );
+
+  // Group rows into orders → courses → items, preserving the SQL order (Maps keep insertion order), so
+  // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
+  // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
+  // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
+  const orders = new Map<string, ExpoOrder>();
+  const courseMaps = new Map<string, Map<string, ExpoCourse>>();
+  for (const row of rows) {
+    let order = orders.get(row.orderId);
+    if (order === undefined) {
+      order = {
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        openedMinutes: Number(row.openedMinutes),
+        courses: [],
+        // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
+        ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
+      };
+      orders.set(row.orderId, order);
+      courseMaps.set(row.orderId, new Map());
+    }
+    const byCourse = courseMaps.get(row.orderId)!;
+    const courseKey = row.courseId ?? "__none__";
+    let course = byCourse.get(courseKey);
+    if (course === undefined) {
+      course = {
+        courseId: row.courseId,
+        // A non-null course_id always matches a kitchen_courses row (the FK guarantees it), so its
+        // name/order are present; a null course serialises both as null.
+        courseName: row.courseId === null ? null : row.courseName!,
+        displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
+        fired: true,
+        away: true,
+        items: [],
+      };
+      byCourse.set(courseKey, course);
+      order.courses.push(course);
+    }
+    course.items.push({
+      id: row.itemId,
+      name: row.descriptions,
+      qty: row.quantity,
+      stationName: row.stationName,
+      state: row.state,
+      firedAt: row.firedAt,
+      awayAt: row.awayAt,
+    });
+    if (row.firedAt === null) course.fired = false;
+    if (row.awayAt === null) course.away = false;
+  }
+  return [...orders.values()];
+}
+
 /** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
  *  are exposed alongside the rolled-up `state` so the floor plan can render a richer badge. */
 export interface TableState {
@@ -2569,6 +2894,15 @@ export interface TableState {
    *  deliveries): a line is counted here only in the window between the kitchen bumping it `ready` and the
    *  waiter marking it served. `0` for a free table (no open tab — the LEFT-join branch). */
   readyToServe: number;
+  /** Count of the open tab's lines the pass has DISPATCHED to the floor but the waiter has not yet
+   *  acknowledged — the ticket item carries `away_at IS NOT NULL` (KDS-3's dispatch marker, set by
+   *  `markCourseAway`) AND the line's `served_at IS NULL` (KDS-3 §3c, the floor's "en camino"). DISTINCT
+   *  from `readyToServe` (kitchen-done, may not yet be dispatched) and `pendingToServe` (unserved lines
+   *  regardless of kitchen/pass state): counted only in the window between the expediter sending a course
+   *  away and the waiter marking it served, the same 1:1 ti-on-line join so no multiplication. The floor
+   *  renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`) over
+   *  por servir (`pendingToServe`). `0` for a free table (no open tab — the LEFT-join branch). */
+  enRoute: number;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -2616,6 +2950,7 @@ export async function listTablesWithState(
     tab_total: string | null;
     pending_to_serve: number;
     ready_to_serve: number;
+    en_route: number;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -2633,6 +2968,7 @@ export async function listTablesWithState(
       tab.tab_total,
       coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
       coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
+      coalesce(tab.en_route, 0)::int as en_route,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
@@ -2646,6 +2982,12 @@ export async function listTablesWithState(
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
+             -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
+             -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
+             -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
+             -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
+             -- en-camino > listos precedence off the two counts.
+             (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
              coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
       from working_orders wo
       left join working_order_lines wol
@@ -2688,6 +3030,7 @@ export async function listTablesWithState(
       hasOpenTab,
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
+      enRoute: Number(r.en_route),
       pendingDeliveries,
       status:
         r.status_id !== null

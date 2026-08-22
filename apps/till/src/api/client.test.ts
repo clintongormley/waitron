@@ -647,6 +647,89 @@ describe("TillApi", () => {
     });
   });
 
+  it("getExpoQueue GETs this node's cross-station pass queue (courses across stations)", async () => {
+    const queue = [
+      {
+        orderId: "wo-1",
+        orderNumber: 7,
+        openedMinutes: 3,
+        courses: [
+          {
+            courseId: "co-1",
+            courseName: "Entrantes",
+            displayOrder: 0,
+            fired: true,
+            away: false,
+            items: [
+              {
+                id: "ti-1",
+                name: { "es-ES": "Paella" },
+                qty: "2.000",
+                stationName: "Cocina",
+                state: "ready",
+                firedAt: "2026-08-17T10:00:00.000Z",
+                awayAt: null,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(queue));
+
+    const r = await new TillApi("", fetchStub).getExpoQueue();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/expo/queue",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(queue);
+  });
+
+  it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).bumpCourseReady("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/ready",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCourseAway POSTs an empty object to the order+course /away route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/away",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCourseAway surfaces { code } when the course is unknown or retired", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).markCourseAway("wo1", "co2")).rejects.toMatchObject({
+      code: "course.not_found",
+    });
+  });
+
   it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
@@ -883,7 +966,7 @@ describe("TillApi", () => {
     expect(r).toEqual(statuses);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe and the tab fields", async () => {
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute and the tab fields", async () => {
     // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
     // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
     // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
@@ -902,6 +985,7 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 2,
         readyToServe: 3,
+        enRoute: 1,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
         posX: 250,
@@ -919,6 +1003,7 @@ describe("TillApi", () => {
         pendingDeliveries: 0,
         pendingToServe: 0,
         readyToServe: 0,
+        enRoute: 0,
         status: null,
         // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
         posX: null,
@@ -936,13 +1021,14 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(rows);
-    // The badge signals the floor screen renders survive the round-trip decoded — `pendingToServe` AND
-    // `readyToServe` (KDS-1 §3d's "N listos") — as do the FP-2 placement fields (a placed table's
-    // coordinates, an unplaced table's nulls).
+    // The badge signals the floor screen renders survive the round-trip decoded — `pendingToServe`,
+    // `readyToServe` (KDS-1 §3d's "N listos") AND `enRoute` (KDS-3 §3c's "en camino") — as do the FP-2
+    // placement fields (a placed table's coordinates, an unplaced table's nulls).
     expect(r[0]).toMatchObject({
       zoneId: "z1",
       pendingToServe: 2,
       readyToServe: 3,
+      enRoute: 1,
       posX: 250,
       shape: "round",
     });

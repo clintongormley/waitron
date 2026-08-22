@@ -65,6 +65,7 @@ const freeTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 0,
   readyToServe: 0,
+  enRoute: 0,
   status: null,
   // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
   posX: null,
@@ -86,6 +87,7 @@ const openTable: TableState = {
   pendingDeliveries: 0,
   pendingToServe: 1,
   readyToServe: 0,
+  enRoute: 0,
   status: null,
   posX: null,
   posY: null,
@@ -197,6 +199,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
+    // KDS-3 expo/pass surface: the cross-station board the expo screen fetches + its per-course levers.
+    getExpoQueue: vi.fn().mockResolvedValue([]),
+    bumpCourseReady: vi.fn().mockResolvedValue(undefined),
+    markCourseAway: vi.fn().mockResolvedValue(undefined),
     // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
@@ -2536,6 +2542,42 @@ describe("till-app", () => {
         fireControl: string;
       };
       expect(screen.fireControl).toBe("kitchen");
+    });
+
+    it("show-expo: the counter nav switches to the expo/pass screen (basket-preserving)", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1"); // a basket in progress
+      await el.updateComplete;
+
+      emit(c, "show-expo");
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      // The basket survives the trip (till-owned store), like the station/schedule/floor nav.
+      expect(c.store.lines).toHaveLength(1);
+
+      // Back returns to the counter with the basket intact.
+      emit(el.shadowRoot!.querySelector("till-expo-screen")!, "back-to-counter");
+      await flush(el);
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.store.lines).toHaveLength(1);
+    });
+
+    it("threads the venue fire_control from boot to the expo screen (an expo-fire venue gets the fire lever)", async () => {
+      // A venue configured `expo` must reach the expo screen's `.fireControl` so its held-course Fire
+      // lever turns on — proving #boot's `fireControl` threads here too, not just to the station screen.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "expo" }),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-expo");
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("till-expo-screen") as unknown as {
+        fireControl: string;
+      };
+      expect(screen.fireControl).toBe("expo");
     });
   });
 

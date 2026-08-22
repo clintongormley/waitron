@@ -72,6 +72,12 @@ export const ticketItems = pgTable(
     // FIRED (workable). The first course of an order auto-fires at fire time (`now()`); later courses
     // are held until `fireCourse` stamps them.
     firedAt: timestamp("fired_at", { withTimezone: true, mode: "string" }),
+    // AWAY vs not-yet-away (KDS-3, §2a) — the pass/expo has dispatched this item's course to the floor.
+    // NULL = not away; set = away (`now()`), the terminal display state after `ready` (item lifecycle
+    // held → fired → queued → preparing → ready → away). Additive nullable timestamptz, mirroring the
+    // `preparing_at` / `ready_at` / `fired_at` lifecycle columns above. The existing FORCE RLS + policy +
+    // SELECT/INSERT/UPDATE grant (0055) are table/row-level, so this column is covered — no RLS/grant change.
+    awayAt: timestamp("away_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide (23505)
