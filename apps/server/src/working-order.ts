@@ -2203,8 +2203,9 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
  * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
  * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
  * calls uniformly) — underscore-prefixed the way {@link voidTabLine}/{@link markLineServed} keep it.
- * Advances freely regardless of the parent order's FISCAL status (a settled Mode-P order's lines still
- * cook), as `ticket_items` is a MUTABLE table separate from the frozen `working_orders` row.
+ * Advances independently of the parent order's FISCAL status (a settled Mode-P order's lines still
+ * cook), as `ticket_items` is a MUTABLE table separate from the frozen `working_orders` row. It DOES
+ * refuse a KDS-2 held item (`fired_at` NULL) with `ticket.item_held` — a kitchen gate, not a fiscal one.
  */
 export async function advanceTicketItem(
   tx: Transaction,

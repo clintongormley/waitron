@@ -16,8 +16,9 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
  * later tasks) inserts one row per new working-order line, with the line's station RESOLVED and
  * SNAPSHOTTED here at fire time (`product.station_id ?? category.station_id ?? the location's default
  * station`), so re-categorising a product later never reroutes food already sent. MUTABLE, node-scoped
- * and ephemeral, exactly as `order_prep` was: advances `queued → preparing → ready` freely regardless
- * of the parent order's fiscal status (a settled Mode-P order still has its lines cooked).
+ * and ephemeral, exactly as `order_prep` was: advances `queued → preparing → ready` independently of
+ * the parent order's fiscal status (a settled Mode-P order still has its lines cooked). The one advance
+ * gate is a KITCHEN one, not a fiscal one — KDS-2 holds an item (`fired_at` NULL) until its course fires.
  *
  * `node_id` mirrors `order_prep`'s node scoping (the queue is node-scoped). `working_order_id` is a
  * denormalised grouping key (the per-station display groups a station's items by order) and carries
