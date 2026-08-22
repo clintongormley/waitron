@@ -1702,10 +1702,32 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     is a **server-contract property** (the pass verbs need a course to key on), not a screen bug. Follow-up
     if the owner wants it: a courseless-dispatch path (a per-order "away" stamping `away_at` on the order's
     null-course `ready` items).
-  - **`courseOrder` is duplicated between `station-queue.ts` and `till-expo-screen.ts` (trivial dedup).**
-    The null-course-first course-ordering comparator is copied in both till widgets — behaviour-identical.
-    Extract a shared helper (mirroring the till `select-styles.ts` dedup KDS-2 did) on the next touch or
-    when a third consumer appears.
+  - **Two till pure-function dups: `courseOrder` and `#ageBucket`.** The null-course-first course-ordering
+    comparator (`courseOrder`) and the fresh/warm/hot age-bucket thresholds (`#ageBucket`, the `>=10`/`>=5`
+    cutoffs an owner might well ask to tune) are each copied between `station-queue.ts` and
+    `till-expo-screen.ts`. `courseOrder`'s two copies differ slightly (type / null-test), `#ageBucket`'s are
+    identical bar the input (raw `queuedAt` vs server `openedMinutes`). Extract shared helpers (mirroring the
+    KDS-2 `select-styles.ts` dedup) on the next touch or when a third consumer appears — deferred because the
+    fix must edit the pre-existing `station-queue.ts`, outside the KDS-3 diff.
+  - **`listExpoQueue`'s fired/away course roll-ups are asymmetric with the client's inline `ready`.** The
+    server precomputes `fired`/`away` booleans per course in the grouping pass, but `till-expo-screen`
+    derives the third state (`ready` = every item `state==='ready'`) inline at render. All three are the same
+    "every item past stage X" predicate. Either add a matching `ready` roll-up to `ExpoCourse` (server +
+    client mirror) for symmetry, or drop `fired`/`away` and derive all three client-side. Non-blocking (the
+    idempotent routes make a briefly-stale client lever label harmless); a design tidy on a future touch.
+  - **`listExpoQueue` cross-station read is unindexed on the node filter and can scan the tenant's whole
+    ticket-item history.** `ticket_items`' only index is `(tenant_id, station_id, state)` (for the
+    per-station `listStationQueue`); the cross-station expo read filters on `node_id` alone (+ a correlated
+    EXISTS on `working_order_id`/`away_at`), neither indexed, so it rides only the `tenant_id` prefix — and
+    `ticket_items` rows are never pruned for closed orders, so the scanned set grows forever. **Structural
+    fact (grep of migrations 0054–0059); NOT EXPLAIN-measured** — the right fix (a partial index
+    `WHERE away_at IS NULL`, or restructuring to filter open orders first) should be sized against real data,
+    so this is a measured optimisation to do once a venue has volume, not a speculative pre-production index.
+    Runs on the expo screen (load + after each lever), not per-sale, so no immediate impact.
+  - **`listExpoQueue`'s `tableLabel` scalar subquery re-runs per ticket-item row, not per order.** It is
+    correlated on the order but the outer query returns one row per item, so an order with N fired items
+    re-executes the `dining_tables` lookup N times. Low severity today (`dining_tables` is tens of rows,
+    unindexed on `tab_id` but small); compute it once per order via a join/CTE on a future touch.
   - **Owner-facing UX: the FP-1 floor now shows ONE most-advanced hint, not KDS-1's two badges.** Per spec
     §3c (owner-approved) the floor renders a single precedence hint (**en camino > listos > por servir**)
     where KDS-1 showed the *listos* and *por servir* counts as two independent badges. No test asserted the
