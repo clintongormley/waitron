@@ -1248,56 +1248,46 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Route a CATEGORY to a station (its default route) — body { stationId: string | null } (null clears
-  // it). A non-null stationId must be a LIVE station of this venue (the verb → station.not_found); a
-  // malformed one is screened to that SAME code before the DB touch. A malformed CATEGORY :id names no
-  // category — the verb no-ops on an unknown one, so it is the same no-op (INSIDE `withVenueAuth`, so the
-  // gate still runs first for a validly-shaped request), never a 22P02 500. KDS-1 mints no
-  // `category.not_found` (spec §6). Returns 204.
-  app.put("/management-api/categories/:id/station", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const categoryId = c.req.param("id");
-      const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
-      if (typeof body.stationId !== "string" && body.stationId !== null) {
-        throw new AppError("management.request_invalid", { field: "stationId" });
-      }
-      const stationId = body.stationId;
-      if (stationId !== null && !isUuid(stationId)) {
-        throw new AppError("station.not_found", { stationId });
-      }
-      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
-        if (!isUuid(categoryId)) return; // malformed id names no category → the verb's unknown-id no-op
-        await setCategoryStation(tx, cfg, categoryId, stationId);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // Route a PRODUCT to a station (its override, winning over the category default) — same body + screens
-  // as the category route above. A malformed PRODUCT :id is the verb's unknown-id no-op (inside the gate);
-  // KDS-1 mints no `product.not_found`. Returns 204.
-  app.put("/management-api/products/:id/station", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const productId = c.req.param("id");
-      const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
-      if (typeof body.stationId !== "string" && body.stationId !== null) {
-        throw new AppError("management.request_invalid", { field: "stationId" });
-      }
-      const stationId = body.stationId;
-      if (stationId !== null && !isUuid(stationId)) {
-        throw new AppError("station.not_found", { stationId });
-      }
-      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
-        if (!isUuid(productId)) return; // malformed id names no product → the verb's unknown-id no-op
-        await setProductStation(tx, cfg, productId, stationId);
-      });
-      return c.body(null, 204);
-    }),
-  );
+  // Route a CATEGORY (its default route) or a PRODUCT (its override, winning over the category default)
+  // to a station — byte-identical PUTs but for the resource segment and the setter verb, so ONE factory
+  // registers both. Body { stationId: string | null } (null clears it). A non-null stationId must be a
+  // LIVE station of this venue (the verb → station.not_found); a malformed one is screened to that SAME
+  // code before the DB touch. A malformed :id names no such entity — the verb no-ops on an unknown one, so
+  // it is the same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped
+  // request), never a 22P02 500. KDS-1 mints no `category.not_found`/`product.not_found` (spec §6).
+  // Returns 204.
+  const registerStationRoute = (
+    segment: string,
+    setStation: (
+      tx: Transaction,
+      cfg: TillConfig,
+      id: string,
+      stationId: string | null,
+    ) => Promise<void>,
+  ): void => {
+    app.put(`/management-api/${segment}/:id/station`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const cfg = requireVenueCfg(deps);
+        const id = c.req.param("id");
+        const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
+        if (typeof body.stationId !== "string" && body.stationId !== null) {
+          throw new AppError("management.request_invalid", { field: "stationId" });
+        }
+        const stationId = body.stationId;
+        if (stationId !== null && !isUuid(stationId)) {
+          throw new AppError("station.not_found", { stationId });
+        }
+        await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+          if (!isUuid(id)) return; // malformed id names no entity → the verb's unknown-id no-op
+          await setStation(tx, cfg, id, stationId);
+        });
+        return c.body(null, 204);
+      }),
+    );
+  };
+  registerStationRoute("categories", setCategoryStation);
+  registerStationRoute("products", setProductStation);
 
   // Set the venue's whole-ticket bump mode (KDS-1 §2e) — body { mode: "line" | "ticket" }. A missing or
   // non-{line,ticket} value is a request-shape fault → management.request_invalid naming the FIELD (which

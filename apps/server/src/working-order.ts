@@ -1936,6 +1936,29 @@ export async function sendToPrep(
  *  the `ticket_state` enum (the successor to `order_prep`'s dropped `prep_state`). */
 export type TicketState = (typeof ticketState.enumValues)[number];
 
+/** The forward kitchen transitions (KDS-1 §2d), keyed by the state a move goes TO: the one legal
+ *  predecessor it comes `from` and the timestamp column it stamps. The per-line {@link advanceTicketItem}
+ *  and whole-ticket {@link advanceTicket} verbs both drive their predecessor-WHERE and stamp off this ONE
+ *  table, so the state machine lives in a single place. `queued` is not a target (a FIRE reaches it,
+ *  {@link fireLines}), so only the two forward moves are keyed. */
+const TICKET_TRANSITIONS = {
+  preparing: { from: "queued", stampedAt: "preparingAt" },
+  ready: { from: "preparing", stampedAt: "readyAt" },
+} as const satisfies Record<
+  Exclude<TicketState, "queued">,
+  { from: TicketState; stampedAt: "preparingAt" | "readyAt" }
+>;
+
+/** The typed `.set()` payload for a forward move: the new state plus the stamp column the transition
+ *  names, set to `now()`. A ternary on the (two-valued) stamp column keeps each branch a concrete object
+ *  Drizzle infers against `ticket_items`' update shape — a computed key would widen it to a string index
+ *  and drop the typing the per-verb switch/ternary existed to hold. */
+function advanceSet(to: Exclude<TicketState, "queued">) {
+  return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
+    ? { state: to, preparingAt: sql`now()` }
+    : { state: to, readyAt: sql`now()` };
+}
+
 /**
  * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. Each branch is a
  * single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
@@ -1948,8 +1971,9 @@ export type TicketState = (typeof ticketState.enumValues)[number];
  *
  * `to = "queued"` is refused immediately, before any query: no kitchen state legally advances INTO
  * `queued` (reaching it is a FIRE's job — {@link fireLines}'s insert), so that case throws the same
- * domain code the empty-`returning` branch would. The switch (rather than a table keyed by a computed
- * column name) keeps each `.set()` fully typed against Drizzle's inferred update shape.
+ * domain code the empty-`returning` branch would. The predecessor and stamp come from
+ * {@link TICKET_TRANSITIONS}; {@link advanceSet} keeps the `.set()` fully typed against Drizzle's
+ * inferred update shape (a computed key would not).
  *
  * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
  * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
@@ -1963,28 +1987,15 @@ export async function advanceTicketItem(
   itemId: string,
   to: TicketState,
 ): Promise<void> {
-  let updated: { id: string }[];
-  switch (to) {
-    case "preparing":
-      updated = await tx
-        .update(ticketItems)
-        .set({ state: to, preparingAt: sql`now()` })
-        .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, "queued")))
-        .returning({ id: ticketItems.id });
-      break;
-    case "ready":
-      updated = await tx
-        .update(ticketItems)
-        .set({ state: to, readyAt: sql`now()` })
-        .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, "preparing")))
-        .returning({ id: ticketItems.id });
-      break;
-    case "queued":
-    default:
-      // No kitchen state advances TO queued — reaching it is a FIRE's job (fireLines' insert).
-      throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+  if (to === "queued") {
+    // No kitchen state advances TO queued — reaching it is a FIRE's job (fireLines' insert).
+    throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
-
+  const updated = await tx
+    .update(ticketItems)
+    .set(advanceSet(to))
+    .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, TICKET_TRANSITIONS[to].from)))
+    .returning({ id: ticketItems.id });
   if (updated.length === 0) {
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
@@ -2014,16 +2025,14 @@ export async function advanceTicket(
   stationId: string,
   to: Exclude<TicketState, "queued">,
 ): Promise<void> {
-  const predecessor: TicketState = to === "preparing" ? "queued" : "preparing";
-  const stamp = to === "preparing" ? { preparingAt: sql`now()` } : { readyAt: sql`now()` };
   await tx
     .update(ticketItems)
-    .set({ state: to, ...stamp })
+    .set(advanceSet(to))
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.stationId, stationId),
-        eq(ticketItems.state, predecessor),
+        eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
       ),
     );
 }
