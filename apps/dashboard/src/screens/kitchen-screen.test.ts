@@ -29,7 +29,10 @@ const TWO_STATIONS: Station[] = [
   { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
 ];
 
-function stubApi(overrides: Partial<DashboardApi> = {}, stations: Station[] = STATIONS): DashboardApi {
+function stubApi(
+  overrides: Partial<DashboardApi> = {},
+  stations: Station[] = STATIONS,
+): DashboardApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations.map((s) => ({ ...s }))),
     createStation: vi.fn().mockResolvedValue({ id: "s9" }),

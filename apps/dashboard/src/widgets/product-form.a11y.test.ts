@@ -53,7 +53,13 @@ describe.each(["light", "dark"] as const)("product-form a11y (%s theme)", (theme
   it("renders accessibly in edit mode with the station-override select", async () => {
     const { el, host } = await mountWidget<ProductForm>(
       "dashboard-product-form",
-      { open: true, catalogueId: "cat-1", categories: CATEGORIES, stations: STATIONS, product: EDIT_PRODUCT },
+      {
+        open: true,
+        catalogueId: "cat-1",
+        categories: CATEGORIES,
+        stations: STATIONS,
+        product: EDIT_PRODUCT,
+      },
       theme,
     );
     const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;

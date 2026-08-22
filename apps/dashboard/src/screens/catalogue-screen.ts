@@ -408,8 +408,9 @@ export class CatalogueScreen extends LitElement {
           .categories=${this.categories}
           .stations=${this.stations}
           @create-category=${(e: CustomEvent<{ name: string }>) => this.#onCreateCategory(e)}
-          @set-category-station=${(e: CustomEvent<{ categoryId: string; stationId: string | null }>) =>
-            void this.#onSetCategoryStation(e)}
+          @set-category-station=${(
+            e: CustomEvent<{ categoryId: string; stationId: string | null }>,
+          ) => void this.#onSetCategoryStation(e)}
         ></dashboard-category-manager>
       </section>
 

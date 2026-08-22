@@ -390,8 +390,10 @@ export class ProductForm extends LitElement {
           this.product
             ? html`<label class="field"
                 >${t("product.station")}
-                <select data-test="product-station" @change=${(e: Event) =>
-                  this.#onStationChange(e)}>
+                <select
+                  data-test="product-station"
+                  @change=${(e: Event) => this.#onStationChange(e)}
+                >
                   <option value="">${t("product.no_station")}</option>
                   ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
                 </select>

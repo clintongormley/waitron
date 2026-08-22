@@ -66,7 +66,13 @@ describe("applyVenue", () => {
     // KDS-1: applyVenue seeds exactly one active default kitchen station for the location, so a fresh
     // venue can fire the moment it exists (fireLines' fallback). Proven by deletion — dropping the
     // create-location station insert makes default_stations 0.
-    expect(counts.rows[0]).toEqual({ tenants: 1, nodes: 1, series: 2, sif: 1, default_stations: 1 });
+    expect(counts.rows[0]).toEqual({
+      tenants: 1,
+      nodes: 1,
+      series: 2,
+      sif: 1,
+      default_stations: 1,
+    });
     expect(result.sif.numeroInstalacion).toBeGreaterThanOrEqual(1);
 
     const series = await suite.db.execute<{ purpose: string }>(sql`

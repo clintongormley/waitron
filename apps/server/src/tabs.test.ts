@@ -121,7 +121,11 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
  *  `collected_at` is set AS the order settles, mirroring the real collectOrder Task 6 wires). An instant
  *  handover with NO ticket item leaves no occupancy — the `EXISTS(ticket_items)` branch of
  *  `listTablesWithState`'s pending-deliveries count. */
-async function seedFiredDelivery(cfg: TillConfig, cafeId: string, tableId: string): Promise<string> {
+async function seedFiredDelivery(
+  cfg: TillConfig,
+  cafeId: string,
+  tableId: string,
+): Promise<string> {
   const id = randomUUID();
   await asApp(cfg, async (tx) => {
     await createOpenOrder(tx, cfg, id, [{ productId: cafeId, quantity: "1" }], null, {

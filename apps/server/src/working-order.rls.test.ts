@@ -1905,8 +1905,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const [item1] = await ticketItemIdsFor(id1);
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).find((g) => g.orderId === id1)
-        ?.items[0]?.state,
+      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).find(
+        (g) => g.orderId === id1,
+      )?.items[0]?.state,
     ).toBe("preparing");
 
     // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
@@ -1915,14 +1916,20 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     await suite.admin.execute(sql`
       update working_orders set status = 'settled', settled_at = now(), collected_at = now()
       where id = ${id1}`);
-    expect((await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId)).toEqual([
-      id2,
-    ]);
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+    ).toEqual([id2]);
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
     // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it, exactly as
     // `listPrepQueue` relied on the status join rather than a write the cancel makes.
-    await cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, id2, "customer left", OPERATOR);
+    await cancelPlacedOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      id2,
+      "customer left",
+      OPERATOR,
+    );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
   });
