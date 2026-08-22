@@ -2739,12 +2739,16 @@ export async function listExpoQueue(
       // order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the table). Scoped to
       // `loc` (the expo's location, the `locationId?` param defaulting to the till's own venue) — the one
       // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
-      // listTablesWithState while the READ itself stays node-scoped. `limit 1` makes it deterministic.
+      // listTablesWithState while the READ itself stays node-scoped. The `order by` — a seated-tab match
+      // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
+      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table AND
+      // a table it delivers to — and PostgreSQL could then return either label across calls).
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where dt.tenant_id = ${workingOrders.tenantId}
           and dt.location_id = ${loc}
           and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
+        order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
         limit 1)`,
     })
     .from(ticketItems)

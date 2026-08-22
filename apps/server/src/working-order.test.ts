@@ -1544,7 +1544,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(course.items.every((i) => i.awayAt === null)).toBe(true);
       // The display snapshot rides through: `name` is the locale→description map, `qty` the numeric text.
       const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
-      expect(soupItem.name).toEqual(soupItem.name); // shape: Record<locale,string>
+      // `name` round-trips as the product's locale→description map (makeProduct seeds `P-<uuid>`), not a
+      // flattened string — exactly one locale key here, so toEqual pins the whole shape + value.
+      expect(soupItem.name).toEqual({ [LOCALE]: expect.stringMatching(/^P-/) });
       expect(typeof soupItem.qty).toBe("string");
 
       // A COLLECTED order and an ABANDONED order are both excluded, the same two listStationQueue drops.
