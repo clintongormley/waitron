@@ -2832,7 +2832,7 @@ export async function listExpoQueue(
       courseMaps.set(row.orderId, new Map());
     }
     const byCourse = courseMaps.get(row.orderId)!;
-    const courseKey = row.courseId ?? " none";
+    const courseKey = row.courseId ?? "__none__";
     let course = byCourse.get(courseKey);
     if (course === undefined) {
       course = {
