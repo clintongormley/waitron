@@ -31,12 +31,13 @@ export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
 /**
  * The per-venue FIRE CONTROL mode (KDS-2, §2c). `waiter` (default): the tab-ordering screen surfaces
  * the fire action per held course. `kitchen`: the station display surfaces it instead. Governs ONLY
- * which UI shows the affordance — `fireCourse` is the same verb either way, and both surfaces are
- * session-gated. Extensible with `expo` in KDS-3 (an additive enum value + a third surface). A pgEnum
- * on `locations`, matching `bump_mode` / `order_flow`'s precedent on the same table (one declaration
- * yields both the union and the constraint).
+ * which UI shows the affordance — `fireCourse` is the same verb either way, and all surfaces are
+ * session-gated. `expo` (KDS-3, §2c): a dedicated expediter/pass display surfaces the fire action. The
+ * enum value is additive (this task); its surface — the expo screen — arrives in KDS-3's later tasks. A
+ * pgEnum on `locations`, matching `bump_mode` / `order_flow`'s precedent on the same table (one
+ * declaration yields both the union and the constraint).
  */
-export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen"]);
+export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen", "expo"]);
 
 /**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish

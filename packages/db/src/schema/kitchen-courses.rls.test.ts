@@ -207,6 +207,30 @@ describe("kitchen_courses schema (RLS + grants + course FKs)", () => {
     expect(row!.fire_control).toBe("waiter");
   });
 
+  it("fire_control_mode accepts the new 'expo' label (KDS-3 ALTER TYPE ADD VALUE applied)", async () => {
+    // Task-1 receipt that `ALTER TYPE fire_control_mode ADD VALUE 'expo'` (0059) applied to the template.
+    // The label is present in pg_enum, and a literal casts to the type without raising. Setting the
+    // locations column to 'expo' is the config verb's job (a later KDS-3 task), NOT exercised here — this
+    // is purely the enum-type receipt. Cast as the owner (enum validity is not tenant- or grant-scoped).
+    const labels = await suite.admin
+      .execute<{ enumlabel: string }>(
+        sql`select e.enumlabel from pg_enum e
+            join pg_type t on t.oid = e.enumtypid
+            where t.typname = 'fire_control_mode' order by e.enumsortorder`,
+      )
+      .then((r) => r.rows.map((row) => row.enumlabel));
+    expect(labels).toEqual(["waiter", "kitchen", "expo"]);
+    // The cast succeeds for 'expo' …
+    const [castRow] = await suite.admin
+      .execute<{ v: string }>(sql`select 'expo'::fire_control_mode as v`)
+      .then((r) => r.rows);
+    expect(castRow!.v).toBe("expo");
+    // … and the control in the other direction (§4): a value that is NOT a label raises 22P02
+    // (invalid_text_representation), so the positive cast above is genuinely validating the label.
+    const e = await captureError(() => suite.admin.execute(sql`select 'nope'::fire_control_mode`));
+    expect(pgErrorCode(e)).toBe("22P02");
+  });
+
   it("lets the app role route a product to an own-tenant course and rejects a foreign or missing one", async () => {
     // The app role writes and reads back products.course_id (the additive column, under products'
     // existing grant + policy) …
