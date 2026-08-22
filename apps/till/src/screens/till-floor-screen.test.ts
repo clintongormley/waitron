@@ -145,8 +145,9 @@ describe("till-floor-screen", () => {
         }),
       ],
     });
-    // The "N listos" badge (kitchen-done, not yet carried out) carries the readyToServe count and its
-    // localised suffix — DISTINCT from the to-serve badge.
+    // readyToServe (2) outranks pendingToServe (1) under the en-camino > listos > por-servir
+    // precedence, so ONLY the "N listos" badge (kitchen-done, not yet carried out) renders here,
+    // carrying the readyToServe count and its localised suffix; the to-serve badge is suppressed.
     const ready = el.shadowRoot!.querySelector("[data-ready]")!;
     expect(ready.textContent).toContain("2");
     expect(ready.textContent).toContain(t("floor.ready"));
