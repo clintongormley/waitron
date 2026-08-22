@@ -16,6 +16,7 @@ const cocinaQueue: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "settled", // a Mode-P pickup — collectable from the rail lens (the handover test below)
     items: [
       {
         id: "ti-1",
@@ -34,6 +35,7 @@ const barraQueue: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
+    status: "placed",
     items: [
       {
         id: "ti-2",
@@ -57,6 +59,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
+    markCollected: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -176,6 +179,27 @@ describe("till-station-screen", () => {
     await flush(el);
     expect(api.advanceTicket).toHaveBeenCalledWith("wo-1", "st-1", "ready");
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("a mark-collected from the widget calls markCollected then reloads the active queue, and does not escape the screen", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    // Stopped at the screen (it owns the handover here too), so the app never double-handles it.
+    const escaped = vi.fn();
+    host.addEventListener("mark-collected", escaped);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("mark-collected", {
+        detail: { orderId: "wo-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.markCollected).toHaveBeenCalledWith("wo-1");
+    // Reloaded: once on connect, once after the handover — so the collected order drops off the display.
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    expect(escaped).not.toHaveBeenCalled();
   });
 
   it("a failed advance still reloads the queue (reconciling to server truth)", async () => {

@@ -590,6 +590,34 @@ describe("TillApi", () => {
     );
   });
 
+  it("markCollected POSTs an empty object to the order's /collect route — the Mode-P handover (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).markCollected("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/collect",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCollected surfaces { code } when the order is not collectable", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.not_settled" } }), {
+        status: 409,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).markCollected("wo1")).rejects.toMatchObject({
+      code: "working_order.not_settled",
+    });
+  });
+
   it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

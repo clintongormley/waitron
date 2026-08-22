@@ -202,6 +202,16 @@ export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
 export type TicketState = "queued" | "preparing" | "ready";
 
 /**
+ * A working order's own status (`open → placed → settled|abandoned`). A LOCAL copy of the server's
+ * `WorkingOrderStatus` (`apps/server/src/working-order.ts`, derived from `@waitron/db`'s
+ * `working_order_status` enum), NOT imported — same bundle-decoupling rationale as every other type in
+ * this file. The station queue carries it so the display shows the Mode-P collect action only on a
+ * COLLECTABLE order — a `settled` one awaiting its counter handover ({@link TillApi.markCollected}); an
+ * `open` (tab) or `placed` (awaiting the fiscal {@link TillApi.collectOrder}) order is not collectable there.
+ */
+export type WorkingOrderStatus = "open" | "placed" | "settled" | "abandoned";
+
+/**
  * `POST /api/working-orders/:id/place` success (7c). `open → placed`: Mode I files a deferred
  * invoice HERE and returns its number; Modes T and P (the latter never reaches this route) file
  * nothing at placing, so every field past `id`/`status` is present only for Mode I. Mirrors the
@@ -267,6 +277,10 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   queuedAt: string;
+  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and not
+   *  yet collected (the server filters both), so the display reads COLLECTABLE off this alone: a
+   *  `settled` order is a Mode-P pickup awaiting its counter handover ({@link TillApi.markCollected}). */
+  status: WorkingOrderStatus;
   items: StationQueueItem[];
 }
 
@@ -642,6 +656,20 @@ export class TillApi {
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});
+  }
+
+  /**
+   * Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e) →
+   * `POST /api/orders/:id/collect` with an empty body. NON-FISCAL: the server stamps the order-level
+   * `collected_at`, which drops the order off `getStationQueue` (the display shows an order until it is
+   * collected). It touches no sale/registro/tender — the order was paid + filed at settle — so this is
+   * DISTINCT from {@link collectOrder}, the placed → settled FISCAL collect on `/api/working-orders/:id/collect`.
+   * A non-settled/absent/foreign id rejects `{ code: "working_order.not_settled" }`, an already-collected
+   * order `{ code: "working_order.already_collected" }`, and one never fired `{ code: "ticket.not_fired" }`.
+   * The server answers an empty 200; re-read `getStationQueue` for the updated display.
+   */
+  async markCollected(id: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${id}/collect`, "POST", {});
   }
 
   /**

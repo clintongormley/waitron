@@ -12,6 +12,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "placed", // awaiting the fiscal collect — no handover button
     items: [
       {
         id: "ti-1",
@@ -41,6 +42,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
+    status: "settled", // a Mode-P pickup — its rail card carries the collect button (a11y-checked here)
     items: [
       {
         id: "ti-4",

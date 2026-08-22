@@ -18,6 +18,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "settled", // collectable — surfaces the rail card's collect button for the a11y sweep
     items: [
       {
         id: "ti-1",
@@ -47,6 +48,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
+    status: "placed",
     items: [
       {
         id: "ti-4",

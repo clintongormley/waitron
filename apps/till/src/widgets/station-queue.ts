@@ -195,6 +195,21 @@ export class TillStationQueue extends LitElement {
       .ticket.age-hot {
         border-left-color: var(--wt-color-danger);
       }
+
+      /* The per-order Mode-P handover action — a full-width primary button at the foot of a collectable
+         (settled) rail card. The wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct
+         one wt-button's primary variant uses, so contrast holds in both themes. */
+      .collect {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-primary);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        font: inherit;
+        font-weight: var(--wt-font-weight-bold);
+        cursor: pointer;
+      }
     `,
   ];
 
@@ -235,6 +250,20 @@ export class TillStationQueue extends LitElement {
     }
   }
 
+  /** Hand a collectable order to the customer — the Mode-P counter handover (KDS-1 §3e). Emits a
+   * composed, bubbling `mark-collected { orderId }` the container (the app, or the station screen)
+   * turns into a `markCollected` call, the same event → container → server shape a bump uses. Order-level
+   * (not per-line): `collected_at` is on the order, so it is one action for the whole card. */
+  #collect(group: StationQueueGroup): void {
+    this.dispatchEvent(
+      new CustomEvent("mark-collected", {
+        detail: { orderId: group.orderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   /** The age bucket for a group's oldest line: fresh (< 5 min), warm (< 10), hot (≥ 10). */
   #ageBucket(queuedAt: string): "fresh" | "warm" | "hot" {
     const elapsedMin = ((this.now ?? Date.now()) - Date.parse(queuedAt)) / 60000;
@@ -269,9 +298,26 @@ export class TillStationQueue extends LitElement {
           <ul class="lines">
             ${group.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
           </ul>
+          ${this.#collectAction(group)}
         </article>`;
       })}
     </div>`;
+  }
+
+  /** The per-order collect button, shown only for a COLLECTABLE order — a `settled` Mode-P pickup awaiting
+   * its counter handover (every order on the queue is already non-abandoned and uncollected; the server
+   * filters both, so `settled` is the whole collectability test). An `open` (tab) or `placed` (awaiting the
+   * fiscal collect) order renders none. The label names the order for an accessible control. */
+  #collectAction(group: StationQueueGroup): TemplateResult | typeof nothing {
+    if (group.status !== "settled") return nothing;
+    return html`<button
+      class="collect"
+      data-collect=${group.orderId}
+      aria-label=${`${t("station.collect")} #${group.orderNumber}`}
+      @click=${() => this.#collect(group)}
+    >
+      ${t("station.collect")}
+    </button>`;
   }
 
   /** KANBAN — three state columns, each holding every order's lines in that state, oldest order first. */

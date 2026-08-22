@@ -704,6 +704,27 @@ export class TillApp extends LitElement {
     await this.#refreshStationQueue();
   }
 
+  /**
+   * Hand a settled Mode-P order to the customer (KDS-1 §3e) — the per-order collect the counter's
+   * default-station `<till-station-queue>` emits (`mark-collected`) for a COLLECTABLE (settled) order.
+   * `markCollected` stamps the order-level `collected_at`, and the refresh then drops the handed-over
+   * order off the counter's queue. NON-FISCAL — it settles nothing and files nothing, so it needs none of
+   * the `submitting` single-flight guard the pay/collect fiscal moments use. Runs the refresh on BOTH
+   * paths like {@link #onAdvanceTicketItem}: a rejected collect (a race, an already-collected order)
+   * re-reads the queue so the display reconciles to server truth. The station-display SCREEN stops (and
+   * handles) its own `mark-collected`, so this only ever fires for the counter's widget.
+   */
+  async #onMarkCollected(event: Event): Promise<void> {
+    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    this.errorKey = undefined;
+    try {
+      await this.api.markCollected(orderId);
+    } catch {
+      this.errorKey = "station.collect_error";
+    }
+    await this.#refreshStationQueue();
+  }
+
   /** Show the station-display screen (KDS-1) — the kitchen's own view, reached from the counter's
    * "Kitchen" nav. Basket-preserving like the schedule/floor nav (the basket is till-owned); the screen
    * owns its own fetching via `.api`, so this just switches. */
@@ -1078,6 +1099,7 @@ export class TillApp extends LitElement {
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
+        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}

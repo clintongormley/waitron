@@ -65,6 +65,7 @@ describe("till-counter-screen", () => {
         orderNumber: 5,
         label: "Mesa 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
+        status: "settled" as const,
         items: [
           {
             id: "ti-1",

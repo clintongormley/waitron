@@ -192,6 +192,19 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.advanceTicket(orderId, stationId, to));
   }
 
+  /**
+   * A Mode-P collect from the widget's rail lens (a settled order's handover, KDS-1 §3e). Handle it HERE
+   * and stop it — the app owns the counter's own default-station widget, so it must not double-handle this
+   * screen's. `markCollected` stamps the order-level `collected_at`; the reload then drops the handed-over
+   * order off the display. Same run-then-reconcile shape as the advance handlers ({@link #advance}), so a
+   * rejected collect (a race, an already-collected order) is swallowed and the reload converges on truth.
+   */
+  async #onMarkCollected(event: Event): Promise<void> {
+    event.stopPropagation();
+    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    await this.#advance(() => this.api.markCollected(orderId));
+  }
+
   override render() {
     return html`
       <section
@@ -199,6 +212,7 @@ export class TillStationScreen extends LitElement {
         aria-label=${t("station.title")}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
+        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
       >
         <header class="head">
           <h1 class="title">${t("station.title")}</h1>

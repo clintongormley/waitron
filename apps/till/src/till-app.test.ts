@@ -138,6 +138,7 @@ const stationGroup = {
   orderNumber: 5,
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
+  status: "settled" as const,
   items: [
     {
       id: "ti-1",
@@ -188,6 +189,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStations: vi.fn().mockResolvedValue([defaultStation]),
     getStationQueue: vi.fn().mockResolvedValue([]),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
+    markCollected: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
     // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
     getTablesState: vi.fn().mockResolvedValue([]),
@@ -2369,6 +2371,43 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("station.advance_error"));
       expect(el.shadowRoot!.textContent).not.toContain("ticket.invalid_transition");
+    });
+
+    // The app's `#onMarkCollected` is mode-independent (it stamps a settled order's handover and reloads);
+    // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#refreshStationQueue`
+    // skips Mode P by a pre-existing decision (`sendToPrep` has no counter UI yet). So these exercise the
+    // handler wiring under `invoice_first`, exactly as the advance-ticket-item tests above do.
+    it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        getStationQueue: vi.fn().mockResolvedValueOnce([stationGroup]).mockResolvedValue([]),
+      });
+      const c = await toCounter(el);
+      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      await flush(el);
+
+      expect(currentApi.markCollected).toHaveBeenCalledWith("wo-1");
+      // once on entering the counter, once after the handover — so the collected order drops off the queue.
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+      expect(stationQueueWidget(el)!.groups).toEqual([]);
+    });
+
+    it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        markCollected: vi.fn().mockRejectedValue({ code: "working_order.already_collected" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      await flush(el);
+
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("station.collect_error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.already_collected");
     });
 
     it("show-station: the counter nav switches to the station-display screen (basket-preserving)", async () => {

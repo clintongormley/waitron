@@ -76,6 +76,10 @@ export const en = {
   "station.min": "min",
   "station.advance": "Advance",
   "station.bump_ticket": "Advance ticket",
+  // The per-order Mode-P handover control on the rail card — hand a settled, fired order to the customer,
+  // which drops it off the station display (KDS-1 §3e). A rail-card action, shown only for a collectable
+  // (settled) order.
+  "station.collect": "Collect",
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
@@ -186,6 +190,8 @@ export const en = {
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
   "station.advance_error": "Could not update the ticket, try again",
+  // A failed Mode-P handover (markCollected) is non-fatal — the operator retries; the queue reload reconciles.
+  "station.collect_error": "Could not mark the order collected, try again",
   // Table-ordering (FP-1): a failed round/serve/status write is non-fatal — the operator retries.
   "table.error": "Could not update the table, try again",
   // Boot: `getTill` failed — the server unreachable, or a non-2xx `{ code }` (e.g. `server.internal`).
@@ -246,6 +252,7 @@ export const es: Record<StringKey, string> = {
   "station.min": "min",
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",
+  "station.collect": "Entregar",
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
@@ -339,6 +346,7 @@ export const es: Record<StringKey, string> = {
   "held.stale": "Ese pedido ya no está disponible",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
+  "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
 };

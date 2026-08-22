@@ -12,6 +12,9 @@ const groupA: StationQueueGroup = {
   orderNumber: 5,
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
+  // A fired-at-placing Mode-I/T order awaiting the FISCAL collect — NOT collectable via the Mode-P
+  // handover, so its card shows no collect button.
+  status: "placed",
   items: [
     {
       id: "ti-1",
@@ -35,6 +38,9 @@ const groupB: StationQueueGroup = {
   orderNumber: 6,
   label: null,
   queuedAt: "2026-08-17T10:05:00.000Z",
+  // A SETTLED Mode-P pickup awaiting its counter handover — COLLECTABLE, so its rail card shows the
+  // collect button.
+  status: "settled",
   items: [
     {
       id: "ti-3",
@@ -120,6 +126,7 @@ describe("till-station-queue", () => {
       orderNumber: 9,
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
+      status: "settled",
       items: [
         {
           id: "ti-x",
@@ -208,6 +215,41 @@ describe("till-station-queue", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
+  });
+
+  it("rail: a SETTLED (collectable) order shows a per-order collect button; a placed one does not", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+    });
+    // groupB (wo-2) is settled → the Mode-P handover is offered; groupA (wo-1) is placed → not.
+    const collectB = el.shadowRoot!.querySelector<HTMLElement>('[data-collect="wo-2"]');
+    expect(collectB).not.toBeNull();
+    expect(collectB!.textContent).toContain(t("station.collect"));
+    expect(el.shadowRoot!.querySelector('[data-collect="wo-1"]')).toBeNull();
+  });
+
+  it("rail: tapping the collect button emits mark-collected { orderId }, composed and bubbling", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+    });
+    let captured: CustomEvent | undefined;
+    el.addEventListener("mark-collected", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-collect="wo-2"]')!.click();
+    expect(captured!.detail).toEqual({ orderId: "wo-2" });
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("kanban: no per-order collect button (the handover is a rail-card, counter-side action)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups, // groupB is settled, but kanban cells cut across orders — no per-order card to host it
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
   });
 
   it("age-colours each ticket by how long its oldest line has waited (fresh / warm / hot)", async () => {
