@@ -45,7 +45,12 @@ import {
   sendToPrep,
   updateHeldOrder,
 } from "./working-order.js";
-import { createStation, setCategoryStation, setProductStation } from "./kitchen.js";
+import {
+  createStation,
+  deactivateStation,
+  setCategoryStation,
+  setProductStation,
+} from "./kitchen.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import "./errors.js";
 
@@ -901,6 +906,24 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     const { cfg, catalogueId } = await setupVenue(); // no default station created
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
+      const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
+      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+    });
+  });
+
+  it("refuses to fire when the only default station has been DEACTIVATED (station.no_default)", async () => {
+    // `deactivateStation` sets `active=false` but leaves `is_default=true`, so the venue keeps a
+    // default row that is no longer a live routing target. The fallback query must filter `active=true`,
+    // else it resolves the dead station and food routes to a queue the till/station display (active-only)
+    // never surface — silently dropped. With the filter it resolves no default and fires fail loud.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      await deactivateStation(tx, cfg, cocina.id);
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
       await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
         code: "station.no_default",

@@ -72,10 +72,13 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
  * duplicate `(tenant, location, name)` collides on `kitchen_stations_name_key` and is surfaced as
  * `station.name_taken` rather than the raw 23505 — the same shape tables.ts's `createZone` maps
  * `zone.name_taken` with. Marking the station default ADOPTS it as THE default: it clears any prior
- * default first (in this same tx), exactly as {@link setDefaultStation} does. That also keeps the 23505
- * catch UNAMBIGUOUS — with the partial-default unique never reachable on this INSERT, the only unique it
- * can trip is the name key, so a caught 23505 is always a name collision (never mis-mapping a default
- * collision to `station.name_taken`, the receipt discipline CLAUDE.md §1/§3 asks for).
+ * default first (in this same tx), exactly as {@link setDefaultStation} does — so WITHIN one tx the
+ * partial-default unique (`kitchen_stations_default_key`) is not reachable and the expected 23505 is the
+ * name key. The one exception is two CONCURRENT `createStation({isDefault:true})` in the same venue:
+ * each clears then inserts `is_default=true`, and the second to commit trips the default partial-unique,
+ * which this catch would ALSO surface as `station.name_taken` (a mislabel). Cosmetic — a gated admin
+ * verb, a remote race, still a 4xx — so the catch is left undiscriminated rather than splitting on the
+ * constraint name (the receipt discipline CLAUDE.md §1/§3 asks for).
  */
 export async function createStation(
   tx: Transaction,
@@ -164,9 +167,12 @@ export async function updateStation(
 
 /** Deactivate a station (`active = false`) — never a hard delete (a `ticket_items.station_id` snapshot
  *  may reference it; app_user holds no DELETE on `kitchen_stations`). An absent id throws
- *  `station.not_found`. `is_default` is left as-is: a deactivated default keeps the slot until another
- *  station is made default (which clears it), and {@link setDefaultStation} refuses a deactivated target,
- *  so no live routing ever lands on it. */
+ *  `station.not_found`. `is_default` is left as-is: the row keeps the default slot until another station
+ *  is made default (which clears it). No live routing lands on a deactivated default — `fireLines`'
+ *  fallback query requires `is_default AND active`, and {@link setDefaultStation} refuses a deactivated
+ *  target — so deactivating the venue's ONLY default leaves it with no ACTIVE default and firing then
+ *  fails loud with `station.no_default` (§2b), NOT silent misrouting to a dead station, until a new
+ *  default is set. */
 export async function deactivateStation(
   tx: Transaction,
   // Unused here for the same reason as {@link updateStation} — kept for the uniform verb surface.

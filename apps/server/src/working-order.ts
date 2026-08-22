@@ -523,12 +523,20 @@ export async function fireLines(
     return;
   }
   // The venue's single fallback station (its `is_default` row, if any) — read ONCE; each line falls to
-  // it when neither the product nor its category names a route.
+  // it when neither the product nor its category names a route. The `active` filter is load-bearing:
+  // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead station
+  // is still resolved here and lines route to a queue the till/station display (active-only) never
+  // surface — food silently dropped. Requiring `active` makes a venue whose only default is deactivated
+  // resolve `null` → the fail-loud `station.no_default` below (§2b), until a new default is set.
   const [fallback] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
     .where(
-      and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)),
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.isDefault, true),
+        eq(kitchenStations.active, true),
+      ),
     );
   const defaultStationId = fallback?.id ?? null;
 
@@ -1889,10 +1897,9 @@ export async function cancelPlacedOrder(
  * Past that guard it fires the order's lines through the shared {@link fireLines} — one `ticket_items`
  * row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time
  * (§2b). A double send-to-prep re-fires already-fired lines and collides on `ticket_items`'
- * `(tenant_id, working_order_line_id)` unique — the structural one-item-per-line guard; KDS-1 mints no
- * domain code for that collision (spec §6 removes `order_prep.invalid_transition`'s throw sites with the
- * rework and adds only `station.*` + the `ticket.invalid_transition` advance code), so the route rework
- * (Task 7) owns any re-fire surface.
+ * `(tenant_id, working_order_line_id)` unique — the structural one-item-per-line guard; `fireLines`
+ * catches that 23505 and throws `ticket.already_fired` (a clean 409, mapped in `till-api.ts`), so this
+ * verb inherits the re-fire surface from the shared fire point without minting a code of its own.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
@@ -2197,8 +2204,8 @@ export interface TableState {
  * to the dropped `order_prep` join (§2d/§3e): `EXISTS(ticket_items)` replaces "has a prep row" and
  * `collected_at` replaces `order_prep.state = 'collected'`, so an instant handover that was never fired
  * (no ticket item — e.g. a walk-up counter delivery) leaves no lingering occupancy, exactly as a
- * no-prep-row handover did. Task 6 wires the collect flow to SET `collected_at`; this read only consumes
- * it (nothing sets it yet, so a fired delivery stays pending until Task 6 lands — acceptable pre-production).
+ * no-prep-row handover did. The collect flow (till-sale.ts's settle paths) stamps `collected_at` at
+ * handover; this read only consumes it.
  *
  * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
  * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a

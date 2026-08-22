@@ -117,8 +117,10 @@ export async function applyVenue(
           // `station.no_default` misconfiguration, so a fresh venue must ship one. Owner-role INSERT under
           // the tenant GUC — the same tx/role that just inserted the location, so the FORCE-RLS
           // `kitchen_stations_tenant_isolation` WITH CHECK passes (tenant_id = current_tenant_id()). The
-          // operator can rename it later via updateStation; `station.no_default` then guards only the
-          // deactivated-last-station edge, not a fresh venue.
+          // operator can rename it later via updateStation; `station.no_default` then guards any venue
+          // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
+          // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
+          // this one.
           await tx.execute(sql`
             insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
             values (${tenantId}, ${locationId}, 'Cocina', 0, true, true)`);
