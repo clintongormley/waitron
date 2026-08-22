@@ -617,8 +617,14 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   ~250s: shard/parallelise db's suite, or split `mutation-verifactu`. The two light bins
   (`LIGHT_A_PACKAGES`/`LIGHT_B_PACKAGES` in `scripts/changed-scope.mjs`) are balanced by MEASURED wall-clock,
   which drifts as suites grow — **rebalance when a run shows one shard dominating** (the partition tests
-  police coverage, never balance). Minor skipped cleanup: memoise `selects()` in
-  `scripts/ci-workflow.test.mjs` (~6-12s on the ungated lint job; pre-existing shape).
+  police coverage, never balance). The `scripts/ci-workflow.test.mjs` timeout flake is FIXED (#130,
+  2026-08-22): its two subprocess-bound cases (~9 real `pnpm ls` spawns each) were timing out past
+  Vitest's 5000ms default on cold CI runners, flaking the `lint` job on #128/#129; they now carry an
+  explicit per-test bound (`PNPM_LS_TEST_TIMEOUT_MS = 60_000`) plus a per-call kill on `spawnSync`
+  itself (`PNPM_LS_SPAWN_TIMEOUT_MS = 30_000`, so a genuine hang is killed — a Vitest timer can't
+  interrupt a synchronous `spawnSync`). Minor optional speedup still open: memoise `selects()` to dedupe
+  the ~3 filter-sets the two cases share (wall-time only, NOT a flake fix — the coverage-partition case's
+  spawns are all-distinct and can't be deduped).
 - **CI test-tier speedup — shared-container rollout COMPLETE (#112–#123).** DONE: every real-PG package
   now boots ONE shared container per package run (a vitest `globalSetup`) and clones a pre-migrated
   template per suite (`CREATE DATABASE … TEMPLATE`, ~26ms) in place of a per-file container boot+migrate
