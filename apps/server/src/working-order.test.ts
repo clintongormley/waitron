@@ -45,6 +45,7 @@ import {
   sendToPrep,
   updateHeldOrder,
 } from "./working-order.js";
+import type { TicketState } from "./working-order.js";
 import {
   createStation,
   deactivateStation,
@@ -1114,6 +1115,38 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         params: { ticketItemId: missing },
       });
       // The refusals changed nothing.
+      const [after] = await ticketItemRows(tx, orderId);
+      expect(after!.state).toBe("queued");
+    });
+  });
+
+  it("advanceTicketItem refuses a garbage or missing `to` with the same code, not a raw TypeError", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+      const [item] = await ticketItemRows(tx, orderId);
+
+      // A garbage `to` — not a key of TICKET_TRANSITIONS. The till route casts `body.to as TicketState`
+      // with no route-level screen, so this is reachable at runtime despite the narrower static type;
+      // this is the till-api.ts route comment's claim, exercised directly at the verb.
+      await expect(
+        advanceTicketItem(tx, cfg, item!.id, "garbage" as unknown as TicketState),
+      ).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+      // A missing `to` — an absent JSON field reaches here as `undefined` the same way.
+      await expect(
+        advanceTicketItem(tx, cfg, item!.id, undefined as unknown as TicketState),
+      ).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+
+      // Neither refusal changed the item's state.
       const [after] = await ticketItemRows(tx, orderId);
       expect(after!.state).toBe("queued");
     });

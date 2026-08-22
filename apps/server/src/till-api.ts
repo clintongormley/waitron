@@ -687,10 +687,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Bump ONE ticket item one kitchen step (KDS-1 §3c) — the per-line advance that is the source of truth.
   // Body `{ to }` (`"preparing" | "ready"`). SESSION-GUARDED. `advanceTicketItem` is a single conditional
   // UPDATE: a skip/repeat/backwards move, an absent/foreign item, OR any non-{preparing,ready} `to`
-  // (including a missing body — its switch's default throws BEFORE any query, so no bad enum reaches the
-  // DB) all surface `ticket.invalid_transition` (409). The `:id` is `isUuid`-screened first, refused as
-  // that SAME code — a malformed id names no item exactly as an absent one — rather than a `22P02` 500.
-  // Returns 200 with an empty body; the display re-reads the station queue.
+  // (including a missing body — the verb's TICKET_TRANSITIONS-table lookup throws BEFORE any query when
+  // `to` is not a key, so no bad enum reaches the DB) all surface `ticket.invalid_transition` (409). The
+  // `:id` is `isUuid`-screened first, refused as that SAME code — a malformed id names no item exactly as
+  // an absent one — rather than a `22P02` 500. Returns 200 with an empty body; the display re-reads the
+  // station queue.
   app.post("/api/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -699,7 +700,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await c.req.json<{ to?: string }>();
       // `body.to` reaches `advanceTicketItem` as-is (cast): the verb owns the target validation, throwing
       // `ticket.invalid_transition` for `"queued"`, a missing field, or any garbage value — no route-level
-      // `to` screen is needed because that switch never lets an invalid value reach the enum column.
+      // `to` screen is needed because the verb's TICKET_TRANSITIONS-table lookup never lets an invalid
+      // value reach the enum column (a lookup miss is refused before the update runs, not after).
       const to = body.to as TicketState;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

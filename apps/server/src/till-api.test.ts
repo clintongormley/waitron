@@ -1219,6 +1219,39 @@ describe("KDS-1 station-display operate routes", () => {
     });
   });
 
+  it("POST /api/ticket-items/:id/advance with a garbage or missing `to` is 409 ticket.invalid_transition, not a 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie);
+    const cocina = await defaultStation(app, cookie);
+    const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const groups = (await q.json()) as { orderId: string; items: { id: string }[] }[];
+    const itemId = groups.find((g) => g.orderId === id)!.items[0]!.id;
+
+    // A `to` outside {preparing, ready, queued} — no route-level screen, so it reaches the verb as-is.
+    const garbage = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "garbage" }),
+    });
+    expect(garbage.status).toBe(409);
+    expect(await garbage.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+    });
+
+    // A missing `to` — the body has no `to` field at all.
+    const missing = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+    });
+  });
+
   it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

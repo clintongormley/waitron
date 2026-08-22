@@ -1969,11 +1969,17 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
  * conditional-UPDATE shape `advancePrep` used over `order_prep`, and the shape `abandonHeldOrder` uses
  * for `working_orders`.
  *
- * `to = "queued"` is refused immediately, before any query: no kitchen state legally advances INTO
- * `queued` (reaching it is a FIRE's job — {@link fireLines}'s insert), so that case throws the same
- * domain code the empty-`returning` branch would. The predecessor and stamp come from
- * {@link TICKET_TRANSITIONS}; {@link advanceSet} keeps the `.set()` fully typed against Drizzle's
- * inferred update shape (a computed key would not).
+ * `to` must name a key of {@link TICKET_TRANSITIONS} (`"preparing" | "ready"`) — anything else is
+ * refused immediately, before any query, with the same domain code the empty-`returning` branch below
+ * throws for an illegal move. That covers `to = "queued"` (no kitchen state legally advances INTO it —
+ * reaching it is a FIRE's job, {@link fireLines}'s insert) AND a missing/garbage `to`: the till route
+ * (`till-api.ts`) casts `body.to as TicketState` with no route-level screen, so an absent JSON field or
+ * an arbitrary string reaches here at runtime despite the narrower static type, and `to` is looked up in
+ * the table BEFORE {@link advanceSet} or the predecessor is read — a lookup miss must not reach either,
+ * or it throws a raw `TypeError` (`Cannot read properties of undefined`) that the error boundary maps to
+ * an opaque `server.internal` 500, not the documented 409. This one guard is what the old
+ * `switch (to) { … default: throw … }` did before the table refactor; the table replaced the three arms,
+ * not the default.
  *
  * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
  * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
@@ -1987,14 +1993,22 @@ export async function advanceTicketItem(
   itemId: string,
   to: TicketState,
 ): Promise<void> {
-  if (to === "queued") {
-    // No kitchen state advances TO queued — reaching it is a FIRE's job (fireLines' insert).
+  // `to as Exclude<TicketState, "queued">` only satisfies the index type — it asserts nothing at
+  // runtime, so "queued" (not a key of TICKET_TRANSITIONS) and any missing/garbage `to` both read back
+  // `undefined` here and are refused together, before `advanceSet`/`.from` ever run.
+  const table = TICKET_TRANSITIONS as Record<
+    string,
+    (typeof TICKET_TRANSITIONS)[Exclude<TicketState, "queued">] | undefined
+  >;
+  const transition = table[to];
+  if (transition === undefined) {
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
+  const validTo = to as Exclude<TicketState, "queued">;
   const updated = await tx
     .update(ticketItems)
-    .set(advanceSet(to))
-    .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, TICKET_TRANSITIONS[to].from)))
+    .set(advanceSet(validTo))
+    .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, transition.from)))
     .returning({ id: ticketItems.id });
   if (updated.length === 0) {
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
