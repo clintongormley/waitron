@@ -1050,9 +1050,11 @@ describe("TillApi", () => {
 
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
     // Typed `TabLine[]` so the mock is a compile-time proof the client mirror carries every field the
-    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`). A served line
-    // carries a timestamp, an unserved one `null` — the two floor states the table-order screen renders
-    // ("Servido" vs "Pendiente de servir"). `unitPriceGross` is the LOCKED gross unit, not a re-price.
+    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`, and KDS-2's
+    // `courseId`/`firedAt`). A served line carries a timestamp, an unserved one `null` — the two floor
+    // states the table-order screen renders ("Servido" vs "Pendiente de servir"). `courseId`/`firedAt`
+    // carry the kitchen coursing state the waiter-fire actions read. `unitPriceGross` is the LOCKED gross
+    // unit, not a re-price.
     const lines: TabLine[] = [
       {
         lineNo: 1,
@@ -1060,6 +1062,8 @@ describe("TillApi", () => {
         quantity: "1.000",
         unitPriceGross: "1.50",
         servedAt: "2026-08-06T10:00:00.000Z",
+        courseId: null,
+        firedAt: "2026-08-06T09:59:00.000Z",
       },
       {
         lineNo: 2,
@@ -1067,6 +1071,8 @@ describe("TillApi", () => {
         quantity: "2.000",
         unitPriceGross: "2.00",
         servedAt: null,
+        courseId: "course-1",
+        firedAt: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(lines));

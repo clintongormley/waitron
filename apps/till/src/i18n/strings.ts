@@ -186,6 +186,14 @@ export const en = {
   "table.status_title": "Status",
   "table.status_clear": "No status",
   "table.move_split": "Move · Split",
+  // KDS-2 (§5b): the round bar's per-line course picker + the waiter-fire drawer section.
+  // `table.course_label` labels each round line's course select; `table.course_default` is its
+  // "use the product's default" placeholder (there is no explicit "no course" option). `table.fire_title`
+  // heads the held-course section; `table.fire_course` is the per-course fire verb (course name appended).
+  "table.course_label": "Course",
+  "table.course_default": "Default",
+  "table.fire_title": "Courses to fire",
+  "table.fire_course": "Fire",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -344,6 +352,10 @@ export const es: Record<StringKey, string> = {
   "table.status_title": "Estado",
   "table.status_clear": "Sin estado",
   "table.move_split": "Mover · Dividir",
+  "table.course_label": "Curso",
+  "table.course_default": "Por defecto",
+  "table.fire_title": "Cursos por marchar",
+  "table.fire_course": "Marchar",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

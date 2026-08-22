@@ -453,6 +453,38 @@ describe("readTabLines", () => {
     });
   });
 
+  it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {
+    // cafe → Entrantes (earliest course, auto-fires on send); agua → Postres (a later course, HELD until
+    // fired). `addTabRound` fires the round via `fireLines`, which stamps `fired_at` on the earliest
+    // course and leaves the later one null. `readTabLines` LEFT-joins the ticket item so the tab screen
+    // can group its "Fire <course>" actions by held course.
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const entrantes = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
+    );
+    const postres = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 1 }),
+    );
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, entrantes.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, postres.id));
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { productId: cafeId, quantity: "1" },
+        { productId: aguaId, quantity: "1" },
+      ]),
+    );
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const cafe = lines.find((l) => l.productId === cafeId)!;
+    const agua = lines.find((l) => l.productId === aguaId)!;
+    // cafe's Entrantes is the earliest course → auto-fired (fired_at set); agua's Postres is later → held.
+    expect(cafe.courseId).toBe(entrantes.id);
+    expect(cafe.firedAt).not.toBeNull();
+    expect(agua.courseId).toBe(postres.id);
+    expect(agua.firedAt).toBeNull();
+  });
+
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

@@ -115,6 +115,9 @@ const till = {
   // The venue's KDS fire-control mode (KDS-2 §2c); `waiter` is the default (the tab screen fires), so the
   // station display shows no fire action unless a test drives this to `kitchen`.
   fireControl: "waiter" as const,
+  // The venue's ACTIVE kitchen courses (KDS-2 §5b) — threaded to the table-order screen's picker + fire
+  // actions. Empty by default; a test drives it to exercise the course surfaces.
+  courses: [] as { id: string; name: string; displayOrder: number }[],
   // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
   // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
   // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
@@ -202,6 +205,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     // status from its events. Each defaults to a resolved value; a test overrides any with its own fn.
     getTabLines: vi.fn().mockResolvedValue([]),
     addTabRound: vi.fn().mockResolvedValue(undefined),
+    fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
@@ -1399,6 +1403,8 @@ describe("till-app", () => {
         quantity: "2.000",
         unitPriceGross: "1.50",
         servedAt: null,
+        courseId: null,
+        firedAt: "2026-08-17T09:59:00.000Z",
       };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue([tabLine]);
@@ -1450,6 +1456,71 @@ describe("till-app", () => {
         // Appended to the tab's own working order, then re-read so the drawer reflects the new round.
         expect(addTabRound).toHaveBeenCalledWith("wo-7", [{ productId: "cafe", quantity: "1" }]);
         expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("send-round forwards a per-line course OVERRIDE verbatim to addTabRound (KDS-2 §5b)", async () => {
+        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          addTabRound,
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        emit(screen, "send-round", {
+          lines: [{ productId: "cafe", quantity: "1", courseId: "postres" }],
+        });
+        await flush(el);
+        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
+          { productId: "cafe", quantity: "1", courseId: "postres" },
+        ]);
+      });
+
+      it("boots the venue courses + fire mode and threads them to the table-order screen", async () => {
+        const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, courses, fireControl: "waiter" }),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(screen.courses).toEqual(courses);
+        expect(screen.fireControl).toBe("waiter");
+      });
+
+      it("fire-course fires the held course on the tab then reloads its lines", async () => {
+        const fireCourse = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          fireCourse,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "fire-course", { orderId: "wo-7", courseId: "c1" });
+        await flush(el);
+
+        // Released on the tab's own working order (activeTabId), then re-read so the held-course actions
+        // reconcile to server truth (the fired course drops off).
+        expect(fireCourse).toHaveBeenCalledWith("wo-7", "c1");
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("a failed fire-course surfaces a non-fatal banner, leaving the screen up", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+        emit(screen, "fire-course", { orderId: "wo-7", courseId: "c1" });
+        await flush(el);
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
       });
 
       it("serve-line marks the line served then reloads its lines", async () => {

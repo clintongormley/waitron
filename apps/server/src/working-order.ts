@@ -110,20 +110,6 @@ async function priceOrderLines(
     return { product, quantity: line.quantity };
   });
 
-  // Each fired product's DEFAULT course, one batched read keyed by product id — the same
-  // `inArray(products.id, …)` idiom `fireLines` uses for its station routes below. `listAvailableProducts`
-  // (`AvailableProduct`, deliberately assignable to `PriceableProduct`) does not carry `course_id`, so the
-  // course default is read here rather than widening the catalogue surface. Every id is already known
-  // sellable (the `sale.unknown_product` gate above), so each resolves a row; RLS confines the read to the
-  // tenant. The resolver is `override ?? product.course_id` (spec §2b): a non-null line override wins,
-  // otherwise the product default, otherwise null (fires earliest).
-  const productIds = [...new Set(lines.map((line) => line.productId))];
-  const courseRows = await tx
-    .select({ id: products.id, courseId: products.courseId })
-    .from(products)
-    .where(inArray(products.id, productIds));
-  const courseByProduct = new Map(courseRows.map((row) => [row.id, row.courseId]));
-
   const priced = priceBasket(items);
   const lineRows = priced.lines.map((line, i) => ({
     tenantId: cfg.tenantId,
@@ -154,9 +140,15 @@ async function priceOrderLines(
     // `grossLineTotals`/`grossUnitPrices`.
     lineTotal: priced.grossLineTotals[i]!,
     category: line.category ?? null,
-    // KDS-2 ring-time course (§2b): the line-level override wins, else the product's default course, else
-    // null. `priced.lines` is in `lines` order, so row `i` reads its override from `lines[i]`.
-    courseId: lines[i]!.courseId ?? courseByProduct.get(lines[i]!.productId) ?? null,
+    // KDS-2 ring-time course (§2b): the resolver is `<override> ?? product.course_id`. The line-level
+    // override wins (a non-null `courseId` on the input line — only the tab round-send threads one, from
+    // its course picker), else the product's DEFAULT course, else null (fires earliest). Both the
+    // override and the default are read from data already in hand — `lines[i]` and the resolved
+    // `items[i].product.courseId` (the `AvailableProduct.course_id` `listAvailableProducts` now returns)
+    // — so no separate product read is needed. `priced.lines`/`items`/`lines` share one order, so row `i`
+    // lines up across all three; `items[i].product` is defined for every line (the `sale.unknown_product`
+    // gate above threw otherwise).
+    courseId: lines[i]!.courseId ?? items[i]!.product.courseId ?? null,
   }));
   return { lineRows, priced };
 }
@@ -992,6 +984,16 @@ export interface TabLine {
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
+  /** The line's RESOLVED kitchen course (KDS-2 `working_order_lines.course_id`), or null when it has
+   * none (a null-course line fires immediately). The tab-order screen groups the waiter-fire actions by
+   * this; the course NAME comes from the venue course list the boot payload carries, not from here. */
+  courseId: string | null;
+  /** When the line's kitchen ticket item was FIRED (`ticket_items.fired_at`), or null while its course
+   * is still HELD — the tab surfaces a "Fire <course>" action for each course with a held line under
+   * `fire_control = 'waiter'` (§5b). LEFT-joined, so it is null for a line that never fired a ticket
+   * item (the empty-`openTab`-with-lines edge the app never exercises); a null-course line always fires,
+   * so a held line always carries a non-null `courseId`. */
+  firedAt: string | null;
 }
 
 /**
@@ -1018,6 +1020,12 @@ export async function readTabLines(
   tabId: string,
 ): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
+  // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` — one item per line at
+  // most (`ticket_items` is UNIQUE on `(tenant_id, working_order_line_id)`), so the join never
+  // multiplies rows. `course_id` is read from `working_order_lines` (the authoritative ring-time
+  // resolution), not the item snapshot, so a line with no ticket item still reports its course; `fired_at`
+  // has no home but the item, so it is null when the join finds none. Both feed the tab's per-course
+  // waiter-fire (§5b); the existing pay/serve columns are unchanged.
   return tx
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -1025,8 +1033,11 @@ export async function readTabLines(
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       servedAt: workingOrderLines.servedAt,
+      courseId: workingOrderLines.courseId,
+      firedAt: ticketItems.firedAt,
     })
     .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
 }

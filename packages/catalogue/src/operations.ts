@@ -99,6 +99,11 @@ export interface AvailableProduct {
   vatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
+  /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
+   * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
+   * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
+   * a `listAvailableProducts` row stays structurally assignable to it (priceBasket ignores it). */
+  courseId: string | null;
 }
 
 const CATALOGUE_COLUMNS = {
@@ -337,6 +342,7 @@ export async function listAvailableProducts(
       vatClass: products.vatClass,
       category: categories.name,
       allergens: products.allergens,
+      courseId: products.courseId,
     })
     .from(locations)
     .innerJoin(catalogues, eq(catalogues.id, locations.catalogueId))
@@ -354,5 +360,6 @@ export async function listAvailableProducts(
     vatClass: row.vatClass as VatClass,
     category: row.category,
     allergens: row.allergens,
+    courseId: row.courseId,
   }));
 }

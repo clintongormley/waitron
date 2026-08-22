@@ -15,17 +15,28 @@ const cafe: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
+  // Default course = Postres, so the round-course picker pre-selects it for a café line.
+  courseId: "postres",
 };
 
 const products: TillProduct[] = [cafe];
 
-// Two dos-café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served.
+// The venue's active courses, in display order (KDS-2 §5b) — the picker options + fire id→name source.
+const courses = [
+  { id: "entrantes", name: "Entrantes", displayOrder: 0 },
+  { id: "postres", name: "Postres", displayOrder: 1 },
+];
+
+// Two dos-café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both
+// have a null course fired immediately (KDS-2 fields), so they surface no waiter-fire action by default.
 const pendingLine: TabLine = {
   lineNo: 1,
   productId: "cafe",
   quantity: "2.000",
   unitPriceGross: "1.50",
   servedAt: null,
+  courseId: null,
+  firedAt: "2026-08-20T09:59:00.000Z",
 };
 const servedLine: TabLine = {
   lineNo: 2,
@@ -33,6 +44,8 @@ const servedLine: TabLine = {
   quantity: "1.000",
   unitPriceGross: "1.50",
   servedAt: "2026-08-20T10:00:00.000Z",
+  courseId: null,
+  firedAt: "2026-08-20T09:59:00.000Z",
 };
 
 const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
@@ -235,5 +248,123 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
       formatMoney("0.00"),
     );
+  });
+
+  // ── KDS-2 (§5b): the per-line course picker + the waiter-fire actions ──────────────────────────────
+
+  /** Rings one café into the current round (the grid tile) and returns the per-line course selects. */
+  async function ringAndPickers(el: TillTableOrderScreen): Promise<HTMLSelectElement[]> {
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    return [...el.shadowRoot!.querySelectorAll<HTMLSelectElement>("[data-round-course]")];
+  }
+
+  it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
+    const { el } = await mount({ courses });
+    // No round yet ⇒ no picker.
+    expect(el.shadowRoot!.querySelector("[data-round-courses]")).toBeNull();
+    const [picker] = await ringAndPickers(el);
+    // One select for the one round line, pre-selected to the café's default course (Postres), with an
+    // option per active venue course plus the "use default" placeholder.
+    expect(picker).not.toBeUndefined();
+    expect(picker!.value).toBe("postres");
+    const optionValues = [...picker!.options].map((o) => o.value);
+    expect(optionValues).toEqual(["", "entrantes", "postres"]);
+  });
+
+  it("hides the course picker when the venue has no courses to pick", async () => {
+    const { el } = await mount({ courses: [] });
+    await ringAndPickers(el);
+    expect(el.shadowRoot!.querySelector("[data-round-courses]")).toBeNull();
+  });
+
+  it("send-round OMITS courseId for an unoverridden line (the server applies the product default)", async () => {
+    const { el } = await mount({ courses });
+    await ringAndPickers(el);
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    // No override picked ⇒ the line carries only productId + quantity; the server resolves the product's
+    // default course from `<override> ?? product.course_id`.
+    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+  });
+
+  it("send-round threads the picked course OVERRIDE for a line the waiter re-pointed", async () => {
+    const { el } = await mount({ courses });
+    const [picker] = await ringAndPickers(el);
+    // Override the café line from its default (Postres) to Entrantes.
+    picker!.value = "entrantes";
+    picker!.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      { productId: "cafe", quantity: "1", courseId: "entrantes" },
+    ]);
+  });
+
+  it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
+    const { el } = await mount({ courses });
+    const [picker] = await ringAndPickers(el);
+    picker!.value = "entrantes";
+    picker!.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    // Back to the "use default" placeholder ⇒ no override sent.
+    picker!.value = "";
+    picker!.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+  });
+
+  // A held (fired_at null) line of a named course — the tab's food waiting for the waiter to fire it.
+  const heldLine: TabLine = {
+    lineNo: 3,
+    productId: "cafe",
+    quantity: "1.000",
+    unitPriceGross: "1.50",
+    servedAt: null,
+    courseId: "postres",
+    firedAt: null,
+  };
+
+  it("shows a Fire <course> action per HELD course under fire_control='waiter' and emits fire-course", async () => {
+    const { el } = await mount({
+      lines: [heldLine],
+      courses,
+      fireControl: "waiter",
+      orderId: "wo-9",
+    });
+    await openDrawer(el);
+    const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire-course="postres"]');
+    expect(fire).not.toBeNull();
+    // The action names the course (Marchar Postres).
+    expect(fire!.textContent).toContain(t("table.fire_course"));
+    expect(fire!.textContent).toContain("Postres");
+
+    let captured: CustomEvent | undefined;
+    el.addEventListener("fire-course", (e) => (captured = e as CustomEvent));
+    fire!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+    expect(captured!.detail).toEqual({ orderId: "wo-9", courseId: "postres" });
+  });
+
+  it("shows NO waiter-fire action under fire_control='kitchen' (the station display owns the fire)", async () => {
+    const { el } = await mount({ lines: [heldLine], courses, fireControl: "kitchen" });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire-course="postres"]')).toBeNull();
+  });
+
+  it("shows no waiter-fire action when nothing is held (a fired / null-course line)", async () => {
+    // pendingLine has a null course fired immediately ⇒ not held ⇒ no fire action.
+    const { el } = await mount({ lines: [pendingLine], courses, fireControl: "waiter" });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
   });
 });

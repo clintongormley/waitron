@@ -59,7 +59,7 @@ import {
   voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
-import { listStations } from "./kitchen.js";
+import { listCourses, listStations } from "./kitchen.js";
 import {
   clearSessionCookie,
   isUuid,
@@ -411,6 +411,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ bumpMode: locations.bumpMode, fireControl: locations.fireControl })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
+        // The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` then name — the coursing
+        // sequence the tab-order screen's per-line course picker offers, and the id→name map its
+        // waiter-fire actions read. Rides this same unauthenticated boot read for the same reason as
+        // `bump_mode`/`fire_control`: venue KDS config with no secrets, no server-side sale-path consumer,
+        // read where it is used rather than lifted onto `deps.cfg`. Trimmed to the picker's shape
+        // (`active` is always true here — `listCourses` is active-only — so it is dropped from the wire).
+        const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
+          id: course.id,
+          name: course.name,
+          displayOrder: course.displayOrder,
+        }));
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
@@ -418,6 +429,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           issuer: row,
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
+          courses,
           layout: definition,
           receipt,
         };
@@ -447,6 +459,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // threads it to the station-display screen, which shows the per-course kitchen-fire action only
         // when this is `kitchen` (under `waiter` the tab screen owns the fire, Task 7).
         fireControl: boot.fireControl,
+        // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the tab-order screen's course picker options
+        // and the id→name source for its waiter-fire actions. `[]` for a venue with no courses configured.
+        courses: boot.courses,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
@@ -1009,7 +1024,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const body = await c.req.json<{ lines: { productId: string; quantity: string }[] }>();
+      // Each round line MAY carry a `courseId` OVERRIDE (KDS-2 §5b) the tab screen's per-line course
+      // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
+      // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
+      const body = await c.req.json<{
+        lines: { productId: string; quantity: string; courseId?: string | null }[];
+      }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await addTabRound(tx, deps.cfg, id, body.lines);
