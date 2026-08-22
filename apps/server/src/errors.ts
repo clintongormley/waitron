@@ -633,6 +633,55 @@ declare module "@waitron/shared" {
      */
     "ticket.not_fired": { workingOrderId: string };
     /**
+     * A per-line ticket-item bump was refused because the line is still HELD (KDS-2 hold-and-fire) — its
+     * course has not been fired to the kitchen yet (`ticket_items.fired_at IS NULL`, greyed on the station
+     * display). A later KDS-2 task's `advanceTicketItem` adds a `fired_at IS NOT NULL` gate to its
+     * conditional bump UPDATE: a held item is on no station's active queue, so there is nothing to advance,
+     * and the bump throws THIS rather than silently matching no row (the same fail-loud shape the coursing
+     * model uses — held food is displayed, not dropped). Distinct from `ticket.invalid_transition`, which
+     * refuses an ILLEGAL move (a skip, a repeat, a jump backwards) on a line that HAS been fired: item_held
+     * is the orthogonal fact that the line is not yet in the kitchen at all. Firing the line's course
+     * (stamping `fired_at`) is the caller's remedy; only then does the bump become legal.
+     *
+     * A fact about the ticket ITEM's kitchen state, not the process → mapped to 409 by the till route's
+     * surface in a later task (the same 409 the state-conflict `ticket.*` codes sit in); the id may be
+     * valid, but the item's held state forbids the move. `ticketItemId` names the affected item's OWN id —
+     * a ticket item is held/advanced per LINE, so the id that failed is the line's ticket item, not the
+     * order — mirroring `ticket.invalid_transition`'s `ticketItemId` exactly. A caller-supplied uuid the
+     * display already holds, not a secret, so echoing it is what makes the error actionable (the rule
+     * `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN CONCEPT (a kitchen ticket item), never
+     * the throwing package (that same note). Never renamed once shipped.
+     */
+    "ticket.item_held": { ticketItemId: string };
+    /**
+     * A kitchen-course name already exists in this venue (KDS-2) — the `(tenant_id, location_id, name)`
+     * unique (`kitchen_courses_name_key`) rejected the insert/update. `name` is the operator-supplied
+     * human label ("Entrantes", "Principales", "Postres"), not a secret, so echoing it is what makes the
+     * error actionable — the same shape `station.name_taken`'s `name` and `zone.name_taken`'s `name` use,
+     * named `name` to match the column `kitchen_courses.name` actually carries. `course.*`, not `server.*`,
+     * for the reason `tenant.not_found`'s note gives (the prefix names the DOMAIN CONCEPT — a kitchen
+     * course — never the throwing package). Mapped to 409 by the management route surface a later KDS-2
+     * task wires the course config verbs into, matching `station.name_taken`. Never renamed once shipped.
+     */
+    "course.name_taken": { name: string };
+    /**
+     * No such kitchen course for this tenant + venue (KDS-2), OR one that is DEACTIVATED. The by-id course
+     * config verbs (update/deactivate, and the routing verb that sets a product's default course) throw
+     * THIS when the course id names none this venue may reach (absent, another tenant's that RLS hides, or
+     * another VENUE's of the same tenant — the config verbs are location-scoped) or names a real but
+     * `active = false` row. All of those fold into the one code, the same fail-closed shape
+     * `station.not_found`/`zone.not_found` use — to a caller picking a course, "gone", "foreign" and
+     * "retired" are the same fact (there is no live course here to use). The inactive case is deliberately
+     * folded in (not a distinct `course.inactive`), exactly as `station.not_found` folds its own.
+     *
+     * `courseId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
+     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
+     * gives). Qualified `courseId` to match the domain-record not_found family (`station.not_found`'s
+     * `stationId`, `zone.not_found`'s `zoneId`). `course.*`, not `server.*`, for the reason
+     * `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     */
+    "course.not_found": { courseId: string };
+    /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
      * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this
