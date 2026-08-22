@@ -1,7 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
+import { descriptionFor, trimQuantity } from "./dish-format.js";
 import type { StationQueueGroup, StationQueueItem, TicketState } from "../api/client.js";
 
 /** The kitchen state each ticket item advances TO next. `ready` is terminal (a counter order's handover
@@ -293,36 +294,35 @@ export class TillStationQueue extends LitElement {
   /** A rail line: the dish (`qty× name`) + its localised state, tappable to bump unless terminal
    *  (`ready`). The card head already names the order, so a line needs only its dish + state. */
   #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
-    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
     const state = html`<span class="line-state"
       >${t(`station.state.${item.state}` as const)}</span
     >`;
-    if (NEXT[item.state] === undefined) {
-      return html`<span class="line state-${item.state} terminal" data-item=${item.id}
-        >${dish}${state}</span
-      >`;
-    }
-    return html`<button
-      class="line state-${item.state}"
-      data-item=${item.id}
-      aria-label=${this.#bumpLabel(group)}
-      @click=${() => this.#bump(group, item)}
-    >
-      ${dish}${state}
-    </button>`;
+    return this.#renderLine(group, item, state);
   }
 
   /** A kanban cell: the dish (`qty× name`) tagged with its order — the columns cut across orders, so a
    *  cell keeps the order number (which order this dish belongs to) beside the dish. Tappable to bump
    *  unless terminal (`ready`). */
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
-    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
     const tag = html`<span class="number"
       >#${group.orderNumber}${group.label ? html` · ${group.label}` : nothing}</span
     >`;
+    return this.#renderLine(group, item, tag);
+  }
+
+  /** The shared line box both lenses render: the dish label followed by a `secondary` element (the
+   *  rail's state text or the kanban's order tag). A terminal (`ready`) line — one with no successor —
+   *  is a non-interactive span; any other is the tappable bump button, with the SAME class/aria-label/
+   *  @click wiring across both views, so the two lenses stay a single source of truth for that box. */
+  #renderLine(
+    group: StationQueueGroup,
+    item: StationQueueItem,
+    secondary: TemplateResult,
+  ): TemplateResult {
+    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
     if (NEXT[item.state] === undefined) {
       return html`<span class="line state-${item.state} terminal" data-item=${item.id}
-        >${dish}${tag}</span
+        >${dish}${secondary}</span
       >`;
     }
     return html`<button
@@ -331,19 +331,16 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${dish}${tag}
+      ${dish}${secondary}
     </button>`;
   }
 
   /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name resolves in
-   *  the operator locale with a first-available fallback (matching {@link productName} — the till's own
-   *  set-at-boot `currentLocale()` is `TillInfo.locale`), degrading to "" only for an empty map; the
-   *  quantity is the line's numeric(_,3) trimmed of trailing zeros ("2.000" → "2", "0.320" → "0.32"),
-   *  the same trim `till-table-order-screen` uses. */
+   *  the operator locale with a first-available fallback ({@link descriptionFor}, degrading to "" for an
+   *  empty map — the till's set-at-boot `currentLocale()` is `TillInfo.locale`); the quantity is the
+   *  line's numeric(_,3) trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
   #dish(item: StationQueueItem): string {
-    const name = item.descriptions[currentLocale()] ?? Object.values(item.descriptions)[0] ?? "";
-    const qty = item.quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-    return `${qty}× ${name}`;
+    return `${trimQuantity(item.quantity)}× ${descriptionFor(item.descriptions, "")}`;
   }
 
   /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */

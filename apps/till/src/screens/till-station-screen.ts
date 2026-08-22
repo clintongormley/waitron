@@ -150,6 +150,20 @@ export class TillStationScreen extends LitElement {
   }
 
   /**
+   * Run one advance verb, then reconcile on BOTH paths: a rejected move (a race, a since-advanced line)
+   * is SWALLOWED and the reload converges the queue on server truth. Shared by the per-line and
+   * whole-ticket handlers — the degrade-gracefully shape the method docs describe.
+   */
+  async #advance(call: () => Promise<void>): Promise<void> {
+    try {
+      await call();
+    } catch {
+      // Non-fatal — the reload reconciles the queue to server truth.
+    }
+    await this.#reload();
+  }
+
+  /**
    * A per-line bump from the widget (`bump_mode = line`, the source of truth). Handle it HERE and stop it
    * — the app must not also see it (it owns the counter's own default-station widget). Advance, then
    * reload on BOTH paths so a rejected move (a race, a since-advanced line) reconciles to server truth.
@@ -159,12 +173,7 @@ export class TillStationScreen extends LitElement {
     const { itemId, to } = (
       event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
     ).detail;
-    try {
-      await this.api.advanceTicketItem(itemId, to);
-    } catch {
-      // Non-fatal — the reload reconciles the queue to server truth (see the method doc).
-    }
-    await this.#reload();
+    await this.#advance(() => this.api.advanceTicketItem(itemId, to));
   }
 
   /**
@@ -180,12 +189,7 @@ export class TillStationScreen extends LitElement {
         to: Exclude<TicketState, "queued">;
       }>
     ).detail;
-    try {
-      await this.api.advanceTicket(orderId, stationId, to);
-    } catch {
-      // Non-fatal — the reload reconciles (see #onAdvanceTicketItem).
-    }
-    await this.#reload();
+    await this.#advance(() => this.api.advanceTicket(orderId, stationId, to));
   }
 
   override render() {
