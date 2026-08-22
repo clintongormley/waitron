@@ -761,7 +761,11 @@ export async function payWorkingOrderIntegrated(
       } else {
         priced = await priceStoredOrder(tx, req.id);
       }
-      return { kind: "collect" as const, priced };
+      // A `placed` order at this read is a genuine COUNTER COLLECT (the card is being tendered at the
+      // collect stage of a prepared order) rather than a walk-up `open` → settle; `finalizeCapture`
+      // stamps `collected_at` (dropping it from its station queue) only in that case — the integrated
+      // analogue of `fileImmediateSale`'s `markCollected` (KDS-1 §3e).
+      return { kind: "collect" as const, priced, wasPlaced: locked?.status === "placed" };
     },
     { nodeId: cfg.nodeId },
   );
@@ -810,7 +814,16 @@ export async function payWorkingOrderIntegrated(
       ticket: await finalizeSettle(deps, cfg, req, prepared.outstanding, tip, result),
     };
   }
-  const ticket = await finalizeCapture(deps, cfg, req, prepared.priced, tip, result, operatorId);
+  const ticket = await finalizeCapture(
+    deps,
+    cfg,
+    req,
+    prepared.priced,
+    tip,
+    result,
+    operatorId,
+    prepared.wasPlaced,
+  );
   return { outcome: "captured", ticket };
 }
 
@@ -850,6 +863,9 @@ async function finalizeCapture(
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
+  // True when the order was `placed` at P1 (a counter card collect, not a walk-up `open` → settle) —
+  // then `collected_at` is stamped in the settle UPDATE so the order leaves its station queue (§3e).
+  markCollected = false,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
@@ -903,9 +919,17 @@ async function finalizeCapture(
 
         // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
         // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
+        // A counter collect (`markCollected`, the order was `placed`) ALSO stamps the order-level
+        // `collected_at` handover marker in this same transition — a later UPDATE would be settled →
+        // settled, which the trigger rejects. Same instant as `settled_at`; NON-FISCAL (the alta path
+        // never reads it). A walk-up `open` → settle leaves it NULL.
         await tx
           .update(workingOrders)
-          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .set({
+            status: "settled",
+            settledAt: settledAt.toISOString(),
+            ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
+          })
           .where(eq(workingOrders.id, req.id));
 
         return {
@@ -1058,10 +1082,17 @@ async function finalizeRecovery(
 
       // → settled, at the ORIGINAL capture instant (the same reading the tender carries).
       // `working_orders_enforce_transition` permits open → settled and placed → settled; the `settled_at`
-      // biconditional requires the timestamp be set.
+      // biconditional requires the timestamp be set. A recovered order that was `placed` (a genuine
+      // counter collect whose P3 was lost) ALSO stamps `collected_at` here so it leaves its station queue
+      // (§3e) — read off the FOR-UPDATE status above, the recover-time analogue of `finalizeCapture`'s
+      // P1 `markCollected`. A recovered WALK-UP (`open`, never fired) leaves it NULL. NON-FISCAL.
       await tx
         .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .set({
+          status: "settled",
+          settledAt: settledAt.toISOString(),
+          ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
+        })
         .where(eq(workingOrders.id, req.id));
 
       return {
@@ -1154,10 +1185,17 @@ async function finalizeSettle(
         });
 
         // placed → settled. `working_orders_enforce_transition` permits it; the `settled_at` biconditional
-        // requires the timestamp be set — the same instant the tender carries.
+        // requires the timestamp be set — the same instant the tender carries. An invoice-first settle is
+        // ALWAYS a counter collect (the order was `placed` at placing), so `collected_at` is stamped
+        // UNCONDITIONALLY in this same transition — dropping it from its station queue (§3e). NON-FISCAL:
+        // the settle files nothing new, so the fiscal record is byte-unchanged.
         await tx
           .update(workingOrders)
-          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .set({
+            status: "settled",
+            settledAt: settledAt.toISOString(),
+            collectedAt: settledAt.toISOString(),
+          })
           .where(eq(workingOrders.id, req.id));
 
         // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
@@ -1278,10 +1316,17 @@ async function finalizeSettleRecovery(
         tenantId: cfg.tenantId,
       });
 
-      // placed → settled, at the ORIGINAL capture instant (the same reading the tender carries).
+      // placed → settled, at the ORIGINAL capture instant (the same reading the tender carries). An
+      // invoice-first recovery is ALWAYS a PLACED counter collect, so `collected_at` is stamped
+      // UNCONDITIONALLY in this same transition — the order leaves its station queue (§3e). NON-FISCAL
+      // (a settle files nothing).
       await tx
         .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .set({
+          status: "settled",
+          settledAt: settledAt.toISOString(),
+          collectedAt: settledAt.toISOString(),
+        })
         .where(eq(workingOrders.id, req.id));
 
       return {
