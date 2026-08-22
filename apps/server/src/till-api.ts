@@ -43,6 +43,7 @@ import {
   listHeldOrders,
   listStationQueue,
   listTablesWithState,
+  markCollected,
   markLineServed,
   mergeTabs,
   moveTab,
@@ -139,6 +140,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_open": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
+  // The Mode-P counter handover (`markCollected`, `POST /api/orders/:id/collect`). Re-collecting an
+  // already-handed-over order is `working_order.already_collected`, and collecting an order that was
+  // never fired is `ticket.not_fired` — both 409, the same family as `not_settled`/`ticket.already_fired`
+  // (the id is valid, but the order's handover/kitchen state forbids the operation).
+  "working_order.already_collected": 409,
+  "ticket.not_fired": 409,
   "working_order.reason_required": 400,
   // Kitchen tickets (KDS-1). A re-fire of an order already sent to the kitchen is `ticket.already_fired`
   // (409 — the order's lines are already in the kitchen; `sendToPrep`'s double-send, mapped from the
@@ -737,6 +744,26 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await asAppUser(tx);
         await advanceTicket(tx, deps.cfg, orderId, stationId, to);
       });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e). SESSION-GUARDED.
+  // `markCollected` stamps the order-level `collected_at`, which drops the order off `listStationQueue`
+  // (the display shows an order until it is collected). NON-FISCAL — it writes ONLY `collected_at`,
+  // touching no sale/registro/tender/huella (the order was already paid + filed at settle). DISTINCT from
+  // the placed-collect FISCAL route `POST /api/working-orders/:id/collect` (`collectOrder`), hence the
+  // distinct `/api/orders/:id/collect` path (the sibling `/api/orders/:id/stations/:sid/advance` already
+  // lives here). A non-settled/absent/foreign id is refused `working_order.not_settled` (409), an
+  // already-handed-over order `working_order.already_collected` (409), and an order never fired
+  // `ticket.not_fired` (409) — all BEFORE any write. The id is `isUuid`-screened first, refused as
+  // `working_order.not_settled` (the SAME code an absent/non-settled id gets) rather than the `22P02`
+  // opaque 500 the raw value would raise. Returns 200 with an empty body; the display re-reads the queue.
+  app.post("/api/orders/:id/collect", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
+      await markCollected({ db: deps.db }, deps.cfg, id);
       return c.body(null, 200);
     }),
   );

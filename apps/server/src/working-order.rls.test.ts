@@ -36,6 +36,7 @@ import {
   getHeldOrder,
   listHeldOrders,
   listStationQueue,
+  markCollected,
   parkOrder,
   placeOrder,
   sendToPrep,
@@ -2044,5 +2045,146 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       params: { workingOrderId: foreignId },
     });
     expect(await ticketStateOf(foreignId)).toBeNull(); // tenant B's refused call fired nothing
+  });
+});
+
+describe("markCollected (Mode-P kitchen-handover marker)", () => {
+  // The end-to-end proof the KDS-1 regression is closed. This RESTORES the base suite's "advancePrep
+  // walks queued → preparing → ready → collected" assertion on the new ticket model: the branch had
+  // rewritten it to stop at `ready` (CLAUDE.md §1 — a test rewritten to match the code hides the very
+  // regression it existed to catch). A Mode-P (prepay) order pays at order, is fired via sendToPrep,
+  // walks queued → preparing → ready, then is HANDED OVER — markCollected stamps `collected_at`, and it
+  // drops off listStationQueue. Before the fix that stamp was impossible (a settled order was immutable),
+  // so a fired Mode-P order's tickets lingered on the display forever.
+  it("Mode P: fired → ready → markCollected stamps collected_at and drops the order off listStationQueue", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const station = await defaultStationId(cfg);
+    const id = randomUUID();
+
+    // Pay at order (open → settled in one tx — the Mode-P walk-up), then fire the settled order's lines.
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await sendToPrep({ db: suite.admin }, cfg, id);
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+    ).toEqual([id]);
+
+    // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
+    const [item] = await ticketItemIdsFor(id);
+    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
+    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    expect(await ticketStateOf(id)).toBe("ready");
+    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    // Still listed — a ready-but-uncollected order lingers (the bug was that it could NEVER leave) — and
+    // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
+    expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
+    expect(readyQueue[0]!.status).toBe("settled");
+
+    // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/registro/tender/huella).
+    await markCollected({ db: suite.admin }, cfg, id);
+    expect(await collectedAtSet(id)).toBe(true);
+    // GONE from the station queue — the regression is closed.
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+  });
+
+  it("refuses a non-settled order — an open one, an absent id, and another tenant's settled+fired order (working_order.not_settled)", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+
+    // OPEN — parked, never paid: not settled, so there is no handover to mark. Fails closed before any write.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(markCollected({ db: suite.admin }, cfg, openId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: openId },
+    });
+    expect(await collectedAtSet(openId)).toBe(false);
+
+    // ABSENT — the existence+status read catches it before any write (never a raw error).
+    const missing = randomUUID();
+    await expect(markCollected({ db: suite.admin }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: missing },
+    });
+
+    // ANOTHER tenant's genuinely settled+fired order — RLS hides it, so tenant B sees no row and refuses
+    // the SAME fail-closed code (never a distinct "wrong tenant" code confirming A's order exists).
+    const { cfg: tenantB } = await modeVenue("prepay");
+    const foreignId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id: foreignId,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await sendToPrep({ db: suite.admin }, cfg, foreignId);
+    await expect(markCollected({ db: suite.admin }, tenantB, foreignId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: foreignId },
+    });
+    expect(await collectedAtSet(foreignId)).toBe(false); // tenant B's refused call stamped nothing
+  });
+
+  it("refuses a settled order that was never fired (ticket.not_fired) — nothing on the kitchen queue to hand over", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    // Settled but NOT sent to prep — no ticket_items exist, so there is nothing on any station display to
+    // hand over. Stamping collected_at here would silently hide a LATER sendToPrep's fired lines, so it is
+    // refused rather than made a no-op.
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await expect(markCollected({ db: suite.admin }, cfg, id)).rejects.toMatchObject({
+      code: "ticket.not_fired",
+      params: { workingOrderId: id },
+    });
+    expect(await collectedAtSet(id)).toBe(false);
+  });
+
+  it("refuses a re-collect of an already-handed-over order (working_order.already_collected)", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await sendToPrep({ db: suite.admin }, cfg, id);
+    await markCollected({ db: suite.admin }, cfg, id); // first handover — allowed
+    expect(await collectedAtSet(id)).toBe(true);
+    // A second markCollected is refused BEFORE it reaches enforce_transition (whose non-null → non-null
+    // collected_at RAISE would otherwise become an opaque 500), with a clean domain code.
+    await expect(markCollected({ db: suite.admin }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.already_collected",
+      params: { workingOrderId: id },
+    });
   });
 });

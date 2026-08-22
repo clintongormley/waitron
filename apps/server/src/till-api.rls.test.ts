@@ -752,6 +752,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       orderNumber: number;
       label: string | null;
       queuedAt: string;
+      status: string;
       items: {
         id: string;
         workingOrderLineId: string;
@@ -766,6 +767,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         orderNumber: expect.any(Number),
         label: "Mesa 9",
         queuedAt: expect.any(String),
+        // A fired-at-PLACING order (Modes I/T) is on the queue as `placed` — not collectable via the
+        // Mode-P handover route; its collect is the fiscal `POST /api/working-orders/:id/collect` below.
+        status: "placed",
         items: [
           {
             id: expect.any(String),
@@ -927,5 +931,110 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
       await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
     ).json()) as { orderId: string }[];
     expect(queueAfterRefusal.find((g) => g.orderId === openId)).toBeUndefined();
+  });
+});
+
+// KDS-1 collect fix — the Mode-P counter handover. A settled walk-up fired to the kitchen and walked to
+// `ready` is handed to the customer via POST /api/orders/:id/collect — the NON-FISCAL marker that stamps
+// `collected_at` and drops the order off the station display (the very thing the regression made
+// impossible: a settled order was immutable, so a fired Mode-P order lingered forever). Real Postgres,
+// because it needs a genuine fiscal settle (`POST /api/sales`, Mode P's walk-up) plus the 0056
+// enforce_transition relaxation — neither of which the hermetic stub `FiscalBackend` can exercise.
+describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
+  it("hands over a fired, ready order: 200, collected_at stamped, off the station queue; a still-OPEN order is refused working_order.not_settled", async () => {
+    const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+    const each = available.find((p) => p.pricingUnit === "each")!;
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+
+    // Walk-up settle (open → settled in one tx) → send to prep → the line is on the default station's queue.
+    const workingOrderId = randomUUID();
+    await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ productId: each.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    const stations = (await (
+      await app.request("/api/stations", { headers: { cookie } })
+    ).json()) as { id: string; isDefault: boolean }[];
+    const station = stations.find((s) => s.isDefault)!;
+    const queueUrl = `/api/stations/${station.id}/queue`;
+
+    // The group carries the order's `status` — the till reads COLLECTABLE off it (settled = Mode-P pickup).
+    const queued = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+      orderId: string;
+      status: string;
+      items: { id: string }[];
+    }[];
+    expect(queued[0]!.status).toBe("settled");
+    const itemId = queued[0]!.items[0]!.id;
+
+    // Walk it queued → preparing → ready over the per-line advance route. A ready-but-uncollected order
+    // STAYS on the queue.
+    for (const to of ["preparing", "ready"] as const) {
+      const bump = await app.request(`/api/ticket-items/${itemId}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to }),
+      });
+      expect(bump.status).toBe(200);
+    }
+    const readyQueue = (await (await app.request(queueUrl, { headers: { cookie } })).json()) as {
+      orderId: string;
+    }[];
+    expect(readyQueue.map((g) => g.orderId)).toEqual([workingOrderId]);
+
+    // Hand it over — the new non-fiscal collect route (an empty body; it needs only the id).
+    const collect = await app.request(`/api/orders/${workingOrderId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(collect.status).toBe(200);
+
+    // collected_at is stamped (direct witness) AND the order is GONE from the station queue.
+    const [wo] = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ collected: sql<boolean>`collected_at is not null`, status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, workingOrderId));
+    });
+    expect(wo).toEqual({ collected: true, status: "settled" }); // fiscal state untouched; only the marker moved
+    const afterCollect = await app.request(queueUrl, { headers: { cookie } });
+    expect(await afterCollect.json()).toEqual([]);
+
+    // A still-OPEN (parked, unpaid) order is refused — not settled, so there is no handover to mark.
+    const openId = randomUUID();
+    await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ id: openId, lines: [{ productId: each.id, quantity: "1" }] }),
+    });
+    const refused = await app.request(`/api/orders/${openId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
+    });
   });
 });

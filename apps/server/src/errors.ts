@@ -327,6 +327,21 @@ declare module "@waitron/shared" {
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
+     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
+     * handover — KDS-1 §3e) is ALREADY collected: its order-level `collected_at` marker is set. The old
+     * order-level `advancePrep('collected')` refused a repeat the same way; `markCollected` catches it
+     * HERE, before the write, because `working_orders_enforce_transition` permits the collected_at stamp
+     * only on a NULL → non-null transition (0056), so a second stamp would RAISE (P0001) and surface as an
+     * opaque `server.internal` 500. This gives it a clean domain code instead. Distinct from
+     * `working_order.not_settled`: an already-collected order IS settled, so that code would mislabel the
+     * state (CLAUDE.md §1). Mapped to 409 (the id is valid, but the order's handover state forbids a
+     * second collect) — the same fail-closed 409 shape the rest of the `working_order.*` state guards use.
+     * `workingOrderId` is the caller-supplied uuid the display already holds, not a secret (the rule
+     * `tenant.not_found`'s note gives). `working_order.*`, not `server.*`, for the reason
+     * `working_order.not_open`'s note gives. Never renamed once shipped.
+     */
+    "working_order.already_collected": { workingOrderId: string };
+    /**
      * A prep operation is not legal given the order's current prep state (design §5's prep surface):
      *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
      *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
@@ -602,6 +617,21 @@ declare module "@waitron/shared" {
      * kitchen ticket item), never the throwing package (`tenant.not_found`'s note). Never renamed once shipped.
      */
     "ticket.already_fired": { workingOrderId: string };
+    /**
+     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
+     * handover — KDS-1 §3e) was NEVER fired to the kitchen: it has no `ticket_items`, so there is nothing
+     * on any station display to hand over. A settled Mode-P order that has not yet been sent to prep is a
+     * reachable state, and stamping `collected_at` on it would be worse than a no-op — a LATER `sendToPrep`
+     * would fire lines that `listStationQueue`'s `collected_at IS NULL` filter immediately hides (food
+     * silently dropped from the display). So `markCollected` refuses it rather than stamping. The inverse
+     * of `ticket.already_fired` (which refuses a DOUBLE fire); `ticket.*` names the DOMAIN CONCEPT (the
+     * kitchen ticket), never the throwing package (`tenant.not_found`'s note). `workingOrderId` names the
+     * order whose handover was refused — a caller-supplied uuid the display already holds, not a secret,
+     * and order-scoped on a `ticket.*` code exactly as `ticket.already_fired` carries a `workingOrderId`.
+     * Mapped to 409 (the id is valid, but the order's kitchen state forbids the handover) — the same 409
+     * family `ticket.already_fired`/`working_order.not_settled` sit in. Never renamed once shipped.
+     */
+    "ticket.not_fired": { workingOrderId: string };
     /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a

@@ -31,6 +31,7 @@ import {
   withTenant,
   workingOrderLines,
   workingOrders,
+  workingOrderStatus,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
@@ -1932,9 +1933,86 @@ export async function sendToPrep(
   });
 }
 
+/**
+ * Mark a SETTLED, FIRED order as handed to the customer (KDS-1 §3e, the Mode-P counter handover) — stamp
+ * the order-level `working_orders.collected_at`, which drops the order off {@link listStationQueue} (the
+ * display shows an order until it is collected). A Mode-P walk-up settles BEFORE it is fired
+ * (`payWorkingOrder` → {@link sendToPrep}), so it never reaches the placed → settled transition where
+ * `collectOrder` stamps `collected_at` for Modes I/T — this is that missing handover, on an
+ * already-settled order.
+ *
+ * NON-FISCAL: it writes ONLY `collected_at` — no sale, registro, tender or huella (the order was paid and
+ * filed at settle; the alta path never reads this marker — the H2 huella-identity test). DISTINCT from
+ * `collectOrder` (the placed → settled FISCAL collect); the two are deliberately not folded together.
+ *
+ * Guards, each fail-closed BEFORE any write (an absent/foreign id, RLS-hidden, reads the same as a
+ * wrong-state one):
+ *  - not `settled` (open, placed, abandoned, or absent/foreign) → `working_order.not_settled`, the SAME
+ *    code {@link sendToPrep} uses for its own settled guard;
+ *  - already collected (`collected_at` set) → `working_order.already_collected` — a repeat, refused the
+ *    way the old `advancePrep('collected')` did, and BEFORE the enforce_transition trigger (0056), which
+ *    permits the stamp only NULL → non-null and would otherwise RAISE an opaque 500 on a re-stamp;
+ *  - never fired (no `ticket_items`) → `ticket.not_fired` — there is nothing on a station display to hand
+ *    over, and stamping now would silently hide a LATER {@link sendToPrep}'s fired lines.
+ *
+ * The stamp is `now()` (the venue's DATABASE clock), the non-fiscal precedent {@link setLineServed} uses —
+ * no `TrustedClock` is involved since nothing fiscal is written. The UPDATE's own `collected_at IS NULL`
+ * predicate makes a concurrent double-collect safe: the loser's UPDATE matches no row (0 rows, no trigger
+ * fire), so one call stamps and the other is a silent no-op rather than a P0001. Runs in its OWN
+ * `withTenant` + `asAppUser` scope (the `db`-only {@link WorkingOrderDeps}), the shape {@link sendToPrep} uses.
+ */
+export async function markCollected(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Only a SETTLED order can be handed over; settled is terminal, so this read cannot be invalidated by
+    // a concurrent status change before the stamp below. Absent/foreign (RLS-hidden), open and placed all
+    // match the SAME fail-closed code.
+    const [order] = await tx
+      .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    if (order === undefined || order.status !== "settled") {
+      throw new AppError("working_order.not_settled", { workingOrderId: id });
+    }
+    // Already handed over — refuse the repeat HERE, before the NULL → non-null-only trigger (0056) would
+    // RAISE a P0001 that becomes an opaque 500.
+    if (order.collectedAt !== null) {
+      throw new AppError("working_order.already_collected", { workingOrderId: id });
+    }
+    // Must have been fired — an order with no ticket items is on no station display to hand over.
+    const [fired] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id))
+      .limit(1);
+    if (fired === undefined) {
+      throw new AppError("ticket.not_fired", { workingOrderId: id });
+    }
+
+    // Stamp the handover marker. enforce_transition (0056) permits this settled → settled UPDATE ONLY
+    // because it sets collected_at NULL → non-null and touches nothing else. The `collected_at IS NULL`
+    // predicate keeps a concurrent double-collect a no-op for the loser rather than a trigger RAISE.
+    await tx
+      .update(workingOrders)
+      .set({ collectedAt: sql`now()` })
+      .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+  });
+}
+
 /** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
  *  the `ticket_state` enum (the successor to `order_prep`'s dropped `prep_state`). */
 export type TicketState = (typeof ticketState.enumValues)[number];
+
+/** The working order's own status (`open → placed → settled|abandoned`, orders.ts) — surfaced on a
+ *  station-queue group so the till knows which orders are COLLECTABLE (a settled Mode-P order awaiting
+ *  its counter handover, {@link markCollected}) versus still open (a tab building) or placed (awaiting
+ *  the fiscal {@link collectOrder}). */
+export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
 
 /** The forward kitchen transitions (KDS-1 §2d), keyed by the state a move goes TO: the one legal
  *  predecessor it comes `from` and the timestamp column it stamps. The per-line {@link advanceTicketItem}
@@ -2073,6 +2151,11 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   queuedAt: string;
+  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and
+   *  not-yet-collected (the query filters both), so the till reads COLLECTABLE off this alone: a
+   *  `settled` order is a Mode-P pickup awaiting the counter handover ({@link markCollected}); `open`
+   *  (a tab) and `placed` (awaiting the fiscal collect) are not collectable via this path. */
+  status: WorkingOrderStatus;
   items: StationQueueItem[];
 }
 
@@ -2117,6 +2200,10 @@ export async function listStationQueue(
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
+      // The order's status — surfaced so the till shows the collect action only on a collectable
+      // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
+      // guaranteed by the WHERE, so this is the only remaining collectability signal.
+      status: workingOrders.status,
     })
     .from(ticketItems)
     // Composite join predicate (tenant_id too) — the tenant-consistency `listPrepQueue`'s own join
@@ -2161,6 +2248,7 @@ export async function listStationQueue(
         orderNumber: row.orderNumber,
         label: row.label,
         queuedAt: row.queuedAt,
+        status: row.status,
         items: [],
       };
       groups.set(row.orderId, group);
