@@ -1247,3 +1247,162 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 });
+
+describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
+  // The eight verbs the Cocina config screen + catalogue routing selects drive (KDS-1's
+  // /management-api/stations, /management-api/categories/:id/station, /management-api/products/:id/station
+  // and /management-api/bump-mode routes, till.configure-gated). GET decodes the station list, POST
+  // returns the minted id (201), PATCH/DELETE/PUT resolve undefined on an empty 204. Paths/bodies
+  // asserted against apps/server/src/management-api.ts.
+
+  it("listStations GETs /management-api/stations with credentials", async () => {
+    const rows = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listStations()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createStation POSTs { name } and returns the id (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s1" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createStation({ name: "Plancha" })).toEqual({ id: "s1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Plancha" }),
+    });
+  });
+
+  it("createStation can carry an optional displayOrder + isDefault", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s2" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createStation({ name: "Barra", displayOrder: 2, isDefault: true })).toEqual({
+      id: "s2",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Barra", displayOrder: 2, isDefault: true }),
+    });
+  });
+
+  it("updateStation PATCHes the addressed station's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateStation("s1", { name: "Pase", displayOrder: 1 }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Pase", displayOrder: 1 }),
+    });
+  });
+
+  it("deactivateStation DELETEs the station and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deactivateStation("s1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("setDefaultStation POSTs the station's default route (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setDefaultStation("s1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1/default", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("setCategoryStation PUTs { stationId } to the category's station route (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setCategoryStation("c1", "s1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stationId: "s1" }),
+    });
+  });
+
+  it("setCategoryStation carries a null stationId to CLEAR the category route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.setCategoryStation("c1", null);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/c1/station", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stationId: null }),
+    });
+  });
+
+  it("setProductStation PUTs { stationId } to the product's station route (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setProductStation("p1", "s1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/station", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stationId: "s1" }),
+    });
+  });
+
+  it("setProductStation carries a null stationId to CLEAR the product override", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.setProductStation("p1", null);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/station", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stationId: null }),
+    });
+  });
+
+  it("setBumpMode PUTs { mode } to /management-api/bump-mode (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setBumpMode("ticket")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bump-mode", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "ticket" }),
+    });
+  });
+
+  it("createStation rejects with { code } on a non-2xx (name already taken)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "station.name_taken" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createStation({ name: "Cocina" })).rejects.toMatchObject({
+      code: "station.name_taken",
+    });
+  });
+
+  it("setDefaultStation rejects with { code } on a non-2xx (station not found)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "station.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setDefaultStation("nope")).rejects.toMatchObject({
+      code: "station.not_found",
+    });
+  });
+});

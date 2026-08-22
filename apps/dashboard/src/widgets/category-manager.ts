@@ -5,7 +5,8 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary, Station } from "../api/client.js";
+import { selectStyles } from "../select-styles.js";
 
 /**
  * The management dashboard's CATEGORY MANAGER: it lists the existing categories and owns a single
@@ -24,6 +25,7 @@ import type { CategorySummary } from "../api/client.js";
 export class CategoryManager extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -36,8 +38,24 @@ export class CategoryManager extends LitElement {
         margin-bottom: var(--wt-space-4);
       }
 
+      .row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
+      }
+
       .name {
         color: var(--wt-color-text);
+      }
+
+      .station {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-text);
+        min-width: 12rem;
       }
 
       .create {
@@ -56,6 +74,11 @@ export class CategoryManager extends LitElement {
   /** The categories to list, straight from `DashboardApi.listCategories`. The screen owns and
    * refreshes it; defaults to empty so the widget renders safely before the screen assigns it. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
+
+  /** The venue's active kitchen stations (from `DashboardApi.listStations`), the options each row's
+   * routing `<select>` offers. The screen owns and refreshes it; defaults to empty so a row renders
+   * only the "— none —" choice before the screen assigns it. */
+  @property({ attribute: false }) stations: Station[] = [];
 
   /** The create field's current text — the ONLY state this widget owns. */
   @state() private name = "";
@@ -89,13 +112,43 @@ export class CategoryManager extends LitElement {
     );
   }
 
+  /**
+   * A category's station-routing `<select>` changed. Native `change` is `composed: false`, so
+   * `stopPropagation` is defensive consistency with the composed create handler (the product-form
+   * pattern). The empty option maps to `null` (clear the route), any other value to the station id;
+   * emit `set-category-station { categoryId, stationId }` bubbles+composed so it reaches the screen.
+   */
+  #onStation(categoryId: string, event: Event): void {
+    event.stopPropagation();
+    const value = (event.target as HTMLSelectElement).value;
+    this.dispatchEvent(
+      new CustomEvent<{ categoryId: string; stationId: string | null }>("set-category-station", {
+        detail: { categoryId, stationId: value === "" ? null : value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   override render() {
     return html`
       <div class="list">
         ${this.categories.map(
           (category) => html`
             <wt-card data-test="category-row">
-              <span class="name">${category.name}</span>
+              <div class="row">
+                <span class="name">${category.name}</span>
+                <label class="station"
+                  >${t("category.station")}
+                  <select
+                    data-test="category-station-${category.id}"
+                    @change=${(e: Event) => this.#onStation(category.id, e)}
+                  >
+                    <option value="">${t("category.no_station")}</option>
+                    ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+                  </select>
+                </label>
+              </div>
             </wt-card>
           `,
         )}

@@ -21,6 +21,7 @@ import type {
   PricingUnit,
   Product,
   ProductPatch,
+  Station,
   VatClass,
 } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
@@ -119,6 +120,10 @@ export class ProductForm extends LitElement {
   /** The categories the category `<select>` offers (loaded by the screen), plus a "— none —" option. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
 
+  /** The venue's active kitchen stations (from `DashboardApi.listStations`), the options the
+   * EDIT-MODE station-override `<select>` offers (KDS-1). Empty by default; the screen assigns it. */
+  @property({ attribute: false }) stations: Station[] = [];
+
   /** The locales a description field is rendered for; default `["es"]` (tenant-locale seeding deferred). */
   @property({ attribute: false }) locales: readonly string[] = ["es"];
 
@@ -197,6 +202,27 @@ export class ProductForm extends LitElement {
     event.stopPropagation();
     const value = (event.target as HTMLSelectElement).value;
     this.categoryId = value === "" ? null : value;
+  }
+
+  /**
+   * The station-override `<select>` changed (edit mode only, so `this.product` is set). The routing is
+   * a SEPARATE server route from the product PATCH (`setProductStation`), so it fires its own live
+   * event rather than joining the confirm patch — the floor screen's zone-assign shape. The empty
+   * option maps to `null` (clear the override → inherit the category route), any other value to the
+   * station id; emit `set-product-station { productId, stationId }` bubbles+composed for the screen.
+   * `stopPropagation` is defensive consistency with the other composed `<select>` handlers.
+   */
+  #onStationChange(event: Event): void {
+    event.stopPropagation();
+    if (!this.product) return; // rendered only in edit mode; guards the non-null id read below
+    const value = (event.target as HTMLSelectElement).value;
+    this.dispatchEvent(
+      new CustomEvent<{ productId: string; stationId: string | null }>("set-product-station", {
+        detail: { productId: this.product.id, stationId: value === "" ? null : value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #onActiveChange(event: CustomEvent<{ checked: boolean }>): void {
@@ -356,6 +382,22 @@ export class ProductForm extends LitElement {
             )}
           </select>
         </label>
+        ${
+          // Station override (KDS-1) — EDIT MODE ONLY: a new product has no id yet and inherits its
+          // category route, so the override is offered only on an existing product (where the id is
+          // known and the write route can address it). No persisted value is projected by the T7 read,
+          // so it starts on "— inherit —" and is a write affordance.
+          this.product
+            ? html`<label class="field"
+                >${t("product.station")}
+                <select data-test="product-station" @change=${(e: Event) =>
+                  this.#onStationChange(e)}>
+                  <option value="">${t("product.no_station")}</option>
+                  ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+                </select>
+              </label>`
+            : nothing
+        }
         <wt-switch
           class="field"
           data-test="active"

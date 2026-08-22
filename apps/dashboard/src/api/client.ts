@@ -328,6 +328,30 @@ export interface DashboardTable {
   rotation?: number | null;
 }
 
+// ── Kitchen-station + routing types (KDS-1) ─────────────────────────────────────────────────────
+// LOCAL copies of the server's kitchen-station JSON shapes (`apps/server/src/kitchen.ts`'s `Station`
+// and `BumpMode`, wrapped by the `/management-api/stations`, `/management-api/categories/:id/station`,
+// `/management-api/products/:id/station` and `/management-api/bump-mode` routes), deliberately NOT
+// imported from `apps/server`/`@waitron/db` (the #70 rule the staff/catalogue/floor shapes above
+// follow). These are the CONTRACT the Cocina config screen + catalogue routing selects build on; the
+// server shapes stay the source of truth, and a mismatch surfaces as a runtime shape error a view test
+// catches, not a compile break.
+
+/** One `kitchen_stations` row as the config surface returns it (`GET /management-api/stations`, active
+ * only, by `displayOrder` then `name`) — mirrors the server's `Station`. `isDefault` marks the venue's
+ * single counter/pass fallback (only {@link DashboardApi.setDefaultStation}/`createStation` flip it). */
+export interface Station {
+  id: string;
+  name: string;
+  displayOrder: number;
+  isDefault: boolean;
+  active: boolean;
+}
+
+/** The venue's whole-ticket bump mode (`locations.bump_mode`) — `line` = per-line bump only; `ticket`
+ * = the station display ALSO offers a whole-ticket "bump all". Mirrors the server's `BumpMode`. */
+export type BumpMode = "line" | "ticket";
+
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 // LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping
 // `@waitron/workforce`'s verbs), deliberately NOT imported from `@waitron/workforce`/`@waitron/db` — a
@@ -944,6 +968,74 @@ export class DashboardApi {
    */
   async clearPlacement(tableId: string): Promise<void> {
     await this.#request<void>(`/management-api/tables/${tableId}/placement`, "DELETE");
+  }
+
+  // ── Kitchen stations + routing (KDS-1) ───────────────────────────────────────────────────────────
+  // The verbs the Cocina config screen + catalogue routing selects drive (KDS-1's
+  // /management-api/stations, .../categories/:id/station, .../products/:id/station and .../bump-mode
+  // routes, till.configure-gated). Station CRUD is per-item POST/PATCH/DELETE (a reload after each, the
+  // service-status/floor idiom); the default is a POST to /:id/default; routing + bump-mode are PUTs
+  // (idempotent full-writes). Creates return the minted id at 201; the rest answer an empty 204.
+
+  /** `GET /management-api/stations` — the venue's ACTIVE kitchen stations, by display order then name. */
+  listStations(): Promise<Station[]> {
+    return this.#request<Station[]>("/management-api/stations", "GET");
+  }
+
+  /** `POST /management-api/stations` — create a station (name, optional order + default); returns its
+   * id (201). Marking it default ADOPTS it as THE default in the same request (the verb clears any
+   * prior default). */
+  createStation(input: {
+    name: string;
+    displayOrder?: number;
+    isDefault?: boolean;
+  }): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/stations", "POST", input);
+  }
+
+  /** `PATCH /management-api/stations/:id` — patch a station's mutable slice (name, order, active — NOT
+   * is_default, which only {@link setDefaultStation} flips). Answers an empty 204. */
+  updateStation(
+    id: string,
+    patch: { name?: string; displayOrder?: number; active?: boolean },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/stations/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/stations/:id` — soft-delete (deactivate) a station. Answers an empty 204. */
+  deactivateStation(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/stations/${id}`, "DELETE");
+  }
+
+  /** `POST /management-api/stations/:id/default` — make this station the venue's single default (the
+   * counter/pass fallback). A retired or foreign station rejects `{ code: "station.not_found" }`.
+   * Answers an empty 204. */
+  setDefaultStation(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/stations/${id}/default`, "POST");
+  }
+
+  /** `PUT /management-api/categories/:id/station` — set (or clear, with `null`) a category's default
+   * routing station. A non-null station that is not live rejects `{ code: "station.not_found" }`.
+   * Answers an empty 204. */
+  setCategoryStation(categoryId: string, stationId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/categories/${categoryId}/station`, "PUT", {
+      stationId,
+    });
+  }
+
+  /** `PUT /management-api/products/:id/station` — set (or clear, with `null`) a product's OVERRIDE
+   * routing station (wins over its category default). Same faults as {@link setCategoryStation}.
+   * Answers an empty 204. */
+  setProductStation(productId: string, stationId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/products/${productId}/station`, "PUT", {
+      stationId,
+    });
+  }
+
+  /** `PUT /management-api/bump-mode` — set the venue's whole-ticket bump mode (`line`/`ticket`).
+   * Answers an empty 204. */
+  setBumpMode(mode: BumpMode): Promise<void> {
+    return this.#request<void>("/management-api/bump-mode", "PUT", { mode });
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────

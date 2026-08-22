@@ -35,11 +35,14 @@ const products: Product[] = [
   },
 ];
 
+const stations = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
+    listStations: vi.fn().mockResolvedValue(stations),
     ...overrides,
   } as unknown as DashboardApi;
 }
