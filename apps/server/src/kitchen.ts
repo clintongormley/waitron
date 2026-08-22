@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   categories,
+  fireControlMode,
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
@@ -278,14 +279,14 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
 /** The KDS-2/3 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
  *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
  *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
- *  every surface is session-gated. Mirrors `locations.fire_control`'s pgEnum
- *  (`packages/db/src/schema/tenants.ts`). Kept as a hand-maintained literal union here (and mirrored in
- *  the dashboard/till client types), so a new `ADD VALUE` means adding the member to each mirror — but a
- *  MISSED mirror is a typecheck failure, so the drift is caught. The RUNTIME `fire-control` route
- *  validator instead DERIVES its valid set from `fireControlMode.enumValues` (`@waitron/db` re-exports the
- *  enum via its barrel, like the sibling `orderFlow`), because that is the one drift site typecheck cannot
- *  protect — a stale literal list there would silently 400 a valid mode. */
-export type FireControl = "waiter" | "kitchen" | "expo";
+ *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` pgEnum (which backs
+ *  `locations.fire_control`, `packages/db/src/schema/tenants.ts`) so the two can never drift — add a mode
+ *  to the enum and this widens with it, exactly as the sibling {@link OrderFlow}/`TicketState` server types
+ *  derive from `orderFlow`/`ticketState`. The RUNTIME `fire-control` route validator derives its valid set
+ *  from the SAME `fireControlMode.enumValues`. The dashboard/till CLIENT types keep a hand-maintained
+ *  literal mirror instead, because the browser bundle cannot import `@waitron/db` to derive it — a MISSED
+ *  member there is a typecheck failure at the client, so that drift is still caught. */
+export type FireControl = (typeof fireControlMode.enumValues)[number];
 
 /**
  * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` under RLS.
