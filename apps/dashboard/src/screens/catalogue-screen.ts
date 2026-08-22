@@ -151,21 +151,48 @@ export class CatalogueScreen extends LitElement {
         this.api.listCategories(),
         this.api.listStations(),
       ]);
-      this.catalogues = catalogues;
-      this.categories = categories;
       this.stations = stations;
-      if (catalogues.length === 0) {
-        this.selectedCatalogueId = "";
-        this.products = [];
-        return;
-      }
-      if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
-        this.selectedCatalogueId = catalogues[0]!.id;
-      }
-      this.products = await this.api.listProducts(this.selectedCatalogueId);
+      await this.#applyCatalogues(catalogues, categories);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
+  }
+
+  /**
+   * Reload catalogues + categories + the selected catalogue's products WITHOUT re-fetching stations —
+   * the targeted reload a catalogue create needs. Stations do not change when a catalogue is created, so
+   * routing {@link #createCatalogue} through the broad {@link #load} would issue an avoidable
+   * `GET /management-api/stations`. Throws to its caller's catch (the create handler's) on rejection.
+   */
+  async #reloadCatalogues(): Promise<void> {
+    const [catalogues, categories] = await Promise.all([
+      this.api.listCatalogues(),
+      this.api.listCategories(),
+    ]);
+    await this.#applyCatalogues(catalogues, categories);
+  }
+
+  /**
+   * Adopt a freshly-fetched catalogue + category set: store them, resolve the selection (keep the current
+   * one if it still exists, else the first; clear when none), and load that catalogue's products. Shared
+   * by the full {@link #load} and the stations-skipping {@link #reloadCatalogues} so the selection logic
+   * lives in one place.
+   */
+  async #applyCatalogues(
+    catalogues: CatalogueSummary[],
+    categories: CategorySummary[],
+  ): Promise<void> {
+    this.catalogues = catalogues;
+    this.categories = categories;
+    if (catalogues.length === 0) {
+      this.selectedCatalogueId = "";
+      this.products = [];
+      return;
+    }
+    if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
+      this.selectedCatalogueId = catalogues[0]!.id;
+    }
+    this.products = await this.api.listProducts(this.selectedCatalogueId);
   }
 
   /** Reload the selected catalogue's products (after a create/update). Throws to its caller's catch. */
@@ -337,7 +364,7 @@ export class CatalogueScreen extends LitElement {
       const created = await this.api.createCatalogue(name);
       this.newCatalogueName = "";
       this.selectedCatalogueId = created.id;
-      await this.#load();
+      await this.#reloadCatalogues();
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
