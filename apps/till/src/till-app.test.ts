@@ -112,6 +112,9 @@ const till = {
   // The venue's KDS whole-ticket bump mode (KDS-1 §2e); `line` is the default (per-line bump only), so
   // the station-screen tests that don't drive it exercise the per-line path. A test overrides it.
   bumpMode: "line" as const,
+  // The venue's KDS fire-control mode (KDS-2 §2c); `waiter` is the default (the tab screen fires), so the
+  // station display shows no fire action unless a test drives this to `kitchen`.
+  fireControl: "waiter" as const,
   // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
   // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
   // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
@@ -2446,6 +2449,22 @@ describe("till-app", () => {
         bumpMode: string;
       };
       expect(screen.bumpMode).toBe("ticket");
+    });
+
+    it("threads the venue fire_control from boot to the station screen (a kitchen-fire venue gets the fire action)", async () => {
+      // The default `till` fixture is `waiter`; a venue configured `kitchen` must reach the station
+      // screen's `.fireControl` so its per-course fire affordance turns on — proving #boot reads
+      // `TillInfo.fireControl` rather than leaving the hardcoded `waiter` default.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "kitchen" }),
+      });
+      const c = await toCounter(el);
+      emit(c, "show-station");
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("till-station-screen") as unknown as {
+        fireControl: string;
+      };
+      expect(screen.fireControl).toBe("kitchen");
     });
   });
 

@@ -3,7 +3,12 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
-import type { StationQueueGroup, StationQueueItem, TicketState } from "../api/client.js";
+import type {
+  StationQueueCourse,
+  StationQueueGroup,
+  StationQueueItem,
+  TicketState,
+} from "../api/client.js";
 
 /** The kitchen state each ticket item advances TO next. `ready` is terminal (a counter order's handover
  *  is an order-level collect, not a kitchen state — KDS-1 §2d), so a `ready` line has no bump. */
@@ -21,11 +26,32 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
  *  convenience the `bump_mode = 'ticket'` venue setting drives) advances the whole order at the station. */
 export type BumpMode = "line" | "ticket";
 
+/** Which surface owns the per-course fire action (KDS-2 §2c, `locations.fire_control`): `kitchen` (the
+ *  station display shows "Empezar curso" on a held course) or `waiter` (the tab screen does — Task 7 —
+ *  so this widget shows no fire affordance). Threaded from the app via the boot payload. */
+export type FireControlMode = "waiter" | "kitchen";
+
 /** A line paired with the order it belongs to — what a kanban column renders (its cells cut across
  *  orders, so each carries back its order's number + queued-time for the label and the age accent). */
 interface FlatItem {
   item: StationQueueItem;
   group: StationQueueGroup;
+}
+
+/** One coursing subsection of an order's rail card (KDS-2 §5a): a course (or `null` for the courseless,
+ *  auto-fired earliest lines) with its lines and whether the whole course is still HELD (every line
+ *  unfired). Held ⇒ greyed lines + the kitchen-fire affordance; a null course is never held (its lines
+ *  auto-fire), so it never offers fire. */
+interface CourseSection {
+  course: StationQueueCourse | null;
+  items: StationQueueItem[];
+  held: boolean;
+}
+
+/** A course's ordering key: the null (courseless) group sorts FIRST — it is the auto-fired earliest set —
+ *  then named courses by `displayOrder` ascending, matching the server's coursing sequence. */
+function courseOrder(course: StationQueueCourse | null): number {
+  return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
 /**
@@ -173,6 +199,16 @@ export class TillStationQueue extends LitElement {
         border-left-color: var(--wt-color-success);
       }
 
+      /* A HELD line (its course not yet fired, KDS-2 §5a) — greyed and non-advanceable. Greying is a
+         MUTED text colour (the token every secondary label uses, so it keeps a11y contrast on the
+         surface) plus a dashed box, NOT reduced opacity (which would composite the text against the
+         background and fail the color-contrast sweep). It renders as an inert span, so there is no bump. */
+      .line.held {
+        border-style: dashed;
+        border-left-style: solid;
+        color: var(--wt-color-text-muted);
+      }
+
       /* The dish label (qty × name) — the primary text a cook reads. Truncates rather than wrapping so
          a long name never blows out the cell/line width (min-width:0 lets a flex child shrink). */
       .line-name {
@@ -196,10 +232,30 @@ export class TillStationQueue extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
-      /* The per-order Mode-P handover action — a full-width primary button at the foot of a collectable
-         (settled) rail card. The wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct
-         one wt-button's primary variant uses, so contrast holds in both themes. */
-      .collect {
+      /* A course subsection within a rail card (KDS-2 §5a) — its held/fired lines under a course header,
+         with the held course's fire button at its foot. Just vertical rhythm; the lines carry the visual. */
+      .course {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+
+      /* The course header — the coursing section's name ("Entrantes"). A muted, uppercased label like the
+         kanban column titles; the null (auto-fired earliest) course has no header at all. */
+      .course-head {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text-muted);
+        text-transform: uppercase;
+      }
+
+      /* The per-order Mode-P handover action (.collect) and the per-course kitchen-fire action (.fire,
+         KDS-2 §5a) — full-width primary buttons at the foot of a rail card / course section. The
+         wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct one wt-button's primary
+         variant uses, so contrast holds in both themes. */
+      .collect,
+      .fire {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-primary);
@@ -221,6 +277,9 @@ export class TillStationQueue extends LitElement {
   @property() bumpMode: BumpMode = "line";
   /** The station these items are AT — required for the whole-ticket bump's event (ticket mode). */
   @property() stationId?: string;
+  /** Whether THIS display owns the per-course fire action (KDS-2 §5a) — `kitchen` shows "Empezar curso"
+   * on a held course's rail section; `waiter` (the default) shows none (the tab screen fires, Task 7). */
+  @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age colouring; defaults to the wall clock. Set in tests for deterministic buckets. */
   @property({ attribute: false }) now?: number;
 
@@ -264,6 +323,42 @@ export class TillStationQueue extends LitElement {
     );
   }
 
+  /** Fire a HELD course of an order (KDS-2 §5a) — the kitchen's "release this course" tap in
+   * `fire_control = 'kitchen'` mode. Emits a composed, bubbling `fire-course { orderId, courseId }` the
+   * container turns into a `fireCourse` call, the same event → container → server shape a bump/collect
+   * uses. Per-order/per-course (the route is `/api/orders/:id/courses/:courseId/fire`), so both ids ride. */
+  #fire(group: StationQueueGroup, course: StationQueueCourse): void {
+    this.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: group.orderId, courseId: course.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Group one order's lines into coursing subsections (KDS-2 §5a): keyed by course id (the null course
+   * its own key), each carrying whether the whole course is still HELD. Sorted null-course-first then by
+   * `displayOrder`, so the sections render in the kitchen's coursing sequence. Item order WITHIN a course
+   * is preserved (the server already ordered by `queued_at, line_no`). A missing/undefined course is
+   * treated as the null course, so an older/partial payload still groups cleanly. */
+  #courseSections(group: StationQueueGroup): CourseSection[] {
+    const byCourse = new Map<string | null, CourseSection>();
+    for (const item of group.items) {
+      const course = item.course ?? null;
+      const key = course?.id ?? null;
+      let section = byCourse.get(key);
+      if (section === undefined) {
+        section = { course, items: [], held: true };
+        byCourse.set(key, section);
+      }
+      section.items.push(item);
+      // A course is HELD only while EVERY line is unfired; one fired line means it is on.
+      if (item.firedAt !== null) section.held = false;
+    }
+    return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
+  }
+
   /** The age bucket for a group's oldest line: fresh (< 5 min), warm (< 10), hot (≥ 10). */
   #ageBucket(queuedAt: string): "fresh" | "warm" | "hot" {
     const elapsedMin = ((this.now ?? Date.now()) - Date.parse(queuedAt)) / 60000;
@@ -284,7 +379,7 @@ export class TillStationQueue extends LitElement {
     return this.view === "rail" ? this.#rail() : this.#kanban();
   }
 
-  /** RAIL — a card per order, its lines listed with per-line bump. */
+  /** RAIL — a card per order, its lines GROUPED BY COURSE (KDS-2 §5a) with per-line bump on fired lines. */
   #rail(): TemplateResult {
     return html`<div class="rail">
       ${this.groups.map((group) => {
@@ -295,13 +390,41 @@ export class TillStationQueue extends LitElement {
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
-          <ul class="lines">
-            ${group.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
-          </ul>
+          ${this.#courseSections(group).map((section) => this.#courseSection(group, section))}
           ${this.#collectAction(group)}
         </article>`;
       })}
     </div>`;
+  }
+
+  /** One coursing subsection of a rail card (KDS-2 §5a): its named course's header (the null course has
+   *  none), its lines, and — for a HELD course under `fire_control = 'kitchen'` — the fire button. */
+  #courseSection(group: StationQueueGroup, section: CourseSection): TemplateResult {
+    return html`<div class="course" data-course=${section.course?.id ?? "none"}>
+      ${section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
+      <ul class="lines">
+        ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
+      </ul>
+      ${this.#fireAction(group, section)}
+    </div>`;
+  }
+
+  /** The per-course kitchen-fire button, shown only when THIS display owns the fire
+   *  (`fire_control = 'kitchen'`) AND the course is a NAMED course still fully HELD — the null (auto-fired)
+   *  course and any already-fired course have nothing to release, so they offer none. Emits `fire-course`
+   *  (via {@link #fire}); the label names the course for an accessible control. Under `waiter` the tab
+   *  screen owns the fire (Task 7), so this renders nothing here. */
+  #fireAction(group: StationQueueGroup, section: CourseSection): TemplateResult | typeof nothing {
+    if (this.fireControl !== "kitchen" || section.course === null || !section.held) return nothing;
+    const course = section.course;
+    return html`<button
+      class="fire"
+      data-fire=${course.id}
+      aria-label=${`${t("station.fire_course")} ${course.name}`}
+      @click=${() => this.#fire(group, course)}
+    >
+      ${t("station.fire_course")}
+    </button>`;
   }
 
   /** The per-order collect button, shown only for a COLLECTABLE order — a `settled` Mode-P pickup awaiting
@@ -357,17 +480,20 @@ export class TillStationQueue extends LitElement {
   }
 
   /** The shared line box both lenses render: the dish label followed by a `secondary` element (the
-   *  rail's state text or the kanban's order tag). A terminal (`ready`) line — one with no successor —
-   *  is a non-interactive span; any other is the tappable bump button, with the SAME class/aria-label/
-   *  @click wiring across both views, so the two lenses stay a single source of truth for that box. */
+   *  rail's state text or the kanban's order tag). A line is a NON-INTERACTIVE span — never a bump button
+   *  — when it is HELD (its course unfired, KDS-2 §5a: greyed + non-advanceable, carrying `.held`) or
+   *  TERMINAL (`ready`, no successor). Any other line is the tappable bump button, with the SAME
+   *  class/aria-label/@click wiring across both views, so the two lenses stay a single source of truth. */
   #renderLine(
     group: StationQueueGroup,
     item: StationQueueItem,
     secondary: TemplateResult,
   ): TemplateResult {
     const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
-    if (NEXT[item.state] === undefined) {
-      return html`<span class="line state-${item.state} terminal" data-item=${item.id}
+    const held = item.firedAt === null;
+    if (held || NEXT[item.state] === undefined) {
+      const modifier = held ? "held" : "terminal";
+      return html`<span class="line state-${item.state} ${modifier}" data-item=${item.id}
         >${dish}${secondary}</span
       >`;
     }

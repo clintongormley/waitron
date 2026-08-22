@@ -80,6 +80,11 @@ export const en = {
   // which drops it off the station display (KDS-1 §3e). A rail-card action, shown only for a collectable
   // (settled) order.
   "station.collect": "Collect",
+  // The kitchen-fire action on a HELD course's rail section (KDS-2 §5a) — release this held course to the
+  // kitchen, shown only when `fire_control = 'kitchen'` (the station display owns the fire; under `waiter`
+  // the tab screen does, Task 7). A per-order/per-course action, so it lives on the rail card like the
+  // collect handover, not on the cross-order kanban board.
+  "station.fire_course": "Start course",
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
@@ -253,6 +258,7 @@ export const es: Record<StringKey, string> = {
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",
   "station.collect": "Entregar",
+  "station.fire_course": "Empezar curso",
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",

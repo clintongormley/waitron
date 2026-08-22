@@ -403,17 +403,31 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // consumer at all (it drives only the client's whole-ticket affordance), so it is read where
         // it is used and kept off the config surface. Same `eq(id)` shape `readOrderFlow` uses, under
         // the same RLS scope, so it selects exactly this till's location row.
+        // `fire_control` (KDS-2 §2c) rides the SAME location read as `bump_mode` — both are
+        // client-only display-convenience flags with no server-side sale-path consumer, so both are
+        // read here where they are used rather than lifted onto `deps.cfg`. The station-display screen
+        // reads it to show the per-course kitchen-fire action only for a `kitchen` venue.
         const [loc] = await tx
-          .select({ bumpMode: locations.bumpMode })
+          .select({ bumpMode: locations.bumpMode, fireControl: locations.fireControl })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        return { issuer: row, bumpMode: loc?.bumpMode, layout: definition, receipt };
+        return {
+          issuer: row,
+          bumpMode: loc?.bumpMode,
+          fireControl: loc?.fireControl,
+          layout: definition,
+          receipt,
+        };
       });
       /* v8 ignore start */
-      if (boot.issuer === undefined || boot.bumpMode === undefined) {
+      if (
+        boot.issuer === undefined ||
+        boot.bumpMode === undefined ||
+        boot.fireControl === undefined
+      ) {
         // Structurally unreachable: `deps.cfg.tenantId`/`locationId` are the till's own tenant and
         // location (provisioning stamped both), so their rows always exist and RLS returns them. A
         // misconfigured till pointed at a nonexistent tenant/location becomes an opaque 500 via `run`,
@@ -429,6 +443,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The venue's whole-ticket bump mode (KDS-1 §2e), read from the location above — the till app
         // threads it to the station-display screen to enable/disable the whole-ticket bump affordance.
         bumpMode: boot.bumpMode,
+        // The venue's KDS fire-control mode (KDS-2 §2c), read from the location above — the till app
+        // threads it to the station-display screen, which shows the per-course kitchen-fire action only
+        // when this is `kitchen` (under `waiter` the tab screen owns the fire, Task 7).
+        fireControl: boot.fireControl,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the

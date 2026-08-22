@@ -53,6 +53,14 @@ export interface TillInfo {
    * imported — same bundle-decoupling rationale as every other type in this file.
    */
   bumpMode: "line" | "ticket";
+  /**
+   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`): `waiter` (the tab surfaces
+   * the fire action) or `kitchen` (the station display surfaces it). Read once from `GET /api/till` on
+   * boot and threaded to the station-display screen so it shows the per-course kitchen-fire action only
+   * for a `kitchen` venue. A LOCAL mirror of the server's `fire_control` enum, deliberately NOT imported
+   * — same bundle-decoupling rationale as `bumpMode` above and every other type in this file.
+   */
+  fireControl: "waiter" | "kitchen";
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
   layout: LayoutDef;
@@ -261,6 +269,26 @@ export interface StationQueueItem {
   descriptions: Record<string, string>;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
   quantity: string;
+  /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
+   *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
+   *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
+  course: StationQueueCourse | null;
+  /** `null` while the item's course is HELD — the display renders it GREYED and non-advanceable
+   *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (the auto-fired
+   *  earliest course, or released via {@link TillApi.fireCourse}). */
+  firedAt: string | null;
+}
+
+/**
+ * The course a queue item was fired for (KDS-2 §5a) — its id (the {@link TillApi.fireCourse} target), the
+ * display `name`, and the `displayOrder` that sequences the coursing sections. A LOCAL mirror of the
+ * server's `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling
+ * rationale as every other type in this file. `null` on the item when its line carried no course.
+ */
+export interface StationQueueCourse {
+  id: string;
+  name: string;
+  displayOrder: number;
 }
 
 /**
@@ -670,6 +698,19 @@ export class TillApi {
    */
   async markCollected(id: string): Promise<void> {
     await this.#request<void>(`/api/orders/${id}/collect`, "POST", {});
+  }
+
+  /**
+   * FIRE a HELD course of an order (KDS-2 §3c/§5a) → `POST /api/orders/:id/courses/:courseId/fire` with
+   * an empty body — the operator's "release this course" action. NON-FISCAL: the server stamps
+   * `fired_at = now()` on every held item of this order + course, so they stop being greyed on the
+   * display and become advanceable; it touches no sale/registro/tender. IDEMPOTENT — a course with
+   * nothing held is a 200 no-op. A malformed/unknown course id rejects `{ code: "course.not_found" }`;
+   * a malformed order id `{ code: "working_order.not_found" }`. The server answers an empty 200; re-read
+   * {@link getStationQueue} for the released (now fired) items.
+   */
+  async fireCourse(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
   }
 
   /**

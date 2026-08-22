@@ -24,6 +24,8 @@ const cocinaQueue: StationQueueGroup[] = [
         state: "queued",
         descriptions: { "es-ES": "Paella" },
         quantity: "2.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -43,6 +45,8 @@ const barraQueue: StationQueueGroup[] = [
         state: "preparing",
         descriptions: { "es-ES": "Vino" },
         quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
   },
@@ -60,6 +64,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
+    fireCourse: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -139,6 +144,60 @@ describe("till-station-screen", () => {
     });
     await flush(el);
     expect(queueWidget(el)!.bumpMode).toBe("ticket");
+  });
+
+  it("threads fireControl through to the widget", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      fireControl: "kitchen",
+    });
+    await flush(el);
+    expect(queueWidget(el)!.fireControl).toBe("kitchen");
+  });
+
+  it("a fire-course from the widget calls fireCourse then reloads the active queue, and does not escape the screen", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      fireControl: "kitchen",
+    });
+    await flush(el);
+    // Stopped at the screen (it owns the fire here), so the app never double-handles it.
+    const escaped = vi.fn();
+    host.addEventListener("fire-course", escaped);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: "wo-1", courseId: "co-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.fireCourse).toHaveBeenCalledWith("wo-1", "co-2");
+    // Reloaded: once on connect, once after the fire — so the released course drops its greying.
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("a failed fire-course still reloads the queue (reconciling to server truth)", async () => {
+    const api = stubApi({
+      fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      fireControl: "kitchen",
+    });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: "wo-1", courseId: "co-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
   });
 
   it("an advance-ticket-item from the widget calls advanceTicketItem then reloads the active queue", async () => {

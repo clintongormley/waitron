@@ -15,7 +15,7 @@ import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { BumpMode } from "./widgets/station-queue.js";
+import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -265,6 +265,14 @@ export class TillApp extends LitElement {
    * bump is always correct), so a boot that has not yet answered never shows the convenience by accident.
    */
   @state() private bumpMode: BumpMode = "line";
+  /**
+   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`) — `waiter` (the tab screen
+   * owns the fire) or `kitchen` (the station display owns it). Read once from `GET /api/till` on boot
+   * ({@link TillInfo.fireControl}) and threaded to the station-display screen, which shows its per-course
+   * "Empezar curso" action only for a `kitchen` venue. Defaults `waiter` until boot resolves — the
+   * fail-safe default, so a boot that has not yet answered never shows the display's fire by accident.
+   */
+  @state() private fireControl: FireControlMode = "waiter";
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
@@ -369,6 +377,7 @@ export class TillApp extends LitElement {
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
       this.bumpMode = till.bumpMode;
+      this.fireControl = till.fireControl;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
       // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
@@ -1183,6 +1192,7 @@ export class TillApp extends LitElement {
         return html`<till-station-screen
           .api=${this.api}
           .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
         ></till-station-screen>`;
     }
   }

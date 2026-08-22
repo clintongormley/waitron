@@ -165,6 +165,7 @@ describe("TillApi", () => {
       nif: "B12345678",
       orderFlow: "prepay",
       bumpMode: "line",
+      fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,
       layout: [
@@ -615,6 +616,34 @@ describe("TillApi", () => {
 
     await expect(new TillApi("", fetchStub).markCollected("wo1")).rejects.toMatchObject({
       code: "working_order.not_settled",
+    });
+  });
+
+  it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/fire",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("fireCourse surfaces { code } when the course is unknown or retired", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).rejects.toMatchObject({
+      code: "course.not_found",
     });
   });
 

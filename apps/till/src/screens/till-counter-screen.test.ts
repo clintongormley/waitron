@@ -73,6 +73,8 @@ describe("till-counter-screen", () => {
             state: "queued" as const,
             descriptions: { "es-ES": "Paella" },
             quantity: "2.000",
+            course: null,
+            firedAt: "2026-08-17T10:00:00.000Z",
           },
         ],
       },
