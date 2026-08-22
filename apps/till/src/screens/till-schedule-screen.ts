@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { selectStyles } from "../select-styles.js";
 import type {
   AbsenceKind,
   MyAbsence,
@@ -72,6 +73,7 @@ function wallClock(iso: string, offsetMinutes: number): { date: string; time: st
 export class TillScheduleScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -158,14 +160,8 @@ export class TillScheduleScreen extends LitElement {
       }
 
       select {
+        /* The shared 7 declarations come from selectStyles; the schedule pickers add a min-width. */
         min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
       }
     `,
   ];
