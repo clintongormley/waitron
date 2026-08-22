@@ -526,6 +526,35 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   build**. Non-fiscal. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-device-identity-1*`.
   **Build-blocked on KDS-1** (it binds to a station + drives its display). Other `device_kind`s (trusting
   the till device), auto-rotation, remote wipe = future.
+- **Table-service model extensions (owner-added 2026-08-22 — NOT yet designed).** Two capabilities the
+  owner asked to keep on the roadmap. Both **reopen decisions the TS/KDS specs deliberately closed**, so
+  they are recorded here with that provenance — a future session must **not** read the earlier
+  "rejected" / "out of scope" wording as final:
+  - **Per-seat ordering — assign each plate to a seating position.** When ringing a round onto a tab, tag
+    each line with which seat/position at the table ordered it, so food is run to the right guest, courses
+    can fire per seat, and the bill can split by seat. **New capability, not a tweak:** the order line
+    (`working_order_lines`, `packages/db/src/schema/orders.ts`) carries **no** seat/position column today,
+    and per-guest seat numbers were **explicitly deferred** — KDS-2 lists "per-guest seat numbers" and
+    KDS-3 "per-guest seat coursing" under *Out*
+    (`docs/superpowers/specs/2026-08-17-kds-{2,3}-*`), and TS-5 split-bill is **item**-split, not
+    seat-split. Would add a nullable seat/position on `working_order_lines` (non-fiscal — must stay out of
+    the huella like `served_at`), an ordering-UI assignment step, and seat-aware consumers in the KDS
+    ticket, running food (the FP-1 `served_at` ack) and a TS-5 split-by-seat. Cross-cuts sub-projects
+    **10** (tabs) and **12** (KDS).
+  - **Multiple tabs per table — several concurrent open tabs on one physical table.** Let one table hold
+    more than one open tab at once (two parties sharing a large table; per-person tabs). **This reopens a
+    settled TS-1 owner decision:** TS-1 §0 (2026-08-17) chose "a table carries at most ONE open tab" and
+    **rejected "many tabs per table everywhere"**, and the schema encodes exactly that as the single
+    nullable `dining_tables.tab_id` back-pointer that "gives one-open-tab-per-table automatically"
+    (`packages/db/src/schema/dining-tables.ts:27-28`). Making a table hold many open tabs turns that
+    back-pointer into a **one-to-many** and ripples through the per-table `openTab` lock, the
+    `listTablesWithState` occupancy read-model, TS-3 move/join/merge, and the pay path (which tab is being
+    paid). Schema + concurrency change; each tab still files its own one sale (as TS-4/TS-5 already
+    establish), but the fiscal-adjacency deserves review. TS-1 §0 held that QR / separate-checks / counter
+    cases do **not** need this, so pin the real driver before building.
+  Both are greenfield + product-heavy like the rest of this track → **specced with the owner, run
+  supervised, never landed unattended**. No spec/plan yet; writing one is the next step when the owner
+  chooses to build either.
 
 Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
 floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
@@ -560,8 +589,9 @@ vendor coverage. The **`cash.drawer` authorization** slice is **now specced + pl
 `drawer_open_policy` (`gated` default / `open`) and, crucially, the **first till-side
 `authorize()`-with-supervisor-override path** + a **reusable supervisor-override dialog** (which on-till
 config — device-identity manager-on-till, FP-2 "Editar plano" — and future till void/refund reuse). **So
-the ENTIRE table-service + kitchen + printing surface is now specced + planned, with nothing left to
-design.** **TS-1 + TS-2 LANDED (#97 2026-08-18, #103 2026-08-19)** — the table-service foundation (tables +
+the ENTIRE table-service + kitchen + printing surface as scoped through 2026-08-17 is now specced +
+planned** — the two owner-added model extensions above (per-seat ordering; multiple tabs per table,
+2026-08-22) are the only table-service items still to design. **TS-1 + TS-2 LANDED (#97 2026-08-18, #103 2026-08-19)** — the table-service foundation (tables +
 tabs), configurable service statuses, move / join / merge, and transfer items are built; **TS-3 + TS-4 LANDED
 (#119, #124, 2026-08-20)** so **FP-1 (floor plan) is the next non-fiscal buildable slice** (**TS-5 split-bill is
 FISCAL — supervised/owner-gated, not autonomous**),
