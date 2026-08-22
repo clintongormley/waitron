@@ -327,6 +327,21 @@ declare module "@waitron/shared" {
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
+     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
+     * handover — KDS-1 §3e) is ALREADY collected: its order-level `collected_at` marker is set. The old
+     * order-level `advancePrep('collected')` refused a repeat the same way; `markCollected` catches it
+     * HERE, before the write, because `working_orders_enforce_transition` permits the collected_at stamp
+     * only on a NULL → non-null transition (0056), so a second stamp would RAISE (P0001) and surface as an
+     * opaque `server.internal` 500. This gives it a clean domain code instead. Distinct from
+     * `working_order.not_settled`: an already-collected order IS settled, so that code would mislabel the
+     * state (CLAUDE.md §1). Mapped to 409 (the id is valid, but the order's handover state forbids a
+     * second collect) — the same fail-closed 409 shape the rest of the `working_order.*` state guards use.
+     * `workingOrderId` is the caller-supplied uuid the display already holds, not a secret (the rule
+     * `tenant.not_found`'s note gives). `working_order.*`, not `server.*`, for the reason
+     * `working_order.not_open`'s note gives. Never renamed once shipped.
+     */
+    "working_order.already_collected": { workingOrderId: string };
+    /**
      * A prep operation is not legal given the order's current prep state (design §5's prep surface):
      *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
      *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
@@ -507,6 +522,116 @@ declare module "@waitron/shared" {
      * zone CRUD verbs into, matching `table.label_taken`/`status.label_taken`.
      */
     "zone.name_taken": { name: string };
+    /**
+     * A kitchen-station name already exists in this venue (KDS-1) — the `(tenant_id, location_id, name)`
+     * unique (`kitchen_stations_name_key`) rejected the insert/update. `name` is the operator-supplied
+     * human label ("Cocina", "Plancha", "Barra"), not a secret, so echoing it is what makes the error
+     * actionable — the same shape `zone.name_taken`'s `name` and `table.label_taken`'s `label` use,
+     * named `name` to match the column `kitchen_stations.name` actually carries. `station.*`, not
+     * `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix names the DOMAIN
+     * CONCEPT — a kitchen station — never the throwing package). Mapped to 409 by the route surface
+     * Task 7 wires the station config verbs into, matching `zone.name_taken`. Never renamed once shipped.
+     */
+    "station.name_taken": { name: string };
+    /**
+     * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED. `createStation`
+     * maps only a NAME collision (above); the by-id verbs — `updateStation`, `deactivateStation`,
+     * `setDefaultStation`, and the routing verbs `setCategoryStation`/`setProductStation` — throw THIS when
+     * the station id names none this venue may reach (absent, another tenant's that RLS hides, or another
+     * VENUE's of the same tenant — the config verbs are `cfg.locationId`-scoped) or names a real but
+     * `active = false` row. All of those fold into the one code, the same fail-closed shape
+     * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a routing/default
+     * target, "gone", "foreign" and "retired" are the same fact ("there is no live station here to use").
+     * The inactive case is deliberately folded in (not a distinct `station.inactive`): the spec enumerates
+     * only name_taken/not_found/no_default for KDS-1, and a routing target that cannot be used reads the
+     * same whether it is absent or retired — unlike `table.inactive`/`status.inactive`, which exist because
+     * a deactivated row is still addressable by the CRUD editor there.
+     *
+     * `stationId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
+     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
+     * gives). Qualified `stationId` to match the domain-record not_found family (`table.not_found`'s
+     * `tableId`, `zone.not_found`'s `zoneId`, `status.not_found`'s `statusId`). `station.*`, not `server.*`,
+     * for the reason `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     */
+    "station.not_found": { stationId: string };
+    /**
+     * A line was fired to the kitchen but its venue has NO default kitchen station (KDS-1, §2b). Station
+     * resolution is `product.station_id ?? category.station_id ?? the location's default station`; when a
+     * line resolves neither a product- nor category-level route AND the location has no `is_default`
+     * station, there is nowhere to send the food. This is a MISCONFIGURATION the venue must fix, so firing
+     * FAILS LOUD with this code rather than silently dropping the line from the kitchen (§2b: "fail loud,
+     * do not silently drop food"). Declared here in Task 2 with the other `station.*` codes; the sole
+     * thrower is Task 3's fire-time resolver (`fireLines`) — no verb in this task throws it yet.
+     *
+     * `locationId` names the misconfigured venue and is echoed because it is the venue's OWN id, already in
+     * the till's config, not a secret — naming which location has no default is exactly what makes the
+     * error actionable. `station.*` names the DOMAIN CONCEPT (a kitchen station, or here its absence),
+     * never the throwing package (`tenant.not_found`'s note gives the rule). A configuration conflict that
+     * blocks firing → mapped to 409 by the fire route's surface in Task 7. Never renamed once shipped.
+     */
+    "station.no_default": { locationId: string };
+    /**
+     * A per-line kitchen ticket-item bump is not legal given the item's current state (KDS-1 §3c) — the
+     * `ticket_items` successor to `order_prep.invalid_transition` (which stays declared but loses its
+     * throw sites with the KDS-1 rework, spec §6). Task 4's `advanceTicketItem` is the thrower: each bump
+     * is a single conditional UPDATE `set state = to where id = … and state = <the one legal predecessor>`,
+     * so the legality of the move IS the write — a skip, a repeat, a jump backwards, or an absent/foreign
+     * item (RLS hides another tenant's) all match no row, and the empty `returning` throws THIS. `to =
+     * 'queued'` is refused too: no state legally advances INTO queued (only firing reaches it). The same
+     * fail-closed conditional-UPDATE shape `working_order.not_open`/the prep family use for their own state
+     * machines.
+     *
+     * A fact about the ticket ITEM's state, not the process → mapped to 409 (the id may be valid, but the
+     * item's state forbids the move). `ticketItemId` names the affected item's OWN id — a ticket item
+     * advances per LINE, so the id that failed is the line's ticket item, not the order (unlike the
+     * order-level `order_prep.invalid_transition`, which named the `workingOrderId` of a one-row-per-order
+     * model). It is a caller-supplied uuid the display already holds, not a secret, so echoing it is what
+     * makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN
+     * CONCEPT (a kitchen ticket item), never the throwing package (that same note); destined for a
+     * @waitron/kitchen package if one is ever extracted. Never renamed once shipped.
+     */
+    "ticket.invalid_transition": { ticketItemId: string };
+    /**
+     * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
+     * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
+     * line; a second fire of a line already sent collides on `ticket_items`' per-line
+     * `(tenant_id, working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
+     * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
+     * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
+     * open→placed guard blocks a second call) and `addTabRound` fires only its freshly-inserted lines, so
+     * neither reaches this in practice — but the catch lives at the shared `fireLines` choke point so ALL
+     * fire paths are covered by construction.
+     *
+     * Deliberately NOT `ticket.invalid_transition`: that code is `advanceTicketItem`'s per-ITEM state-bump
+     * refusal and carries the failed item's own `ticketItemId`, which a re-fire has no clean handle on (the
+     * INSERT of N items fails atomically; the colliding row is a PRE-EXISTING item this catch never reads).
+     * Broadening it would stretch a shipped code's documented meaning and force a wrong/looked-up param, the
+     * §1 defect class — so a re-fire gets its own code. Nor is it the RETIRED `order_prep.invalid_transition`,
+     * whose double-send throw site the KDS-1 rework removes (spec §6). `workingOrderId` names the order whose
+     * fire was refused — the caller-supplied uuid `sendToPrep`'s route already holds, not a secret, so echoing
+     * it is what makes the error actionable (the rule `tenant.not_found`'s note gives); an order-scoped param
+     * on a `ticket.*` code exactly as `tab.already_open` carries a `tableId`. A state conflict (the order's
+     * lines are already in the kitchen) → mapped to 409 by the fire route's surface (Task 7), the same 409
+     * family `working_order.not_settled`/`tab.already_open` sit in. `ticket.*` names the DOMAIN CONCEPT (a
+     * kitchen ticket item), never the throwing package (`tenant.not_found`'s note). Never renamed once shipped.
+     */
+    "ticket.already_fired": { workingOrderId: string };
+    /**
+     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
+     * handover — KDS-1 §3e) was NEVER fired to the kitchen: it has no `ticket_items`, so there is nothing
+     * on any station display to hand over. A settled Mode-P order that has not yet been sent to prep is a
+     * reachable state, and stamping `collected_at` on it would be worse than a no-op — a LATER `sendToPrep`
+     * would fire lines that `listStationQueue`'s `collected_at IS NULL` filter immediately hides (food
+     * silently dropped from the display). So `markCollected` refuses it rather than stamping. The inverse
+     * of `ticket.already_fired` (which refuses a DOUBLE fire); `ticket.*` names the DOMAIN CONCEPT (the
+     * kitchen ticket), never the throwing package (`tenant.not_found`'s note). `workingOrderId` names the
+     * order whose handover was refused — a caller-supplied uuid the display already holds, not a secret,
+     * and order-scoped on a `ticket.*` code exactly as `ticket.already_fired` carries a `workingOrderId`.
+     * Mapped to 409 (the id is valid, but the order's kitchen state forbids the handover) — the same 409
+     * family `ticket.already_fired`/`working_order.not_settled` sit in. Never renamed once shipped.
+     */
+    "ticket.not_fired": { workingOrderId: string };
     /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a

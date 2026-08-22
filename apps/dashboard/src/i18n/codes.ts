@@ -116,6 +116,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table position isn't valid",
     es: "Esa posición de la mesa no es válida",
   },
+  // Kitchen-station configuration (apps/server/src/kitchen.ts, KDS-1). The Cocina editor's per-item
+  // mutations (and the catalogue routing selects) reject with these when a station name collides, or
+  // when a station — or a routing/default target — can no longer be found (absent, another tenant's,
+  // another venue's, or deactivated, all folded into the one code server-side).
+  "station.name_taken": {
+    en: "A station with that name already exists",
+    es: "Ya existe una estación con ese nombre",
+  },
+  "station.not_found": {
+    en: "That station no longer exists",
+    es: "Esa estación ya no existe",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",

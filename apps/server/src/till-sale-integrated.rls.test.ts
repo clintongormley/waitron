@@ -36,7 +36,7 @@ import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
-import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder, listStationQueue, parkOrder, placeOrder } from "./working-order.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import "./errors.js";
@@ -253,6 +253,36 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
 }
 
+/** Whether this order's `collected_at` customer-handover marker is set — owner read. The witness that an
+ *  integrated CARD collect at the collect stage stamped the ORDER-level marker `listStationQueue`
+ *  excludes on (KDS-1 §3e): a placed order fired to a station leaves that station's queue once collected;
+ *  a walk-up (open→settle, never fired) leaves it NULL. */
+async function collectedAtSet(id: string): Promise<boolean> {
+  const { rows } = await suite.admin.execute<{ collected: boolean }>(sql`
+    select (collected_at is not null) as collected from working_orders where id = ${id}
+  `);
+  return rows[0]!.collected;
+}
+
+/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location) — owner read.
+ *  Every fixture line here carries no product/category route, so `placeOrder` fires it to this station. */
+async function defaultStationId(cfg: TillConfig): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active
+  `);
+  return rows[0]!.id;
+}
+
+/** The order ids on a station's queue (`listStationQueue`), read under the tenant + `app_user` scope the
+ *  till runs it in. A COLLECTED order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
+async function stationQueueOrderIds(cfg: TillConfig, stationId: string): Promise<string[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const groups = await listStationQueue(tx, cfg, stationId);
+    return groups.map((g) => g.orderId);
+  });
+}
+
 /** The tender(s) filed for this order's sale — method, amount, tip. */
 async function tendersFor(
   workingOrderId: string,
@@ -380,6 +410,9 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
+      // A WALK-UP was never fired to a station, so its handover marker stays NULL — the `markCollected`
+      // default guard: only a counter COLLECT (a placed order) stamps `collected_at`, never a walk-up.
+      expect(await collectedAtSet(id)).toBe(false);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
@@ -526,8 +559,9 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     }
   });
 
-  it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2)", async () => {
+  it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), stamps collected_at, drops from the station queue", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const station = await defaultStationId(cfg);
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const id = randomUUID();
@@ -535,10 +569,14 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         id,
         lines: [{ productId: cafe.id, quantity: "1" }],
       });
-      // Place it: open → placed, NO fiscal document filed yet (ticket_then_pay issues at pay).
+      // Place it: open → placed, NO fiscal document filed yet (ticket_then_pay issues at pay). Placing
+      // FIRES one ticket item to the default station, so the order shows on that station's queue,
+      // uncollected.
       await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
       expect(await saleCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await collectedAtSet(id)).toBe(false);
 
       const { deps } = integratedDeps(cfg, app);
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -552,6 +590,10 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
       expect(payments[0]!.linkedToSale).toBe(true);
+      // This IS a counter collect (a placed card collect over the terminal): `collected_at` is stamped in
+      // the settle UPDATE, so the order leaves its station queue.
+      expect(await collectedAtSet(id)).toBe(true);
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -769,11 +811,60 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
+      // The recovered order was an OPEN walk-up (seeded via createOpenOrder, never fired), so its handover
+      // marker stays NULL — a recovered walk-up is still a walk-up (the `wasPlaced` guard).
+      expect(await collectedAtSet(id)).toBe(false);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
       expect(payments[0]!.state).toBe("captured");
       expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING row, not a fresh one
       expect(payments[0]!.linkedToSale).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("recovers a lost-T2 capture on a PLACED order: files, stamps collected_at, drops from the station queue", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const station = await defaultStationId(cfg);
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      // A PLACED ticket_then_pay order fired to the kitchen, whose card collect CAPTURED but lost P3
+      // (sale_id NULL) — the recovery path for a genuine counter collect. Recovery files from the locked
+      // lines (issue-at-pay, no outstanding invoice → `recover`, not `recover-settle`) without re-charging.
+      const id = randomUUID();
+      await parkOrder({ db: suite.admin }, cfg, {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+      });
+      await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await insertCapturedPayment(tx, {
+          tenantId: cfg.tenantId,
+          workingOrderId: id,
+          provider: "stripe",
+          paymentRef: `pi-ref-${randomUUID()}`,
+          amount: decimal("1.50"),
+          settledAt: new Date(),
+          externalRef: `pi_lost_${randomUUID()}`,
+        });
+      });
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await collectedAtSet(id)).toBe(false);
+
+      const { deps, client } = integratedDeps(cfg, app);
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      expect(client.lastCreateIntent).toBeUndefined(); // recovery skips P2 — no re-charge
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await paymentCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      // A recovered PLACED collect leaves its station queue: collected_at stamped in the settle UPDATE.
+      expect(await collectedAtSet(id)).toBe(true);
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -937,16 +1028,20 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     return { id, saleId: await saleIdFor(id) };
   }
 
-  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale)", async () => {
+  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), stamps collected_at, drops from the station queue", async () => {
     const { cfg, cafe } = await modeVenue("invoice_first");
+    const station = await defaultStationId(cfg);
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
-      // The deferred invoice is issued at placing: one sale + registro, order placed, OUTSTANDING.
+      // The deferred invoice is issued at placing: one sale + registro, order placed, OUTSTANDING. Placing
+      // also FIRED the ticket item to the default station, so the order queues there, uncollected.
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
       expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await collectedAtSet(id)).toBe(false);
 
       const { deps, client } = integratedDeps(cfg, app);
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -963,6 +1058,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await outstandingSalesFor(cfg)).toEqual([]);
+      // A settle IS a counter collect: `collected_at` stamped in the placed → settled UPDATE, so the
+      // order leaves its station queue (the fiscal settle itself is byte-unchanged).
+      expect(await collectedAtSet(id)).toBe(true);
+      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
@@ -1115,12 +1214,15 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       return externalRef;
     }
 
-    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row", async () => {
+    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, stamps collected_at, drops from the station queue", async () => {
       const { cfg, cafe } = await modeVenue("invoice_first");
+      const station = await defaultStationId(cfg);
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
-        const { id } = await placeInvoiceFirst(cfg, cafe);
+        const { id } = await placeInvoiceFirst(cfg, cafe); // placing fires the ticket item to the station
         const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
+        expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+        expect(await collectedAtSet(id)).toBe(false);
 
         const { deps, client } = integratedDeps(cfg, app);
         const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -1135,6 +1237,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         expect(await filedSaleTotal(id)).toBe("1.50");
         expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
         expect(await outstandingSalesFor(cfg)).toEqual([]);
+        // An invoice-first recovery is always a PLACED counter collect: collected_at stamped, order leaves
+        // the station queue (settle files nothing new — fiscally byte-unchanged).
+        expect(await collectedAtSet(id)).toBe(true);
+        expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
         expect(await tendersFor(id)).toEqual([
           { method: "card", amount: "1.50", tipAmount: "0.00" },
         ]);

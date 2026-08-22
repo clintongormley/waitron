@@ -45,6 +45,14 @@ export interface TillInfo {
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
+  /**
+   * The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`): `line` (per-line bump
+   * only, the source of truth) or `ticket` (the display also offers a whole-ticket bump). Read once
+   * from `GET /api/till` on boot and threaded to the station-display screen so it can enable the
+   * whole-ticket affordance. A LOCAL mirror of the server's `bump_mode` enum, deliberately NOT
+   * imported — same bundle-decoupling rationale as every other type in this file.
+   */
+  bumpMode: "line" | "ticket";
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
   layout: LayoutDef;
@@ -185,12 +193,23 @@ export interface HeldOrder {
 export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
 
 /**
- * One order's kitchen-prep state (7c, design §5). Mirrors the server's `PrepState`
- * (`apps/server/src/working-order.ts`, derived from `@waitron/db`'s `prep_state` enum). An order
- * enters at `queued` (placing, for Modes I/T, or `sendToPrep` for Mode P) and advances one step at a
- * time; `collected` never appears in `GET /api/prep-queue` (see {@link PrepQueueEntry}).
+ * The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`. A LOCAL
+ * copy of the server's `TicketState` (`apps/server/src/working-order.ts`, the `ticket_state` enum that
+ * succeeds `order_prep`'s dropped `prep_state`), deliberately NOT imported — same bundle-decoupling
+ * rationale as every other type in this file. `collected` is GONE from the kitchen states: a counter
+ * order's handover is now an order-level `collected_at`, not a kitchen state (design §2d/§3e).
  */
-export type PrepState = "queued" | "preparing" | "ready" | "collected";
+export type TicketState = "queued" | "preparing" | "ready";
+
+/**
+ * A working order's own status (`open → placed → settled|abandoned`). A LOCAL copy of the server's
+ * `WorkingOrderStatus` (`apps/server/src/working-order.ts`, derived from `@waitron/db`'s
+ * `working_order_status` enum), NOT imported — same bundle-decoupling rationale as every other type in
+ * this file. The station queue carries it so the display shows the Mode-P collect action only on a
+ * COLLECTABLE order — a `settled` one awaiting its counter handover ({@link TillApi.markCollected}); an
+ * `open` (tab) or `placed` (awaiting the fiscal {@link TillApi.collectOrder}) order is not collectable there.
+ */
+export type WorkingOrderStatus = "open" | "placed" | "settled" | "abandoned";
 
 /**
  * `POST /api/working-orders/:id/place` success (7c). `open → placed`: Mode I files a deferred
@@ -209,18 +228,60 @@ export interface PlaceOrderResult {
 }
 
 /**
- * One row of `GET /api/prep-queue` (7c) — an order still ACTIVE in prep on this node (queued,
- * preparing or ready). `collected` orders never appear: `listPrepQueue` excludes them server-side, so
- * an order drops off the till's queue the moment its last advance lands. Mirrors the server's
- * `PrepQueueEntry`; `queuedAt` is when the order FIRST entered prep, not when it reached its current
- * `state`.
+ * One configured kitchen station from `GET /api/stations` (KDS-1 §3f) — the slim shape the station
+ * picker reads. A LOCAL mirror of the server's `Station` (`apps/server/src/kitchen.ts`), deliberately
+ * NOT imported — same bundle-decoupling rationale as every other type in this file. The display only
+ * READS stations to populate its picker; station CRUD is the management API's, so this carries no
+ * create-side fields. `isDefault` names the venue's single fallback station (the counter/pass), the one
+ * the counter's own default-station queue reads.
  */
-export interface PrepQueueEntry {
+export interface Station {
   id: string;
+  name: string;
+  displayOrder: number;
+  isDefault: boolean;
+  active: boolean;
+}
+
+/**
+ * One ticket item on a station's queue (KDS-1 §3c) — its id (the per-line bump target for
+ * {@link TillApi.advanceTicketItem}), the working-order line it was fired from, and its current kitchen
+ * `state`. A LOCAL mirror of the server's `StationQueueItem` (`apps/server/src/working-order.ts`), NOT
+ * imported — same bundle-decoupling rationale as every other type in this file.
+ */
+export interface StationQueueItem {
+  id: string;
+  workingOrderLineId: string;
+  state: TicketState;
+  /**
+   * The line's snapshotted dish description (locale → text), so the kitchen display renders the dish
+   * name ("2× Paella"), not a bare line number. Resolved for display in the operator's locale with a
+   * first-available fallback, exactly as `productName` resolves a product's `descriptions`.
+   */
+  descriptions: Record<string, string>;
+  /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
+  quantity: string;
+}
+
+/**
+ * One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
+ * operator `label`, the `queuedAt` of its OLDEST line at this station (the group's oldest-first
+ * ordering key + the age-colouring anchor), and the lines themselves. A LOCAL mirror of the server's
+ * `StationQueueGroup` (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling
+ * rationale as every other type in this file. The per-line/per-station successor to the removed
+ * `PrepQueueEntry` (which was one row per order); the reworked `GET /api/stations/:id/queue` returns
+ * these grouped by order, oldest first.
+ */
+export interface StationQueueGroup {
+  orderId: string;
   orderNumber: number;
   label: string | null;
-  state: PrepState;
   queuedAt: string;
+  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and not
+   *  yet collected (the server filters both), so the display reads COLLECTABLE off this alone: a
+   *  `settled` order is a Mode-P pickup awaiting its counter handover ({@link TillApi.markCollected}). */
+  status: WorkingOrderStatus;
+  items: StationQueueItem[];
 }
 
 /**
@@ -304,12 +365,14 @@ export interface FloorZone {
  * One row of the live-floor occupancy read-model from `GET /api/tables/state` (FP-1, design §4). A LOCAL
  * mirror of the server's `TableState` (`apps/server/src/working-order.ts`'s `listTablesWithState` return),
  * NOT imported — same bundle-decoupling rationale as every other type in this file. The raw signals
- * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`) sit alongside the rolled-up `state` so the floor
- * plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits in, or null. The
- * `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`); `tabTotal` is the
- * open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL service status (a
- * colour badge), independent of occupancy, or null. `pendingToServe` counts the open tab's lines still
- * to deliver (`served_at IS NULL`); DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`, `readyToServe`) sit alongside the rolled-up
+ * `state` so the floor plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits
+ * in, or null. The `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`);
+ * `tabTotal` is the open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL
+ * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
+ * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
+ * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); both are DISTINCT from
+ * `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;
@@ -323,6 +386,7 @@ export interface TableState {
   tabTotal?: string;
   pendingDeliveries: number;
   pendingToServe: number;
+  readyToServe: number;
   status: { id: string; label: string; color: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
@@ -535,23 +599,77 @@ export class TillApi {
   }
 
   /**
-   * Advance an order's prep state one step (7c, design §5) → `POST /api/working-orders/:id/prep` with
-   * `{ to }`. Only the NEXT state in `queued → preparing → ready → collected` is legal; any other
-   * target (or an id with no active prep row) rejects with `{ code: "order_prep.invalid_transition" }`.
-   * The server answers an empty 200; re-read `listPrepQueue` for the new state.
+   * The venue's ACTIVE kitchen stations (KDS-1, design §3f) → `GET /api/stations`. LIST-ONLY, by display
+   * order then name — the picker's catalogue for the station-display screen (session-gated; kitchen staff
+   * log in and pick a station). Station CRUD is the management API's, so this reads only.
    */
-  async advancePrep(id: string, to: PrepState): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", { to });
+  listStations(): Promise<Station[]> {
+    return this.#request<Station[]>("/api/stations", "GET");
   }
 
   /**
-   * Enqueue a SETTLED order into the node's prep queue at `queued` (7c, design §5) → the same
-   * `POST /api/working-orders/:id/prep` route as {@link advancePrep}, with no `to` — the Mode-P
-   * pickup for an order that pays at order and so never places (Modes I/T enqueue automatically when
-   * `placeOrder` runs). A non-settled or already-queued id rejects `{ code: "order_prep.invalid_transition" }`.
+   * One station's kitchen queue (KDS-1, design §3c) → `GET /api/stations/:id/queue`. This node's ticket
+   * items at that station, GROUPED BY ORDER (each group one order's lines at the station), oldest order
+   * first — what the display renders as kanban/rail. A malformed/unknown station id rejects with
+   * `{ code: "station.not_found" }`.
+   */
+  getStationQueue(stationId: string): Promise<StationQueueGroup[]> {
+    return this.#request<StationQueueGroup[]>(`/api/stations/${stationId}/queue`, "GET");
+  }
+
+  /**
+   * Advance ONE ticket item one kitchen step (KDS-1, design §3c) → `POST /api/ticket-items/:id/advance`
+   * with `{ to }` — the per-line bump that is the source of truth. `to` is the NEXT state
+   * (`queued → preparing → ready`); a skip/repeat/backwards move, or an absent/foreign item, rejects with
+   * `{ code: "ticket.invalid_transition" }`. The server answers an empty 200; re-read `getStationQueue`
+   * for the new state.
+   */
+  async advanceTicketItem(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
+    await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to });
+  }
+
+  /**
+   * Advance a WHOLE ticket (KDS-1, design §3c) → `POST /api/orders/:id/stations/:sid/advance` with
+   * `{ to }` — the convenience the `bump_mode = 'ticket'` venue setting drives, over the per-line truth.
+   * Advances every not-yet-`to` line of order `orderId` at station `stationId` to `to`. It NO-OPs on an
+   * empty match by design (bumping an already-advanced ticket is not an error), so unlike the per-line
+   * verb it never rejects on a transition; the server answers an empty 200. Re-read `getStationQueue`.
+   */
+  async advanceTicket(
+    orderId: string,
+    stationId: string,
+    to: Exclude<TicketState, "queued">,
+  ): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/stations/${stationId}/advance`, "POST", {
+      to,
+    });
+  }
+
+  /**
+   * FIRE a SETTLED order to the kitchen (KDS-1, design §3b) → `POST /api/working-orders/:id/prep` with no
+   * `to` — the Mode-P pickup for an order that pays at order and so never places (Modes I/T fire
+   * automatically when `placeOrder` runs). The server's reworked route no longer enqueues one order row;
+   * it fires the order's lines through `fireLines`, inserting one `ticket_items` row per line, each routed
+   * to a station (product ?? category ?? default) SNAPSHOTTED at fire time. A non-settled/absent/foreign
+   * id rejects `{ code: "working_order.not_settled" }`; a re-fire of an already-sent order
+   * `{ code: "ticket.already_fired" }`; a venue with no default station `{ code: "station.no_default" }`.
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});
+  }
+
+  /**
+   * Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e) →
+   * `POST /api/orders/:id/collect` with an empty body. NON-FISCAL: the server stamps the order-level
+   * `collected_at`, which drops the order off `getStationQueue` (the display shows an order until it is
+   * collected). It touches no sale/registro/tender — the order was paid + filed at settle — so this is
+   * DISTINCT from {@link collectOrder}, the placed → settled FISCAL collect on `/api/working-orders/:id/collect`.
+   * A non-settled/absent/foreign id rejects `{ code: "working_order.not_settled" }`, an already-collected
+   * order `{ code: "working_order.already_collected" }`, and one never fired `{ code: "ticket.not_fired" }`.
+   * The server answers an empty 200; re-read `getStationQueue` for the updated display.
+   */
+  async markCollected(id: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${id}/collect`, "POST", {});
   }
 
   /**
@@ -562,15 +680,6 @@ export class TillApi {
    */
   async cancelOrder(id: string, reason: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
-  }
-
-  /**
-   * The node-scoped prep queue (7c, design §5) → `GET /api/prep-queue`. Every order still active in
-   * prep on this node (queued/preparing/ready), oldest first; a collected order has already dropped
-   * off (see {@link PrepQueueEntry}).
-   */
-  listPrepQueue(): Promise<PrepQueueEntry[]> {
-    return this.#request<PrepQueueEntry[]>("/api/prep-queue", "GET");
   }
 
   // --- Live floor (FP-1): zones, occupancy read-model, served markers, tab open/round. All

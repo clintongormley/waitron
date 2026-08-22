@@ -16,9 +16,10 @@ export type {
   AmendmentVerification,
   VerifiableAmendment,
 } from "./order-amendment-hash.js";
-export { orderPrep, prepState } from "./schema/order-prep.js";
 export { diningTables, floorTableShape } from "./schema/dining-tables.js";
 export { floorZones } from "./schema/floor-zones.js";
+export { kitchenStations } from "./schema/kitchen-stations.js";
+export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
 export {

@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   compareDecimal,
@@ -19,15 +19,19 @@ import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
+  categories,
   diningTables,
   invoiceSeries,
   isUniqueViolation,
-  orderPrep,
-  prepState,
+  kitchenStations,
+  products,
   sales,
+  ticketItems,
+  ticketState,
   withTenant,
   workingOrderLines,
   workingOrders,
+  workingOrderStatus,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
@@ -488,6 +492,105 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
 }
 
 /**
+ * Fire an order's (or a tab round's) lines to the kitchen (KDS-1 §3b): insert one `ticket_items` row
+ * per line, its station RESOLVED and SNAPSHOTTED at fire time. The shared primitive the three fire
+ * points funnel through — `placeOrder` (placing = firing for Modes I/T), `sendToPrep` (Mode P's
+ * pickup) and a tab's round-send ({@link addTabRound}) — so routing and the snapshot rule live in ONE
+ * place, replacing #63's single `order_prep` row per order with a per-line/per-station model.
+ *
+ * Each line resolves `product.station_id ?? category.station_id ?? the location's default station`
+ * (§2b): a per-product override wins over the product's category default, which wins over the venue's
+ * single `is_default` kitchen station. The resolved id is WRITTEN onto the ticket item, so re-pointing
+ * the product's or category's station later never moves an already-fired item — the load-bearing
+ * snapshot (`ticket_items.station_id`'s own schema comment). If a line resolves NEITHER a product- nor
+ * category-level route AND the venue has no default station, firing FAILS LOUD with
+ * `station.no_default` (§2b: a misconfiguration must not silently drop food from the kitchen), naming
+ * the venue so the operator can fix it.
+ *
+ * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
+ * denormalised grouping key; `working_order_line_id` is the fired line, whose `(tenant_id,
+ * working_order_line_id)` unique makes a double-fire collide (23505) rather than duplicate. The two
+ * catalogue reads (the venue default once, then all lines' product/category routes in one batched
+ * `inArray`) and the insert all run on the CALLER's transaction under its tenant/app_user scope. An
+ * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
+ */
+export async function fireLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lines: { id: string; productId: string }[],
+): Promise<void> {
+  if (lines.length === 0) {
+    return;
+  }
+  // The venue's single fallback station (its `is_default` row, if any) — read ONCE; each line falls to
+  // it when neither the product nor its category names a route. The `active` filter is load-bearing:
+  // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead station
+  // is still resolved here and lines route to a queue the till/station display (active-only) never
+  // surface — food silently dropped. Requiring `active` makes a venue whose only default is deactivated
+  // resolve `null` → the fail-loud `station.no_default` below (§2b), until a new default is set.
+  const [fallback] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.isDefault, true),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  const defaultStationId = fallback?.id ?? null;
+
+  // Every fired product's own override AND its category's default, in ONE batched read (no per-line
+  // round trip). Both `station_id`s are nullable; the LEFT JOIN yields a null category route for a
+  // product with no category. RLS confines both tables to the caller's tenant.
+  const productIds = [...new Set(lines.map((line) => line.productId))];
+  const routes = await tx
+    .select({
+      productId: products.id,
+      productStationId: products.stationId,
+      categoryStationId: categories.stationId,
+    })
+    .from(products)
+    .leftJoin(
+      categories,
+      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
+    )
+    .where(inArray(products.id, productIds));
+  const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
+
+  // Resolve + snapshot each line's station, refusing the whole fire if any line has nowhere to go.
+  const values: (typeof ticketItems.$inferInsert)[] = lines.map((line) => {
+    const route = routeByProduct.get(line.productId);
+    const stationId = route?.productStationId ?? route?.categoryStationId ?? defaultStationId;
+    if (stationId === null || stationId === undefined) {
+      throw new AppError("station.no_default", { locationId: cfg.locationId });
+    }
+    return {
+      tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
+      workingOrderId: orderId,
+      workingOrderLineId: line.id,
+      stationId,
+      state: "queued",
+    };
+  });
+  try {
+    await tx.insert(ticketItems).values(values);
+  } catch (error) {
+    // A line already fired collides on `ticket_items`' per-line `(tenant_id, working_order_line_id)`
+    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
+    // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
+    // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
+    // path (placeOrder / sendToPrep / addTabRound) is covered by construction. Any other error re-throws.
+    if (isUniqueViolation(error)) {
+      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    }
+    throw error;
+  }
+}
+
+/**
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
  * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
  * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
@@ -521,7 +624,14 @@ export async function addTabRound(
   // maps to maxLineNo + i + 1.
   const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
-  await tx.insert(workingOrderLines).values(appended);
+  // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
+  // lines and send each to the kitchen as a ticket item. `returning` gives the minted line ids
+  // (`defaultRandom`) that `fireLines` snapshots the resolved station onto.
+  const appendedLines = await tx
+    .insert(workingOrderLines)
+    .values(appended)
+    .returning({ id: workingOrderLines.id, productId: workingOrderLines.productId });
+  await fireLines(tx, cfg, tabId, appendedLines);
 }
 
 /**
@@ -1557,7 +1667,7 @@ export interface PlaceOrderResult {
 /**
  * Place a working order (spec §3): `open → placed`, which FREEZES its composition and OPENS the
  * art. 29.2.j amendment log with an `order_placed` genesis entry — all in ONE `withTenant`/`asAppUser`
- * transaction, so the transition, the genesis amendment and the prep enqueue commit as one unit (or
+ * transaction, so the transition, the genesis amendment and the kitchen fire commit as one unit (or
  * roll back together, leaving the order open and un-logged).
  *
  * The freeze is FREE: once the row is `placed`, `working_orders_enforce_transition` rejects a
@@ -1675,16 +1785,17 @@ export async function placeOrder(
         eventOffsetMinutes: now.offsetMinutes,
       });
 
-      // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
-      // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
-      // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
-      // MUTABLE table rather than a `working_orders` column.
-      await tx.insert(orderPrep).values({
-        tenantId: cfg.tenantId,
-        workingOrderId: id,
-        nodeId: cfg.nodeId,
-        state: "queued",
-      });
+      // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per line, each routed to a
+      // station (product ?? category ?? default) SNAPSHOTTED at fire time, replacing #63's single
+      // `order_prep` row per order. Read the order's lines (id + product, in line order) and fire them;
+      // ticket items advance queued → preparing → ready freely even after the order is fiscally frozen,
+      // so they live in their own MUTABLE table, as `order_prep` did.
+      const firedLines = await tx
+        .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      await fireLines(tx, cfg, id, firedLines);
 
       return placeResult;
     },
@@ -1773,52 +1884,23 @@ export async function cancelPlacedOrder(
 }
 
 /**
- * The prep lifecycle (design §5), mirrored from `@waitron/db`'s `prepState` pgEnum via its own
- * `enumValues` — the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow` uses for the
- * identical reason, so the two can never drift. `send-to-prep` (= placing for Modes I/T, or
- * `sendToPrep` for Mode P, which never places) enqueues at `queued`; the cook advances
- * queued → preparing → ready → collected.
- */
-export type PrepState = (typeof prepState.enumValues)[number];
-
-/**
- * One row of the node-scoped prep-queue view (design §5): what a cook's screen shows for a single
- * order still ACTIVE in prep (not yet collected). `id` is the working order's own id — the prep
- * queue addresses orders the same way the held list does, so a route can chain straight from one to
- * the other. `queuedAt` is when the order FIRST entered prep (`order_prep.queued_at`, the column the
- * queue is ordered by), not when it reached its CURRENT `state`.
- */
-export interface PrepQueueEntry {
-  id: string;
-  orderNumber: number;
-  label: string | null;
-  state: PrepState;
-  queuedAt: string;
-}
-
-/**
- * Enqueue a SETTLED order into prep (design §5) — the Mode-P counterpart to `placeOrder`'s own
- * enqueue. Modes I/T enqueue `order_prep` at `queued` INSIDE `placeOrder` (open → placed), because
- * placing is where their order becomes an order of record. Mode P (prepay) never places at all — it
- * pays and issues at ORDER via `payWorkingOrder` (open → settled, no placed state) — so its order has
- * no `placeOrder` call to pick a prep row up from, and this is that pickup: called once the order is
- * already `settled`.
+ * Fire a SETTLED order's lines to the kitchen (KDS-1 §3b) — the Mode-P counterpart to `placeOrder`'s
+ * own fire. Modes I/T fire INSIDE `placeOrder` (open → placed), because placing is where their order
+ * becomes an order of record. Mode P (prepay) never places at all — it pays and issues at ORDER via
+ * `payWorkingOrder` (open → settled, no placed state) — so its order has no `placeOrder` call to fire
+ * from, and this is that pickup: called once the order is already `settled`.
  *
- * The order's status IS checked first, and enforced: an id naming NO working order (absent, or
- * another tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own
- * route, `placeOrder`, already enqueued its prep row at placing — sending it here too would be the
- * wrong path, not a legitimate double-enqueue), all refuse with the domain
- * `working_order.not_settled` (409) BEFORE any write — never a raw `order_prep_order_fk` violation
- * surfacing as an opaque 500 for a well-formed but wrong/absent id (fix round 1, review finding).
+ * The order's status IS checked first, and enforced: an id naming NO working order (absent, or another
+ * tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own route,
+ * `placeOrder`, already fired at placing — sending it here too would be the wrong path), all refuse with
+ * the domain `working_order.not_settled` (409) BEFORE any write.
  *
- * Only past that guard is it a plain INSERT, not a state-machine transition: `order_prep`'s PK is
- * `(tenant_id, working_order_id)` (one row per order), so a SECOND send-to-prep for an order already
- * sent (this same guard having passed both times) collides on it. Rather than let that surface as a
- * raw `23505`, it is caught and reported as the domain `order_prep.invalid_transition` — the same
- * code `advancePrep` uses for every other illegal prep MOVE (as opposed to the order-level
- * `not_settled` guard above, which is about the order's FISCAL eligibility to enter prep at all),
- * since "this order already has a prep record" is exactly as illegal a move as "the target isn't the
- * next state" (see that code's own note in `errors.ts`).
+ * Past that guard it fires the order's lines through the shared {@link fireLines} — one `ticket_items`
+ * row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time
+ * (§2b). A double send-to-prep re-fires already-fired lines and collides on `ticket_items`'
+ * `(tenant_id, working_order_line_id)` unique — the structural one-item-per-line guard; `fireLines`
+ * catches that 23505 and throws `ticket.already_fired` (a clean 409, mapped in `till-api.ts`), so this
+ * verb inherits the re-fire surface from the shared fire point without minting a code of its own.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
@@ -1829,8 +1911,8 @@ export async function sendToPrep(
     await asAppUser(tx);
 
     // Only a SETTLED order is eligible — `settled` is terminal, so there is no race between this read
-    // and the insert below that could invalidate it. Absent, foreign (RLS-hidden), `open` and
-    // `placed` orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
+    // and the fire below that could invalidate it. Absent, foreign (RLS-hidden), `open` and `placed`
+    // orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -1839,143 +1921,347 @@ export async function sendToPrep(
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
 
-    try {
-      await tx.insert(orderPrep).values({
-        tenantId: cfg.tenantId,
-        workingOrderId: id,
-        nodeId: cfg.nodeId,
-        state: "queued",
-      });
-    } catch (error) {
-      if (!isUniqueViolation(error)) {
-        throw error;
-      }
-      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-    }
+    // Fire the settled order's lines to the kitchen: read them (id + product, in line order) and insert
+    // one ticket item per line, station resolved + snapshotted — the same fire `placeOrder` runs at
+    // placing.
+    const firedLines = await tx
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    await fireLines(tx, cfg, id, firedLines);
   });
 }
 
 /**
- * Advance a working order's prep state one step (design §5): `queued → preparing → ready →
- * collected`. Each branch is a single conditional UPDATE — `set state = to, <to>_at = now() where
- * working_order_id = id and state = <the one legal predecessor of to>` — so the legality of the move
- * IS the write: a skip, a repeat, a jump backwards, or an absent/foreign prep row (RLS hides another
- * tenant's) all match no row, and the empty `returning` throws `order_prep.invalid_transition`. The
- * same fail-closed shape `abandonHeldOrder`'s conditional UPDATE uses for `working_orders`.
+ * Mark a SETTLED, FIRED order as handed to the customer (KDS-1 §3e, the Mode-P counter handover) — stamp
+ * the order-level `working_orders.collected_at`, which drops the order off {@link listStationQueue} (the
+ * display shows an order until it is collected). A Mode-P walk-up settles BEFORE it is fired
+ * (`payWorkingOrder` → {@link sendToPrep}), so it never reaches the placed → settled transition where
+ * `collectOrder` stamps `collected_at` for Modes I/T — this is that missing handover, on an
+ * already-settled order.
  *
- * `to = "queued"` is refused immediately, before any query: no prep state legally advances TO queued
- * (only `sendToPrep`'s INSERT reaches it), so that case throws the same domain code the empty-
- * `returning` branch would. The switch (rather than a table keyed by a computed column name) keeps
- * each branch's `.set()` call fully typed against Drizzle's inferred update shape.
+ * NON-FISCAL: it writes ONLY `collected_at` — no sale, registro, tender or huella (the order was paid and
+ * filed at settle; the alta path never reads this marker — the H2 huella-identity test). DISTINCT from
+ * `collectOrder` (the placed → settled FISCAL collect); the two are deliberately not folded together.
  *
- * Advances freely regardless of the order's FISCAL status (open/placed/settled) — `order_prep` is a
- * separate MUTABLE table precisely so prep can progress on an already-`settled` Mode-P order without
- * touching the frozen `working_orders` row (design §5, "where prep state lives"). Node-scoping is not
- * needed here: the id addresses one prep row directly and RLS still confines it to the tenant,
- * mirroring `getHeldOrder`/`updateHeldOrder`'s by-id family.
+ * Guards, each fail-closed BEFORE any write (an absent/foreign id, RLS-hidden, reads the same as a
+ * wrong-state one):
+ *  - not `settled` (open, placed, abandoned, or absent/foreign) → `working_order.not_settled`, the SAME
+ *    code {@link sendToPrep} uses for its own settled guard;
+ *  - already collected (`collected_at` set) → `working_order.already_collected` — a repeat, refused the
+ *    way the old `advancePrep('collected')` did, and BEFORE the enforce_transition trigger (0056), which
+ *    permits the stamp only NULL → non-null and would otherwise RAISE an opaque 500 on a re-stamp;
+ *  - never fired (no `ticket_items`) → `ticket.not_fired` — there is nothing on a station display to hand
+ *    over, and stamping now would silently hide a LATER {@link sendToPrep}'s fired lines.
+ *
+ * The stamp is `now()` (the venue's DATABASE clock), the non-fiscal precedent {@link setLineServed} uses —
+ * no `TrustedClock` is involved since nothing fiscal is written. The UPDATE's own `collected_at IS NULL`
+ * predicate makes a concurrent double-collect safe: the loser's UPDATE matches no row (0 rows, no trigger
+ * fire), so one call stamps and the other is a silent no-op rather than a P0001. Runs in its OWN
+ * `withTenant` + `asAppUser` scope (the `db`-only {@link WorkingOrderDeps}), the shape {@link sendToPrep} uses.
  */
-export async function advancePrep(
+export async function markCollected(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
-  to: PrepState,
 ): Promise<void> {
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
 
-    let updated: { id: string }[];
-    switch (to) {
-      case "preparing":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, preparingAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "queued")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "ready":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, readyAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "preparing")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "collected":
-        updated = await tx
-          .update(orderPrep)
-          .set({ state: to, collectedAt: sql`now()` })
-          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "ready")))
-          .returning({ id: orderPrep.workingOrderId });
-        break;
-      case "queued":
-      default:
-        // No prep state advances TO queued — reaching it is `sendToPrep`'s job (an INSERT).
-        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    // Only a SETTLED order can be handed over; settled is terminal, so this read cannot be invalidated by
+    // a concurrent status change before the stamp below. Absent/foreign (RLS-hidden), open and placed all
+    // match the SAME fail-closed code.
+    const [order] = await tx
+      .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    if (order === undefined || order.status !== "settled") {
+      throw new AppError("working_order.not_settled", { workingOrderId: id });
+    }
+    // Already handed over — refuse the repeat HERE, before the NULL → non-null-only trigger (0056) would
+    // RAISE a P0001 that becomes an opaque 500.
+    if (order.collectedAt !== null) {
+      throw new AppError("working_order.already_collected", { workingOrderId: id });
+    }
+    // Must have been fired — an order with no ticket items is on no station display to hand over.
+    const [fired] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id))
+      .limit(1);
+    if (fired === undefined) {
+      throw new AppError("ticket.not_fired", { workingOrderId: id });
     }
 
-    if (updated.length === 0) {
-      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-    }
+    // Stamp the handover marker. enforce_transition (0056) permits this settled → settled UPDATE ONLY
+    // because it sets collected_at NULL → non-null and touches nothing else. The `collected_at IS NULL`
+    // predicate keeps a concurrent double-collect a no-op for the loser rather than a trigger RAISE.
+    await tx
+      .update(workingOrders)
+      .set({ collectedAt: sql`now()` })
+      .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
   });
 }
 
+/** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
+ *  the `ticket_state` enum (the successor to `order_prep`'s dropped `prep_state`). */
+export type TicketState = (typeof ticketState.enumValues)[number];
+
+/** The working order's own status (`open → placed → settled|abandoned`, orders.ts) — surfaced on a
+ *  station-queue group so the till knows which orders are COLLECTABLE (a settled Mode-P order awaiting
+ *  its counter handover, {@link markCollected}) versus still open (a tab building) or placed (awaiting
+ *  the fiscal {@link collectOrder}). */
+export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
+
+/** The forward kitchen transitions (KDS-1 §2d), keyed by the state a move goes TO: the one legal
+ *  predecessor it comes `from` and the timestamp column it stamps. The per-line {@link advanceTicketItem}
+ *  and whole-ticket {@link advanceTicket} verbs both drive their predecessor-WHERE and stamp off this ONE
+ *  table, so the state machine lives in a single place. `queued` is not a target (a FIRE reaches it,
+ *  {@link fireLines}), so only the two forward moves are keyed. */
+const TICKET_TRANSITIONS = {
+  preparing: { from: "queued", stampedAt: "preparingAt" },
+  ready: { from: "preparing", stampedAt: "readyAt" },
+} as const satisfies Record<
+  Exclude<TicketState, "queued">,
+  { from: TicketState; stampedAt: "preparingAt" | "readyAt" }
+>;
+
+/** The typed `.set()` payload for a forward move: the new state plus the stamp column the transition
+ *  names, set to `now()`. A ternary on the (two-valued) stamp column keeps each branch a concrete object
+ *  Drizzle infers against `ticket_items`' update shape — a computed key would widen it to a string index
+ *  and drop the typing the per-verb switch/ternary existed to hold. */
+function advanceSet(to: Exclude<TicketState, "queued">) {
+  return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
+    ? { state: to, preparingAt: sql`now()` }
+    : { state: to, readyAt: sql`now()` };
+}
+
 /**
- * The node-scoped prep-queue view (design §5): every ACTIVE (not yet collected) prep row on THIS
- * node for a working order that is STILL prep-eligible, joined to its working order for the display
- * fields a cook's screen needs — reusing 7b's `listHeldOrders` node-scoping SHAPE (`node_id =
- * cfg.nodeId`, RLS confines the tenant) over a DIFFERENT storage table: prep lives in `order_prep`,
- * not `working_orders`, for the reason that table's own schema comment gives (a Mode-P order is
- * already fiscally frozen `settled` when prep runs, so a `working_orders` column could not advance on
- * it). Ordered by `queued_at` — when the order FIRST entered prep — so the queue reads oldest-first
- * regardless of which state each row has since advanced to.
+ * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. Each branch is a
+ * single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
+ * legal predecessor of to>` — so the legality of the move IS the write: a skip (`queued → ready`), a
+ * repeat, a jump backwards, or an absent/foreign item (RLS hides another tenant's) all match no row, and
+ * the empty `returning` throws `ticket.invalid_transition` naming the offending item. The per-line
+ * successor to #63's order-level `advancePrep`, over `ticket_items` — the same fail-closed
+ * conditional-UPDATE shape `advancePrep` used over `order_prep`, and the shape `abandonHeldOrder` uses
+ * for `working_orders`.
  *
- * `collected` rows are excluded (`state in ('queued','preparing','ready')`): once collected, an order
- * leaves the ACTIVE queue a cook's screen shows, mirroring `listHeldOrders` dropping a `settled`
- * order from the held list. A SECOND, independent exclusion drops an `abandoned` working order
- * (`ne(workingOrders.status, "abandoned")`) — `cancelPlacedOrder` (`placed → abandoned`) never
- * touches `order_prep` at all (design §4's amendment log and design §5's prep table are deliberately
- * separate concerns), so a cancelled order's `order_prep` row would otherwise sit at whatever state it
- * was in FOREVER, still `state in (queued, preparing, ready)` and so still matching the first filter —
- * this join is what retires it instead (fix round 1, review finding), rather than requiring every
- * removal path (cancel, and any future one) to also know to touch `order_prep`. PGlite is enough for
- * THIS behaviour — the join, the state/status filters and the ordering are plain SQL a single backend
- * proves; the node/tenant SCOPING is real-Postgres's job, the same split `listHeldOrders` uses
- * (CLAUDE.md §4).
+ * `to` must name a key of {@link TICKET_TRANSITIONS} (`"preparing" | "ready"`) — anything else is
+ * refused immediately, before any query, with the same domain code the empty-`returning` branch below
+ * throws for an illegal move. That covers `to = "queued"` (no kitchen state legally advances INTO it —
+ * reaching it is a FIRE's job, {@link fireLines}'s insert) AND a missing/garbage `to`: the till route
+ * (`till-api.ts`) casts `body.to as TicketState` with no route-level screen, so an absent JSON field or
+ * an arbitrary string reaches here at runtime despite the narrower static type, and `to` is looked up in
+ * the table BEFORE {@link advanceSet} or the predecessor is read — a lookup miss must not reach either,
+ * or it throws a raw `TypeError` (`Cannot read properties of undefined`) that the error boundary maps to
+ * an opaque `server.internal` 500, not the documented 409. This one guard is what the old
+ * `switch (to) { … default: throw … }` did before the table refactor; the table replaced the three arms,
+ * not the default.
+ *
+ * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
+ * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
+ * calls uniformly) — underscore-prefixed the way {@link voidTabLine}/{@link markLineServed} keep it.
+ * Advances freely regardless of the parent order's FISCAL status (a settled Mode-P order's lines still
+ * cook), as `ticket_items` is a MUTABLE table separate from the frozen `working_orders` row.
  */
-export async function listPrepQueue(
-  deps: WorkingOrderDeps,
-  cfg: TillConfig,
-): Promise<PrepQueueEntry[]> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return (
-      tx
-        .select({
-          id: workingOrders.id,
-          orderNumber: workingOrders.orderNumber,
-          label: workingOrders.label,
-          state: orderPrep.state,
-          queuedAt: orderPrep.queuedAt,
-        })
-        .from(orderPrep)
-        // Composite join predicate (tenant_id too, not the order id alone) — the same tenant-consistency
-        // `listHeldOrders`'s own line join enforces, matching `order_prep_order_fk`'s composite shape.
-        .innerJoin(
-          workingOrders,
-          and(
-            eq(orderPrep.workingOrderId, workingOrders.id),
-            eq(orderPrep.tenantId, workingOrders.tenantId),
-          ),
-        )
-        .where(
-          and(
-            eq(orderPrep.nodeId, cfg.nodeId),
-            inArray(orderPrep.state, ["queued", "preparing", "ready"]),
-            ne(workingOrders.status, "abandoned"),
-          ),
-        )
-        .orderBy(orderPrep.queuedAt)
+export async function advanceTicketItem(
+  tx: Transaction,
+  _cfg: TillConfig,
+  itemId: string,
+  to: TicketState,
+): Promise<void> {
+  // `to as Exclude<TicketState, "queued">` only satisfies the index type — it asserts nothing at
+  // runtime, so "queued" (not a key of TICKET_TRANSITIONS) and any missing/garbage `to` both read back
+  // `undefined` here and are refused together, before `advanceSet`/`.from` ever run.
+  const table = TICKET_TRANSITIONS as Record<
+    string,
+    (typeof TICKET_TRANSITIONS)[Exclude<TicketState, "queued">] | undefined
+  >;
+  const transition = table[to];
+  if (transition === undefined) {
+    throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+  }
+  const validTo = to as Exclude<TicketState, "queued">;
+  const updated = await tx
+    .update(ticketItems)
+    .set(advanceSet(validTo))
+    .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, transition.from)))
+    .returning({ id: ticketItems.id });
+  if (updated.length === 0) {
+    throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+  }
+}
+
+/**
+ * Whole-ticket bump (KDS-1 §3c): advance EVERY not-yet-`to` line of one order at one station together —
+ * the convenience the `bump_mode = 'ticket'` venue setting (and a "bump all" affordance) drives, over
+ * the per-line {@link advanceTicketItem} truth. A single bulk conditional UPDATE — `set state = to,
+ * <to>_at = now() where working_order_id = orderId and station_id = stationId and state = <the legal
+ * predecessor of to>` — so it moves exactly the items still AT that predecessor and leaves the rest
+ * untouched (a line already `ready` is not at `queued`, so a `to = "preparing"` bump skips it). Unlike
+ * the per-line verb it does NOT throw on an empty match: bumping a ticket whose lines have all already
+ * advanced is a no-op convenience, not an illegal move (there is no single item to name in
+ * `ticket.invalid_transition`).
+ *
+ * `to` is `"preparing" | "ready"` — the two forward targets; there is no whole-ticket move INTO `queued`
+ * (a fire, not a bump, reaches it), so unlike the per-line verb this needs no runtime `queued` guard,
+ * and the type forbids it at the call site. Runs on the CALLER's transaction under its tenant/app_user
+ * scope; RLS confines the update to the tenant, and the (orderId, stationId) pair addresses one node's
+ * items (a working order is node-local), so `_cfg` is unused — the uniform tab-verb signature shape.
+ */
+export async function advanceTicket(
+  tx: Transaction,
+  _cfg: TillConfig,
+  orderId: string,
+  stationId: string,
+  to: Exclude<TicketState, "queued">,
+): Promise<void> {
+  await tx
+    .update(ticketItems)
+    .set(advanceSet(to))
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.stationId, stationId),
+        eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
+      ),
     );
-  });
+}
+
+/** One ticket item on a station's queue — its id (the bump target for {@link advanceTicketItem}), the
+ *  line it was fired from, its current kitchen state, and the DISPLAY fields a cook reads: the line's
+ *  snapshotted `descriptions` (locale → text, the dish name — so the kitchen shows "2× Paella", not a
+ *  bare line number) and its `quantity` (numeric(12,3) as text, e.g. "2.000"). Both are carried from
+ *  the joined `working_order_lines` row; the description is the SNAPSHOT frozen at fire, never a live
+ *  catalogue lookup. */
+export interface StationQueueItem {
+  id: string;
+  workingOrderLineId: string;
+  state: TicketState;
+  descriptions: Record<string, string>;
+  quantity: string;
+}
+
+/** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
+ *  operator label, the `queued_at` of its OLDEST line at this station (the group's oldest-first ordering
+ *  key + elapsed-time anchor), and the lines themselves. */
+export interface StationQueueGroup {
+  orderId: string;
+  orderNumber: number;
+  label: string | null;
+  queuedAt: string;
+  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and
+   *  not-yet-collected (the query filters both), so the till reads COLLECTABLE off this alone: a
+   *  `settled` order is a Mode-P pickup awaiting the counter handover ({@link markCollected}); `open`
+   *  (a tab) and `placed` (awaiting the fiscal collect) are not collectable via this path. */
+  status: WorkingOrderStatus;
+  items: StationQueueItem[];
+}
+
+/**
+ * The per-station kitchen queue (KDS-1 §3c) — this node's ticket items AT `stationId`, joined to their
+ * working order for the display fields and GROUPED BY ORDER (each group = one order's lines at this
+ * station), oldest order first. The per-line/per-station successor to #63's order-level `listPrepQueue`,
+ * over `ticket_items` rather than `order_prep`.
+ *
+ * Two order-level exclusions, mirroring `listPrepQueue`'s abandoned filter and adding the collect
+ * handover: an `abandoned` working order (`ne(status, "abandoned")` — a cancelled placed order's items
+ * are cascaded only if the LINE is deleted, so the status join is what retires a still-present item's
+ * order, as `listPrepQueue` relied on) and a COLLECTED order (`collected_at IS NULL` — the default-station
+ * display drops an order once handed to the customer, §3e) both drop out. Ticket items are NOT filtered
+ * by state: a `ready` line stays on the display until its order collects, so the group carries the
+ * order's queued/preparing/ready lines alike (the Nuevo/Preparando/Listo columns are a client lens).
+ *
+ * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
+ * order fixes that group's position (oldest-first) and its `queuedAt`. Node-scoped
+ * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
+ * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope; RLS
+ * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
+ * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
+ * used (CLAUDE.md §4).
+ */
+export async function listStationQueue(
+  tx: Transaction,
+  cfg: TillConfig,
+  stationId: string,
+): Promise<StationQueueGroup[]> {
+  const rows = await tx
+    .select({
+      itemId: ticketItems.id,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      state: ticketItems.state,
+      queuedAt: ticketItems.queuedAt,
+      // The DISPLAY fields the kitchen renders — the line's snapshotted dish description + quantity,
+      // carried from the joined working_order_lines row (the snapshot, never a live catalogue lookup).
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      lineNo: workingOrderLines.lineNo,
+      orderId: workingOrders.id,
+      orderNumber: workingOrders.orderNumber,
+      label: workingOrders.label,
+      // The order's status — surfaced so the till shows the collect action only on a collectable
+      // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
+      // guaranteed by the WHERE, so this is the only remaining collectability signal.
+      status: workingOrders.status,
+    })
+    .from(ticketItems)
+    // Composite join predicate (tenant_id too) — the tenant-consistency `listPrepQueue`'s own join
+    // enforced, matching the composite shape the ticket_items → working_order_lines FK carries.
+    .innerJoin(
+      workingOrders,
+      and(
+        eq(ticketItems.workingOrderId, workingOrders.id),
+        eq(ticketItems.tenantId, workingOrders.tenantId),
+      ),
+    )
+    // The line this item was fired from, for its display name + quantity. Composite (tenant_id too),
+    // mirroring the tenant-consistent (tenant_id, working_order_line_id) FK ticket_items carries.
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(ticketItems.nodeId, cfg.nodeId),
+        eq(ticketItems.stationId, stationId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+      ),
+    )
+    // Primary `queued_at` keeps the oldest-order-first grouping (each group's position + `queuedAt`
+    // anchor is its oldest line, unchanged), with `line_no` breaking the tie so an order's lines —
+    // fired together with an identical `queued_at` — render in a stable line order within the group.
+    .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
+
+  // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
+  // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
+  const groups = new Map<string, StationQueueGroup>();
+  for (const row of rows) {
+    let group = groups.get(row.orderId);
+    if (group === undefined) {
+      group = {
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        label: row.label,
+        queuedAt: row.queuedAt,
+        status: row.status,
+        items: [],
+      };
+      groups.set(row.orderId, group);
+    }
+    group.items.push({
+      id: row.itemId,
+      workingOrderLineId: row.workingOrderLineId,
+      state: row.state,
+      descriptions: row.descriptions,
+      quantity: row.quantity,
+    });
+  }
+  return [...groups.values()];
 }
 
 /** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
@@ -1999,6 +2285,12 @@ export interface TableState {
    *  LEFT-join branch. DISTINCT from `pendingDeliveries` (uncollected counter deliveries to this table);
    *  both are kept. */
   pendingToServe: number;
+  /** Count of the open tab's lines that are KITCHEN-DONE but NOT yet carried out — the ticket item is
+   *  `ready` AND the line's `served_at IS NULL` (KDS-1 §3d, the floor's "N listos"). DISTINCT from
+   *  `pendingToServe` (unserved lines regardless of kitchen state) and from `pendingDeliveries` (counter
+   *  deliveries): a line is counted here only in the window between the kitchen bumping it `ready` and the
+   *  waiter marking it served. `0` for a free table (no open tab — the LEFT-join branch). */
+  readyToServe: number;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -2018,8 +2310,13 @@ export interface TableState {
  * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
  * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
  * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
- * `delivery_table_id` = this table whose `order_prep` state is not yet `collected` and whose order is not
- * `abandoned`). A non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
+ * `delivery_table_id` = this table that were FIRED to the kitchen — a `ticket_items` row exists — and are
+ * not yet collected (`working_orders.collected_at IS NULL`) nor `abandoned`). This is the KDS-1 successor
+ * to the dropped `order_prep` join (§2d/§3e): `EXISTS(ticket_items)` replaces "has a prep row" and
+ * `collected_at` replaces `order_prep.state = 'collected'`, so an instant handover that was never fired
+ * (no ticket item — e.g. a walk-up counter delivery) leaves no lingering occupancy, exactly as a
+ * no-prep-row handover did. The collect flow (till-sale.ts's settle paths) stamps `collected_at` at
+ * handover; this read only consumes it.
  *
  * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
  * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
@@ -2040,6 +2337,7 @@ export async function listTablesWithState(
     tab_line_count: number;
     tab_total: string | null;
     pending_to_serve: number;
+    ready_to_serve: number;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -2056,6 +2354,7 @@ export async function listTablesWithState(
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
       coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
+      coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
@@ -2063,19 +2362,30 @@ export async function listTablesWithState(
       select wo.id,
              count(wol.id)::int as line_count,
              (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
+             -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
+             -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
+             -- (tenant_id, working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
+             -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
+             -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
+             (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
              coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
       from working_orders wo
       left join working_order_lines wol
         on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
+      left join ticket_items ti
+        on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
       where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
       group by wo.id
     ) tab on true
     left join lateral (
       select count(*)::int as pending
       from working_orders d
-      join order_prep op on op.tenant_id = d.tenant_id and op.working_order_id = d.id
       where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
-        and d.status <> 'abandoned' and op.state <> 'collected'
+        and d.status <> 'abandoned' and d.collected_at is null
+        and exists (
+          select 1 from ticket_items ti
+          where ti.tenant_id = d.tenant_id and ti.working_order_id = d.id
+        )
     ) del on true
     left join table_service_statuses tss
       on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
@@ -2099,6 +2409,7 @@ export async function listTablesWithState(
       state,
       hasOpenTab,
       pendingToServe: Number(r.pending_to_serve),
+      readyToServe: Number(r.ready_to_serve),
       pendingDeliveries,
       status:
         r.status_id !== null

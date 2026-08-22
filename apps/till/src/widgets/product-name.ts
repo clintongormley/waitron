@@ -1,4 +1,5 @@
 import { currentLocale } from "../i18n/t.js";
+import { descriptionFor } from "./dish-format.js";
 import type { TillProduct } from "../api/client.js";
 
 /**
@@ -14,5 +15,5 @@ import type { TillProduct } from "../api/client.js";
  * defect, but something tappable/printable must still render.
  */
 export function productName(product: TillProduct, locale: string = currentLocale()): string {
-  return product.descriptions[locale] ?? Object.values(product.descriptions)[0] ?? product.id;
+  return descriptionFor(product.descriptions, product.id, locale);
 }

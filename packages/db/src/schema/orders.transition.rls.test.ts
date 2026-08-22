@@ -204,6 +204,72 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(pgErrorCode(e2)).toBe("P0001");
   });
 
+  it("permits a collected_at NULL→non-null stamp on a settled order (the Mode-P handover marker, 0056)", async () => {
+    // A Mode-P walk-up settles BEFORE it is fired, so its order-level `collected_at` handover marker
+    // (KDS-1 §3e) can only be written by a settled → settled UPDATE — the ONE relaxation 0056 adds to
+    // `enforce_transition`. Nothing else about the settled row changes, so the trigger permits exactly
+    // this stamp (the fiscal record was filed at settle and is untouched). settled_at is set alongside
+    // status to satisfy the settled_at biconditional.
+    const id = await open();
+    await asApp((tx) =>
+      tx.execute(
+        sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+      ),
+    );
+    await asApp((tx) =>
+      tx.execute(sql`update working_orders set collected_at = now() where id = ${id}`),
+    );
+    const [row] = await asApp((tx) =>
+      tx
+        .execute<{ collected: boolean }>(
+          sql`select (collected_at is not null) as collected from working_orders where id = ${id}`,
+        )
+        .then((r) => r.rows),
+    );
+    expect(row!.collected).toBe(true);
+  });
+
+  it("rejects any OTHER change to a settled order, and a re-stamp of an already-collected one (0056 keeps the settled-state freeze)", async () => {
+    // The 0056 relaxation permits the collected_at stamp and NOTHING ELSE — every other working_orders
+    // column is pinned with IS NOT DISTINCT FROM. Each rejection below is the trigger's RAISE (P0001).
+    const id = await open();
+    await asApp((tx) =>
+      tx.execute(
+        sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+      ),
+    );
+    // A settled-row change that ALSO touches another column (label) is rejected even though collected_at
+    // is going NULL→non-null — the pinned label no longer matches, so no allowed branch applies. This is
+    // the defense-in-depth: the fiscal-relevant identity/`settled_at` fields stay frozen.
+    const eLabel = await captureError(() =>
+      asApp((tx) =>
+        tx.execute(
+          sql`update working_orders set collected_at = now(), label = 'x' where id = ${id}`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(eLabel)).toBe("P0001");
+    // A settled → settled UPDATE that is NOT a collected_at stamp (a bare settled_at edit) is rejected —
+    // the relaxation requires collected_at itself to go NULL→non-null.
+    const eSettledAt = await captureError(() =>
+      asApp((tx) => tx.execute(sql`update working_orders set settled_at = now() where id = ${id}`)),
+    );
+    expect(pgErrorCode(eSettledAt)).toBe("P0001");
+
+    // Now legitimately stamp the handover marker (NULL→non-null) — allowed.
+    await asApp((tx) =>
+      tx.execute(sql`update working_orders set collected_at = now() where id = ${id}`),
+    );
+    // A re-stamp of an already-collected order (collected_at non-null → non-null) is rejected: the
+    // branch's guard is OLD.collected_at IS NULL, so a second collect matches no allowed branch.
+    const eRecollect = await captureError(() =>
+      asApp((tx) =>
+        tx.execute(sql`update working_orders set collected_at = now() where id = ${id}`),
+      ),
+    );
+    expect(pgErrorCode(eRecollect)).toBe("P0001");
+  });
+
   it("rejects placed → open and a non-status update of a placed row (the row-level freeze)", async () => {
     const id = await open();
     await asApp((tx) =>

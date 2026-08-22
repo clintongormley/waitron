@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
   pgErrorCode,
+  ticketItems,
   withTenant,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -30,11 +31,28 @@ import {
 import type { TillConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
+  addTabRound,
+  advanceTicket,
+  advanceTicketItem,
+  createOpenOrder,
+  fireLines,
   getHeldOrder,
   listHeldOrders,
+  listStationQueue,
+  openTab,
   parkOrder,
+  placeOrder,
+  sendToPrep,
   updateHeldOrder,
 } from "./working-order.js";
+import type { TicketState } from "./working-order.js";
+import {
+  createStation,
+  deactivateStation,
+  setCategoryStation,
+  setProductStation,
+} from "./kitchen.js";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `parkOrder` — the working-order
@@ -60,6 +78,8 @@ beforeAll(() => {
 
 interface SeededVenue {
   cfg: TillConfig;
+  /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
+  catalogueId: string;
   /** The `each`-priced "Café" product (VAT general/21%, category "Bebidas"). */
   cafeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
@@ -73,7 +93,7 @@ interface SeededVenue {
  * number `allocateOrderNumber` issues is that test's own — always 1 on the first park — and the suite
  * is order-independent (CLAUDE.md §4).
  */
-async function setupVenue(): Promise<SeededVenue> {
+async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -84,7 +104,7 @@ async function setupVenue(): Promise<SeededVenue> {
     values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
-  const { cafeId, aguaId } = await withTenant(db, tenantId, async (tx) => {
+  const { cafeId, aguaId, catalogueId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -107,7 +127,7 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, locationId, cat.id);
-    return { cafeId: cafe.id, aguaId: agua.id };
+    return { cafeId: cafe.id, aguaId: agua.id, catalogueId: cat.id };
   });
 
   const cfg: TillConfig = {
@@ -122,10 +142,11 @@ async function setupVenue(): Promise<SeededVenue> {
     // No integrated card terminal; these park routes never read it.
     cardProvider: "none",
     tipsEnabled: false,
-    // This PGlite suite covers park/list/retrieve/update/abandon, none of which dispatch on the mode.
-    orderFlow: "prepay",
+    // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
+    // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
+    orderFlow,
   };
-  return { cfg, cafeId, aguaId };
+  return { cfg, cafeId, aguaId, catalogueId };
 }
 
 describe("parkOrder", () => {
@@ -749,6 +770,452 @@ describe("abandonHeldOrder", () => {
     await expect(abandonHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: foreign },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
+// SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
+// tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
+// and the no-default refusal — plain SQL a single backend proves; RLS/node isolation of `ticket_items`
+// is real-Postgres's job (packages/db `ticket-items.rls.test.ts`). Every write runs through
+// `withTenant` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
+ *  stored, never joined; mirrors working-order.rls.test.ts's OPERATOR). */
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
+
+/** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
+const stubClock = {
+  now: () => ({ instant: new Date(), offsetMinutes: 0 }),
+} as unknown as TrustedClock;
+
+/** A fiscal-backend stub — never touched on the non-`invoice_first` placing paths these tests exercise. */
+const stubBackend = {} as unknown as FiscalBackend;
+
+/** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines consume. */
+const line = (productId: string) => ({ productId, quantity: "1" });
+
+/** Create a sellable product in the venue's catalogue, optionally with a category and/or a station
+ *  override; returns its id. Descriptions match the location's single locale so `check_locales` passes. */
+async function makeProduct(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+  route: { categoryId?: string; stationId?: string },
+): Promise<string> {
+  const { id } = await createProduct(tx, {
+    catalogueId,
+    categoryId: route.categoryId ?? null,
+    descriptions: { [LOCALE]: `P-${randomUUID().slice(0, 8)}` },
+    pricingUnit: "each",
+    unitPrice: "1.50",
+    vatClass: "general",
+  });
+  if (route.stationId !== undefined) {
+    await setProductStation(tx, cfg, id, route.stationId);
+  }
+  return id;
+}
+
+/** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
+async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    insert into dining_tables (tenant_id, location_id, label)
+    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+  return rows[0]!.id;
+}
+
+/** Open a fresh working order carrying `lines` and FIRE it — the same read-lines → fireLines sequence
+ *  placeOrder/sendToPrep run, isolated onto the caller's tx so the resolver + snapshot can be asserted
+ *  without the fiscal machinery. Returns the order's id. */
+async function placeOrderWith(
+  tx: Transaction,
+  cfg: TillConfig,
+  lines: { productId: string; quantity: string }[],
+): Promise<{ id: string }> {
+  const id = randomUUID();
+  await createOpenOrder(tx, cfg, id, lines, null);
+  const fired = await tx
+    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  await fireLines(tx, cfg, id, fired);
+  return { id };
+}
+
+/** The order's ticket items joined back to each line's product, for asserting where each line routed. */
+async function ticketItemsFor(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ productId: string; stationId: string; state: string }[]> {
+  return tx
+    .select({
+      productId: workingOrderLines.productId,
+      stationId: ticketItems.stationId,
+      state: ticketItems.state,
+    })
+    .from(ticketItems)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(eq(ticketItems.workingOrderId, orderId));
+}
+
+const byProduct = (
+  items: { productId: string; stationId: string; state: string }[],
+  productId: string,
+) => items.find((i) => i.productId === productId)!;
+
+describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
+  it("routes product > category > default and snapshots the station at fire time", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const drinks = await createCategory(tx, { name: "Copas" });
+      await setCategoryStation(tx, cfg, drinks.id, barra.id);
+      const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
+      const cafe = await makeProduct(tx, cfg, catalogueId, {
+        categoryId: drinks.id,
+        stationId: cocina.id,
+      }); // → cocina (the product override wins over its category default)
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cana), line(cafe)]);
+      const items = await ticketItemsFor(tx, orderId);
+      expect(byProduct(items, cana).stationId).toBe(barra.id);
+      expect(byProduct(items, cafe).stationId).toBe(cocina.id);
+      expect(items.every((i) => i.state === "queued")).toBe(true);
+
+      // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
+      // the load-bearing rule (re-categorising a product later never reroutes food already sent).
+      await setCategoryStation(tx, cfg, drinks.id, cocina.id);
+      const after = await ticketItemsFor(tx, orderId);
+      expect(byProduct(after, cana).stationId).toBe(barra.id);
+    });
+  });
+
+  it("refuses to fire when the location has no default station (station.no_default)", async () => {
+    const { cfg, catalogueId } = await setupVenue(); // no default station created
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
+      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+    });
+  });
+
+  it("refuses to fire when the only default station has been DEACTIVATED (station.no_default)", async () => {
+    // `deactivateStation` sets `active=false` but leaves `is_default=true`, so the venue keeps a
+    // default row that is no longer a live routing target. The fallback query must filter `active=true`,
+    // else it resolves the dead station and food routes to a queue the till/station display (active-only)
+    // never surface — silently dropped. With the filter it resolves no default and fires fail loud.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      await deactivateStation(tx, cfg, cocina.id);
+      const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
+      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: cfg.locationId },
+      });
+    });
+  });
+
+  it("a re-fire of an already-fired line is refused ticket.already_fired, not a raw 23505", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const orderId = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const p = await makeProduct(tx, cfg, catalogueId, {});
+      const { id } = await placeOrderWith(tx, cfg, [line(p)]);
+      return id;
+    });
+    // A SECOND fire of the same lines collides on `ticket_items`' per-line
+    // `(tenant_id, working_order_line_id)` unique. `fireLines` maps that 23505 to the domain code
+    // (naming the order) rather than leaking the raw constraint error as an opaque 500. The re-fire runs
+    // in its OWN transaction so the 23505 poisons that one and the mapped AppError rolls it back cleanly.
+    await expect(
+      withTenant(db, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const fired = await tx
+          .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        await fireLines(tx, cfg, orderId, fired);
+      }),
+    ).rejects.toMatchObject({
+      code: "ticket.already_fired",
+      params: { workingOrderId: orderId },
+    });
+  });
+
+  it("addTabRound fires the appended round's lines to the resolved station (the tab round-send)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+
+      const items = await ticketItemsFor(tx, tabId);
+      expect(items).toHaveLength(1);
+      expect(items[0]!.stationId).toBe(cocina.id);
+      expect(items[0]!.state).toBe("queued");
+    });
+  });
+});
+
+describe("placeOrder / sendToPrep fire ticket items", () => {
+  it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const { cocinaId, cafe } = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const p = await makeProduct(tx, cfg, catalogueId, {});
+      return { cocinaId: cocina.id, cafe: p };
+    });
+
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [line(cafe)] });
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+
+    const items = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return ticketItemsFor(tx, id);
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.stationId).toBe(cocinaId);
+    expect(items[0]!.state).toBe("queued");
+  });
+
+  it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    // An OPEN (parked, never settled) order is ineligible — Mode P's pickup fires only a settled order.
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await expect(sendToPrep({ db }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: id },
+    });
+  });
+});
+
+// KDS-1 Task 4 — bump (advance) + per-station queue read. `advanceTicketItem` is the per-line
+// conditional-UPDATE state machine (queued → preparing → ready, illegal moves refused via an empty
+// `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
+// order at one station together; `listStationQueue` groups a station's items by order, dropping
+// collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
+// grouping/exclusion filters — plain SQL a single backend proves; the RLS/tenant-isolation + node
+// scoping are real-Postgres's job (working-order.rls.test.ts). Every write runs through
+// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+
+/** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
+ *  line and current state, so a test can address item[0]/item[1] deterministically. */
+async function ticketItemRows(
+  tx: Transaction,
+  orderId: string,
+): Promise<{ id: string; lineNo: number; state: string }[]> {
+  return tx
+    .select({ id: ticketItems.id, lineNo: workingOrderLines.lineNo, state: ticketItems.state })
+    .from(ticketItems)
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    .where(eq(ticketItems.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", () => {
+  it("bumps a line queued→preparing→ready, refuses illegal moves, and whole-ticket bumps together", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const agua = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe), line(agua)]); // both → Cocina, queued
+
+      const items = await ticketItemRows(tx, orderId);
+      expect(items.map((i) => i.state)).toEqual(["queued", "queued"]);
+
+      // Per-line bump: item[0] walks queued → preparing → ready.
+      await advanceTicketItem(tx, cfg, items[0]!.id, "preparing");
+      await advanceTicketItem(tx, cfg, items[0]!.id, "ready");
+
+      // Backwards (ready → preparing) is refused via the empty `returning` — the state predicate no
+      // longer matches — naming the offending ticket item.
+      await expect(advanceTicketItem(tx, cfg, items[0]!.id, "preparing")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: items[0]!.id },
+      });
+
+      // Whole-ticket bump advances only the still-queued item[1] (item[0], already `ready`, is left
+      // alone — it is no longer at the `queued` predecessor).
+      await advanceTicket(tx, cfg, orderId, cocina.id, "preparing");
+
+      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const group = queue.find((g) => g.orderId === orderId)!;
+      expect(group.items).toHaveLength(2);
+      expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
+
+      // A second whole-ticket bump to `ready` advances the now-preparing item[1]; item[0] (already
+      // `ready`) is skipped — the bulk UPDATE matches only the `preparing` predecessor.
+      await advanceTicket(tx, cfg, orderId, cocina.id, "ready");
+      const readied = await listStationQueue(tx, cfg, cocina.id);
+      expect(readied.find((g) => g.orderId === orderId)!.items.map((i) => i.state)).toEqual([
+        "ready",
+        "ready",
+      ]);
+    });
+  });
+
+  it("advanceTicketItem refuses a skip (queued→ready), to='queued', and a nonexistent item", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+      const [item] = await ticketItemRows(tx, orderId);
+
+      // Skipping preparing (queued → ready) matches no row — `ready`'s only legal predecessor is
+      // `preparing` — so the empty `returning` refuses it.
+      await expect(advanceTicketItem(tx, cfg, item!.id, "ready")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+      // No state legally advances INTO queued — refused before any query.
+      await expect(advanceTicketItem(tx, cfg, item!.id, "queued")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+      });
+      // An absent id (or another tenant's, RLS-hidden) matches no row — the same fail-closed code.
+      const missing = randomUUID();
+      await expect(advanceTicketItem(tx, cfg, missing, "preparing")).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: missing },
+      });
+      // The refusals changed nothing.
+      const [after] = await ticketItemRows(tx, orderId);
+      expect(after!.state).toBe("queued");
+    });
+  });
+
+  it("advanceTicketItem refuses a garbage or missing `to` with the same code, not a raw TypeError", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
+      const [item] = await ticketItemRows(tx, orderId);
+
+      // A garbage `to` — not a key of TICKET_TRANSITIONS. The till route casts `body.to as TicketState`
+      // with no route-level screen, so this is reachable at runtime despite the narrower static type;
+      // this is the till-api.ts route comment's claim, exercised directly at the verb.
+      await expect(
+        advanceTicketItem(tx, cfg, item!.id, "garbage" as unknown as TicketState),
+      ).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+      // A missing `to` — an absent JSON field reaches here as `undefined` the same way.
+      await expect(
+        advanceTicketItem(tx, cfg, item!.id, undefined as unknown as TicketState),
+      ).rejects.toMatchObject({
+        code: "ticket.invalid_transition",
+        params: { ticketItemId: item!.id },
+      });
+
+      // Neither refusal changed the item's state.
+      const [after] = await ticketItemRows(tx, orderId);
+      expect(after!.state).toBe("queued");
+    });
+  });
+
+  it("listStationQueue groups a station's items by order oldest-first, dropping collected and abandoned orders", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const copa = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id });
+
+      // Order 1 → Cocina (two lines), then order 2 → Cocina (one line) + one line to Barra.
+      const { id: order1 } = await placeOrderWith(tx, cfg, [line(cafe), line(cafe)]);
+      const { id: order2 } = await placeOrderWith(tx, cfg, [line(cafe), line(copa)]);
+
+      const cocinaQueue = await listStationQueue(tx, cfg, cocina.id);
+      // Two groups, oldest order first; order 1 has two Cocina lines, order 2 has one (its copa went
+      // to Barra, so it is NOT in this station's group).
+      expect(cocinaQueue.map((g) => g.orderId)).toEqual([order1, order2]);
+      expect(cocinaQueue[0]!.items).toHaveLength(2);
+      expect(cocinaQueue[1]!.items).toHaveLength(1);
+      // The Barra station sees only order 2's copa line.
+      const barraQueue = await listStationQueue(tx, cfg, barra.id);
+      expect(barraQueue.map((g) => g.orderId)).toEqual([order2]);
+      expect(barraQueue[0]!.items).toHaveLength(1);
+
+      // Collecting order 1 (handover marker) drops it from the station queue.
+      await tx
+        .update(workingOrders)
+        .set({ collectedAt: sql`now()` })
+        .where(eq(workingOrders.id, order1));
+      expect((await listStationQueue(tx, cfg, cocina.id)).map((g) => g.orderId)).toEqual([order2]);
+
+      // Abandoning order 2 drops it too — the queue is empty at Cocina.
+      await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, order2));
+      expect(await listStationQueue(tx, cfg, cocina.id)).toEqual([]);
+    });
+  });
+
+  it("carries each line's snapshotted description + quantity, items ordered by line_no", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station.
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: cafeId, quantity: "2" },
+        { productId: aguaId, quantity: "3" },
+      ]);
+
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.orderId).toBe(orderId);
+      expect(group!.items).toHaveLength(2);
+      // Items in line_no order, each carrying the line's snapshotted dish description + quantity
+      // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
+      expect(group!.items[0]).toMatchObject({
+        descriptions: { [LOCALE]: "Café" },
+        quantity: "2.000",
+      });
+      expect(group!.items[1]).toMatchObject({
+        descriptions: { [LOCALE]: "Agua" },
+        quantity: "3.000",
+      });
     });
   });
 });

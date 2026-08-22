@@ -54,13 +54,25 @@ describe("applyVenue", () => {
       nodes: number;
       series: number;
       sif: number;
+      default_stations: number;
     }>(sql`
       select
         (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
         (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
-        (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif`);
-    expect(counts.rows[0]).toEqual({ tenants: 1, nodes: 1, series: 2, sif: 1 });
+        (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif,
+        (select count(*) from kitchen_stations
+           where location_id = ${result.locationId} and is_default and active)::int as default_stations`);
+    // KDS-1: applyVenue seeds exactly one active default kitchen station for the location, so a fresh
+    // venue can fire the moment it exists (fireLines' fallback). Proven by deletion — dropping the
+    // create-location station insert makes default_stations 0.
+    expect(counts.rows[0]).toEqual({
+      tenants: 1,
+      nodes: 1,
+      series: 2,
+      sif: 1,
+      default_stations: 1,
+    });
     expect(result.sif.numeroInstalacion).toBeGreaterThanOrEqual(1);
 
     const series = await suite.db.execute<{ purpose: string }>(sql`

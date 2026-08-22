@@ -19,6 +19,7 @@ import type {
   DashboardApi,
   Product,
   ProductInput,
+  Station,
 } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -111,6 +112,9 @@ export class CatalogueScreen extends LitElement {
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private products: Product[] = [];
+  /** The venue's active kitchen stations (KDS-1), loaded on connect and threaded to the category
+   * manager + product form as the options their station-routing selects offer. */
+  @state() private stations: Station[] = [];
   /** Which catalogue's products show; the catalogue new products are created under. */
   @state() private selectedCatalogueId = "";
   @state() private formOpen = false;
@@ -142,24 +146,53 @@ export class CatalogueScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [catalogues, categories] = await Promise.all([
+      const [catalogues, categories, stations] = await Promise.all([
         this.api.listCatalogues(),
         this.api.listCategories(),
+        this.api.listStations(),
       ]);
-      this.catalogues = catalogues;
-      this.categories = categories;
-      if (catalogues.length === 0) {
-        this.selectedCatalogueId = "";
-        this.products = [];
-        return;
-      }
-      if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
-        this.selectedCatalogueId = catalogues[0]!.id;
-      }
-      this.products = await this.api.listProducts(this.selectedCatalogueId);
+      this.stations = stations;
+      await this.#applyCatalogues(catalogues, categories);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
+  }
+
+  /**
+   * Reload catalogues + categories + the selected catalogue's products WITHOUT re-fetching stations —
+   * the targeted reload a catalogue create needs. Stations do not change when a catalogue is created, so
+   * routing {@link #createCatalogue} through the broad {@link #load} would issue an avoidable
+   * `GET /management-api/stations`. Throws to its caller's catch (the create handler's) on rejection.
+   */
+  async #reloadCatalogues(): Promise<void> {
+    const [catalogues, categories] = await Promise.all([
+      this.api.listCatalogues(),
+      this.api.listCategories(),
+    ]);
+    await this.#applyCatalogues(catalogues, categories);
+  }
+
+  /**
+   * Adopt a freshly-fetched catalogue + category set: store them, resolve the selection (keep the current
+   * one if it still exists, else the first; clear when none), and load that catalogue's products. Shared
+   * by the full {@link #load} and the stations-skipping {@link #reloadCatalogues} so the selection logic
+   * lives in one place.
+   */
+  async #applyCatalogues(
+    catalogues: CatalogueSummary[],
+    categories: CategorySummary[],
+  ): Promise<void> {
+    this.catalogues = catalogues;
+    this.categories = categories;
+    if (catalogues.length === 0) {
+      this.selectedCatalogueId = "";
+      this.products = [];
+      return;
+    }
+    if (!catalogues.some((c) => c.id === this.selectedCatalogueId)) {
+      this.selectedCatalogueId = catalogues[0]!.id;
+    }
+    this.products = await this.api.listProducts(this.selectedCatalogueId);
   }
 
   /** Reload the selected catalogue's products (after a create/update). Throws to its caller's catch. */
@@ -277,6 +310,41 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
+  /**
+   * Route a CATEGORY to a station (KDS-1) from the category manager's `set-category-station` event.
+   * `stopPropagation` keeps the composed event inside this screen. A rejection becomes the `errorKey`
+   * banner; there is no reload — the catalogue read does not project a category's routing, so a resync
+   * would show nothing new (the write itself is authoritative server-side).
+   */
+  async #onSetCategoryStation(
+    event: CustomEvent<{ categoryId: string; stationId: string | null }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    this.errorKey = null;
+    try {
+      await this.api.setCategoryStation(event.detail.categoryId, event.detail.stationId);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /**
+   * Override a PRODUCT's route to a station (KDS-1) from the product form's `set-product-station`
+   * event — the same shape as {@link #onSetCategoryStation}. A rejection becomes the `errorKey` banner;
+   * no reload for the same reason (the product read projects no `station_id`).
+   */
+  async #onSetProductStation(
+    event: CustomEvent<{ productId: string; stationId: string | null }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    this.errorKey = null;
+    try {
+      await this.api.setProductStation(event.detail.productId, event.detail.stationId);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   /** Capture the new-catalogue field. `stopPropagation` keeps its composed `wt-change` inside this
    * screen (the house field-handler pattern). */
   #onNewCatalogueNameChange(event: CustomEvent<{ value: string }>): void {
@@ -296,7 +364,7 @@ export class CatalogueScreen extends LitElement {
       const created = await this.api.createCatalogue(name);
       this.newCatalogueName = "";
       this.selectedCatalogueId = created.id;
-      await this.#load();
+      await this.#reloadCatalogues();
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
@@ -365,7 +433,11 @@ export class CatalogueScreen extends LitElement {
       <section class="categories">
         <dashboard-category-manager
           .categories=${this.categories}
+          .stations=${this.stations}
           @create-category=${(e: CustomEvent<{ name: string }>) => this.#onCreateCategory(e)}
+          @set-category-station=${(
+            e: CustomEvent<{ categoryId: string; stationId: string | null }>,
+          ) => void this.#onSetCategoryStation(e)}
         ></dashboard-category-manager>
       </section>
 
@@ -375,11 +447,14 @@ export class CatalogueScreen extends LitElement {
         .open=${this.formOpen}
         .catalogueId=${this.selectedCatalogueId}
         .categories=${this.categories}
+        .stations=${this.stations}
         .product=${this.editingProduct}
         .api=${this.api}
         .busy=${this.busy}
         @create-product=${(e: CustomEvent<CreateProductDetail>) => void this.#onCreateProduct(e)}
         @update-product=${(e: CustomEvent<UpdateProductDetail>) => void this.#onUpdateProduct(e)}
+        @set-product-station=${(e: CustomEvent<{ productId: string; stationId: string | null }>) =>
+          void this.#onSetProductStation(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-product-form>
     `;

@@ -13,18 +13,21 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
+import "./screens/till-station-screen.js";
 import type { StringKey } from "./i18n/strings.js";
+import type { BumpMode } from "./widgets/station-queue.js";
 import type {
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
   PayOutcome,
-  PrepQueueEntry,
-  PrepState,
+  Station,
+  StationQueueGroup,
   StaffMember,
   TabLine,
   TableServiceStatus,
   TableState,
+  TicketState,
   TillInfo,
   TillProduct,
   TillSaleResult,
@@ -44,7 +47,7 @@ import type {
  * per-table ordering screen. One at a time. `"table-order"` is added here by Task 8 so `#renderScreen`
  * stays exhaustive (Ruling FP-D) — it renders a placeholder until Task 9 supplies `<till-table-order-screen>`.
  */
-type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order";
+type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station";
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -106,10 +109,12 @@ function isDefaultLayout(layout: LayoutDef): boolean {
  *    ({@link cardOutcome}) instead of an error (CLAUDE.md §5: nothing may block a sale but the sale
  *    itself);
  *  - `place-order` (Modes I/T) → park-or-sync then `placeOrder` the basket, move to the `"collect"`
- *    stage for the SAME order and refresh the prep queue;
+ *    stage for the SAME order and refresh the default station's queue;
  *  - `collect-order` (Modes I/T) → `collectOrder` the placed order, then show the `ticket` — the same
  *    shape `confirm-payment` follows, on the collect-stage tender instead of a fresh sale;
- *  - `advance-prep` → `advancePrep` one prep-queue entry, then refresh the queue regardless of outcome;
+ *  - `advance-ticket-item` (KDS-1) → `advanceTicketItem` one ticket line, then refresh the default
+ *    station's queue regardless of outcome;
+ *  - `show-station` → switch to the kitchen station-display screen (basket-preserving);
  *  - `new-sale` → clear the basket, reset the `"order"`/`"collect"` stage, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
@@ -238,13 +243,28 @@ export class TillApp extends LitElement {
    */
   @state() private stage: "order" | "collect" = "order";
   /**
-   * This node's active prep-queue entries (7c, design §5), handed to the counter's prep-queue widget.
-   * Refreshed on entering the counter, after a successful place (Modes I/T enqueue automatically) and
-   * after every advance — the moments the queue's contents change. Fetching is gated on
-   * {@link orderFlow}: Mode P has no automatic path into prep (`sendToPrep` is a manual, unbuilt
-   * follow-up — see `#refreshPrepQueue`), so a prepay till never issues the request.
+   * The venue's kitchen stations (KDS-1), fetched lazily the first time the counter needs its
+   * default-station queue (see {@link #refreshStationQueue}) and cached for the session. The counter's
+   * queue reads the DEFAULT station; the dedicated station-display screen fetches its own list.
    */
-  @state() private prepQueue: PrepQueueEntry[] = [];
+  @state() private stations: Station[] = [];
+  /**
+   * The DEFAULT station's queue (KDS-1, design §3e — "the counter prep-queue becomes the default
+   * station"), grouped by order, handed to the counter's station-queue widget. The per-line/per-station
+   * successor to 7c's `prepQueue`. Refreshed on entering the counter, after a successful place (Modes I/T
+   * enqueue automatically) and after every advance. Fetching is gated on {@link orderFlow}: Mode P has no
+   * automatic path into the kitchen here (`sendToPrep` is a manual, unbuilt follow-up — see
+   * {@link #refreshStationQueue}), so a prepay till never issues the request.
+   */
+  @state() private stationQueue: StationQueueGroup[] = [];
+  /**
+   * The venue's whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — `line` (per-line, the source
+   * of truth) or `ticket` (advance the whole order at a station). Read once from `GET /api/till` on boot
+   * ({@link TillInfo.bumpMode}) and threaded to the station-display screen, which enables its whole-ticket
+   * affordance for a `ticket` venue. Defaults `line` until boot resolves — the fail-safe default (per-line
+   * bump is always correct), so a boot that has not yet answered never shows the convenience by accident.
+   */
+  @state() private bumpMode: BumpMode = "line";
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
@@ -348,6 +368,7 @@ export class TillApp extends LitElement {
       this.invoiceLocale = till.locale;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
+      this.bumpMode = till.bumpMode;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
       // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
@@ -378,7 +399,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.screen = "counter";
     await this.#refreshHeldOrders();
-    await this.#refreshPrepQueue();
+    await this.#refreshStationQueue();
     // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
     // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
     // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
@@ -402,15 +423,31 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Reload the node's prep queue (7c, design §5). Called on entering the counter, after a successful
-   * place (Modes I/T enqueue automatically at placing) and after every advance — the moments the
-   * queue's contents change. Gated on {@link orderFlow}: under Mode P nothing auto-enqueues (`sendToPrep`
-   * is a manual action with no UI control yet — a documented follow-up, not built here), so the widget
-   * would only ever show its empty state and the request would be pure waste; skip it entirely.
+   * Reload the DEFAULT station's queue for the counter (KDS-1, design §3e). Called on entering the
+   * counter, after a successful place (Modes I/T enqueue automatically at placing) and after every
+   * advance — the moments the queue's contents change. Gated on {@link orderFlow}: under Mode P nothing
+   * auto-enqueues (`sendToPrep` is a manual action with no UI control yet — a documented follow-up), so
+   * the widget would only ever show its empty state and the request would be pure waste; skip it entirely.
+   *
+   * The station list is fetched ONCE and cached (`this.stations`): the counter needs only the default
+   * station's id, which does not change mid-shift. A venue with no default station (a misconfiguration)
+   * leaves the queue empty rather than throwing — the kitchen display touches no fiscal path.
    */
-  async #refreshPrepQueue(): Promise<void> {
+  async #refreshStationQueue(): Promise<void> {
     if (this.orderFlow === "prepay") return;
-    this.prepQueue = await this.api.listPrepQueue();
+    if (this.stations.length === 0) this.stations = await this.api.listStations();
+    const defaultStation = this.stations.find((station) => station.isDefault);
+    if (defaultStation === undefined) {
+      this.stationQueue = [];
+      return;
+    }
+    this.stationQueue = await this.api.getStationQueue(defaultStation.id);
+  }
+
+  /** The DEFAULT station's id, or `undefined` when none is configured — threaded to the counter's
+   * station-queue widget (its whole-ticket bump is keyed by station). */
+  #defaultStationId(): string | undefined {
+    return this.stations.find((station) => station.isDefault)?.id;
   }
 
   /**
@@ -609,7 +646,7 @@ export class TillApp extends LitElement {
       }
       await this.api.placeOrder(id);
       this.stage = "collect";
-      await this.#refreshPrepQueue();
+      await this.#refreshStationQueue();
     } catch {
       // A rejected {code} must not lose the order in progress: stay on the counter, basket (and its
       // `"order"` stage) intact, and surface a generic, non-fatal message — never the raw domain code.
@@ -647,20 +684,53 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Advance a prep-queue entry one step (7c, design §5) — the kitchen action `<till-prep-queue>`'s
-   * Advance control emits. Runs the refresh on BOTH paths, like `#onDiscardOrder`: even a rejected
-   * advance (a race with another till, or a since-collected order) re-reads the queue, so a stale entry
-   * corrects itself rather than sitting on an out-of-date state.
+   * Advance a ticket ITEM one kitchen step (KDS-1, design §3c) — the per-line bump the counter's
+   * default-station `<till-station-queue>` emits (`advance-ticket-item`). Runs the refresh on BOTH paths,
+   * like `#onDiscardOrder`: even a rejected advance (a race with another till, or a since-advanced line)
+   * re-reads the default station's queue, so a stale entry corrects itself rather than sitting on an
+   * out-of-date state. The dedicated station-display SCREEN handles (and stops) its own advances, so this
+   * only ever fires for the counter's widget.
    */
-  async #onAdvancePrep(event: Event): Promise<void> {
-    const { id, to } = (event as CustomEvent<{ id: string; to: PrepState }>).detail;
+  async #onAdvanceTicketItem(event: Event): Promise<void> {
+    const { itemId, to } = (
+      event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
+    ).detail;
     this.errorKey = undefined;
     try {
-      await this.api.advancePrep(id, to);
+      await this.api.advanceTicketItem(itemId, to);
     } catch {
-      this.errorKey = "prep.advance_error";
+      this.errorKey = "station.advance_error";
     }
-    await this.#refreshPrepQueue();
+    await this.#refreshStationQueue();
+  }
+
+  /**
+   * Hand a settled Mode-P order to the customer (KDS-1 §3e) — the per-order collect the counter's
+   * default-station `<till-station-queue>` emits (`mark-collected`) for a COLLECTABLE (settled) order.
+   * `markCollected` stamps the order-level `collected_at`, and the refresh then drops the handed-over
+   * order off the counter's queue. NON-FISCAL — it settles nothing and files nothing, so it needs none of
+   * the `submitting` single-flight guard the pay/collect fiscal moments use. Runs the refresh on BOTH
+   * paths like {@link #onAdvanceTicketItem}: a rejected collect (a race, an already-collected order)
+   * re-reads the queue so the display reconciles to server truth. The station-display SCREEN stops (and
+   * handles) its own `mark-collected`, so this only ever fires for the counter's widget.
+   */
+  async #onMarkCollected(event: Event): Promise<void> {
+    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    this.errorKey = undefined;
+    try {
+      await this.api.markCollected(orderId);
+    } catch {
+      this.errorKey = "station.collect_error";
+    }
+    await this.#refreshStationQueue();
+  }
+
+  /** Show the station-display screen (KDS-1) — the kitchen's own view, reached from the counter's
+   * "Kitchen" nav. Basket-preserving like the schedule/floor nav (the basket is till-owned); the screen
+   * owns its own fetching via `.api`, so this just switches. */
+  #onShowStation(): void {
+    this.errorKey = undefined;
+    this.screen = "station";
   }
 
   /**
@@ -1005,7 +1075,7 @@ export class TillApp extends LitElement {
    * Mode P simply shows its empty state).
    *
    * A DEFAULT or ABSENT layout keeps slice 1's fallback: `LAYOUT_A` minus the prep-queue widget under
-   * Mode P. Mode P has no automatic path into prep (see `#refreshPrepQueue`'s doc), so the widget would
+   * Mode P. Mode P has no automatic path into the kitchen (see `#refreshStationQueue`'s doc), so the widget would
    * only ever show its empty state there; Modes I/T enqueue automatically at placing (design §5) and
    * are the modes prep-queue exists for. `layout.ts` itself stays plain data (its own stated invariant)
    * — this derivation lives here, in the composition root, not there.
@@ -1028,7 +1098,9 @@ export class TillApp extends LitElement {
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
-        @advance-prep=${(event: Event) => void this.#onAdvancePrep(event)}
+        @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
+        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
+        @show-station=${() => this.#onShowStation()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
@@ -1060,7 +1132,8 @@ export class TillApp extends LitElement {
           .store=${this.#store}
           .products=${this.products}
           .heldOrders=${this.heldOrders}
-          .prepQueue=${this.prepQueue}
+          .stationQueue=${this.stationQueue}
+          .defaultStationId=${this.#defaultStationId()}
           .operatorName=${this.operatorName}
           .invoiceLocale=${this.invoiceLocale}
           .orderFlow=${this.orderFlow}
@@ -1103,6 +1176,14 @@ export class TillApp extends LitElement {
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
         ></till-table-order-screen>`;
+      // KDS-1 (design §5a): the kitchen's station-display screen. It OWNS its own fetching via `.api`
+      // (the station list + the active station's queue) and handles its own advances, so the app just
+      // hands it the api + the venue bump mode and switches; `back-to-counter` (wired above) returns.
+      case "station":
+        return html`<till-station-screen
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+        ></till-station-screen>`;
     }
   }
 }

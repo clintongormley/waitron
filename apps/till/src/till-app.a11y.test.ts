@@ -29,7 +29,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listProducts: vi.fn().mockResolvedValue(products),
     recordSale: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
-    listPrepQueue: vi.fn().mockResolvedValue([]),
+    // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T).
+    listStations: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "st-default", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+      ]),
+    getStationQueue: vi.fn().mockResolvedValue([]),
+    advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -57,7 +64,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the composed counter screen for Mode I (Place control + prep queue together)", async () => {
+  it("has no violations on the composed counter screen for Mode I (Place control + station queue together)", async () => {
     const api = stubApi({
       getTill: vi.fn().mockResolvedValue({
         locale: "es-ES",
@@ -65,13 +72,21 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         nif: "B12345678",
         orderFlow: "invoice_first",
       }),
-      listPrepQueue: vi.fn().mockResolvedValue([
+      getStationQueue: vi.fn().mockResolvedValue([
         {
-          id: "wo-1",
+          orderId: "wo-1",
           orderNumber: 5,
           label: "Mesa 4",
-          state: "queued",
-          queuedAt: "2026-08-06T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
+          items: [
+            {
+              id: "ti-1",
+              workingOrderLineId: "wol-1",
+              state: "queued",
+              descriptions: { "es-ES": "Paella" },
+              quantity: "2.000",
+            },
+          ],
         },
       ]),
     });

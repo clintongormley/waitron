@@ -5,6 +5,7 @@ import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitr
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { productName } from "../widgets/product-name.js";
+import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
@@ -323,9 +324,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Trim a numeric(_,3) quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
-   * unit-agnostic (the regex only touches zeros AFTER a decimal point, so a bare integer is untouched). */
+   * the shared {@link trimQuantity} the kitchen queue uses too. */
   #displayQty(quantity: string): string {
-    return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    return trimQuantity(quantity);
   }
 
   /** Emit the current round's picked lines and clear the round bar for the next round. */

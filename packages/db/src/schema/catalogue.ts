@@ -50,6 +50,12 @@ export const categories = pgTable(
       .notNull()
       .references(() => tenants.id),
     name: text("name").notNull(),
+    // The DEFAULT kitchen station for products in this category (KDS-1 routing, §2b). Bare NULLABLE
+    // uuid: the tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id, id) FK is
+    // hand-written in the --custom migration. NULL = no category-level route; a fired line then falls
+    // to the product override or the location's default station. categories' existing RLS policy +
+    // app_user grants (0027) cover this additive column with no change.
+    stationId: uuid("station_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -69,6 +75,12 @@ export const products = pgTable(
       .notNull()
       .references(() => catalogues.id),
     categoryId: uuid("category_id").references(() => categories.id),
+    // The per-product OVERRIDE kitchen station (KDS-1 routing, §2b) — wins over the category default.
+    // Bare NULLABLE uuid: the tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id,
+    // id) FK is hand-written in the --custom migration. NULL = no override; the fired line then falls to
+    // the category default or the location's default station. products' existing RLS policy + app_user
+    // grants (0027) cover this additive column with no change.
+    stationId: uuid("station_id"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     pricingUnit: text("pricing_unit").notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),

@@ -164,6 +164,7 @@ describe("TillApi", () => {
       venueName: "Deli",
       nif: "B12345678",
       orderFlow: "prepay",
+      bumpMode: "line",
       cardProvider: "none",
       tipsEnabled: false,
       layout: [
@@ -473,15 +474,67 @@ describe("TillApi", () => {
     expect(r).toEqual(ticket);
   });
 
-  it("advancePrep POSTs { to } to the addressed order's /prep route (empty 200 body)", async () => {
+  it("listStations GETs the venue's active kitchen stations", async () => {
+    const stations = [
+      { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+      { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stations));
+
+    const r = await new TillApi("", fetchStub).listStations();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/stations",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(stations);
+  });
+
+  it("getStationQueue GETs one station's queue grouped by order", async () => {
+    const groups = [
+      {
+        orderId: "wo-1",
+        orderNumber: 7,
+        label: "Mesa 4",
+        queuedAt: "2026-08-17T10:00:00.000Z",
+        items: [
+          {
+            id: "ti-1",
+            workingOrderLineId: "wol-1",
+            state: "queued",
+            descriptions: { "es-ES": "Paella" },
+            quantity: "2.000",
+          },
+          {
+            id: "ti-2",
+            workingOrderLineId: "wol-2",
+            state: "preparing",
+            descriptions: { "es-ES": "Agua" },
+            quantity: "1.000",
+          },
+        ],
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(groups));
+
+    const r = await new TillApi("", fetchStub).getStationQueue("st-1");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/stations/st-1/queue",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(groups);
+  });
+
+  it("advanceTicketItem POSTs { to } to the ticket item's advance route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(
-      new TillApi("", fetchStub).advancePrep("wo1", "preparing"),
+      new TillApi("", fetchStub).advanceTicketItem("ti-1", "preparing"),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/wo1/prep",
+      "/api/ticket-items/ti-1/advance",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -491,16 +544,34 @@ describe("TillApi", () => {
     );
   });
 
-  it("advancePrep surfaces { code } for an illegal transition", async () => {
+  it("advanceTicketItem surfaces { code } for an illegal transition", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "order_prep.invalid_transition" } }), {
+      new Response(JSON.stringify({ error: { code: "ticket.invalid_transition" } }), {
         status: 409,
       }),
     );
 
-    await expect(new TillApi("", fetchStub).advancePrep("wo1", "ready")).rejects.toMatchObject({
-      code: "order_prep.invalid_transition",
-    });
+    await expect(
+      new TillApi("", fetchStub).advanceTicketItem("ti-1", "ready"),
+    ).rejects.toMatchObject({ code: "ticket.invalid_transition" });
+  });
+
+  it("advanceTicket POSTs { to } to the whole-ticket advance route (order + station, empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).advanceTicket("wo-1", "st-1", "ready"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo-1/stations/st-1/advance",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to: "ready" }),
+      }),
+    );
   });
 
   it("sendToPrep POSTs an empty object (no `to`) to the addressed order's /prep route", async () => {
@@ -517,6 +588,34 @@ describe("TillApi", () => {
         body: JSON.stringify({}),
       }),
     );
+  });
+
+  it("markCollected POSTs an empty object to the order's /collect route — the Mode-P handover (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).markCollected("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/collect",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("markCollected surfaces { code } when the order is not collectable", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.not_settled" } }), {
+        status: 409,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).markCollected("wo1")).rejects.toMatchObject({
+      code: "working_order.not_settled",
+    });
   });
 
   it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
@@ -547,27 +646,6 @@ describe("TillApi", () => {
     await expect(new TillApi("", fetchStub).cancelOrder("wo1", "")).rejects.toMatchObject({
       code: "working_order.reason_required",
     });
-  });
-
-  it("listPrepQueue GETs the node-scoped prep queue", async () => {
-    const queue = [
-      {
-        id: "wo1",
-        orderNumber: 7,
-        label: "Mesa 4",
-        state: "queued",
-        queuedAt: "2026-08-06T10:00:00.000Z",
-      },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(queue));
-
-    const r = await new TillApi("", fetchStub).listPrepQueue();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/prep-queue",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-    expect(r).toEqual(queue);
   });
 
   it("listMyShifts GETs the schedule shifts window and returns the rows", async () => {
@@ -776,7 +854,7 @@ describe("TillApi", () => {
     expect(r).toEqual(statuses);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe and the tab fields", async () => {
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe and the tab fields", async () => {
     // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
     // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
     // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
@@ -794,6 +872,7 @@ describe("TillApi", () => {
         tabTotal: "12.50",
         pendingDeliveries: 0,
         pendingToServe: 2,
+        readyToServe: 3,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
         posX: 250,
@@ -810,6 +889,7 @@ describe("TillApi", () => {
         hasOpenTab: false,
         pendingDeliveries: 0,
         pendingToServe: 0,
+        readyToServe: 0,
         status: null,
         // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
         posX: null,
@@ -827,9 +907,16 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(rows);
-    // The two badge signals the floor screen renders survive the round-trip decoded, as do the FP-2
-    // placement fields (a placed table's coordinates, an unplaced table's nulls).
-    expect(r[0]).toMatchObject({ zoneId: "z1", pendingToServe: 2, posX: 250, shape: "round" });
+    // The badge signals the floor screen renders survive the round-trip decoded — `pendingToServe` AND
+    // `readyToServe` (KDS-1 §3d's "N listos") — as do the FP-2 placement fields (a placed table's
+    // coordinates, an unplaced table's nulls).
+    expect(r[0]).toMatchObject({
+      zoneId: "z1",
+      pendingToServe: 2,
+      readyToServe: 3,
+      posX: 250,
+      shape: "round",
+    });
     expect(r[1]).toMatchObject({ posX: null, shape: null });
   });
 

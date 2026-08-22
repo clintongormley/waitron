@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
@@ -72,6 +72,9 @@ const suite = usePgliteDb({
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+    // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
+    // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are (RLS bypassed).
+    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
@@ -473,6 +476,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
+      // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
+      // location never set it, so the column default `line` reaches the wire (per-line bump only).
+      bumpMode: "line",
       cardProvider: "none",
       tipsEnabled: false,
       layout: DEFAULT_LAYOUT,
@@ -500,6 +506,28 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
+  });
+
+  it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {
+    // The default `line` above would pass even if the route hardcoded it, so drive the location's
+    // `bump_mode` to `ticket` and prove the boot read reflects it. Restored in `finally` so the shared
+    // location stays `line` for the order-independent default assertion above (CLAUDE.md §4).
+    await suite.db.execute(
+      sql`update locations set bump_mode = 'ticket' where id = ${cfg.locationId}`,
+    );
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ bumpMode: "ticket" });
+    } finally {
+      await suite.db.execute(
+        sql`update locations set bump_mode = 'line' where id = ${cfg.locationId}`,
+      );
+    }
   });
 
   it("GET /api/till returns the AUTHORED layout + receipt when the tenant has one, not the defaults", async () => {
@@ -717,9 +745,9 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const id = randomUUID();
     const json = { "content-type": "application/json" };
     // The guard runs FIRST on each route (before any body is read or catalogue touched), so an
-    // unauthenticated park/list/retrieve/update/abandon/place/prep/prep-queue/collect/cancel all 401
-    // with the one code. Deleting the `requireSession` call from any route flips that route's case to
-    // a 200/404, the deletion proof.
+    // unauthenticated park/list/retrieve/update/abandon/place/prep/collect/cancel all 401 with the one
+    // code. Deleting the `requireSession` call from any route flips that route's case to a 200/404, the
+    // deletion proof. (The KDS-1 station-operate routes have their own 401 guard test below.)
     const cases = [
       app.request("/api/working-orders", {
         method: "POST",
@@ -741,7 +769,6 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
         headers: json,
         body: JSON.stringify({}),
       }),
-      app.request("/api/prep-queue"),
       app.request(`/api/working-orders/${id}/collect`, {
         method: "POST",
         headers: json,
@@ -967,7 +994,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 // tested here too, for the same reason; its FISCAL happy path needs a real backend and lives in
 // `till-api.rls.test.ts`.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
-  it("POST places an open order (open → placed), enqueues prep at queued, and returns { id, status }", async () => {
+  it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -986,16 +1013,17 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     // `prepay` files nothing at placing (Task 8's dispatch) — just the bare transition result.
     expect(await placed.json()).toEqual({ id, status: "placed" });
 
-    // The order really transitioned AND a prep row was enqueued — send-to-prep = placing (design §5).
-    // Read as the PGlite superuser (RLS bypassed), a plain state witness.
+    // The order really transitioned AND a ticket item was fired at `queued` — placing fires the lines to
+    // the kitchen (KDS-1, `placeOrder` → `fireLines`). Read as the PGlite superuser (RLS bypassed), a
+    // plain state witness; the single line routes to the seeded default station "Cocina".
     const order = await suite.db.execute<{ status: string }>(
       sql`select status from working_orders where id = ${id}`,
     );
     expect(order.rows[0]).toEqual({ status: "placed" });
-    const prep = await suite.db.execute<{ state: string }>(
-      sql`select state from order_prep where working_order_id = ${id}`,
+    const ticket = await suite.db.execute<{ state: string }>(
+      sql`select state from ticket_items where working_order_id = ${id}`,
     );
-    expect(prep.rows[0]).toEqual({ state: "queued" });
+    expect(ticket.rows[0]).toEqual({ state: "queued" });
   });
 
   it("POST on a non-open order (a re-place of an already-placed one) is 409 working_order.not_open", async () => {
@@ -1034,15 +1062,13 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   });
 });
 
-describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
-  // `sendToPrep` (a `{}` body) needs a SETTLED order (fix round 1), and settling one under this
-  // suite's `prepay` cfg means a real fiscal write the stub `FiscalBackend` cannot make — so the
-  // send-to-prep SUCCESS path (a genuine Mode-P walk-up settled via `POST /api/sales`, then sent to
-  // prep) lives in `till-api.rls.test.ts`. This suite proves the REFUSAL the route now forwards, and
-  // the advance/malformed-id mechanics using `placeOrder`'s OWN enqueue (which needs no fiscal write
-  // under this suite's `prepay` cfg — Task 8's dispatch only reaches the backend for `invoice_first`)
-  // to seed a queued row instead of `sendToPrep`.
-  it("POST {} on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, not enqueued", async () => {
+describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)", () => {
+  // `sendToPrep` needs a SETTLED order, and settling one under this suite's `prepay` cfg means a real
+  // fiscal write the stub `FiscalBackend` cannot make — so the SUCCESS path (a genuine Mode-P walk-up
+  // settled via `POST /api/sales`, then sent to prep) and the DOUBLE-send collision (→
+  // `ticket.already_fired`) live in `till-api.rls.test.ts`. This suite proves, hermetically, the REFUSAL
+  // the route forwards and the malformed-id screen.
+  it("POST on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, nothing fired", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -1063,57 +1089,14 @@ describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
       error: { code: "working_order.not_settled", params: { workingOrderId: id } },
     });
 
-    // Refused BEFORE any write — the order never appears on the prep queue.
-    const queue = await app.request("/api/prep-queue", { headers: { cookie } });
-    const entries = (await queue.json()) as { id: string }[];
-    expect(entries.find((e) => e.id === id)).toBeUndefined();
-  });
-
-  it("POST { to } advances a prep-queued order one step; skipping straight to a later state is refused", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const id = randomUUID();
-    await park(app, cookie, {
-      id,
-      lines: [{ productId: aguaProduct.id, quantity: "1" }],
-      label: "Mesa 6",
-    });
-    // `placeOrder`'s OWN enqueue seeds the `queued` row — no fiscal write needed under `prepay` (Task
-    // 8's dispatch only reaches the backend for `invoice_first`), unlike `sendToPrep` (see above).
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
-
-    const queueBefore = await app.request("/api/prep-queue", { headers: { cookie } });
-    const before = (await queueBefore.json()) as {
-      id: string;
-      state: string;
-      label: string | null;
-    }[];
-    expect(before).toContainEqual(
-      expect.objectContaining({ id, state: "queued", label: "Mesa 6" }),
+    // Refused BEFORE any write — no ticket item was fired for the order (read as superuser, RLS bypassed).
+    const fired = await suite.db.execute(
+      sql`select 1 from ticket_items where working_order_id = ${id}`,
     );
-
-    const advance = (to: string) =>
-      app.request(`/api/working-orders/${id}/prep`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to }),
-      });
-
-    const toPreparing = await advance("preparing");
-    expect(toPreparing.status).toBe(200);
-    expect(await toPreparing.text()).toBe("");
-
-    // Skipping straight from `preparing` to `collected` (the legal next step is `ready`) is refused —
-    // 409 order_prep.invalid_transition, the domain code every illegal prep move surfaces.
-    const skip = await advance("collected");
-    expect(skip.status).toBe(409);
-    expect(await skip.json()).toMatchObject({
-      error: { code: "order_prep.invalid_transition", params: { workingOrderId: id } },
-    });
+    expect(fired.rows).toHaveLength(0);
   });
 
-  it("POST with a malformed id is 409 order_prep.invalid_transition, not an opaque 500", async () => {
+  it("POST with a malformed id is 409 working_order.not_settled, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -1125,8 +1108,232 @@ describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "order_prep.invalid_transition", params: { workingOrderId: "not-a-uuid" } },
+      error: { code: "working_order.not_settled", params: { workingOrderId: "not-a-uuid" } },
     });
+  });
+});
+
+// KDS-1 station-display operate routes: GET /api/stations, GET /api/stations/:id/queue,
+// POST /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic (PGlite): the
+// station list, the per-station queue read, the per-line + whole-ticket bumps and the malformed-id
+// screens are plain logic a single backend proves; RLS/node isolation of `ticket_items` is
+// real-Postgres's job (`working-order.rls.test.ts`). `placeOrder`'s OWN fire seeds ticket items with no
+// fiscal write under this suite's `prepay` cfg (only `invoice_first`/Mode T dispatch a fiscal doc).
+describe("KDS-1 station-display operate routes", () => {
+  /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
+  async function defaultStation(
+    app: Hono,
+    cookie: string,
+  ): Promise<{ id: string; name: string; isDefault: boolean }> {
+    const res = await app.request("/api/stations", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const stations = (await res.json()) as { id: string; name: string; isDefault: boolean }[];
+    return stations.find((s) => s.isDefault)!;
+  }
+
+  /** Park + place a one-line order (fires one ticket item to the default station at `queued`), returning
+   *  the order id — the seed the queue/bump tests read from. */
+  async function placeFired(app: Hono, cookie: string, label?: string): Promise<string> {
+    const id = randomUUID();
+    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }], label });
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    return id;
+  }
+
+  it("a session lists stations, reads a station's queue, bumps a ticket item, and the queue reflects it", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie, "Mesa 8");
+
+    // 1. List stations → the seeded default "Cocina".
+    const cocina = await defaultStation(app, cookie);
+    expect(cocina.name).toBe("Cocina");
+
+    // 2. Read its queue → the order's group carries one queued line.
+    const q1 = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    expect(q1.status).toBe(200);
+    const groups1 = (await q1.json()) as {
+      orderId: string;
+      label: string | null;
+      items: { id: string; state: string }[];
+    }[];
+    const group = groups1.find((g) => g.orderId === id)!;
+    expect(group).toMatchObject({ label: "Mesa 8" });
+    expect(group.items).toHaveLength(1);
+    expect(group.items[0]!.state).toBe("queued");
+    const itemId = group.items[0]!.id;
+
+    // 3. Bump that item queued → preparing.
+    const bump = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "preparing" }),
+    });
+    expect(bump.status).toBe(200);
+    expect(await bump.text()).toBe("");
+
+    // 4. The queue reflects it.
+    const q2 = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const groups2 = (await q2.json()) as {
+      orderId: string;
+      items: { state: string }[];
+    }[];
+    expect(groups2.find((g) => g.orderId === id)!.items[0]!.state).toBe("preparing");
+  });
+
+  it("a queued item bumped straight to ready (skipping preparing) is refused 409 ticket.invalid_transition", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie);
+    const cocina = await defaultStation(app, cookie);
+    const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const groups = (await q.json()) as { orderId: string; items: { id: string }[] }[];
+    const itemId = groups.find((g) => g.orderId === id)!.items[0]!.id;
+
+    // The legal next step from `queued` is `preparing`; jumping to `ready` matches no row → refused.
+    const skip = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "ready" }),
+    });
+    expect(skip.status).toBe(409);
+    expect(await skip.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+    });
+  });
+
+  it("POST /api/ticket-items/:id/advance with a malformed id is 409 ticket.invalid_transition, not a 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const res = await app.request("/api/ticket-items/not-a-uuid/advance", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "preparing" }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: "not-a-uuid" } },
+    });
+  });
+
+  it("POST /api/ticket-items/:id/advance with a garbage or missing `to` is 409 ticket.invalid_transition, not a 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie);
+    const cocina = await defaultStation(app, cookie);
+    const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const groups = (await q.json()) as { orderId: string; items: { id: string }[] }[];
+    const itemId = groups.find((g) => g.orderId === id)!.items[0]!.id;
+
+    // A `to` outside {preparing, ready, queued} — no route-level screen, so it reaches the verb as-is.
+    const garbage = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "garbage" }),
+    });
+    expect(garbage.status).toBe(409);
+    expect(await garbage.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+    });
+
+    // A missing `to` — the body has no `to` field at all.
+    const missing = await app.request(`/api/ticket-items/${itemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({
+      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+    });
+  });
+
+  it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const res = await app.request("/api/stations/not-a-uuid/queue", { headers: { cookie } });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "station.not_found", params: { stationId: "not-a-uuid" } },
+    });
+  });
+
+  it("POST /api/orders/:id/stations/:sid/advance bumps the WHOLE ticket; a bad `to` is 400; a malformed id a 200 no-op", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    // Two lines → two ticket items at the default station, so the whole-ticket bump moves both together.
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [
+        { productId: aguaProduct.id, quantity: "1" },
+        { productId: aguaProduct.id, quantity: "1" },
+      ],
+      label: "Mesa 9",
+    });
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    const cocina = await defaultStation(app, cookie);
+
+    const advance = (order: string, station: string, to: string) =>
+      app.request(`/api/orders/${order}/stations/${station}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to }),
+      });
+
+    // A non-{preparing,ready} target is a request-shape fault (advanceTicket has no target guard).
+    const bad = await advance(id, cocina.id, "collected");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "to" } },
+    });
+
+    // A malformed ORDER id, and a malformed STATION id, each name nothing — the SAME no-op advanceTicket
+    // makes for an unknown one, a clean 200 (never the 22P02 500 the raw value would raise).
+    expect((await advance("not-a-uuid", cocina.id, "preparing")).status).toBe(200);
+    expect((await advance(id, "not-a-uuid", "preparing")).status).toBe(200);
+
+    // The real whole-ticket bump: both lines move queued → preparing → ready together.
+    expect((await advance(id, cocina.id, "preparing")).status).toBe(200);
+    expect((await advance(id, cocina.id, "ready")).status).toBe(200);
+    const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const groups = (await q.json()) as { orderId: string; items: { state: string }[] }[];
+    const items = groups.find((g) => g.orderId === id)!.items;
+    expect(items).toHaveLength(2);
+    expect(items.every((i) => i.state === "ready")).toBe(true);
+  });
+
+  it("REJECTS every station-operate route with 401 session.required when no cookie is present", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const someId = randomUUID();
+    const j = { "content-type": "application/json" };
+    const advanceBody = JSON.stringify({ to: "preparing" });
+    // The guard runs FIRST on each route; deleting `requireSession` from any flips its case to a 2xx/4xx.
+    const cases = [
+      app.request("/api/stations"),
+      app.request(`/api/stations/${someId}/queue`),
+      app.request(`/api/ticket-items/${someId}/advance`, {
+        method: "POST",
+        headers: j,
+        body: advanceBody,
+      }),
+      app.request(`/api/orders/${someId}/stations/${someId}/advance`, {
+        method: "POST",
+        headers: j,
+        body: advanceBody,
+      }),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    }
   });
 });
 

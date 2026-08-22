@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { describeEachTarget } from "./harness.js";
-import { freshNif, seedNode, seedTenant } from "./seed.js";
+import { freshNif, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
 
 describe("freshNif", () => {
   // Deliberately asserts the SHAPE and the base, never a specific counter value: the counter is
@@ -78,5 +78,49 @@ describeEachTarget("seedNode", (target) => {
       sql`select count(*)::int as n from nodes where id = ${node} and location_id = ${location}`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
+  });
+});
+
+describeEachTarget("seedKitchenStation", (target) => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await target.create();
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
+  async function seedVenue() {
+    const tenant = await seedTenant(db);
+    const locResult = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+    return { tenant, location: brandLocationId(locResult.rows[0]!.id) };
+  }
+
+  it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
+    const { tenant, location } = await seedVenue();
+    const id = await seedKitchenStation(db, { tenantId: tenant, locationId: location });
+    const result = await db.execute<{ name: string; is_default: boolean }>(
+      sql`select name, is_default from kitchen_stations where id = ${id} and location_id = ${location}`,
+    );
+    expect(result.rows[0]).toEqual({ name: "Cocina", is_default: true });
+  });
+
+  it("honours an overridden name and is_default", async () => {
+    const { tenant, location } = await seedVenue();
+    const id = await seedKitchenStation(db, {
+      tenantId: tenant,
+      locationId: location,
+      name: "Barra",
+      isDefault: false,
+    });
+    const result = await db.execute<{ name: string; is_default: boolean }>(
+      sql`select name, is_default from kitchen_stations where id = ${id}`,
+    );
+    expect(result.rows[0]).toEqual({ name: "Barra", is_default: false });
   });
 });

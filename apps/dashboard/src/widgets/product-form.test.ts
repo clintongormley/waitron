@@ -6,13 +6,24 @@ import { unitName, vatClassName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-product-form` so `mountWidget` can create it.
 import { ProductForm } from "./product-form.js";
-import type { AllergenDeclaration, CategorySummary, DashboardApi, Product } from "../api/client.js";
+import type {
+  AllergenDeclaration,
+  CategorySummary,
+  DashboardApi,
+  Product,
+  Station,
+} from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
 const CATEGORIES: CategorySummary[] = [
   { id: "cat-bebidas", name: "Bebidas" },
   { id: "cat-postres", name: "Postres" },
+];
+
+const STATIONS: Station[] = [
+  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
 ];
 
 /** The base props every mount needs: an open dialog scoped to a catalogue, with the category list. */
@@ -416,5 +427,66 @@ describe("product-form", () => {
     confirm(el);
     await el.updateComplete;
     expect(fired).toBe(false);
+  });
+
+  // ── Product → kitchen-station override routing (KDS-1) ──────────────────────────────────────────
+  // The override select is EDIT-MODE ONLY (a new product has no id yet and inherits its category
+  // route; an override is set on an existing product). It fires immediately on change (the floor
+  // zone-assign shape), not on Guardar, so it is a live side-write through its own event.
+
+  it("renders the station-override select in edit mode (an inherit option + one per station)", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      stations: STATIONS,
+    });
+    await el.updateComplete;
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=product-station]")!;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["", "s1", "s2"]);
+  });
+
+  it("does NOT render the station-override select in create mode (no product yet)", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ stations: STATIONS }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=product-station]")).toBeNull();
+  });
+
+  it("emits set-product-station with the product id + picked station on change", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      stations: STATIONS,
+    });
+    await el.updateComplete;
+    const routed = nextEvent<{ productId: string; stationId: string | null }>(
+      el,
+      "set-product-station",
+    );
+    await setSelect(el, "product-station", "s2");
+    expect((await routed).detail).toEqual({ productId: "prod-1", stationId: "s2" });
+  });
+
+  it("emits set-product-station with a null stationId when the inherit option is picked", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      stations: STATIONS,
+    });
+    await el.updateComplete;
+    const routed = nextEvent<{ productId: string; stationId: string | null }>(
+      el,
+      "set-product-station",
+    );
+    await setSelect(el, "product-station", "");
+    expect((await routed).detail).toEqual({ productId: "prod-1", stationId: null });
   });
 });

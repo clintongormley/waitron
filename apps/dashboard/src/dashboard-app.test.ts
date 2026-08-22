@@ -38,10 +38,12 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
     // The catalogue screen the nav mounts loads these on connect; resolve them so navigating to it
-    // does not leave a stray rejection (a rejection is a finding — the suite runs pristine).
+    // does not leave a stray rejection (a rejection is a finding — the suite runs pristine). The
+    // catalogue screen also loads `listStations` (KDS-1 routing selects), as does the Cocina screen.
     listCatalogues: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
+    listStations: vi.fn().mockResolvedValue([]),
     // The layout + receipt screens the nav mounts both load `getLayout` on connect; resolve it (and
     // stub the two writers they call on Guardar) so navigating to either leaves no stray rejection.
     getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
@@ -88,6 +90,7 @@ const approvals = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-
 const plannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-planned-actual-screen");
 const purchases = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-purchases-screen");
+const kitchen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-kitchen-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navStaff = (el: DashboardApp) =>
@@ -108,6 +111,8 @@ const navPlannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-planned-actual]");
 const navPurchases = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-purchases]");
+const navKitchen = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-kitchen]");
 
 /** The logged-in screen tags — exactly one is mounted at a time (the staff self-service face plus the
  * manager faces the shell test navigates). */
@@ -122,6 +127,7 @@ const SCREEN_TAGS = [
   "dashboard-approvals-screen",
   "dashboard-planned-actual-screen",
   "dashboard-purchases-screen",
+  "dashboard-kitchen-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -371,6 +377,18 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(statuses(el)).toBeTruthy();
     expect(mountedScreens(el)).toEqual(["dashboard-service-status-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
+  it("navigates to the kitchen (Cocina) screen", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navKitchen(el)).toBeTruthy();
+    navKitchen(el)!.click();
+    await flush(el);
+    expect(kitchen(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-kitchen-screen"]);
     expect(countH1(el)).toBe(1);
   });
 

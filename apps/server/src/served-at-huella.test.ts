@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, withTenant, workingOrderLines } from "@waitron/db";
+import { asAppUser, ticketItems, withTenant, workingOrderLines, workingOrders } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -23,7 +23,13 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
-import { markLineServed, openTab } from "./working-order.js";
+import {
+  advanceTicketItem,
+  fireLines,
+  markLineServed,
+  openTab,
+  type TicketState,
+} from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
@@ -379,5 +385,157 @@ describe("table placement is not part of the huella", () => {
     const walkupPlacement = await placementOf(shopWalkup);
     expect(placedPlacement).toEqual({ posX: 500, posY: 250, shape: "square", rotation: 15 });
     expect(walkupPlacement).toEqual({ posX: null, posY: null, shape: null, rotation: null });
+  });
+});
+
+/**
+ * Open the identical two-line tab, run its lines through the FULL KDS-1 kitchen lifecycle, then pay it
+ * through the real pay path with the FROZEN clock — so the registro is filed with the order's KDS state
+ * fully populated:
+ *   1. `fireLines` inserts one `ticket_items` row per line, each routed + snapshotted to the venue's
+ *      seeded default station ('Cocina', `is_default = true` — applyVenue seeds it, so `fireLines`'s
+ *      fallback resolves and no `station.no_default` fires);
+ *   2. every item is advanced `queued → preparing → ready` via the real `advanceTicketItem`;
+ *   3. the order-level `collected_at` handover marker (KDS-1 §3e) is stamped.
+ * All THREE happen BEFORE the pay files the registro, so this world's filing carries live ticket items in
+ * `ready` and a set `collected_at`. Returns the filed huella (asserted, as the sibling helper does, to be
+ * registro #1 at secuencia 1).
+ *
+ * `collected_at` is stamped by a direct UPDATE rather than `collectOrder`, deliberately: `collectOrder`
+ * would file through a DIFFERENT settle path, and this test's whole point is that the two worlds differ in
+ * KDS state ALONE — filing path held constant at `payWorkingOrder`, exactly as the served/placement
+ * siblings do. `collected_at` is a plain nullable `working_orders` column (no CHECK ties it to a status),
+ * and a tab pay leaves it untouched (`markCollected = false`, till-sale.ts), so the value set here survives
+ * to the self-check. app_user holds UPDATE on `working_orders` (the settle path writes it as app_user).
+ */
+async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
+  const { cfg, aguaId, cafeId, tableId } = shop;
+  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return openTab(tx, cfg, {
+      tableId,
+      lines: [
+        { productId: aguaId, quantity: "1" },
+        { productId: cafeId, quantity: "1" },
+      ],
+    });
+  });
+
+  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
+    // product nor category names a route), then walk each ticket item queued→preparing→ready.
+    const lines = await tx
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    await fireLines(tx, cfg, tabId, lines);
+    const items = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, tabId));
+    for (const item of items) {
+      await advanceTicketItem(tx, cfg, item.id, "preparing");
+      await advanceTicketItem(tx, cfg, item.id, "ready");
+    }
+    // The order-level customer-handover marker (KDS-1 §3e) — stamped here so this world files WITH it set.
+    await tx
+      .update(workingOrders)
+      .set({ collectedAt: FROZEN_INSTANT.toISOString() })
+      .where(eq(workingOrders.id, tabId));
+  });
+
+  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    id: tabId,
+    lines: [],
+    tender: { method: "cash", amount: "10.00" },
+  });
+
+  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows[0]!.secuencia).toBe(1);
+    return rows[0]!.huella;
+  });
+  return { tabId, huella };
+}
+
+/** An order's KDS-1 state — the `state` of every ticket item fired from it (empty when the order was never
+ *  fired) and its order-level `collected_at` handover marker. The two fields the self-check pins to prove
+ *  the kitchen-lifecycle world and the plain world GENUINELY differ. */
+interface KdsState {
+  ticketStates: TicketState[];
+  collectedAt: string | null;
+}
+
+async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
+  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const items = await tx
+      .select({ state: ticketItems.state })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, tabId));
+    const [order] = await tx
+      .select({ collectedAt: workingOrders.collectedAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId));
+    return { ticketStates: items.map((i) => i.state), collectedAt: order!.collectedAt };
+  });
+}
+
+// KDS-1's fiscal firewall (spec §4 / CLAUDE.md §5). The KDS fields — `ticket_items` (a whole new table)
+// and `working_orders.collected_at` (the handover marker) — live entirely off the fiscal path:
+// `payWorkingOrder` files from the tab's STORED locked lines, and no fiscal source (`record-sale.ts`,
+// `backend.ts`, `registro-row.ts`) even NAMES a station/ticket/collected_at field (the structural half —
+// the commit body's grep, zero hits). This proves the same BEHAVIOURALLY: two shops file the IDENTICAL
+// basket, one whose order ran the full kitchen lifecycle (fired → routed → advanced to ready → collected)
+// and one filed plain, and must file registros with the IDENTICAL huella. `collected_at` is the KDS field
+// STRUCTURALLY closest to the huella — a `working_orders` column touched in the SAME settle UPDATE that
+// files the record (till-sale.ts) — which is exactly why it is pinned here.
+describe("KDS state (ticket items + collected_at) is not part of the huella", () => {
+  it("files an IDENTICAL huella whether the order ran the full kitchen lifecycle or was filed plain — no KDS field enters the fiscal record", async () => {
+    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
+    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // (frozen) clock all fixed, the order's KDS STATE is the ONLY thing that differs between the two filings.
+    const emisorNif = nextNif();
+    const shopKitchen = await seedShop(emisorNif);
+    const shopPlain = await seedShop(emisorNif);
+
+    const kitchen = await openKitchenLifecycleAndPay(shopKitchen); // fired → ready → collected
+    const plain = await openServeAndPay(shopPlain, false); // never fired; not collected
+
+    // The invariant. A FAILURE here means a KDS field (a ticket item, its station, or collected_at) leaked
+    // into the filed record (CLAUDE.md §5: our own metadata must never enter computeHuella) — STOP and
+    // report, do NOT adjust the test; fix the LEAK.
+    expect(kitchen.huella).toBe(plain.huella);
+    // Not a trivial pass: a real uppercase-hex SHA-256 digest, so "both null/empty → equal" cannot
+    // masquerade as the invariant holding.
+    expect(kitchen.huella).toMatch(/^[0-9A-F]{64}$/);
+
+    // Self-check (§1: a measurement where both answers look alike measures nothing). Confirm the two orders
+    // GENUINELY differ in KDS state: the kitchen order carries two ticket items both advanced to `ready`
+    // and a set `collected_at`; the plain order was never fired (no ticket items) and never collected.
+    // Without this, a silent break in the fire/advance/collect plumbing would leave BOTH orders plain and
+    // this test would pass while differing nothing — no longer testing what its name claims.
+    const kitchenState = await kdsStateOf(shopKitchen, kitchen.tabId);
+    const plainState = await kdsStateOf(shopPlain, plain.tabId);
+    expect(kitchenState.ticketStates).toEqual(["ready", "ready"]);
+    expect(kitchenState.collectedAt).not.toBeNull();
+    expect(plainState.ticketStates).toEqual([]);
+    expect(plainState.collectedAt).toBeNull();
+
+    // Negative control (§1: a control in the other direction). Prove the self-check DISCRIMINATES rather
+    // than passing vacuously: were the two worlds identical, the assertions above could NOT both hold. The
+    // kitchen world's states are not the plain world's empty set, and vice versa — so a fire that silently
+    // did nothing (leaving BOTH plain) would be caught by the `toEqual(["ready","ready"])` above, and a
+    // collect that silently ran on both would be caught by the `toBeNull()` below.
+    expect(() => expect(plainState.ticketStates).toEqual(["ready", "ready"])).toThrow();
+    expect(() => expect(kitchenState.ticketStates).toEqual([])).toThrow();
+    expect(() => expect(plainState.collectedAt).not.toBeNull()).toThrow();
   });
 });

@@ -93,6 +93,12 @@ export const workingOrders = pgTable(
     // (tenant_id, delivery_table_id) → dining_tables(tenant_id, id) is hand-written in the mutual-FK
     // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
     deliveryTableId: uuid("delivery_table_id"),
+    // The counter handover marker (KDS-1, §2d/§3e): set by the existing collect flow when a walk-up
+    // order is handed to the customer, replacing #63's order_prep `collected` state (kitchen-done and
+    // customer-handed were conflated there). The default-station display drops an order once this is
+    // set. Nullable — NULL until collected; NON-FISCAL (never read into a filed record, design H2).
+    // Additive nullable column; working_orders' existing FORCE-RLS policy + app_user grants cover it.
+    collectedAt: timestamp("collected_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     unique("working_orders_tenant_id_key").on(t.tenantId, t.id),
@@ -196,6 +202,11 @@ export const workingOrderLines = pgTable(
       name: "working_order_lines_product_fk",
     }).onDelete("restrict"),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
+    // Composite (tenant_id, id) UNIQUE — the target for ticket_items' tenant-consistent (tenant_id,
+    // working_order_line_id) FK (KDS-1, hand-written --custom migration), the same role
+    // products_tenant_id_key plays for working_order_lines_product_fk. A line cannot be referenced by a
+    // ticket item of another tenant, independently of RLS.
+    unique("working_order_lines_tenant_id_key").on(t.tenantId, t.id),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),

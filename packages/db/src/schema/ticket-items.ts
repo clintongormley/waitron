@@ -1,0 +1,72 @@
+import { index, pgEnum, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { tenants } from "./tenants.js";
+
+/**
+ * The per-line kitchen state (KDS-1, §2d). A NEW enum, NOT `order_prep`'s `prep_state`: ticket items
+ * are KITCHEN states only — `queued → preparing → ready`. `order_prep`'s fourth value `collected`
+ * (customer handover) moves to the ORDER level as `working_orders.collected_at`, removing #63's
+ * conflation of "kitchen done" with "customer handed the order". `prep_state` is dropped with
+ * `order_prep` (it had no other consumer), so there is no reused-enum-with-a-dead-value to carry.
+ */
+export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready"]);
+
+/**
+ * A per-line, per-station kitchen TICKET ITEM (KDS-1) — the replacement for `order_prep`'s
+ * one-row-per-order model. A fire point (placeOrder / sendToPrep / a tab's round-send, reworked in
+ * later tasks) inserts one row per new working-order line, with the line's station RESOLVED and
+ * SNAPSHOTTED here at fire time (`product.station_id ?? category.station_id ?? the location's default
+ * station`), so re-categorising a product later never reroutes food already sent. MUTABLE, node-scoped
+ * and ephemeral, exactly as `order_prep` was: advances `queued → preparing → ready` freely regardless
+ * of the parent order's fiscal status (a settled Mode-P order still has its lines cooked).
+ *
+ * `node_id` mirrors `order_prep`'s node scoping (the queue is node-scoped). `working_order_id` is a
+ * denormalised grouping key (the per-station display groups a station's items by order) and carries
+ * NO FK of its own — the composite FK on `working_order_line_id` gives the real integrity, cascading a
+ * cancelled/abandoned line's item away with the line (the analogue of `order_prep`'s order FK).
+ * `UNIQUE (tenant_id, working_order_line_id)` is one ticket item per line — also the guard that makes a
+ * concurrent double-fire collide rather than duplicate.
+ *
+ * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
+ * `ticket_items_tenant_isolation` policy, the SELECT/INSERT/UPDATE grant to `app_user` (no DELETE — a
+ * cancelled line's item is cascaded via the line FK, never deleted directly, as `order_prep` relied on
+ * its order FK) and the three composite FKs (node, working-order-line CASCADE, station) are all
+ * hand-written in the paired --custom migration. The `inmutabilidad` guard in packages/fiscal-verifactu
+ * scans every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
+ */
+export const ticketItems = pgTable(
+  "ticket_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
+      // resolves it in a separate CLI process), the reason floor-zones.ts / orders.ts use this form.
+      /* v8 ignore next */
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    // The node the prep happens on — node-scoped, as order_prep was. Bare column: the tenant-consistent
+    // (tenant_id, node_id) → nodes(tenant_id, id) FK is hand-written in the --custom migration.
+    nodeId: uuid("node_id").notNull(),
+    // Denormalised grouping key — the per-station display groups a station's items by order. No FK: the
+    // working_order_line_id FK below carries the integrity; this is a read convenience, snapshotted at fire.
+    workingOrderId: uuid("working_order_id").notNull(),
+    // The line this ticket item was fired from. Bare column: the tenant-consistent (tenant_id,
+    // working_order_line_id) → working_order_lines(tenant_id, id) FK is hand-written CASCADE in the
+    // --custom migration, so a cancelled/abandoned line's item is removed with the line.
+    workingOrderLineId: uuid("working_order_line_id").notNull(),
+    // The station this line was ROUTED to, snapshotted at fire time (§2b) — re-pointing the product's
+    // station later never moves an already-fired item. Bare column: the tenant-consistent (tenant_id,
+    // station_id) → kitchen_stations(tenant_id, id) FK is hand-written in the --custom migration.
+    stationId: uuid("station_id").notNull(),
+    state: ticketState("state").notNull().default("queued"),
+    queuedAt: timestamp("queued_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+    preparingAt: timestamp("preparing_at", { withTimezone: true, mode: "string" }),
+    readyAt: timestamp("ready_at", { withTimezone: true, mode: "string" }),
+  },
+  (t) => [
+    // One ticket item per line — also the guard that makes a concurrent double-fire collide (23505)
+    // rather than silently duplicate the item.
+    unique("ticket_items_working_order_line_id_key").on(t.tenantId, t.workingOrderLineId),
+    // The per-station queue scan (the analogue of order_prep_queue_idx, re-keyed on station).
+    index("ticket_items_queue_idx").on(t.tenantId, t.stationId, t.state),
+  ],
+).enableRLS();

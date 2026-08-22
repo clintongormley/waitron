@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, tenants, withTenant } from "@waitron/db";
+import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   authorize,
@@ -35,13 +35,15 @@ import {
 import {
   abandonHeldOrder,
   addTabRound,
-  advancePrep,
+  advanceTicket,
+  advanceTicketItem,
   cancelPlacedOrder,
   getHeldOrder,
   joinTable,
   listHeldOrders,
-  listPrepQueue,
+  listStationQueue,
   listTablesWithState,
+  markCollected,
   markLineServed,
   mergeTabs,
   moveTab,
@@ -55,7 +57,8 @@ import {
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
-import type { PrepState } from "./working-order.js";
+import type { TicketState } from "./working-order.js";
+import { listStations } from "./kitchen.js";
 import {
   clearSessionCookie,
   isUuid,
@@ -104,14 +107,19 @@ export interface TillApiDeps {
  * this table defaults to 400 (a client fault not yet given a more specific status), which is why
  * `run` needs the `?? 400`.
  *
- * The working-order and prep codes are given SPECIFIC statuses rather than the 400 default: a
+ * The working-order and kitchen codes are given SPECIFIC statuses rather than the 400 default: a
  * retrieve of an id that names no open order is a 404 (`working_order.not_found`); a MODIFY of an
  * order that is not open (`working_order.not_open`), not placed (`working_order.not_placed`), not
- * settled (`working_order.not_settled`, `sendToPrep`'s own guard), or a prep move the order's current
- * prep state forbids (`order_prep.invalid_transition`) are all 409 — the id may be valid, but the
- * order's (or its prep row's) STATE forbids the operation (see each code's own note in `errors.ts`).
- * `working_order.reason_required` is listed explicitly at 400 despite being the table's own default,
- * matching every other `working_order.*`/`sale.*` entry here.
+ * settled (`working_order.not_settled`, `sendToPrep`'s own guard), a re-fire of an order already sent
+ * to the kitchen (`ticket.already_fired`), or a per-line bump the item's current kitchen state forbids
+ * (`ticket.invalid_transition`) are all 409 — the id may be valid, but the order's (or its ticket
+ * item's) STATE forbids the operation (see each code's own note in `errors.ts`). A fire to a venue with
+ * no default station is `station.no_default` (409, a misconfiguration blocking the fire); a station id
+ * naming no live station is `station.not_found` (404). `working_order.reason_required` is listed
+ * explicitly at 400 despite being the table's own default, matching every other
+ * `working_order.*`/`sale.*` entry here. (`order_prep.invalid_transition` is retired from this surface
+ * with the KDS-1 rework — its throw sites are gone, so it is no longer mapped here; it stays REGISTERED
+ * in `errors.ts`, never renamed, spec §6.)
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -132,8 +140,23 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_open": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
+  // The Mode-P counter handover (`markCollected`, `POST /api/orders/:id/collect`). Re-collecting an
+  // already-handed-over order is `working_order.already_collected`, and collecting an order that was
+  // never fired is `ticket.not_fired` — both 409, the same family as `not_settled`/`ticket.already_fired`
+  // (the id is valid, but the order's handover/kitchen state forbids the operation).
+  "working_order.already_collected": 409,
+  "ticket.not_fired": 409,
   "working_order.reason_required": 400,
-  "order_prep.invalid_transition": 409,
+  // Kitchen tickets (KDS-1). A re-fire of an order already sent to the kitchen is `ticket.already_fired`
+  // (409 — the order's lines are already in the kitchen; `sendToPrep`'s double-send, mapped from the
+  // per-line unique in `fireLines`); a per-line bump the item's state forbids (skip/repeat/backwards, or
+  // an absent/foreign/malformed item id) is `ticket.invalid_transition` (409). A fire to a venue with no
+  // default station is `station.no_default` (409, a misconfiguration blocking the fire); a station id
+  // naming no live station (or a malformed one, screened) is `station.not_found` (404).
+  "ticket.already_fired": 409,
+  "ticket.invalid_transition": 409,
+  "station.no_default": 409,
+  "station.not_found": 404,
   // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
   // `catalogue-api.ts`) use for a malformed body field — here, an out-of-range `capacity` on the
   // table create/patch routes (see `requireCapacity`). Listed explicitly though 400 is the table's
@@ -200,8 +223,9 @@ export const run = createErrorBoundary(STATUS, "till.failed");
  * — the fail-closed shape each route documents. `code` is the caller's deliberate per-route choice
  * (`working_order.not_found` for retrieve → 404 — the retrieve route's absent-order code;
  * `working_order.not_open` for edit/abandon/place → 409; `working_order.not_placed` for collect/cancel
- * → 409; `order_prep.invalid_transition` for prep → 409); every code carries `{ workingOrderId }`. The
- * seven retrieve/edit/abandon/place/prep/collect/cancel routes share this one guard.
+ * → 409; `working_order.not_settled` for send-to-prep → 409, `sendToPrep`'s own guard code); every code
+ * carries `{ workingOrderId }`. The retrieve/edit/abandon/place/prep/collect/cancel routes share this
+ * one guard.
  */
 function requireUuidId(
   id: string,
@@ -209,7 +233,7 @@ function requireUuidId(
     | "working_order.not_found"
     | "working_order.not_open"
     | "working_order.not_placed"
-    | "order_prep.invalid_transition",
+    | "working_order.not_settled",
 ): string {
   if (!isUuid(id)) {
     throw new AppError(code, { workingOrderId: id });
@@ -362,17 +386,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ venueName: tenants.legalName, nif: tenants.taxId })
           .from(tenants)
           .where(eq(tenants.id, deps.cfg.tenantId));
+        // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE from
+        // the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow` rides the
+        // config because the SALE PATH dispatches on it, whereas `bump_mode` has no server-side
+        // consumer at all (it drives only the client's whole-ticket affordance), so it is read where
+        // it is used and kept off the config surface. Same `eq(id)` shape `readOrderFlow` uses, under
+        // the same RLS scope, so it selects exactly this till's location row.
+        const [loc] = await tx
+          .select({ bumpMode: locations.bumpMode })
+          .from(locations)
+          .where(eq(locations.id, deps.cfg.locationId));
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        return { issuer: row, layout: definition, receipt };
+        return { issuer: row, bumpMode: loc?.bumpMode, layout: definition, receipt };
       });
       /* v8 ignore start */
-      if (boot.issuer === undefined) {
-        // Structurally unreachable: `deps.cfg.tenantId` is the till's own tenant (provisioning
-        // stamped it), so its `tenants` row always exists and RLS returns it. A misconfigured till
-        // pointed at a nonexistent tenant becomes an opaque 500 via `run`, never a partial payload.
-        throw new Error(`GET /api/till: no tenant row for ${deps.cfg.tenantId}`);
+      if (boot.issuer === undefined || boot.bumpMode === undefined) {
+        // Structurally unreachable: `deps.cfg.tenantId`/`locationId` are the till's own tenant and
+        // location (provisioning stamped both), so their rows always exist and RLS returns them. A
+        // misconfigured till pointed at a nonexistent tenant/location becomes an opaque 500 via `run`,
+        // never a partial payload.
+        throw new Error(`GET /api/till: no tenant/location row for ${deps.cfg.tenantId}`);
       }
       /* v8 ignore stop */
       return c.json({
@@ -380,6 +415,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
+        // The venue's whole-ticket bump mode (KDS-1 §2e), read from the location above — the till app
+        // threads it to the station-display screen to enable/disable the whole-ticket bump affordance.
+        bumpMode: boot.bumpMode,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
@@ -598,35 +636,135 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Advance an order's prep state, or (an EMPTY body) ENQUEUE it (7c, design §5). A body carrying
-  // `{ to }` calls `advancePrep`; `to` absent (`{}`) calls `sendToPrep` — the Mode-P pickup for an
-  // order that never places. SESSION-GUARDED. The id is `isUuid`-screened before any query, refused
-  // as `order_prep.invalid_transition` — the code every other illegal prep move surfaces, since a
-  // malformed id names no prep row exactly as legitimately as an absent one. Returns 200 with an
-  // empty body (like `updateHeldOrder`'s PUT); the caller re-reads `GET /api/prep-queue` for the new
-  // state.
+  // Send a SETTLED order to the kitchen — Mode P's pickup (design §5, reworked to KDS-1's ticket model).
+  // SESSION-GUARDED. `sendToPrep` fires the order's lines through the shared `fireLines`, inserting one
+  // `ticket_items` row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at
+  // fire time. It is the ONE fire path with a public route (place fires inside `placeOrder`; a tab round
+  // fires inside `addTabRound`), so this route stays — but it no longer advances anything (the removed
+  // `advancePrep` `{ to }` branch is gone; advancing is now per-line/whole-ticket, below). A non-settled,
+  // absent or foreign order is refused `working_order.not_settled` (409) BEFORE any write; a re-fire of an
+  // already-sent order collides on the per-line unique and is refused `ticket.already_fired` (409, mapped
+  // in `fireLines`) rather than an opaque 500; a venue with no default station fails the fire loud with
+  // `station.no_default` (409). The id is `isUuid`-screened before any query, refused as
+  // `working_order.not_settled` — the SAME code a non-settled/absent id gets — rather than the `22P02`
+  // opaque 500 the raw value would raise. Returns 200 with an empty body.
   app.post("/api/working-orders/:id/prep", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const id = requireUuidId(c.req.param("id"), "order_prep.invalid_transition");
-      const body = await c.req.json<{ to?: PrepState }>();
-      if (body.to === undefined) {
-        await sendToPrep({ db: deps.db }, deps.cfg, id);
-      } else {
-        await advancePrep({ db: deps.db }, deps.cfg, id, body.to);
-      }
+      const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
+      await sendToPrep({ db: deps.db }, deps.cfg, id);
       return c.body(null, 200);
     }),
   );
 
-  // The node-scoped prep queue (7c, design §5) — every order still ACTIVE in prep on this node
-  // (queued/preparing/ready, not yet collected), oldest first. SESSION-GUARDED; `listPrepQueue` is
-  // node- and (via RLS) tenant-scoped from `deps.cfg` — the browser names nothing.
-  app.get("/api/prep-queue", (c) =>
+  // The venue's ACTIVE kitchen stations (KDS-1, design §3f), for the station-display picker. SESSION-
+  // GUARDED (kitchen staff log in with a PIN and pick a station, §0). `listStations` is RLS- + location-
+  // scoped from `deps.cfg`, ordered by display order then name — the same LIST-ONLY, active-only shape
+  // `GET /api/zones` uses; station CRUD is the MANAGEMENT API's, so this surface throws no config code.
+  app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const queue = await listPrepQueue({ db: deps.db }, deps.cfg);
+      const stations = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listStations(tx, deps.cfg);
+      });
+      return c.json(stations);
+    }),
+  );
+
+  // One station's kitchen queue (KDS-1, design §3c/§3f) — this node's ticket items AT `:id`, grouped by
+  // order, oldest first. SESSION-GUARDED. `listStationQueue` is node- + (via RLS) tenant-scoped from
+  // `deps.cfg`. The `:id` is `isUuid`-screened first: an unknown station id already yields an empty
+  // queue (it names no items), so a MALFORMED one — which likewise names no live station — is refused
+  // `station.not_found` (404) rather than reaching the `station_id` uuid column and raising `22P02` → an
+  // opaque 500, the SAME 404 the config surface gives an absent station.
+  app.get("/api/stations/:id/queue", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
+      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listStationQueue(tx, deps.cfg, id);
+      });
       return c.json(queue);
+    }),
+  );
+
+  // Bump ONE ticket item one kitchen step (KDS-1 §3c) — the per-line advance that is the source of truth.
+  // Body `{ to }` (`"preparing" | "ready"`). SESSION-GUARDED. `advanceTicketItem` is a single conditional
+  // UPDATE: a skip/repeat/backwards move, an absent/foreign item, OR any non-{preparing,ready} `to`
+  // (including a missing body — the verb's TICKET_TRANSITIONS-table lookup throws BEFORE any query when
+  // `to` is not a key, so no bad enum reaches the DB) all surface `ticket.invalid_transition` (409). The
+  // `:id` is `isUuid`-screened first, refused as that SAME code — a malformed id names no item exactly as
+  // an absent one — rather than a `22P02` 500. Returns 200 with an empty body; the display re-reads the
+  // station queue.
+  app.post("/api/ticket-items/:id/advance", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
+      const body = await c.req.json<{ to?: string }>();
+      // `body.to` reaches `advanceTicketItem` as-is (cast): the verb owns the target validation, throwing
+      // `ticket.invalid_transition` for `"queued"`, a missing field, or any garbage value — no route-level
+      // `to` screen is needed because the verb's TICKET_TRANSITIONS-table lookup never lets an invalid
+      // value reach the enum column (a lookup miss is refused before the update runs, not after).
+      const to = body.to as TicketState;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await advanceTicketItem(tx, deps.cfg, id, to);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Bump a WHOLE ticket — every not-yet-`to` line of one order at one station (KDS-1 §3c) — the
+  // convenience the `bump_mode = 'ticket'` venue setting (and a "bump all" affordance) drives, over the
+  // per-line truth above. `:id` is the order, `:sid` the station; body `{ to }` (`"preparing" | "ready"`).
+  // SESSION-GUARDED. UNLIKE the per-line verb, `advanceTicket` has no target-validation switch and NO-OPs
+  // on an empty match by design (bumping a ticket whose lines have all advanced is a convenience, not an
+  // error), so the route screens `to` itself — a non-{preparing,ready} value is `management.request_invalid`
+  // (400, the request-shape code the sibling routes use), which also keeps a bad enum off the column. A
+  // malformed order/station id names nothing, which is the SAME no-op the verb makes for an unknown one, so
+  // it is screened to a clean 200 (never the `22P02` 500 the raw value would raise). Returns 200 empty.
+  app.post("/api/orders/:id/stations/:sid/advance", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const orderId = c.req.param("id");
+      const stationId = c.req.param("sid");
+      const body = await c.req.json<{ to?: string }>();
+      if (body.to !== "preparing" && body.to !== "ready") {
+        throw new AppError("management.request_invalid", { field: "to" });
+      }
+      // Bind `to` to a local: the narrowing above does not survive into the `withTenant` closure (a
+      // captured property resets to its declared `string | undefined`), the login/create-person pattern.
+      const to = body.to;
+      if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await advanceTicket(tx, deps.cfg, orderId, stationId, to);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e). SESSION-GUARDED.
+  // `markCollected` stamps the order-level `collected_at`, which drops the order off `listStationQueue`
+  // (the display shows an order until it is collected). NON-FISCAL — it writes ONLY `collected_at`,
+  // touching no sale/registro/tender/huella (the order was already paid + filed at settle). DISTINCT from
+  // the placed-collect FISCAL route `POST /api/working-orders/:id/collect` (`collectOrder`), hence the
+  // distinct `/api/orders/:id/collect` path (the sibling `/api/orders/:id/stations/:sid/advance` already
+  // lives here). A non-settled/absent/foreign id is refused `working_order.not_settled` (409), an
+  // already-handed-over order `working_order.already_collected` (409), and an order never fired
+  // `ticket.not_fired` (409) — all BEFORE any write. The id is `isUuid`-screened first, refused as
+  // `working_order.not_settled` (the SAME code an absent/non-settled id gets) rather than the `22P02`
+  // opaque 500 the raw value would raise. Returns 200 with an empty body; the display re-reads the queue.
+  app.post("/api/orders/:id/collect", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
+      await markCollected({ db: deps.db }, deps.cfg, id);
+      return c.body(null, 200);
     }),
   );
 

@@ -111,6 +111,19 @@ export async function applyVenue(
                ${action.operationDescription}, ${action.fiscalTerritory}, ${action.addressLine1},
                ${action.addressLine2}, ${action.postalCode}, ${action.city}, ${action.province},
                ${action.timeZone}, ${action.dayCutover})`);
+          // KDS-1: seed this location's DEFAULT kitchen station so firing (placeOrder / sendToPrep / a
+          // tab's round-send → fireLines) has a fallback the instant the venue exists. Spec §2a ("one
+          // default") + §2b: a location with NO default station makes firing a fail-loud
+          // `station.no_default` misconfiguration, so a fresh venue must ship one. Owner-role INSERT under
+          // the tenant GUC — the same tx/role that just inserted the location, so the FORCE-RLS
+          // `kitchen_stations_tenant_isolation` WITH CHECK passes (tenant_id = current_tenant_id()). The
+          // operator can rename it later via updateStation; `station.no_default` then guards any venue
+          // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
+          // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
+          // this one.
+          await tx.execute(sql`
+            insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
+            values (${tenantId}, ${locationId}, 'Cocina', 0, true, true)`);
           break;
         }
         case "create-till":

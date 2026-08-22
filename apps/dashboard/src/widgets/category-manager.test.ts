@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary, Station } from "../api/client.js";
 import { CategoryManager } from "./category-manager.js";
 
 afterEach(cleanupWidgets);
@@ -10,6 +10,18 @@ const categories: CategorySummary[] = [
   { id: "c1", name: "Entrantes" },
   { id: "c2", name: "Postres" },
 ];
+
+const stations: Station[] = [
+  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
+];
+
+/** Set a native <select>'s value and fire its `change`, exactly as the browser does on a pick. */
+function selectValue(el: CategoryManager, sel: string, value: string): void {
+  const node = el.shadowRoot!.querySelector<HTMLSelectElement>(sel)!;
+  node.value = value;
+  node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+}
 
 /** Drive the create field the way the operator does: type into the wt-input (its composed wt-change). */
 function type(el: CategoryManager, value: string): void {
@@ -93,6 +105,58 @@ describe("category-manager", () => {
     type(el, "Bebidas");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    const event = await seen;
+    expect(event.bubbles).toBe(true);
+    expect(event.composed).toBe(true);
+  });
+
+  // ── Category → kitchen-station routing (KDS-1) ──────────────────────────────────────────────────
+
+  it("renders a station select per category row (an inherit option + one per active station)", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", {
+      categories,
+      stations,
+    });
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      "[data-test=category-station-c1]",
+    )!;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(["", "s1", "s2"]); // the empty "— none —" plus each station id
+  });
+
+  it("emits set-category-station with the picked station id on change", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", {
+      categories,
+      stations,
+    });
+    const detail = new Promise<{ categoryId: string; stationId: string | null }>((resolve) =>
+      el.addEventListener("set-category-station", (e) => resolve((e as CustomEvent).detail)),
+    );
+    selectValue(el, "[data-test=category-station-c1]", "s2");
+    expect(await detail).toEqual({ categoryId: "c1", stationId: "s2" });
+  });
+
+  it("emits set-category-station with a null stationId when the inherit option is picked", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", {
+      categories,
+      stations,
+    });
+    const detail = new Promise<{ categoryId: string; stationId: string | null }>((resolve) =>
+      el.addEventListener("set-category-station", (e) => resolve((e as CustomEvent).detail)),
+    );
+    selectValue(el, "[data-test=category-station-c1]", "");
+    expect(await detail).toEqual({ categoryId: "c1", stationId: null });
+  });
+
+  it("emits set-category-station as a bubbling, composed event", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", {
+      categories,
+      stations,
+    });
+    const seen = new Promise<Event>((resolve) =>
+      el.addEventListener("set-category-station", resolve),
+    );
+    selectValue(el, "[data-test=category-station-c1]", "s1");
     const event = await seen;
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
