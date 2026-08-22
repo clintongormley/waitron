@@ -284,8 +284,10 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
  *  to the enum and this widens with it, exactly as the sibling {@link OrderFlow}/`TicketState` server types
  *  derive from `orderFlow`/`ticketState`. The RUNTIME `fire-control` route validator derives its valid set
  *  from the SAME `fireControlMode.enumValues`. The dashboard/till CLIENT types keep a hand-maintained
- *  literal mirror instead, because the browser bundle cannot import `@waitron/db` to derive it — a MISSED
- *  member there is a typecheck failure at the client, so that drift is still caught. */
+ *  literal mirror instead, because the browser bundle cannot import `@waitron/db` to derive it — so a
+ *  server-ahead enum addition is NOT caught at the client automatically (a stale client mirror only fails
+ *  to typecheck if the client itself references the unlisted mode); add a mode to each client mirror by
+ *  hand. */
 export type FireControl = (typeof fireControlMode.enumValues)[number];
 
 /**
