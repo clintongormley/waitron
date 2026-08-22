@@ -38,6 +38,7 @@ import {
   fireCourse,
   fireLines,
   getHeldOrder,
+  listExpoQueue,
   listHeldOrders,
   listStationQueue,
   openTab,
@@ -1490,6 +1491,171 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         code: "course.not_found",
         params: { courseId: missing },
       });
+    });
+  });
+});
+
+// KDS-3 Task 2 — the cross-station expo/pass read. `listExpoQueue` aggregates every OPEN order on the
+// node (with at least one not-yet-away item), gathers its ticket items ACROSS stations, and groups them
+// by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
+// station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
+// join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
+// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.rls.test.ts).
+// Every read/write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
+  it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      // Two products in the SAME course, routed to DIFFERENT stations — the cross-station shape.
+      const soup = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
+      const olives = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
+      await setProductCourse(tx, cfg, soup, ent.id);
+      await setProductCourse(tx, cfg, olives, ent.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
+
+      const expo = await listExpoQueue(tx, cfg);
+      expect(expo).toHaveLength(1);
+      const order = expo[0]!;
+      expect(order.orderId).toBe(orderId);
+      // A single earliest course, both items auto-fired, neither away.
+      expect(order.courses).toHaveLength(1);
+      const course = order.courses[0]!;
+      expect(course.courseId).toBe(ent.id);
+      expect(course.courseName).toBe("Entrantes");
+      expect(course.displayOrder).toBe(0);
+      expect(course.fired).toBe(true);
+      expect(course.away).toBe(false);
+      // Both lines under the one course, each labelled with its OWN station — the join listStationQueue omits.
+      expect(course.items).toHaveLength(2);
+      expect(course.items.map((i) => i.stationName).sort()).toEqual(["Barra", "Cocina"]);
+      expect(course.items.every((i) => i.state === "queued")).toBe(true);
+      expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
+      expect(course.items.every((i) => i.awayAt === null)).toBe(true);
+      // The display snapshot rides through: `name` is the locale→description map, `qty` the numeric text.
+      const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
+      expect(soupItem.name).toEqual(soupItem.name); // shape: Record<locale,string>
+      expect(typeof soupItem.qty).toBe("string");
+
+      // A COLLECTED order and an ABANDONED order are both excluded, the same two listStationQueue drops.
+      const { id: collected } = await placeOrderWith(tx, cfg, [line(soup)]);
+      await tx
+        .update(workingOrders)
+        .set({ collectedAt: sql`now()` })
+        .where(eq(workingOrders.id, collected));
+      const { id: abandoned } = await placeOrderWith(tx, cfg, [line(soup)]);
+      await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, abandoned));
+
+      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+    });
+  });
+
+  it("groups by course in display_order; a held later course reads fired:false, and the away roll-up follows per course", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+
+      const order = (await listExpoQueue(tx, cfg))[0]!;
+      // Courses in display_order: Entrantes (0) then Principales (1).
+      expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
+      const [c0, c1] = order.courses;
+      expect(c0!.fired).toBe(true); // earliest course auto-fired
+      expect(c0!.away).toBe(false);
+      expect(c1!.fired).toBe(false); // later course HELD — fired_at null on its item
+      expect(c1!.items.every((i) => i.firedAt === null)).toBe(true);
+
+      // Fire the held course, and mark the earliest course AWAY (KDS-3's dispatch marker). The per-course
+      // roll-ups follow: Entrantes now `away`, Principales now `fired`; the order stays (main not away).
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const items = await courseItemsFor(tx, orderId);
+      const entItem = items.find((i) => i.courseId === ent.id)!;
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, entItem.id));
+
+      const after = await listExpoQueue(tx, cfg);
+      expect(after).toHaveLength(1);
+      const c0b = after[0]!.courses.find((c) => c.courseId === ent.id)!;
+      const c1b = after[0]!.courses.find((c) => c.courseId === pri.id)!;
+      expect(c0b.away).toBe(true);
+      expect(c0b.items[0]!.awayAt).not.toBeNull();
+      expect(c1b.fired).toBe(true); // released
+      expect(c1b.away).toBe(false);
+    });
+  });
+
+  it("drops a FULLY-away order but keeps one that still has a not-yet-away item", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const a = await makeProduct(tx, cfg, catalogueId, {});
+      const b = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, a, ent.id);
+      await setProductCourse(tx, cfg, b, ent.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(a), line(b)]);
+      const items = await courseItemsFor(tx, orderId);
+
+      // One item away → the order stays (a not-yet-away item remains).
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, items[0]!.id));
+      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+
+      // The last item away → the whole order is fully dispatched and leaves the pass.
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: sql`now()` })
+        .where(eq(ticketItems.id, items[1]!.id));
+      expect(await listExpoQueue(tx, cfg)).toEqual([]);
+    });
+  });
+
+  it("surfaces the dining-table label for a tab and omits it for a walk-up; openedMinutes is derived from opened_at", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {}); // null course → fires immediately
+
+      // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Mesa 5') returning id`);
+      const tableId = rows[0]!.id;
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+
+      // A WALK-UP counter order, no table → tableLabel omitted.
+      const { id: walkup } = await placeOrderWith(tx, cfg, [line(cafe)]);
+
+      const expo = await listExpoQueue(tx, cfg);
+      const tab = expo.find((o) => o.orderId === tabId)!;
+      expect(tab.tableLabel).toBe("Mesa 5");
+      expect(tab.openedMinutes).toBeGreaterThanOrEqual(0);
+      const walk = expo.find((o) => o.orderId === walkup)!;
+      expect(walk.tableLabel).toBeUndefined();
     });
   });
 });

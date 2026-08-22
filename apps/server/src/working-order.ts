@@ -2542,6 +2542,242 @@ export async function listStationQueue(
   return [...groups.values()];
 }
 
+/** One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item of an order,
+ *  carrying the display fields the pass renders: the line's SNAPSHOTTED description map + quantity (the
+ *  same snapshot `StationQueueItem` serialises, never a live catalogue lookup), the resolved STATION name
+ *  (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill lagging the
+ *  cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is the
+ *  locale→description map (localised client-side, per the repo's never-store-formatted rule), mirroring
+ *  `StationQueueItem.descriptions` rather than a pre-flattened string. */
+export interface ExpoItem {
+  id: string;
+  name: Record<string, string>;
+  qty: string;
+  stationName: string;
+  state: TicketState;
+  firedAt: string | null;
+  awayAt: string | null;
+}
+
+/** One course section of an expo order (KDS-3 §3a) — the order's items for one course, grouped under the
+ *  course header and ordered by `displayOrder` (a null-course line has no course row: `courseId`/
+ *  `courseName`/`displayOrder` are null and it sorts EARLIEST, the same null-first coursing
+ *  `listStationQueue`'s client renders). Two roll-up flags drive the pass's per-course lever: `fired` is
+ *  true once EVERY item of the course carries `fired_at` (so the "Curso listo" bump is offered — a held
+ *  course reads `false`), `away` true once every item carries `away_at` (the drop-off signal the screen
+ *  uses to retire the course). */
+export interface ExpoCourse {
+  courseId: string | null;
+  courseName: string | null;
+  displayOrder: number | null;
+  fired: boolean;
+  away: boolean;
+  items: ExpoItem[];
+}
+
+/** One open order on the cross-station expo board (KDS-3 §3a) — its id, the human order number and
+ *  optional dining-table label, how long it has been open (`openedMinutes`, from `opened_at`), and its
+ *  `ticket_items` grouped BY COURSE in `display_order`. `tableLabel` is present only when the order maps
+ *  to a table (a tab back-pointer or a counter delivery); it is omitted for a bare walk-up (the `?`). */
+export interface ExpoOrder {
+  orderId: string;
+  tableLabel?: string;
+  orderNumber: number;
+  openedMinutes: number;
+  courses: ExpoCourse[];
+}
+
+/**
+ * The cross-station expo/pass read (KDS-3 §3a) — every OPEN order on this node with at least one
+ * not-yet-away item, its `ticket_items` gathered ACROSS all stations and grouped by course, so the
+ * expediter sees a whole order's coursing at once. The counterpart to KDS-1's per-station
+ * `listStationQueue`, which filters to ONE station and never needs the station's name; this joins
+ * `kitchen_stations` to label each item with its station, so the pass reads "the grill is lagging the
+ * cold station" off one query.
+ *
+ * Three order-level exclusions, computed at query time (there is no per-order "done" column):
+ *  - `abandoned` orders (`ne(status,"abandoned")`) and COLLECTED orders (`collected_at IS NULL`), the
+ *    same two `listStationQueue` drops;
+ *  - FULLY-AWAY orders — an order leaves the pass once the expediter has dispatched every course (every
+ *    item carries `away_at`). Expressed as an EXISTS of one still-not-away item on this node (§2a: `away`
+ *    is the KDS-3 dispatch marker; the waiter's `served_at` is a separate floor ack, not consulted here),
+ *    so the order stays while ANY item is undispatched and drops the instant the last one goes away. Done
+ *    in SQL rather than post-grouping so a venue's fully-dispatched orders are never hauled into memory.
+ *  A SURVIVING order still carries ALL its items — including away ones — so a per-course `away` flag can
+ *  be rolled up; the SCREEN (a later task) hides fully-away courses, the READ does not.
+ *
+ * Node-scoped (`ticket_items.node_id = cfg.nodeId`, spec §3a — the pass is one node's, exactly as
+ * `listStationQueue`'s queue is). `locationId` (default `cfg.locationId`) scopes only the dining-table
+ * label lookup, keeping the `(tx, cfg, locationId?)` signature symmetric with `listTablesWithState`; a
+ * node sits in one location, so the default is the till's own venue.
+ *
+ * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
+ * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the tenant. PGlite
+ * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
+ * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.rls.test.ts), the
+ * same split `listStationQueue` uses (CLAUDE.md §4).
+ */
+export async function listExpoQueue(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId?: string,
+): Promise<ExpoOrder[]> {
+  const loc = locationId ?? cfg.locationId;
+  const rows = await tx
+    .select({
+      itemId: ticketItems.id,
+      state: ticketItems.state,
+      firedAt: ticketItems.firedAt,
+      awayAt: ticketItems.awayAt,
+      // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
+      // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      lineNo: workingOrderLines.lineNo,
+      // The item's STATION name — the cross-station label listStationQueue omits (it filters by one
+      // station, so it never needs it). `station_id` is notNull, so this inner join drops nothing.
+      stationName: kitchenStations.name,
+      // The item's snapshotted course (or null) + its live header/order from the LEFT-joined
+      // kitchen_courses row — a courseless line serialises `course* : null` and sorts earliest.
+      courseId: ticketItems.courseId,
+      courseName: kitchenCourses.name,
+      courseDisplayOrder: kitchenCourses.displayOrder,
+      orderId: workingOrders.id,
+      orderNumber: workingOrders.orderNumber,
+      // Minutes since the order opened — the pass's urgency clock. `::int` so pg/PGlite hand back a
+      // number; `now()` is transaction time, so an order opened earlier in this same tx reads 0.
+      openedMinutes: sql<number>`floor(extract(epoch from (now() - ${workingOrders.openedAt})) / 60)::int`,
+      // The dining-table label, resolved by a FAN-OUT-PROOF scalar subquery (a LEFT JOIN could multiply
+      // an order's item rows if two tables pointed at it — tab_id carries no DB unique, only an app lock).
+      // Covers both directions a table binds an order: a TAB (`dining_tables.tab_id` back-points at the
+      // order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the table). Scoped to
+      // `loc` (the expo's location, the `locationId?` param defaulting to the till's own venue) — the one
+      // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
+      // listTablesWithState while the READ itself stays node-scoped. `limit 1` makes it deterministic.
+      tableLabel: sql<string | null>`(
+        select dt.label from dining_tables dt
+        where dt.tenant_id = ${workingOrders.tenantId}
+          and dt.location_id = ${loc}
+          and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
+        limit 1)`,
+    })
+    .from(ticketItems)
+    // The owning order, for the display fields + the open/collected/abandoned exclusions. Composite
+    // (tenant_id too), the tenant-consistent shape ticket_items' FKs carry, mirroring listStationQueue.
+    .innerJoin(
+      workingOrders,
+      and(
+        eq(ticketItems.workingOrderId, workingOrders.id),
+        eq(ticketItems.tenantId, workingOrders.tenantId),
+      ),
+    )
+    // The line this item was fired from, for its display name + quantity. Composite (tenant_id too).
+    .innerJoin(
+      workingOrderLines,
+      and(
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    // The item's STATION, for its name — the join that makes this read cross-station. Composite
+    // (tenant_id too), mirroring the tenant-consistent (tenant_id, station_id) → kitchen_stations FK.
+    .innerJoin(
+      kitchenStations,
+      and(
+        eq(ticketItems.stationId, kitchenStations.id),
+        eq(ticketItems.tenantId, kitchenStations.tenantId),
+      ),
+    )
+    // The item's course, for the header + coursing order. LEFT join — `course_id` is nullable, and (as
+    // in listStationQueue) it is NOT filtered by `active`, so a course deactivated after the item was
+    // fired still names its header. Composite (tenant_id too).
+    .leftJoin(
+      kitchenCourses,
+      and(
+        eq(ticketItems.courseId, kitchenCourses.id),
+        eq(ticketItems.tenantId, kitchenCourses.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(ticketItems.nodeId, cfg.nodeId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+        // Fully-away exclusion, order-level, computed at query time (there is no per-order "done"
+        // column): keep the order while ANY of its items on this node is still not-away, drop it once
+        // every item carries `away_at` (§2a — `away` is KDS-3's dispatch marker; `served_at` is a
+        // separate floor ack, not consulted). A surviving order still returns ALL its items (away ones
+        // included) so a per-course `away` roll-up can be formed; the screen hides fully-away courses.
+        sql`exists (
+          select 1 from ${ticketItems} tix
+          where tix.tenant_id = ${workingOrders.tenantId}
+            and tix.working_order_id = ${workingOrders.id}
+            and tix.node_id = ${cfg.nodeId}
+            and tix.away_at is null)`,
+      ),
+    )
+    // Oldest order first (opened_at), then course display_order NULLS FIRST (the null course fires
+    // earliest), then line_no and item id for a stable within-course order. Grouping preserves this.
+    .orderBy(
+      workingOrders.openedAt,
+      sql`${kitchenCourses.displayOrder} asc nulls first`,
+      workingOrderLines.lineNo,
+      ticketItems.id,
+    );
+
+  // Group rows into orders → courses → items, preserving the SQL order (Maps keep insertion order), so
+  // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
+  // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
+  // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
+  const orders = new Map<string, ExpoOrder>();
+  const courseMaps = new Map<string, Map<string, ExpoCourse>>();
+  for (const row of rows) {
+    let order = orders.get(row.orderId);
+    if (order === undefined) {
+      order = {
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        openedMinutes: Number(row.openedMinutes),
+        courses: [],
+        // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
+        ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
+      };
+      orders.set(row.orderId, order);
+      courseMaps.set(row.orderId, new Map());
+    }
+    const byCourse = courseMaps.get(row.orderId)!;
+    const courseKey = row.courseId ?? " none";
+    let course = byCourse.get(courseKey);
+    if (course === undefined) {
+      course = {
+        courseId: row.courseId,
+        // A non-null course_id always matches a kitchen_courses row (the FK guarantees it), so its
+        // name/order are present; a null course serialises both as null.
+        courseName: row.courseId === null ? null : row.courseName!,
+        displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
+        fired: true,
+        away: true,
+        items: [],
+      };
+      byCourse.set(courseKey, course);
+      order.courses.push(course);
+    }
+    course.items.push({
+      id: row.itemId,
+      name: row.descriptions,
+      qty: row.quantity,
+      stationName: row.stationName,
+      state: row.state,
+      firedAt: row.firedAt,
+      awayAt: row.awayAt,
+    });
+    if (row.firedAt === null) course.fired = false;
+    if (row.awayAt === null) course.away = false;
+  }
+  return [...orders.values()];
+}
+
 /** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
  *  are exposed alongside the rolled-up `state` so the floor plan can render a richer badge. */
 export interface TableState {
