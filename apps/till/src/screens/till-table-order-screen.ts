@@ -4,9 +4,10 @@ import { baseStyles } from "@waitron/ui";
 import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
+import { selectStyles } from "../select-styles.js";
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import { WorkingOrderStore } from "../state/working-order.js";
+import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
 // picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
@@ -14,8 +15,9 @@ import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
-import type { TabLine, TableServiceStatus, TillProduct } from "../api/client.js";
+import type { TabLine, TableServiceStatus, TillCourse, TillProduct } from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
+import type { FireControlMode } from "../widgets/station-queue.js";
 
 // The Estado picker's option type is the shape `GET /api/statuses` returns (`{ id, label, color }`),
 // defined once in the API client and re-exported here so the screen's `.statuses` element type — and
@@ -80,6 +82,7 @@ class TabPayStore extends WorkingOrderStore {
 export class TillTableOrderScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -225,6 +228,34 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: 50%;
       }
 
+      .round-courses {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
+      }
+
+      .round-course {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+      }
+
+      .round-course-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .fire-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
       .round-bar {
         display: flex;
         align-items: flex-end;
@@ -252,6 +283,13 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) products: TillProduct[] = [];
   /** The table service statuses the Estado picker offers (the app derives + threads them). */
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
+  /** The venue's ACTIVE kitchen courses (KDS-2 §5b), from `GET /api/till` — the per-line course picker's
+   * options (in `displayOrder`) and the id→name source for the waiter-fire actions. */
+  @property({ attribute: false }) courses: TillCourse[] = [];
+  /** Who owns the per-course fire — the `fire_control` venue setting (KDS-2 §2c), threaded from the app.
+   * `waiter` surfaces the tab's per-held-course "Fire <course>" actions; `kitchen` hides them (the
+   * station display owns the fire then). */
+  @property() fireControl: FireControlMode = "waiter";
   /** The tab's working-order id (the app owns the writes; this rides along for reference/parity with
    * the FP-D placeholder it replaces). */
   @property() orderId?: string;
@@ -265,6 +303,13 @@ export class TillTableOrderScreen extends LitElement {
   /** The CURRENT round the product grid rings into and the round basket shows — its own store, distinct
    * from the tab (which is server-side). Cleared by {@link #sendRound}. */
   readonly #roundStore = new WorkingOrderStore();
+  /** Per-round-line course OVERRIDES the waiter picked (KDS-2 §5b), keyed by the round line's stable
+   * object identity — a `WorkingOrderStore` line object is pushed once and kept by reference until the
+   * round clears, so a `WeakMap` survives re-renders and reorders and auto-drops its entries when the
+   * round is sent (the line objects become unreachable). A line ABSENT here takes its product's default
+   * course server-side (`<override> ?? product.course_id`); the picker offers no explicit "no course"
+   * option, so a value here is always a real course id, never null. */
+  #roundCourses = new WeakMap<OrderLine, string>();
   /** The pay store fed to `tender-pay` — rebuilt from {@link lines} on every change (see {@link willUpdate}). */
   #payStore?: TabPayStore;
   /** Per-line locked gross, keyed by `lineNo`, memoised from {@link lines} in the SAME
@@ -329,16 +374,63 @@ export class TillTableOrderScreen extends LitElement {
     return trimQuantity(quantity);
   }
 
-  /** Emit the current round's picked lines and clear the round bar for the next round. */
+  /** Emit the current round's picked lines — each with its course OVERRIDE when the waiter picked one
+   * (KDS-2 §5b) — and clear the round bar for the next round. An unoverridden line OMITS `courseId`, so
+   * the server applies the product's default course (`<override> ?? product.course_id`). */
   #sendRound(): void {
-    const lines = this.#roundStore.lines.map((line) => ({
-      productId: line.product.id,
-      quantity: line.quantity,
-    }));
+    const lines = this.#roundStore.lines.map((line) => {
+      const courseId = this.#roundCourses.get(line);
+      return courseId === undefined
+        ? { productId: line.product.id, quantity: line.quantity }
+        : { productId: line.product.id, quantity: line.quantity, courseId };
+    });
     this.dispatchEvent(
       new CustomEvent("send-round", { detail: { lines }, bubbles: true, composed: true }),
     );
     this.#roundStore.clear();
+  }
+
+  /** A round line's PRE-SELECTED course id: the waiter's override if any, else the product's default
+   * course, else `""` (the "use the product default" placeholder — never a "no course" option). */
+  #selectedCourseId(line: OrderLine): string {
+    return this.#roundCourses.get(line) ?? line.product.courseId ?? "";
+  }
+
+  /** Record a per-line course pick. `""` (the default placeholder) clears any override so the line falls
+   * back to the product default server-side; any other value is an explicit override. `requestUpdate`
+   * because {@link #roundCourses} is a `WeakMap`, not a reactive property — the picker must re-render to
+   * reflect the new selection (and a store-triggered re-render reads the same map). */
+  #pickCourse(line: OrderLine, courseId: string): void {
+    if (courseId === "") this.#roundCourses.delete(line);
+    else this.#roundCourses.set(line, courseId);
+    this.requestUpdate();
+  }
+
+  /** The tab's HELD courses (KDS-2 §5b), in `displayOrder` — each course that has at least one line whose
+   * kitchen item is still held (`firedAt === null`) and that is still an ACTIVE venue course (so it has a
+   * name and can be fired). A null-course line fires immediately, so it is never held; a course
+   * deactivated since it was rung drops off (firing it would be `course.not_found`, Task 4's accepted
+   * edge). The waiter-fire section renders one "Fire <course>" action per entry. */
+  #heldCourses(): TillCourse[] {
+    const heldIds = new Set(
+      this.lines
+        .filter((line) => line.firedAt === null && line.courseId !== null)
+        .map((line) => line.courseId),
+    );
+    return this.courses.filter((course) => heldIds.has(course.id));
+  }
+
+  /** Announce a waiter fire of one held course (KDS-2 §5b) — the app releases it via `fireCourse` and
+   * reloads the tab. Carries the tab's order id + the course id, the SAME `{ orderId, courseId }` shape
+   * the station display's kitchen-fire uses. */
+  #fire(courseId: string): void {
+    this.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: this.orderId, courseId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /** Announce that one pending line went out (the app marks it served, then reloads the tab). */
@@ -421,6 +513,7 @@ export class TillTableOrderScreen extends LitElement {
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
+        ${this.#roundCoursesSection()}
         <div class="round-bar">
           <till-basket .store=${this.#roundStore}></till-basket>
           <wt-button
@@ -438,10 +531,44 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
+  /** The round bar's per-line COURSE PICKER (KDS-2 §5b): one select per current-round line, defaulting to
+   * the product's course, overridable to any active venue course. Rendered only when a round is being
+   * built AND the venue has courses to pick — with none, there is nothing to choose and the strip stays
+   * hidden. The `""` placeholder means "use the product default", not "no course" (no such option). */
+  #roundCoursesSection(): TemplateResult | typeof nothing {
+    const lines = this.#roundStore.lines;
+    if (lines.length === 0 || this.courses.length === 0) return nothing;
+    return html`<div class="round-courses" data-round-courses>
+      ${lines.map((line, index) => this.#roundCourseRow(line, index))}
+    </div>`;
+  }
+
+  #roundCourseRow(line: OrderLine, index: number): TemplateResult {
+    const name = productName(line.product);
+    const selected = this.#selectedCourseId(line);
+    return html`<label class="round-course">
+      <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      <select
+        data-round-course=${index}
+        aria-label=${`${t("table.course_label")} · ${name}`}
+        @change=${(event: Event) =>
+          this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
+      >
+        <option value="" .selected=${selected === ""}>${t("table.course_default")}</option>
+        ${this.courses.map(
+          (course) =>
+            html`<option value=${course.id} .selected=${selected === course.id}>
+              ${course.name}
+            </option>`,
+        )}
+      </select>
+    </label>`;
+  }
+
   #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#pendingSection(pending)} ${this.#servedSection()}
+        ${this.#fireSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total>${formatMoney(this.#payStore!.total)}</span>
@@ -512,6 +639,32 @@ export class TillTableOrderScreen extends LitElement {
               )}
             </ul>`
       }
+    </section>`;
+  }
+
+  /** The waiter-fire section (KDS-2 §5b): under `fire_control = 'waiter'`, one "Fire <course>" action per
+   * HELD course of the tab (in `displayOrder`). Hidden entirely under `kitchen` (the station display owns
+   * the fire then) and when nothing is held. */
+  #fireSection(): TemplateResult | typeof nothing {
+    if (this.fireControl !== "waiter") return nothing;
+    const held = this.#heldCourses();
+    if (held.length === 0) return nothing;
+    return html`<section class="fire" data-fire-section>
+      <h2>${t("table.fire_title")}</h2>
+      <div class="fire-options">
+        ${held.map(
+          (course) =>
+            html`<wt-button
+              class="fire-course"
+              data-fire-course=${course.id}
+              variant="primary"
+              size="sm"
+              @click=${() => this.#fire(course.id)}
+            >
+              ${t("table.fire_course")} ${course.name}
+            </wt-button>`,
+        )}
+      </div>
     </section>`;
   }
 

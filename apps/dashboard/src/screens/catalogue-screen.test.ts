@@ -4,6 +4,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type {
   CatalogueSummary,
   CategorySummary,
+  Course,
   DashboardApi,
   Product,
   Station,
@@ -23,6 +24,8 @@ const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes" }];
 const stations: Station[] = [
   { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
 ];
+
+const courses: Course[] = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
 
 const products: Product[] = [
   {
@@ -60,6 +63,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
     listStations: vi.fn().mockResolvedValue(stations),
+    listCourses: vi.fn().mockResolvedValue(courses),
     createProduct: vi.fn().mockResolvedValue({ ...products[0], id: "p-new" }),
     updateProduct: vi.fn().mockResolvedValue(undefined),
     createCategory: vi.fn().mockResolvedValue({ id: "c2", name: "Postres" }),
@@ -68,6 +72,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .mockResolvedValue({ id: "cat-new", name: "Nueva", active: true, version: 1 }),
     setCategoryStation: vi.fn().mockResolvedValue(undefined),
     setProductStation: vi.fn().mockResolvedValue(undefined),
+    setProductCourse: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -441,6 +446,32 @@ describe("catalogue-screen", () => {
     expect(api.listStations).toHaveBeenCalledTimes(1);
     expect(categoryManager(el).stations).toEqual(stations);
     expect(form(el).stations).toEqual(stations);
+  });
+
+  it("loads the courses on connect and threads them to the product form (KDS-2)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
+    expect(form(el).courses).toEqual(courses);
+  });
+
+  it("sets a product's default course on the form's set-product-course event (KDS-2)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(form(el), "set-product-course", { productId: "p1", courseId: "k1" });
+    await flush(el);
+    expect(api.setProductCourse).toHaveBeenCalledWith("p1", "k1");
+  });
+
+  it("clears a product's default course on a null set-product-course courseId (KDS-2)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(form(el), "set-product-course", { productId: "p1", courseId: null });
+    await flush(el);
+    expect(api.setProductCourse).toHaveBeenCalledWith("p1", null);
   });
 
   it("routes a category to a station on the manager's set-category-station event", async () => {

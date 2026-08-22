@@ -15,7 +15,7 @@ import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { BumpMode } from "./widgets/station-queue.js";
+import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -28,6 +28,7 @@ import type {
   TableServiceStatus,
   TableState,
   TicketState,
+  TillCourse,
   TillInfo,
   TillProduct,
   TillSaleResult,
@@ -265,6 +266,21 @@ export class TillApp extends LitElement {
    * bump is always correct), so a boot that has not yet answered never shows the convenience by accident.
    */
   @state() private bumpMode: BumpMode = "line";
+  /**
+   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`) — `waiter` (the tab screen
+   * owns the fire) or `kitchen` (the station display owns it). Read once from `GET /api/till` on boot
+   * ({@link TillInfo.fireControl}) and threaded to the station-display screen, which shows its per-course
+   * "Empezar curso" action only for a `kitchen` venue. Defaults `waiter` until boot resolves — the
+   * fail-safe default, so a boot that has not yet answered never shows the display's fire by accident.
+   */
+  @state() private fireControl: FireControlMode = "waiter";
+  /**
+   * The venue's ACTIVE kitchen courses (KDS-2 §5b), read once from `GET /api/till` on boot
+   * ({@link TillInfo.courses}) and threaded to the table-order screen — its per-line course picker's
+   * options and the id→name source for its waiter-fire actions. Defaults `[]` until boot resolves (a
+   * venue with no courses configured, and the fail-safe for a boot that has not yet answered).
+   */
+  @state() private courses: TillCourse[] = [];
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
@@ -369,6 +385,8 @@ export class TillApp extends LitElement {
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
       this.bumpMode = till.bumpMode;
+      this.fireControl = till.fireControl;
+      this.courses = till.courses;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
       // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
@@ -978,15 +996,34 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. A failed
-   * append is non-fatal — surface a banner, leave the tab as it was. */
+  /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. Each line MAY
+   * carry a `courseId` OVERRIDE the tab screen's course picker set (KDS-2 §5b), forwarded verbatim to
+   * `addTabRound`. A failed append is non-fatal — surface a banner, leave the tab as it was. */
   async #onSendRound(event: Event): Promise<void> {
-    const { lines } = (event as CustomEvent<{ lines: { productId: string; quantity: string }[] }>)
-      .detail;
+    const { lines } = (
+      event as CustomEvent<{ lines: { productId: string; quantity: string; courseId?: string }[] }>
+    ).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
       await this.api.addTabRound(this.activeTabId, lines);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Fire a HELD course of the open tab (KDS-2 §5b) — the waiter's "Fire <course>" tap under
+   * `fire_control = 'waiter'`. Releases the course via `fireCourse` then reloads the tab so its held-course
+   * actions reconcile to server truth (the fired course drops off `#heldCourses`). A failed fire is
+   * non-fatal — surface a banner, leave the tab as it was — the same shape as {@link #onSendRound}. */
+  async #onFireCourse(event: Event): Promise<void> {
+    const { courseId } = (event as CustomEvent<{ orderId?: string; courseId: string }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.fireCourse(this.activeTabId, courseId);
     } catch {
       this.errorKey = "table.error";
       return;
@@ -1110,6 +1147,7 @@ export class TillApp extends LitElement {
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @send-round=${(event: Event) => void this.#onSendRound(event)}
+        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
@@ -1173,6 +1211,8 @@ export class TillApp extends LitElement {
           .lines=${this.tabLines}
           .products=${this.products}
           .statuses=${this.statuses}
+          .courses=${this.courses}
+          .fireControl=${this.fireControl}
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
         ></till-table-order-screen>`;
@@ -1183,6 +1223,7 @@ export class TillApp extends LitElement {
         return html`<till-station-screen
           .api=${this.api}
           .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
         ></till-station-screen>`;
     }
   }

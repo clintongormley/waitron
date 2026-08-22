@@ -479,6 +479,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
       // location never set it, so the column default `line` reaches the wire (per-line bump only).
       bumpMode: "line",
+      // The venue's KDS fire-control mode (KDS-2 §2c), read from the same location row — the seeded
+      // location never set it, so the column default `waiter` reaches the wire (the tab screen fires).
+      fireControl: "waiter",
+      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
+      // the wire (the tab course picker offers nothing then).
+      courses: [],
       cardProvider: "none",
       tipsEnabled: false,
       layout: DEFAULT_LAYOUT,
@@ -526,6 +532,59 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     } finally {
       await suite.db.execute(
         sql`update locations set bump_mode = 'line' where id = ${cfg.locationId}`,
+      );
+    }
+  });
+
+  it("GET /api/till echoes a non-default fire_control from the location, proving it reads the column", async () => {
+    // The default `waiter` above would pass even if the route hardcoded it, so drive the location's
+    // `fire_control` to `kitchen` and prove the boot read reflects it — the same shape as the bump_mode
+    // echo above. Restored in `finally` so the shared location stays `waiter` for the order-independent
+    // default assertion above (CLAUDE.md §4).
+    await suite.db.execute(
+      sql`update locations set fire_control = 'kitchen' where id = ${cfg.locationId}`,
+    );
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ fireControl: "kitchen" });
+    } finally {
+      await suite.db.execute(
+        sql`update locations set fire_control = 'waiter' where id = ${cfg.locationId}`,
+      );
+    }
+  });
+
+  it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
+    // Seed two courses out of display order, plus a deactivated one, to prove the boot read returns the
+    // ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker offers) and drops the
+    // retired one. Direct inserts as the PGlite superuser (RLS bypassed — pure setup, like the bump_mode
+    // seed above); cleaned up in `finally` so the shared-location default `[]` case stays order-independent.
+    await suite.db.execute(
+      sql`insert into kitchen_courses (tenant_id, location_id, name, display_order, active) values
+        (${cfg.tenantId}, ${cfg.locationId}, 'Postres', 2, true),
+        (${cfg.tenantId}, ${cfg.locationId}, 'Entrantes', 1, true),
+        (${cfg.tenantId}, ${cfg.locationId}, 'Retirado', 0, false)`,
+    );
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { courses: { name: string; displayOrder: number }[] };
+      // Active-only, by display_order: Entrantes (1) before Postres (2); the deactivated Retirado absent.
+      expect(body.courses).toEqual([
+        { id: expect.any(String), name: "Entrantes", displayOrder: 1 },
+        { id: expect.any(String), name: "Postres", displayOrder: 2 },
+      ]);
+    } finally {
+      await suite.db.execute(
+        sql`delete from kitchen_courses where location_id = ${cfg.locationId}`,
       );
     }
   });
@@ -598,7 +657,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     expect(res.status).toBe(200);
     // The exact `AvailableProduct` shape the route reads back: the seeded product with its resolved
     // category NAME (not id), priced from the catalogue, its EU-14 allergen declaration carried
-    // through unchanged, one entry for the one assigned product.
+    // through unchanged, KDS-2's default `courseId` (null — no course assigned), one entry for the one
+    // assigned product.
     expect(await res.json()).toEqual([
       {
         id: aguaProduct.id,
@@ -608,6 +668,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         vatClass: "general",
         category: "Bebidas",
         allergens: { sulphites: { presence: "may_contain" } },
+        courseId: null,
       },
     ]);
   });

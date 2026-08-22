@@ -80,6 +80,11 @@ export const en = {
   // which drops it off the station display (KDS-1 §3e). A rail-card action, shown only for a collectable
   // (settled) order.
   "station.collect": "Collect",
+  // The kitchen-fire action on a HELD course's rail section (KDS-2 §5a) — release this held course to the
+  // kitchen, shown only when `fire_control = 'kitchen'` (the station display owns the fire; under `waiter`
+  // the tab screen does, Task 7). A per-order/per-course action, so it lives on the rail card like the
+  // collect handover, not on the cross-order kanban board.
+  "station.fire_course": "Start course",
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
@@ -181,6 +186,14 @@ export const en = {
   "table.status_title": "Status",
   "table.status_clear": "No status",
   "table.move_split": "Move · Split",
+  // KDS-2 (§5b): the round bar's per-line course picker + the waiter-fire drawer section.
+  // `table.course_label` labels each round line's course select; `table.course_default` is its
+  // "use the product's default" placeholder (there is no explicit "no course" option). `table.fire_title`
+  // heads the held-course section; `table.fire_course` is the per-course fire verb (course name appended).
+  "table.course_label": "Course",
+  "table.course_default": "Default",
+  "table.fire_title": "Courses to fire",
+  "table.fire_course": "Fire",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -253,6 +266,7 @@ export const es: Record<StringKey, string> = {
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",
   "station.collect": "Entregar",
+  "station.fire_course": "Empezar curso",
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
@@ -338,6 +352,10 @@ export const es: Record<StringKey, string> = {
   "table.status_title": "Estado",
   "table.status_clear": "Sin estado",
   "table.move_split": "Mover · Dividir",
+  "table.course_label": "Curso",
+  "table.course_default": "Por defecto",
+  "table.fire_title": "Cursos por marchar",
+  "table.fire_course": "Marchar",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

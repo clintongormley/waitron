@@ -9,9 +9,10 @@ const stations: Station[] = [
   { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
-// One order with a line in each kitchen state + a second order, so axe sees the queued/preparing/ready
-// cells, the active + inactive picker tabs, the toggle and Back, and both a labelled and an unlabelled
-// ticket in a single mount.
+// One order with a line in each kitchen state + a second order carrying a HELD later course, so axe sees
+// the queued/preparing/ready cells, the active + inactive picker tabs, the toggle and Back, both a
+// labelled and an unlabelled ticket, a course header, a greyed (held) line and — under `fire_control =
+// 'kitchen'` — the "Empezar curso" fire button, all in a single mount.
 const groups: StationQueueGroup[] = [
   {
     orderId: "wo-1",
@@ -26,6 +27,8 @@ const groups: StationQueueGroup[] = [
         state: "queued",
         descriptions: { "es-ES": "Paella" },
         quantity: "2.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         id: "ti-2",
@@ -33,6 +36,8 @@ const groups: StationQueueGroup[] = [
         state: "preparing",
         descriptions: { "es-ES": "Agua" },
         quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         id: "ti-3",
@@ -40,6 +45,8 @@ const groups: StationQueueGroup[] = [
         state: "ready",
         descriptions: { "es-ES": "Café" },
         quantity: "3.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -56,6 +63,9 @@ const groups: StationQueueGroup[] = [
         state: "queued",
         descriptions: { "es-ES": "Vino" },
         quantity: "1.000",
+        // A HELD later course (fired_at null) — greyed + non-advanceable, and the kitchen-fire target.
+        course: { id: "co-2", name: "Postres", displayOrder: 2 },
+        firedAt: null,
       },
     ],
   },
@@ -93,6 +103,18 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
       { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the kitchen-fire RAIL (held course greyed, the Empezar curso button shown)", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      { api: stubApi(), fireControl: "kitchen" },
       theme,
     );
     await flush(el);

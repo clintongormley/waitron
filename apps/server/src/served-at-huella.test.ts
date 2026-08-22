@@ -426,7 +426,11 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
     // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
     // product nor category names a route), then walk each ticket item queued→preparing→ready.
     const lines = await tx
-      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        courseId: workingOrderLines.courseId,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);

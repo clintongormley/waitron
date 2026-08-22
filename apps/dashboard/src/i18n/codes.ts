@@ -128,6 +128,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That station no longer exists",
     es: "Esa estación ya no existe",
   },
+  // Kitchen-course configuration (apps/server/src/kitchen.ts, KDS-2). The Cursos editor's per-item
+  // mutations (and the product-course select) reject with these when a course name collides, or when a
+  // course — or a product's default-course target — can no longer be found (absent, another tenant's,
+  // another venue's, or deactivated, all folded into the one code server-side). Mirrors `station.*`.
+  "course.name_taken": {
+    en: "A course with that name already exists",
+    es: "Ya existe un curso con ese nombre",
+  },
+  "course.not_found": {
+    en: "That course no longer exists",
+    es: "Ese curso ya no existe",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",

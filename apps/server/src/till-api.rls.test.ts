@@ -759,6 +759,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         state: string;
         descriptions: Record<string, string>;
         quantity: string;
+        course: { id: string; name: string; displayOrder: number } | null;
+        firedAt: string | null;
       }[];
     }[];
     expect(groups1).toEqual([
@@ -779,6 +781,10 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // working-order line's snapshot through the HTTP route (KDS-1 Gap 2): "2× Agua mineral".
             descriptions: { "es-ES": "Agua mineral" },
             quantity: "2.000",
+            // KDS-2: this product carries no course, so the item serialises `course: null` and fires
+            // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
+            course: null,
+            firedAt: expect.any(String),
           },
         ],
       },

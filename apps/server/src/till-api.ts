@@ -38,6 +38,7 @@ import {
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
+  fireCourse,
   getHeldOrder,
   joinTable,
   listHeldOrders,
@@ -58,7 +59,7 @@ import {
   voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
-import { listStations } from "./kitchen.js";
+import { listCourses, listStations } from "./kitchen.js";
 import {
   clearSessionCookie,
   isUuid,
@@ -155,6 +156,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // naming no live station (or a malformed one, screened) is `station.not_found` (404).
   "ticket.already_fired": 409,
   "ticket.invalid_transition": 409,
+  // Coursing (KDS-2). A per-line bump the item's HELD state forbids — its course has not been fired, so
+  // the kitchen must not start it — is `ticket.item_held` (409, thrown by `advanceTicketItem`'s held
+  // guard), the same STATE-forbids-it family as `ticket.invalid_transition` beside it. The course-fire
+  // route (`POST /api/orders/:id/courses/:courseId/fire`) surfaces `course.not_found` (404) for an
+  // unknown/retired/malformed course id — thrown by `fireCourse`'s `requireLiveCourse`, the SAME code
+  // and 404 the management config surface maps it to (courses are a management concept, but the fire
+  // verb is operational and runs here). A malformed ORDER id on that route is `working_order.not_found`
+  // (404, already mapped above), the honest "no such order" a bad id names.
+  "ticket.item_held": 409,
+  "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
   // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
@@ -392,17 +403,43 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // consumer at all (it drives only the client's whole-ticket affordance), so it is read where
         // it is used and kept off the config surface. Same `eq(id)` shape `readOrderFlow` uses, under
         // the same RLS scope, so it selects exactly this till's location row.
+        // `fire_control` (KDS-2 §2c) rides the SAME location read as `bump_mode` — both are
+        // client-only display-convenience flags with no server-side sale-path consumer, so both are
+        // read here where they are used rather than lifted onto `deps.cfg`. The station-display screen
+        // reads it to show the per-course kitchen-fire action only for a `kitchen` venue.
         const [loc] = await tx
-          .select({ bumpMode: locations.bumpMode })
+          .select({ bumpMode: locations.bumpMode, fireControl: locations.fireControl })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
+        // The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` then name — the coursing
+        // sequence the tab-order screen's per-line course picker offers, and the id→name map its
+        // waiter-fire actions read. Rides this same unauthenticated boot read for the same reason as
+        // `bump_mode`/`fire_control`: venue KDS config with no secrets, no server-side sale-path consumer,
+        // read where it is used rather than lifted onto `deps.cfg`. Trimmed to the picker's shape
+        // (`active` is always true here — `listCourses` is active-only — so it is dropped from the wire).
+        const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
+          id: course.id,
+          name: course.name,
+          displayOrder: course.displayOrder,
+        }));
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        return { issuer: row, bumpMode: loc?.bumpMode, layout: definition, receipt };
+        return {
+          issuer: row,
+          bumpMode: loc?.bumpMode,
+          fireControl: loc?.fireControl,
+          courses,
+          layout: definition,
+          receipt,
+        };
       });
       /* v8 ignore start */
-      if (boot.issuer === undefined || boot.bumpMode === undefined) {
+      if (
+        boot.issuer === undefined ||
+        boot.bumpMode === undefined ||
+        boot.fireControl === undefined
+      ) {
         // Structurally unreachable: `deps.cfg.tenantId`/`locationId` are the till's own tenant and
         // location (provisioning stamped both), so their rows always exist and RLS returns them. A
         // misconfigured till pointed at a nonexistent tenant/location becomes an opaque 500 via `run`,
@@ -418,6 +455,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The venue's whole-ticket bump mode (KDS-1 §2e), read from the location above — the till app
         // threads it to the station-display screen to enable/disable the whole-ticket bump affordance.
         bumpMode: boot.bumpMode,
+        // The venue's KDS fire-control mode (KDS-2 §2c), read from the location above — the till app
+        // threads it to the station-display screen, which shows the per-course kitchen-fire action only
+        // when this is `kitchen` (under `waiter` the tab screen owns the fire, Task 7).
+        fireControl: boot.fireControl,
+        // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the tab-order screen's course picker options
+        // and the id→name source for its waiter-fire actions. `[]` for a venue with no courses configured.
+        courses: boot.courses,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
@@ -748,6 +792,32 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" action. SESSION-
+  // GUARDED: a WAITER or a KITCHEN operator may call it. The `fire_control` venue setting decides which UI
+  // surfaces the button, NOT who may call it — both surfaces are session-gated (spec §3c), so the gate is
+  // `requireSession`, no permission. `fireCourse` stamps `fired_at = now()` on every HELD item of this
+  // order + course, so they stop being greyed on the display and become advanceable. OPERATIONAL, not
+  // fiscal — it writes only the mutable `ticket_items`, touching no sale/registro/tender/huella (§4/§5),
+  // so nothing here can block a sale. `:courseId` is `isUuid`-screened first, refused as `course.not_found`
+  // (404) — a malformed id names no live course, the SAME code `requireLiveCourse` throws for an
+  // unknown/retired one — rather than reaching the `uuid` column and raising `22P02` → an opaque 500. `:id`
+  // (the order) is `isUuid`-screened as `working_order.not_found` (404): a malformed one names no order,
+  // while a well-formed-but-absent order is `fireCourse`'s idempotent no-op (200, nothing held to fire).
+  // Returns 200 with an empty body; the display re-reads the queue.
+  app.post("/api/orders/:id/courses/:courseId/fire", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const courseId = c.req.param("courseId");
+      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await fireCourse(tx, deps.cfg, orderId, courseId);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
   // Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e). SESSION-GUARDED.
   // `markCollected` stamps the order-level `collected_at`, which drops the order off `listStationQueue`
   // (the display shows an order until it is collected). NON-FISCAL — it writes ONLY `collected_at`,
@@ -954,7 +1024,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const body = await c.req.json<{ lines: { productId: string; quantity: string }[] }>();
+      // Each round line MAY carry a `courseId` OVERRIDE (KDS-2 §5b) the tab screen's per-line course
+      // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
+      // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
+      const body = await c.req.json<{
+        lines: { productId: string; quantity: string; courseId?: string | null }[];
+      }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await addTabRound(tx, deps.cfg, id, body.lines);

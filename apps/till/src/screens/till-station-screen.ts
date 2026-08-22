@@ -5,7 +5,7 @@ import { t } from "../i18n/t.js";
 // Side-effect import: registers <till-station-queue>, the shared queue renderer this screen wraps with a
 // picker + view toggle. The screen names it only as a tag below, so the rendering stays the widget's.
 import "../widgets/station-queue.js";
-import type { BumpMode } from "../widgets/station-queue.js";
+import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
 import type { Station, StationQueueGroup, TicketState, TillApi } from "../api/client.js";
 
 /**
@@ -88,6 +88,10 @@ export class TillStationScreen extends LitElement {
   /** Per-line (default) vs whole-ticket bump — the `bump_mode` venue setting, threaded from the app and
    * passed straight to the widget. */
   @property() bumpMode: BumpMode = "line";
+  /** Who owns the per-course fire — the `fire_control` venue setting, threaded from the app and passed
+   * straight to the widget. `kitchen` surfaces the display's "Empezar curso" action; `waiter` (the
+   * default) surfaces none here (the tab screen fires — Task 7). */
+  @property() fireControl: FireControlMode = "waiter";
 
   /** The venue's active stations (fetched once on connect). */
   @state() private stations: Station[] = [];
@@ -205,6 +209,21 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.markCollected(orderId));
   }
 
+  /**
+   * A kitchen-fire from the widget (`fire_control = 'kitchen'`, KDS-2 §5a) — release a held course.
+   * Handle it HERE and stop it (the app owns the counter's own default-station widget, so it must not
+   * double-handle this screen's), then `fireCourse` and reload on BOTH paths so a rejected fire (a race,
+   * an already-fired or now-unknown course) reconciles to server truth — the same run-then-reconcile
+   * shape as the advance/collect handlers ({@link #advance}). The reload drops the released course's
+   * greying and makes its lines advanceable.
+   */
+  async #onFireCourse(event: Event): Promise<void> {
+    event.stopPropagation();
+    const { orderId, courseId } = (event as CustomEvent<{ orderId: string; courseId: string }>)
+      .detail;
+    await this.#advance(() => this.api.fireCourse(orderId, courseId));
+  }
+
   override render() {
     return html`
       <section
@@ -213,6 +232,7 @@ export class TillStationScreen extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
+        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
       >
         <header class="head">
           <h1 class="title">${t("station.title")}</h1>
@@ -250,6 +270,7 @@ export class TillStationScreen extends LitElement {
         .groups=${this.groups}
         .view=${this.view}
         .bumpMode=${this.bumpMode}
+        .fireControl=${this.fireControl}
         .stationId=${this.activeStationId}
       ></till-station-queue>
     `;

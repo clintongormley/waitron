@@ -20,6 +20,8 @@ const groups: StationQueueGroup[] = [
         state: "queued",
         descriptions: { "es-ES": "Paella" },
         quantity: "2.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         id: "ti-2",
@@ -27,6 +29,8 @@ const groups: StationQueueGroup[] = [
         state: "preparing",
         descriptions: { "es-ES": "Agua" },
         quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         id: "ti-3",
@@ -34,6 +38,8 @@ const groups: StationQueueGroup[] = [
         state: "ready",
         descriptions: { "es-ES": "Café" },
         quantity: "3.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -50,6 +56,50 @@ const groups: StationQueueGroup[] = [
         state: "queued",
         descriptions: { "es-ES": "Vino" },
         quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:05:00.000Z",
+      },
+    ],
+  },
+];
+
+// A coursed order (KDS-2 §5a) for the course-grouping / held-greying / kitchen-fire a11y sweep: a fired
+// null course (no header), a fired named course, and a HELD later course (greyed lines + the fire button).
+const coursedGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-c",
+    orderNumber: 7,
+    label: "Mesa 2",
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "placed",
+    items: [
+      {
+        id: "it-bread",
+        workingOrderLineId: "wl-bread",
+        state: "preparing",
+        descriptions: { "es-ES": "Pan" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "it-start",
+        workingOrderLineId: "wl-start",
+        state: "queued",
+        descriptions: { "es-ES": "Ensalada" },
+        quantity: "1.000",
+        course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "it-main",
+        workingOrderLineId: "wl-main",
+        state: "queued",
+        descriptions: { "es-ES": "Solomillo" },
+        quantity: "1.000",
+        // HELD — greyed + non-advanceable, and the kitchen-fire target below.
+        course: { id: "co-main", name: "Principales", displayOrder: 2 },
+        firedAt: null,
       },
     ],
   },
@@ -89,6 +139,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups, stationId: "st-1", view: "rail", bumpMode: "ticket" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("the course-grouped rail (headers, greyed held lines, kitchen-fire button) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: coursedGroups, stationId: "st-1", view: "rail", fireControl: "kitchen" },
       theme,
     );
     await expectNoA11yViolations(host);

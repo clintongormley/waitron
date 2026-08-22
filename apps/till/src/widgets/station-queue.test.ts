@@ -22,6 +22,10 @@ const groupA: StationQueueGroup = {
       state: "queued",
       descriptions: { "es-ES": "Paella" },
       quantity: "2.000",
+      // KDS-1 world: no courses, everything auto-fired (advanceable). KDS-2's course-grouping /
+      // held-greying cases live in their own `describe` below with their own fixtures.
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       id: "ti-2",
@@ -29,6 +33,8 @@ const groupA: StationQueueGroup = {
       state: "preparing",
       descriptions: { "es-ES": "Agua" },
       quantity: "1.000",
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
@@ -48,6 +54,8 @@ const groupB: StationQueueGroup = {
       state: "ready",
       descriptions: { "es-ES": "Café" },
       quantity: "3.000",
+      course: null,
+      firedAt: "2026-08-17T10:05:00.000Z",
     },
   ],
 };
@@ -136,6 +144,8 @@ describe("till-station-queue", () => {
           // matching `productName`'s first-available fallback rather than blanking the cell.
           descriptions: { en: "Fish" },
           quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
         },
       ],
     };
@@ -273,5 +283,177 @@ describe("till-station-queue", () => {
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-fresh")).toBe(true);
+  });
+});
+
+// KDS-2 (design §5a): the station display groups each order's lines BY COURSE (a header per course, in
+// `display_order`, with the null course — the auto-fired earliest — first). A HELD course (every line
+// `firedAt == null`) renders greyed + non-advanceable; a fired course behaves as KDS-1. When
+// `fire_control = 'kitchen'` the display owns the fire, so each held course shows an "Empezar curso"
+// button → `fire-course { orderId, courseId }`; under `waiter` (the default) it shows none. Course
+// grouping + fire live on the RAIL lens (a per-order card action, like the collect handover), while the
+// held-greying invariant applies to the cross-order kanban cells too.
+//
+// The fixture is one order with three courses listed OUT of display order — a held later course first,
+// then a fired middle course, then the fired null (bread) course — so a passing grouping test proves the
+// widget re-orders (null, then by display_order) rather than echoing the item order.
+const coursedOrder: StationQueueGroup = {
+  orderId: "wo-c",
+  orderNumber: 7,
+  label: "Mesa 2",
+  queuedAt: "2026-08-17T10:00:00.000Z",
+  status: "placed",
+  items: [
+    {
+      id: "it-main",
+      workingOrderLineId: "wl-main",
+      state: "queued",
+      descriptions: { "es-ES": "Solomillo" },
+      quantity: "1.000",
+      // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
+      course: { id: "co-main", name: "Principales", displayOrder: 2 },
+      firedAt: null,
+    },
+    {
+      id: "it-start",
+      workingOrderLineId: "wl-start",
+      state: "preparing",
+      descriptions: { "es-ES": "Ensalada" },
+      quantity: "1.000",
+      // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
+      course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
+      firedAt: "2026-08-17T10:00:00.000Z",
+    },
+    {
+      id: "it-bread",
+      workingOrderLineId: "wl-bread",
+      state: "queued",
+      descriptions: { "es-ES": "Pan" },
+      quantity: "1.000",
+      // The null course — auto-fired earliest — must render FIRST, and carries no header.
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
+    },
+  ],
+};
+
+describe("till-station-queue — KDS-2 courses & fire", () => {
+  it("rail: groups a card's lines by course, header per named course, ordered null-course-first then by displayOrder", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-course]")];
+    // Three course sections in display order: the null course, then Entrantes (1), then Principales (2).
+    expect(sections.map((s) => s.dataset.course)).toEqual(["none", "co-start", "co-main"]);
+    // The null course carries no header; the named courses show their name.
+    expect(sections[0]!.querySelector(".course-head")).toBeNull();
+    expect(sections[0]!.querySelector('[data-item="it-bread"]')).not.toBeNull();
+    expect(sections[1]!.querySelector(".course-head")!.textContent).toContain("Entrantes");
+    expect(sections[2]!.querySelector(".course-head")!.textContent).toContain("Principales");
+  });
+
+  it("rail: a HELD course's line renders greyed (held) and non-advanceable — a span, never a bump button", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const held = el.shadowRoot!.querySelector('[data-item="it-main"]')!;
+    expect(held.classList.contains("held")).toBe(true);
+    // Non-advanceable: it is the inert span, not the tappable button (so no advance can be emitted).
+    expect(el.shadowRoot!.querySelector('button[data-item="it-main"]')).toBeNull();
+    expect(held.tagName).toBe("SPAN");
+  });
+
+  it("rail: a held line does not emit an advance when clicked (it is not a bump target)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const spy = vi.fn();
+    el.addEventListener("advance-ticket-item", spy);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="it-main"]')!.click();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rail: a FIRED course's line stays advanceable (KDS-1 behaviour is unchanged for fired items)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+    });
+    const spy = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
+    // Entrantes is fired + preparing → tappable, advances to ready.
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="it-start"]')!.click();
+    expect(spy).toHaveBeenCalledWith({ itemId: "it-start", to: "ready" });
+  });
+
+  it("kitchen fire: a held course shows the Empezar curso button; clicking it emits fire-course, composed + bubbling", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-main"]')!;
+    expect(fire).not.toBeNull();
+    expect(fire.textContent).toContain(t("station.fire_course"));
+    let captured: CustomEvent | undefined;
+    el.addEventListener("fire-course", (e) => (captured = e as CustomEvent));
+    fire.click();
+    expect(captured!.detail).toEqual({ orderId: "wo-c", courseId: "co-main" });
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("kitchen fire: a FIRED course and the null course show no fire button (nothing to release)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    // Only the held Principales course is fireable; the fired Entrantes and the (null, always-fired)
+    // bread course are not.
+    expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector('[data-fire="co-start"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire="none"]')).toBeNull();
+  });
+
+  it("waiter fire: the display shows no fire button even for a held course (the tab screen fires — Task 7)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "waiter", // the default; the held course is still greyed, just not fireable here
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+    // The held line is still greyed + non-advanceable regardless of who owns the fire.
+    expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
+      true,
+    );
+  });
+
+  it("kanban: a held line renders greyed and non-advanceable in its state column too", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      stationId: "st-1", // default kanban view
+    });
+    const held = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="it-main"]')!;
+    expect(held.classList.contains("held")).toBe(true);
+    expect(el.shadowRoot!.querySelector('button[data-item="it-main"]')).toBeNull();
+  });
+
+  it("kanban: no fire button (the fire is a per-order rail-card action, like the collect handover)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      stationId: "st-1",
+      fireControl: "kitchen", // even in kitchen mode, kanban has no per-order card to host the action
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
 });

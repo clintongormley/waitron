@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { DashboardApi, Station } from "../api/client.js";
+import type { Course, DashboardApi, FireControl, Station } from "../api/client.js";
 import { KitchenScreen } from "./kitchen-screen.js";
 
 /**
@@ -29,9 +29,19 @@ const TWO_STATIONS: Station[] = [
   { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
 ];
 
+const COURSES: Course[] = [{ id: "c1", name: "Entrantes", displayOrder: 0, active: true }];
+
+/** Two courses so a per-row edit exercises the "leave the other row alone" map branch. */
+const TWO_COURSES: Course[] = [
+  { id: "c1", name: "Entrantes", displayOrder: 0, active: true },
+  { id: "c2", name: "Postres", displayOrder: 1, active: true },
+];
+
 function stubApi(
   overrides: Partial<DashboardApi> = {},
   stations: Station[] = STATIONS,
+  courses: Course[] = COURSES,
+  fireControl: FireControl = "waiter",
 ): DashboardApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations.map((s) => ({ ...s }))),
@@ -40,6 +50,12 @@ function stubApi(
     deactivateStation: vi.fn().mockResolvedValue(undefined),
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
+    listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
+    createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
+    updateCourse: vi.fn().mockResolvedValue(undefined),
+    deactivateCourse: vi.fn().mockResolvedValue(undefined),
+    getFireControl: vi.fn().mockResolvedValue({ mode: fireControl }),
+    setFireControl: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -193,6 +209,115 @@ describe("kitchen-screen", () => {
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
     q(el, "[data-test=bump-ticket]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")).not.toBeNull();
+  });
+
+  // ── KDS-2 (§5c): the Cursos panel + the fire-control toggle ────────────────────────────────────────
+
+  it("loads and lists the courses on connect (beside the stations)", async () => {
+    const api = stubApi({}, STATIONS, TWO_COURSES);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=course-row-c1]")).not.toBeNull();
+    expect(q(el, "[data-test=course-row-c2]")).not.toBeNull();
+  });
+
+  it("shows the empty state when there are no courses", async () => {
+    const api = stubApi({}, STATIONS, []);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(t("kitchen.no_courses", "es-ES"));
+  });
+
+  it("creates a course from the new-course form (createCourse with the name), then reloads", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    type(el, "[data-new-course]", "Postres");
+    q(el, "[data-add-course]")!.click();
+    await flush(el);
+    expect(api.createCourse).toHaveBeenCalledWith({ name: "Postres" });
+    expect(api.listCourses).toHaveBeenCalledTimes(2); // initial + reload after create
+  });
+
+  it("does not create an empty-name course", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    q(el, "[data-add-course]")!.click();
+    await flush(el);
+    expect(api.createCourse).not.toHaveBeenCalled();
+  });
+
+  it("saves an edited course row (updateCourse with the row's current name + order), then reloads", async () => {
+    // Two rows, so editing c2 also exercises the "leave the other row untouched" map branch.
+    const api = stubApi({}, STATIONS, TWO_COURSES);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    type(el, "[data-test=course-name-c2]", "Café");
+    type(el, "[data-test=course-order-c2]", "x"); // non-numeric coerces to 0 (the `|| 0` branch)
+    type(el, "[data-test=course-order-c2]", "3");
+    q(el, "[data-test=course-save-c2]")!.click();
+    await flush(el);
+    expect(api.updateCourse).toHaveBeenCalledTimes(1);
+    expect(api.updateCourse).toHaveBeenCalledWith("c2", { name: "Café", displayOrder: 3 });
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
+  });
+
+  it("deactivates a course row", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    q(el, "[data-test=course-deactivate-c1]")!.click();
+    await flush(el);
+    expect(api.deactivateCourse).toHaveBeenCalledWith("c1");
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a rejected course create as the localised course.name_taken alert, never the raw code", async () => {
+    const api = stubApi({
+      createCourse: vi.fn().mockRejectedValue({ code: "course.name_taken" }),
+    });
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    type(el, "[data-new-course]", "Entrantes");
+    q(el, "[data-add-course]")!.click();
+    await flush(el);
+    const alert = q(el, "[role=alert]");
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("course.name_taken", "es-ES"));
+    expect(alert!.textContent).not.toContain("course.name_taken");
+  });
+
+  it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {
+    // The persisted setting is `kitchen`, so on load the Kitchen option is primary (selected).
+    const api = stubApi({}, STATIONS, COURSES, "kitchen");
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(api.getFireControl).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=fire-kitchen]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=fire-waiter]")!.getAttribute("variant")).toBe("secondary");
+  });
+
+  it("toggles the fire-control mode to kitchen and back to waiter", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    q(el, "[data-test=fire-kitchen]")!.click();
+    await flush(el);
+    expect(api.setFireControl).toHaveBeenNthCalledWith(1, "kitchen");
+    q(el, "[data-test=fire-waiter]")!.click();
+    await flush(el);
+    expect(api.setFireControl).toHaveBeenNthCalledWith(2, "waiter");
+  });
+
+  it("surfaces a rejected fire-control write as a localised role=alert banner", async () => {
+    const api = stubApi({ setFireControl: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    q(el, "[data-test=fire-kitchen]")!.click();
     await flush(el);
     expect(q(el, "[role=alert]")).not.toBeNull();
   });

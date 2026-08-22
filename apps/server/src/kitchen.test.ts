@@ -14,12 +14,17 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import {
+  createCourse,
   createStation,
+  deactivateCourse,
   deactivateStation,
+  listCourses,
   listStations,
   setCategoryStation,
   setDefaultStation,
+  setProductCourse,
   setProductStation,
+  updateCourse,
   updateStation,
 } from "./kitchen.js";
 import "./errors.js";
@@ -206,6 +211,12 @@ async function productStation(productId: string): Promise<string | null> {
   );
   return rows[0]!.station_id;
 }
+async function productCourse(productId: string): Promise<string | null> {
+  const { rows } = await db.execute<{ course_id: string | null }>(
+    sql`select course_id from products where id = ${productId}`,
+  );
+  return rows[0]!.course_id;
+}
 async function seedCategory(cfg: TillConfig): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(
     sql`insert into categories (tenant_id, name) values (${cfg.tenantId}, 'Food') returning id`,
@@ -263,5 +274,116 @@ describe("routing config", () => {
     await expect(
       asApp(cfg, (tx) => setProductStation(tx, cfg, productId, dead)),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: dead } });
+  });
+});
+
+// KDS-2 course config verbs — mirror the station-config suite above EXACTLY, minus the default concept
+// (kitchen_courses has no `is_default`; a null course simply fires earliest, spec §2b). Same lighter
+// PGlite target for the same reason (config verbs, no privilege/concurrency dimension — the RLS + grants
+// live in packages/db's kitchen-courses.rls.test.ts against real Postgres).
+describe("kitchen-course config", () => {
+  it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {
+    const cfg = await setupVenue();
+    const { id: a } = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+    );
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }));
+    // Same display_order tie-break by name: create two at 0 and confirm Alpha precedes Zebra.
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Zebra", displayOrder: 0 }));
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Alpha", displayOrder: 0 }));
+    const list = await asApp(cfg, (tx) => listCourses(tx, cfg));
+    // Ordered display_order asc then name asc: (0)Alpha, (0)Entrantes, (0)Zebra, (1)Principales.
+    expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
+    // The exact Course shape (id/name/displayOrder/active — no createdAt, no isDefault).
+    expect(list[3]).toEqual({ id: a, name: "Principales", displayOrder: 1, active: true });
+    // Rename + reorder, then deactivate (deactivated courses drop out of the active-only list).
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
+    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, a));
+    expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
+    // Reactivation is updateCourse({ active: true }).
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { active: true }));
+    expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toContainEqual({
+      id: a,
+      name: "Segundos",
+      displayOrder: 9,
+      active: true,
+    });
+  });
+
+  it("createCourse defaults displayOrder to 0", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    const [only] = await asApp(cfg, (tx) => listCourses(tx, cfg));
+    expect(only).toEqual({ id, name: "Postres", displayOrder: 0, active: true });
+  });
+
+  it("createCourse and updateCourse surface a duplicate name as course.name_taken", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
+    await expect(
+      asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" })),
+    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Principales" }));
+    await expect(
+      asApp(cfg, (tx) => updateCourse(tx, cfg, id, { name: "Entrantes" })),
+    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
+  });
+
+  it("updateCourse and deactivateCourse throw course.not_found for an unknown id", async () => {
+    const cfg = await setupVenue();
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => updateCourse(tx, cfg, missing, { name: "X" })),
+    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
+    await expect(asApp(cfg, (tx) => deactivateCourse(tx, cfg, missing))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: missing },
+    });
+  });
+
+  it("createCourse and updateCourse rethrow a NON-unique DB error raw, not as course.name_taken", async () => {
+    // display_order overflow (22003) is not the name unique — the false branch of each catch, the
+    // negative control the station verbs carry.
+    const cfg = await setupVenue();
+    const createErr = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
+    ).catch((e: unknown) => e);
+    expect(createErr).toBeInstanceOf(Error);
+    expect(createErr).not.toBeInstanceOf(AppError);
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Ord" }));
+    const updateErr = await asApp(cfg, (tx) =>
+      updateCourse(tx, cfg, id, { displayOrder: 10_000_000_000 }),
+    ).catch((e: unknown) => e);
+    expect(updateErr).toBeInstanceOf(Error);
+    expect(updateErr).not.toBeInstanceOf(AppError);
+  });
+});
+
+describe("product-course config", () => {
+  it("setProductCourse sets then clears the product's default course", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct(cfg);
+    const { id: courseId } = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Principales" }),
+    );
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, courseId));
+    expect(await productCourse(productId)).toBe(courseId);
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, null));
+    expect(await productCourse(productId)).toBeNull();
+  });
+
+  it("setProductCourse rejects an inactive or absent course with course.not_found", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct(cfg);
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, missing)),
+    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
+    // A deactivated course is not a live routing target either — requireLiveCourse's inactive branch.
+    const { id: dead } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Retired" }));
+    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, dead));
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, dead)),
+    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead } });
   });
 });

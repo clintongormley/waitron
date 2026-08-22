@@ -1367,3 +1367,279 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 });
+
+describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
+  /** Create a course as the manager and return its id. */
+  async function createCourse(
+    name: string,
+    extra: { displayOrder?: number } = {},
+  ): Promise<string> {
+    const res = await req(
+      "/courses",
+      { method: "POST", body: JSON.stringify({ name, ...extra }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  /** The venue's ACTIVE courses, as the manager sees them (by display_order then name). */
+  async function listCourses(): Promise<
+    { id: string; name: string; displayOrder: number; active: boolean }[]
+  > {
+    return (await (await req("/courses", { method: "GET" }, managerCookie)).json()) as {
+      id: string;
+      name: string;
+      displayOrder: number;
+      active: boolean;
+    }[];
+  }
+
+  it("POST creates (201 { id }) + GET lists it, active, at its display order (manager)", async () => {
+    const name = unique("Entrantes");
+    const id = await createCourse(name, { displayOrder: 3 });
+    const found = (await listCourses()).find((c) => c.id === id);
+    expect(found).toMatchObject({ name, displayOrder: 3, active: true });
+  });
+
+  it("POST with a duplicate name → 409 course.name_taken", async () => {
+    const name = unique("dupcourse");
+    await createCourse(name);
+    const dup = await req(
+      "/courses",
+      { method: "POST", body: JSON.stringify({ name }) },
+      managerCookie,
+    );
+    expect(dup.status).toBe(409);
+    expect(await dup.json()).toMatchObject({ error: { code: "course.name_taken" } });
+  });
+
+  it("POST body-shape faults → 400 management.request_invalid (non-object, missing name)", async () => {
+    const nullBody = await req("/courses", { method: "POST", body: "null" }, managerCookie);
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+    const arrayBody = await req("/courses", { method: "POST", body: "[]" }, managerCookie);
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+  });
+
+  it("PATCH edits name/displayOrder/active; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
+    const id = await createCourse(unique("Edit"));
+    const patch = await req(
+      `/courses/${id}`,
+      { method: "PATCH", body: JSON.stringify({ displayOrder: 9, active: false }) },
+      managerCookie,
+    );
+    expect(patch.status).toBe(204);
+    // Deactivated → drops off the active list; read the row back directly to see the edit landed.
+    const row = await suite.admin.execute<{ display_order: number; active: boolean }>(
+      sql`select display_order, active from kitchen_courses where id = ${id}`,
+    );
+    expect(row.rows[0]).toMatchObject({ display_order: 9, active: false });
+
+    // A rename onto an existing name collides.
+    const taken = unique("Taken");
+    await createCourse(taken);
+    const active = await createCourse(unique("Active"));
+    const collide = await req(
+      `/courses/${active}`,
+      { method: "PATCH", body: JSON.stringify({ name: taken }) },
+      managerCookie,
+    );
+    expect(collide.status).toBe(409);
+    expect(await collide.json()).toMatchObject({ error: { code: "course.name_taken" } });
+
+    // An empty patch is a 204 no-op (never reaches updateCourse's empty `.set()`).
+    const empty = await req(`/courses/${active}`, { method: "PATCH", body: "{}" }, managerCookie);
+    expect(empty.status).toBe(204);
+
+    // A non-object PATCH body → management.request_invalid naming "body".
+    const arrayBody = await req(
+      `/courses/${active}`,
+      { method: "PATCH", body: "[]" },
+      managerCookie,
+    );
+    expect(arrayBody.status).toBe(400);
+    expect(await arrayBody.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+
+    const unknown = await req(
+      `/courses/${randomUUID()}`,
+      { method: "PATCH", body: JSON.stringify({ name: unique("Y") }) },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "course.not_found" } });
+    const malformed = await req(
+      "/courses/not-a-uuid",
+      { method: "PATCH", body: JSON.stringify({ name: unique("Z") }) },
+      managerCookie,
+    );
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({ error: { code: "course.not_found" } });
+  });
+
+  it("DELETE deactivates a course (drops off the active list); unknown/malformed :id → 404", async () => {
+    const id = await createCourse(unique("Del"));
+    expect((await listCourses()).find((c) => c.id === id)).toBeDefined();
+    const del = await req(`/courses/${id}`, { method: "DELETE" }, managerCookie);
+    expect(del.status).toBe(204);
+    expect((await listCourses()).find((c) => c.id === id)).toBeUndefined();
+
+    const unknown = await req(`/courses/${randomUUID()}`, { method: "DELETE" }, managerCookie);
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "course.not_found" } });
+    const malformed = await req("/courses/not-a-uuid", { method: "DELETE" }, managerCookie);
+    expect(malformed.status).toBe(404);
+  });
+
+  it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
+    const courseId = await createCourse(unique("Course"));
+    // Seed a real product to route, on the app role under this venue's tenant.
+    const { productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const category = await createCategory(tx, { name: unique("Cat") });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: category.id,
+        descriptions: { [LOCALE]: unique("Prod") },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      return { productId: product.id };
+    });
+
+    const courseOf = async (id: string): Promise<string | null> => {
+      const r = await suite.admin.execute<{ course_id: string | null }>(
+        sql`select course_id from products where id = ${id}`,
+      );
+      return r.rows[0]!.course_id;
+    };
+    const put = (body: unknown, id = productId) =>
+      req(`/products/${id}/course`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
+
+    // Set → the column carries the course.
+    expect((await put({ courseId })).status).toBe(204);
+    expect(await courseOf(productId)).toBe(courseId);
+    // Clear (null) → the column nulls.
+    expect((await put({ courseId: null })).status).toBe(204);
+    expect(await courseOf(productId)).toBeNull();
+    // A non-string courseId is a request-shape fault.
+    const badType = await put({ courseId: 5 });
+    expect(badType.status).toBe(400);
+    expect(await badType.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "courseId" } },
+    });
+    // A malformed courseId names no course.
+    const badCourse = await put({ courseId: "not-a-uuid" });
+    expect(badCourse.status).toBe(404);
+    expect(await badCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
+    // A well-formed-but-unknown courseId also names no live course (requireLiveCourse in the verb).
+    const missingCourse = await put({ courseId: randomUUID() });
+    expect(missingCourse.status).toBe(404);
+    expect(await missingCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
+    // A malformed PRODUCT id names nothing — the verb's unknown-id no-op, a clean 204 (no code exists).
+    expect((await put({ courseId }, "not-a-uuid")).status).toBe(204);
+  });
+
+  it("GET /fire-control reads the venue setting (defaults 'waiter'); PUT sets it; a bad value → 400", async () => {
+    // The setting defaults to 'waiter' on a fresh venue (the KDS-2 column default).
+    const initial = await req("/fire-control", { method: "GET" }, managerCookie);
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toEqual({ mode: "waiter" });
+
+    const set = await req(
+      "/fire-control",
+      { method: "PUT", body: JSON.stringify({ mode: "kitchen" }) },
+      managerCookie,
+    );
+    expect(set.status).toBe(204);
+    const after = await req("/fire-control", { method: "GET" }, managerCookie);
+    expect(await after.json()).toEqual({ mode: "kitchen" });
+    // The write also lands on the location row.
+    const row = await suite.admin.execute<{ fire_control: string }>(
+      sql`select fire_control from locations where id = ${venue.locationId}`,
+    );
+    expect(row.rows[0]!.fire_control).toBe("kitchen");
+    // Reset to the default so a later assertion on the shared venue is unaffected.
+    await req(
+      "/fire-control",
+      { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
+      managerCookie,
+    );
+
+    const bad = await req(
+      "/fire-control",
+      { method: "PUT", body: JSON.stringify({ mode: "banana" }) },
+      managerCookie,
+    );
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "mode" } },
+    });
+  });
+
+  it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
+    // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager` refuses
+    // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
+    // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
+    const someId = randomUUID();
+    const cases = [
+      req("/courses", { method: "GET" }, staffCookie),
+      req("/courses", { method: "POST", body: JSON.stringify({ name: unique("N") }) }, staffCookie),
+      req(
+        `/courses/${someId}`,
+        { method: "PATCH", body: JSON.stringify({ name: unique("Z") }) },
+        staffCookie,
+      ),
+      req(`/courses/${someId}`, { method: "DELETE" }, staffCookie),
+      req(
+        `/products/${someId}/course`,
+        { method: "PUT", body: JSON.stringify({ courseId: null }) },
+        staffCookie,
+      ),
+      req("/fire-control", { method: "GET" }, staffCookie),
+      req(
+        "/fire-control",
+        { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
+        staffCookie,
+      ),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    }
+  });
+
+  it("no session → 401 management_session.required on every course/product-course/fire-control route", async () => {
+    const someId = randomUUID();
+    const cases = [
+      req("/courses", { method: "GET" }, undefined),
+      req("/courses", { method: "POST", body: JSON.stringify({ name: "N" }) }, undefined),
+      req(
+        `/courses/${someId}`,
+        { method: "PATCH", body: JSON.stringify({ name: "Z" }) },
+        undefined,
+      ),
+      req(`/courses/${someId}`, { method: "DELETE" }, undefined),
+      req(
+        `/products/${someId}/course`,
+        { method: "PUT", body: JSON.stringify({ courseId: null }) },
+        undefined,
+      ),
+      req("/fire-control", { method: "GET" }, undefined),
+      req("/fire-control", { method: "PUT", body: JSON.stringify({ mode: "waiter" }) }, undefined),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
+    }
+  });
+});

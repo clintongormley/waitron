@@ -83,3 +83,41 @@ describe("the ticket error code carries its declared params", () => {
     expect(error.params).toEqual({ ticketItemId });
   });
 });
+
+// KDS-2 (Task 2) courses + hold-and-fire. As with every block above, each `it` only proves the code
+// is REGISTERED with the right param SHAPE — the construction typechecks solely because errors.ts's
+// `declare module` augmentation is loaded (the side-effect import above), so the fail-first signal for
+// these registration tests is `tsc --noEmit`, not the runtime run (AppError does no runtime validation
+// of the code). The real throwers arrive in later KDS-2 tasks: the course config verbs
+// (name_taken/not_found) and `advanceTicketItem`'s new held-line gate (item_held). Each param NAME
+// follows a shipped sibling so the family stays uniform: `name` mirrors station.name_taken/
+// zone.name_taken; `courseId` the qualified domain-record not_found family (station.not_found's
+// `stationId`, zone.not_found's `zoneId`); `ticketItemId` mirrors ticket.invalid_transition — a ticket
+// item advances (or is held) per line, so the id is the line's ticket item, not the order.
+describe("the course error codes carry their declared params", () => {
+  it("constructs course.name_taken with the operator-supplied name, matching station.name_taken's shape", () => {
+    const error = new AppError("course.name_taken", { name: "Entrantes" });
+    expect(error.code).toBe("course.name_taken");
+    expect(error.params).toEqual({ name: "Entrantes" });
+  });
+
+  it("constructs course.not_found with the qualified courseId, matching station.not_found's shape", () => {
+    const courseId = "55555555-5555-5555-5555-555555555555";
+    const error = new AppError("course.not_found", { courseId });
+    expect(error.code).toBe("course.not_found");
+    expect(error.params).toEqual({ courseId });
+  });
+});
+
+// KDS-2 (Task 2) the held-line refusal on the per-line advance surface. Same registration-only proof
+// as the block above (typecheck-gated). The real thrower is a later task's `advanceTicketItem`, whose
+// new `fired_at IS NOT NULL` gate refuses a bump of a line still HELD (a later course not yet fired).
+// `ticketItemId` mirrors ticket.invalid_transition — the same per-line ticket item, not the order.
+describe("the held-ticket error code carries its declared params", () => {
+  it("constructs ticket.item_held with the qualified ticketItemId, matching ticket.invalid_transition's shape", () => {
+    const ticketItemId = "66666666-6666-6666-6666-666666666666";
+    const error = new AppError("ticket.item_held", { ticketItemId });
+    expect(error.code).toBe("ticket.item_held");
+    expect(error.params).toEqual({ ticketItemId });
+  });
+});

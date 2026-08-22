@@ -53,10 +53,39 @@ export interface TillInfo {
    * imported — same bundle-decoupling rationale as every other type in this file.
    */
   bumpMode: "line" | "ticket";
+  /**
+   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`): `waiter` (the tab surfaces
+   * the fire action) or `kitchen` (the station display surfaces it). Read once from `GET /api/till` on
+   * boot and threaded to the station-display screen so it shows the per-course kitchen-fire action only
+   * for a `kitchen` venue. A LOCAL mirror of the server's `fire_control` enum, deliberately NOT imported
+   * — same bundle-decoupling rationale as `bumpMode` above and every other type in this file.
+   */
+  fireControl: "waiter" | "kitchen";
+  /**
+   * The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` — the options the tab-order
+   * screen's per-line course picker offers, and the id→name source its "Fire <course>" actions read.
+   * Read once from `GET /api/till` on boot and threaded to that screen. A LOCAL mirror of the trimmed
+   * course shape the boot route sends (`{ id, name, displayOrder }`; the server's `Course.active` is
+   * always true in an active-only list, so it is dropped), deliberately NOT imported — same
+   * bundle-decoupling rationale as every other type in this file. `[]` for a venue with no courses.
+   */
+  courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
   layout: LayoutDef;
   receipt: ReceiptConfig;
+}
+
+/**
+ * One ACTIVE kitchen course as the boot payload carries it (KDS-2 §5b) — its id (the
+ * {@link TillApi.fireCourse} target + a round line's course override), display `name`, and the
+ * `displayOrder` that sequences the picker + the waiter-fire actions. A LOCAL mirror of the server's
+ * trimmed course shape, NOT imported (the bundle rule).
+ */
+export interface TillCourse {
+  id: string;
+  name: string;
+  displayOrder: number;
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */
@@ -101,12 +130,30 @@ export interface TillProduct {
    * substance ("wheat", "almendra") when known. Task 6 renders these on the allergen screen.
    */
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  /**
+   * The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none — the
+   * value the tab-order screen's per-line course picker PRE-SELECTS. Mirrors catalogue's
+   * `AvailableProduct.course_id`, which `GET /api/products` always sends; OPTIONAL here (unlike
+   * `category`) purely so the many pre-KDS-2 `TillProduct` fixtures that predate it need no update — an
+   * absent value reads as "no default course", the same as null. NOT imported (the bundle rule).
+   */
+  courseId?: string | null;
 }
 
 /** One basket line the till sends to `POST /api/sales`: never a price — the server re-prices. */
 export interface SaleLine {
   productId: string;
   quantity: string;
+}
+
+/**
+ * One round line the tab-order screen sends to {@link TillApi.addTabRound} (KDS-2 §5b): a {@link SaleLine}
+ * that MAY carry a `courseId` OVERRIDE the waiter picked. Absent (the picker left on the product default)
+ * = the server resolves the product's default course (`<override> ?? product.course_id`). Only ever a real
+ * course id — the picker offers no explicit "no course" option — so never `null`.
+ */
+export interface RoundLine extends SaleLine {
+  courseId?: string;
 }
 
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
@@ -261,6 +308,26 @@ export interface StationQueueItem {
   descriptions: Record<string, string>;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
   quantity: string;
+  /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
+   *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
+   *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
+  course: StationQueueCourse | null;
+  /** `null` while the item's course is HELD — the display renders it GREYED and non-advanceable
+   *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (the auto-fired
+   *  earliest course, or released via {@link TillApi.fireCourse}). */
+  firedAt: string | null;
+}
+
+/**
+ * The course a queue item was fired for (KDS-2 §5a) — its id (the {@link TillApi.fireCourse} target), the
+ * display `name`, and the `displayOrder` that sequences the coursing sections. A LOCAL mirror of the
+ * server's `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling
+ * rationale as every other type in this file. `null` on the item when its line carried no course.
+ */
+export interface StationQueueCourse {
+  id: string;
+  name: string;
+  displayOrder: number;
 }
 
 /**
@@ -467,6 +534,14 @@ export interface TabLine {
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
+  /** The line's RESOLVED kitchen course (KDS-2), or null when it has none. The tab-order screen groups
+   * its waiter-fire actions by this (the course NAME comes from {@link TillInfo.courses}). Mirrors the
+   * server's `TabLine.courseId`, NOT imported (the bundle rule). */
+  courseId: string | null;
+  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD (KDS-2 §5b) — a
+   * course with any held line gets a "Fire <course>" action under `fire_control = 'waiter'`. Mirrors the
+   * server's `TabLine.firedAt`, NOT imported (the bundle rule). */
+  firedAt: string | null;
 }
 
 export class TillApi {
@@ -673,6 +748,19 @@ export class TillApi {
   }
 
   /**
+   * FIRE a HELD course of an order (KDS-2 §3c/§5a) → `POST /api/orders/:id/courses/:courseId/fire` with
+   * an empty body — the operator's "release this course" action. NON-FISCAL: the server stamps
+   * `fired_at = now()` on every held item of this order + course, so they stop being greyed on the
+   * display and become advanceable; it touches no sale/registro/tender. IDEMPOTENT — a course with
+   * nothing held is a 200 no-op. A malformed/unknown course id rejects `{ code: "course.not_found" }`;
+   * a malformed order id `{ code: "working_order.not_found" }`. The server answers an empty 200; re-read
+   * {@link getStationQueue} for the released (now fired) items.
+   */
+  async fireCourse(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
+  }
+
+  /**
    * Cancel a PLACED order (7c, spec §4) → `POST /api/working-orders/:id/cancel`. `placed → abandoned`,
    * appending a logged `order_cancelled` amendment carrying `reason` — the accountable content, so an
    * absent/blank reason rejects `{ code: "working_order.reason_required" }` before any transition. A
@@ -741,10 +829,11 @@ export class TillApi {
   /**
    * Append a priced round to an open tab → `POST /api/working-orders/:orderId/round` (FP-1, design §3b).
    * Prices each new line at add-time and appends WITHOUT re-pricing the existing lines. `lines` carry no
-   * price — the server prices them. The server answers an empty 200; `tab.not_open` (a non-open/absent
-   * tab) / `sale.empty_basket` (no lines) surface as a rejected `{ code }`.
+   * price — the server prices them — but each MAY carry a `courseId` OVERRIDE the tab's course picker set
+   * (KDS-2 §5b); absent, the server applies the product's default course. The server answers an empty 200;
+   * `tab.not_open` (a non-open/absent tab) / `sale.empty_basket` (no lines) surface as a rejected `{ code }`.
    */
-  async addTabRound(orderId: string, lines: SaleLine[]): Promise<void> {
+  async addTabRound(orderId: string, lines: RoundLine[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/round`, "POST", { lines });
   }
 

@@ -562,7 +562,11 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     );
     const lines = await asApp(cfg, (tx) =>
       tx
-        .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+        })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo),

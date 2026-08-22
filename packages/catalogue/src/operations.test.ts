@@ -504,6 +504,10 @@ describe("catalogue operations", () => {
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = await listAvailableProducts(tx, locationId);
       expect(available!.category).toBeNull();
+      // KDS-2: a product with no default course reports `courseId: null` (the till's course picker reads
+      // this as "no pre-selected default"). The non-null path is proven end-to-end by the server's
+      // ring-time course resolver (it reads this field as `<override> ?? product.course_id`).
+      expect(available!.courseId).toBeNull();
     });
   });
 
@@ -545,6 +549,7 @@ describe("catalogue operations", () => {
       vatClass: "general",
       category: null,
       allergens: null,
+      courseId: null,
     };
     expect(widen(sample).unitPrice).toBe("1.50");
   });

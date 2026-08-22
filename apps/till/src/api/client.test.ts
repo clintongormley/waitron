@@ -165,6 +165,7 @@ describe("TillApi", () => {
       nif: "B12345678",
       orderFlow: "prepay",
       bumpMode: "line",
+      fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,
       layout: [
@@ -618,6 +619,34 @@ describe("TillApi", () => {
     });
   });
 
+  it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/courses/co2/fire",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("fireCourse surfaces { code } when the course is unknown or retired", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).fireCourse("wo1", "co2")).rejects.toMatchObject({
+      code: "course.not_found",
+    });
+  });
+
   it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
@@ -1021,9 +1050,11 @@ describe("TillApi", () => {
 
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
     // Typed `TabLine[]` so the mock is a compile-time proof the client mirror carries every field the
-    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`). A served line
-    // carries a timestamp, an unserved one `null` — the two floor states the table-order screen renders
-    // ("Servido" vs "Pendiente de servir"). `unitPriceGross` is the LOCKED gross unit, not a re-price.
+    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`, and KDS-2's
+    // `courseId`/`firedAt`). A served line carries a timestamp, an unserved one `null` — the two floor
+    // states the table-order screen renders ("Servido" vs "Pendiente de servir"). `courseId`/`firedAt`
+    // carry the kitchen coursing state the waiter-fire actions read. `unitPriceGross` is the LOCKED gross
+    // unit, not a re-price.
     const lines: TabLine[] = [
       {
         lineNo: 1,
@@ -1031,6 +1062,8 @@ describe("TillApi", () => {
         quantity: "1.000",
         unitPriceGross: "1.50",
         servedAt: "2026-08-06T10:00:00.000Z",
+        courseId: null,
+        firedAt: "2026-08-06T09:59:00.000Z",
       },
       {
         lineNo: 2,
@@ -1038,6 +1071,8 @@ describe("TillApi", () => {
         quantity: "2.000",
         unitPriceGross: "2.00",
         servedAt: null,
+        courseId: "course-1",
+        firedAt: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(lines));
