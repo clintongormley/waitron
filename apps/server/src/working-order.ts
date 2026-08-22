@@ -2289,12 +2289,31 @@ export async function advanceTicket(
  *  bare line number) and its `quantity` (numeric(12,3) as text, e.g. "2.000"). Both are carried from
  *  the joined `working_order_lines` row; the description is the SNAPSHOT frozen at fire, never a live
  *  catalogue lookup. */
+/** The course a queue item was fired for (KDS-2) — its snapshotted `course_id` joined to the LIVE
+ *  `kitchen_courses` row, so the display renders the course header and orders the coursing sequence by
+ *  `displayOrder` without a second fetch. The name/order are the current config (a display convenience,
+ *  not a fiscal snapshot); the item's `course_id` snapshot is the anchor. `null` on the item when the
+ *  line carried no course. Not filtered by `active`, so a course deactivated after the item was fired
+ *  still names its header. */
+export interface StationQueueCourse {
+  id: string;
+  name: string;
+  displayOrder: number;
+}
+
 export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
   descriptions: Record<string, string>;
   quantity: string;
+  /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the client groups the
+   *  queue by this and renders a per-course header in `displayOrder`. */
+  course: StationQueueCourse | null;
+  /** `null` while the item's course is HELD — the client renders it GREYED and non-advanceable
+   *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (auto-fired earliest
+   *  course, or released via `fireCourse`). */
+  firedAt: string | null;
 }
 
 /** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
@@ -2351,6 +2370,13 @@ export async function listStationQueue(
       descriptions: workingOrderLines.descriptions,
       quantity: workingOrderLines.quantity,
       lineNo: workingOrderLines.lineNo,
+      // KDS-2: the item's snapshotted course (or null) + its held/fired marker. `course_id` is the
+      // item's own snapshot; the name/order ride from the LEFT-joined live `kitchen_courses` row (a
+      // display convenience — see StationQueueCourse). `fired_at` null = HELD (greyed, non-advanceable).
+      courseId: ticketItems.courseId,
+      courseName: kitchenCourses.name,
+      courseDisplayOrder: kitchenCourses.displayOrder,
+      firedAt: ticketItems.firedAt,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
@@ -2376,6 +2402,17 @@ export async function listStationQueue(
       and(
         eq(ticketItems.workingOrderLineId, workingOrderLines.id),
         eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    // The item's course, for the display header + coursing order (KDS-2 §5a). LEFT join — `course_id`
+    // is nullable (a courseless line), and it is NOT filtered by `active`, so a course deactivated after
+    // the item was fired still names its header. Composite (tenant_id too), mirroring the
+    // tenant-consistent (tenant_id, course_id) → kitchen_courses FK ticket_items carries.
+    .leftJoin(
+      kitchenCourses,
+      and(
+        eq(ticketItems.courseId, kitchenCourses.id),
+        eq(ticketItems.tenantId, kitchenCourses.tenantId),
       ),
     )
     .where(
@@ -2413,6 +2450,13 @@ export async function listStationQueue(
       state: row.state,
       descriptions: row.descriptions,
       quantity: row.quantity,
+      // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
+      // `courseId` is present its name/order are too; a null course serialises `course: null`.
+      course:
+        row.courseId === null
+          ? null
+          : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
+      firedAt: row.firedAt,
     });
   }
   return [...groups.values()];

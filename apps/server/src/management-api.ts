@@ -48,15 +48,23 @@ import {
   updateZone,
 } from "./tables.js";
 import {
+  createCourse,
   createStation,
+  deactivateCourse,
   deactivateStation,
+  getFireControl,
+  listCourses,
   listStations,
   setBumpMode,
   setCategoryStation,
   setDefaultStation,
+  setFireControl,
+  setProductCourse,
   setProductStation,
+  updateCourse,
   updateStation,
   type BumpMode,
+  type FireControl,
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -204,6 +212,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // is a FIRE-time code on the till surface, never thrown by these config routes, so it is absent here.)
   "station.not_found": 404,
   "station.name_taken": 409,
+  // Kitchen-course config CRUD (KDS-2, design §3a). An unknown course id (or a malformed one screened to
+  // it at the PATCH/DELETE routes), OR a retired/cross-venue course named as a product's default route,
+  // names no LIVE course → 404 (`course.not_found`); a duplicate name collides on the
+  // `(tenant, location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
+  // station name has. Courses are a management/config concern, so both codes are mapped HERE — beside the
+  // station codes above; `course.not_found` is ALSO mapped on the till surface (`till-api.ts`), where the
+  // OPERATIONAL fire route surfaces it. The code's own semantics imply these statuses, but they are
+  // listed explicitly as the house style requires (an unmapped code would default to 400, the wrong 4xx).
+  "course.not_found": 404,
+  "course.name_taken": 409,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -274,6 +292,17 @@ function requireTableId(id: string): string {
  */
 function requireStationId(id: string): string {
   if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
+  return id;
+}
+
+/**
+ * Screen a `/management-api/courses/:id` path param as a UUID, returning it. Mirrors `requireStationId`
+ * for the kitchen-course routes: a malformed id → `22P02` → opaque 500 without this, so it is refused as
+ * `course.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
+ * course gets from the by-id course verbs. Shared by the PATCH and DELETE `:id` course routes.
+ */
+function requireCourseId(id: string): string {
+  if (!isUuid(id)) throw new AppError("course.not_found", { courseId: id });
   return id;
 }
 
@@ -1304,6 +1333,158 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
       const mode: BumpMode = body.mode;
       await withVenueAuth(deps, cfg, sessionId, (tx) => setBumpMode(tx, cfg, mode));
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Kitchen-course + fire-control configuration (KDS-2, design §3a) ────────────────────────────────
+  // The dashboard "Cursos" panel: CRUD the venue's coursing sequence, route a product to its default
+  // course, and read/write the fire-control setting. All gated exactly like the KDS-1 station routes above
+  // — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb under
+  // `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`, so a staff session is refused 403
+  // before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof the tests
+  // name). The verbs are location-scoped, so each reads the venue's config via `requireVenueCfg`.
+  // Body-shape screens mirror the station / service-status routes above.
+
+  // Create a course. Body { name, displayOrder? }; a bad shape → management.request_invalid naming the
+  // FIELD; a duplicate name → course.name_taken (409). No default concept (courses have none, spec §2b),
+  // so no isDefault field. Returns the new id at 201, matching every other management-surface create.
+  app.post("/management-api/courses", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = (await c.req.json<{ name?: unknown; displayOrder?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string")
+        throw new AppError("management.request_invalid", { field: "name" });
+      const displayOrder = parseDisplayOrder(body.displayOrder);
+      // Bind the validated `name` to a local: the `typeof` guard narrows `body.name` HERE, but that
+      // narrowing does not survive into the `withVenueAuth` closure — the login/create-person pattern.
+      const { name } = body;
+      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+        createCourse(tx, cfg, { name, displayOrder }),
+      );
+      return c.json(result, 201);
+    }),
+  );
+
+  // The venue's ACTIVE courses, by display order then name (the coursing SEQUENCE). Gated on till.configure.
+  app.get("/management-api/courses", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const courses = await withVenueAuth(deps, cfg, sessionId, (tx) => listCourses(tx, cfg));
+      return c.json(courses);
+    }),
+  );
+
+  // Edit a course (name/displayOrder/active — any subset). Malformed :id → course.not_found (a bad id
+  // names no course), not a 500; an unknown id → course.not_found; a name collision → course.name_taken.
+  // A present field with the wrong type → management.request_invalid; a patch carrying no mutable field is
+  // a 204 no-op (the sibling station PATCH shape) — returned WITHOUT reaching updateCourse's empty `.set()`.
+  app.patch("/management-api/courses/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireCourseId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body =
+        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      if (body.name !== undefined) {
+        if (typeof body.name !== "string")
+          throw new AppError("management.request_invalid", { field: "name" });
+        patch.name = body.name;
+      }
+      if (body.displayOrder !== undefined) {
+        patch.displayOrder = parseDisplayOrder(body.displayOrder);
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean")
+          throw new AppError("management.request_invalid", { field: "active" });
+        patch.active = body.active;
+      }
+      if (
+        patch.name === undefined &&
+        patch.displayOrder === undefined &&
+        patch.active === undefined
+      ) {
+        return c.body(null, 204);
+      }
+      await withVenueAuth(deps, cfg, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Deactivate a course (DELETE = deactivate; app_user holds no hard DELETE — a `ticket_items.course_id`
+  // snapshot may reference it). Malformed :id → course.not_found; an unknown id → course.not_found.
+  app.delete("/management-api/courses/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireCourseId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateCourse(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  // Set (or clear, with null) a PRODUCT's default kitchen course (the catalogue config, spec §3a). Body
+  // { courseId: string | null }. A non-null courseId must be a LIVE course of this venue (the verb's
+  // `requireLiveCourse` → course.not_found); a malformed one is screened to that SAME code before the DB
+  // touch. A malformed PRODUCT :id names no such product — the verb no-ops on an unknown one, so it is the
+  // same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped request), never a
+  // 22P02 500. The sibling of the `PUT /management-api/products/:id/station` route above. Returns 204.
+  app.put("/management-api/products/:id/course", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const id = c.req.param("id");
+      const body = (await c.req.json<{ courseId?: unknown }>()) ?? {};
+      if (typeof body.courseId !== "string" && body.courseId !== null) {
+        throw new AppError("management.request_invalid", { field: "courseId" });
+      }
+      const courseId = body.courseId;
+      if (courseId !== null && !isUuid(courseId)) {
+        throw new AppError("course.not_found", { courseId });
+      }
+      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+        if (!isUuid(id)) return; // malformed id names no product → the verb's unknown-id no-op
+        await setProductCourse(tx, cfg, id, courseId);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Read the venue's fire-control setting (spec §3a: read AND written with the other venue config, for the
+  // dashboard's toggle). Gated on till.configure. Returns { mode: "waiter" | "kitchen" }.
+  app.get("/management-api/fire-control", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const mode = await withVenueAuth(deps, cfg, sessionId, (tx) => getFireControl(tx, cfg));
+      return c.json({ mode });
+    }),
+  );
+
+  // Set the venue's fire-control setting — body { mode: "waiter" | "kitchen" }. A missing or non-{waiter,
+  // kitchen} value is a request-shape fault → management.request_invalid naming the FIELD (which also keeps
+  // a bad value off the `fire_control_mode` enum column). `setFireControl` writes `locations.fire_control`
+  // scoped to this venue. The sibling of the `PUT /management-api/bump-mode` route above. Returns 204.
+  app.put("/management-api/fire-control", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
+      if (body.mode !== "waiter" && body.mode !== "kitchen") {
+        throw new AppError("management.request_invalid", { field: "mode" });
+      }
+      // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
+      const mode: FireControl = body.mode;
+      await withVenueAuth(deps, cfg, sessionId, (tx) => setFireControl(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );

@@ -275,6 +275,46 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
 }
 
+/** The KDS-2 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
+ *  per-course fire action; `kitchen` = the station display surfaces it. Governs only which UI shows the
+ *  button — `fireCourse` is the same either way, and both surfaces are session-gated. Mirrors
+ *  `locations.fire_control`'s pgEnum (`packages/db/src/schema/tenants.ts`), spelled as a literal union
+ *  here because `@waitron/db`'s enumerated exports do NOT publish the `fireControlMode` enum object
+ *  (CLAUDE.md §3). Extends to `expo` in KDS-3. */
+export type FireControl = "waiter" | "kitchen";
+
+/**
+ * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` under RLS.
+ * The read counterpart of {@link setFireControl}, for the dashboard config surface's toggle (spec §3a:
+ * the setting is read AND written with the other venue config). Read via a parameterised `sql` select
+ * rather than a Drizzle `.select(locations)` for the same reason {@link setBumpMode} writes with raw
+ * `sql` — `@waitron/db`'s enumerated exports map does NOT publish the `locations` table object. The
+ * column is `NOT NULL DEFAULT 'waiter'`, so a row always yields one of the two enum members.
+ */
+export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<FireControl> {
+  const { rows } = await tx.execute<{ fire_control: FireControl }>(
+    sql`select fire_control from locations where id = ${cfg.locationId}`,
+  );
+  return rows[0]!.fire_control;
+}
+
+/**
+ * Set the venue's fire-control setting (`locations.fire_control`, `waiter` default / `kitchen`), scoped
+ * to `cfg.locationId` under RLS. The exact shape of {@link setBumpMode}: written via a parameterised
+ * `sql` update because `@waitron/db`'s enumerated exports map does NOT publish the `locations` table
+ * object (CLAUDE.md §3). `mode` is a typed {@link FireControl}, so the value reaching the enum column is
+ * always one of its members (the route validates the request field before calling); `${mode}` binds as a
+ * parameter (never string-concatenated) and PostgreSQL coerces it to the `fire_control_mode` enum in the
+ * assignment context. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs are.
+ */
+export async function setFireControl(
+  tx: Transaction,
+  cfg: TillConfig,
+  mode: FireControl,
+): Promise<void> {
+  await tx.execute(sql`update locations set fire_control = ${mode} where id = ${cfg.locationId}`);
+}
+
 // ── KDS-2 kitchen courses (design §2a/§3a) ───────────────────────────────────────────────────────
 // Config verbs mirroring the station-config verbs above, minus the default concept: `kitchen_courses`
 // has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set

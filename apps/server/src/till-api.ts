@@ -38,6 +38,7 @@ import {
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
+  fireCourse,
   getHeldOrder,
   joinTable,
   listHeldOrders,
@@ -155,6 +156,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // naming no live station (or a malformed one, screened) is `station.not_found` (404).
   "ticket.already_fired": 409,
   "ticket.invalid_transition": 409,
+  // Coursing (KDS-2). A per-line bump the item's HELD state forbids — its course has not been fired, so
+  // the kitchen must not start it — is `ticket.item_held` (409, thrown by `advanceTicketItem`'s held
+  // guard), the same STATE-forbids-it family as `ticket.invalid_transition` beside it. The course-fire
+  // route (`POST /api/orders/:id/courses/:courseId/fire`) surfaces `course.not_found` (404) for an
+  // unknown/retired/malformed course id — thrown by `fireCourse`'s `requireLiveCourse`, the SAME code
+  // and 404 the management config surface maps it to (courses are a management concept, but the fire
+  // verb is operational and runs here). A malformed ORDER id on that route is `working_order.not_found`
+  // (404, already mapped above), the honest "no such order" a bad id names.
+  "ticket.item_held": 409,
+  "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
   // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
@@ -743,6 +754,32 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await advanceTicket(tx, deps.cfg, orderId, stationId, to);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" action. SESSION-
+  // GUARDED: a WAITER or a KITCHEN operator may call it. The `fire_control` venue setting decides which UI
+  // surfaces the button, NOT who may call it — both surfaces are session-gated (spec §3c), so the gate is
+  // `requireSession`, no permission. `fireCourse` stamps `fired_at = now()` on every HELD item of this
+  // order + course, so they stop being greyed on the display and become advanceable. OPERATIONAL, not
+  // fiscal — it writes only the mutable `ticket_items`, touching no sale/registro/tender/huella (§4/§5),
+  // so nothing here can block a sale. `:courseId` is `isUuid`-screened first, refused as `course.not_found`
+  // (404) — a malformed id names no live course, the SAME code `requireLiveCourse` throws for an
+  // unknown/retired one — rather than reaching the `uuid` column and raising `22P02` → an opaque 500. `:id`
+  // (the order) is `isUuid`-screened as `working_order.not_found` (404): a malformed one names no order,
+  // while a well-formed-but-absent order is `fireCourse`'s idempotent no-op (200, nothing held to fire).
+  // Returns 200 with an empty body; the display re-reads the queue.
+  app.post("/api/orders/:id/courses/:courseId/fire", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const courseId = c.req.param("courseId");
+      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await fireCourse(tx, deps.cfg, orderId, courseId);
       });
       return c.body(null, 200);
     }),
