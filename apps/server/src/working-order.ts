@@ -619,8 +619,13 @@ export async function fireLines(
   //    batch's courses below, this is the order's course SET the earliest is taken over. Without prior
   //    rounds a later round of only a late course would see itself as the sole — hence earliest — course.
   // RLS confines both tables to the tenant; the join's tenant predicate keeps the composite key aligned;
-  // the venue filter enumerates this venue's courses (the courses an order fired here carries — product
-  // defaults and A1-screened overrides are both this-venue), the set the min `display_order` runs over.
+  // the venue filter enumerates THIS venue's courses — the set the min `display_order` runs over. A1
+  // screens every OVERRIDE to a live this-venue course, but a product DEFAULT is NOT location-checked
+  // (`products.course_id`'s FK is tenant-scoped only), so a catalogue shared across venues can leave a
+  // line carrying a FOREIGN venue's course. Such a course is absent from this venue-filtered result, so
+  // that line is treated as held (see the fired-decision note below). This diverges — in that one
+  // incoherent shared-catalogue corner only — from the former read, which read the foreign course
+  // cross-venue; deliberately accepted, no coherent setup produces it, no fiscal effect (Debt → KDS-2).
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
@@ -671,9 +676,11 @@ export async function fireLines(
     const courseId = courseByLine.get(line.id) ?? null;
     // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
     // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
-    // `fireCourse` stamps it. A non-null course on a line is a course of THIS venue (a product default or
-    // an A1-screened override), and `displayOrderByCourse` is keyed by every venue course, so the lookup
-    // is defined here.
+    // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
+    // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
+    // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
+    // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
+    // incoherent state that alone produces it.
     const fired =
       courseId === null ||
       firedCourseIds.has(courseId) ||
