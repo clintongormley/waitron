@@ -640,8 +640,11 @@ function lineCourse(
 
 describe("addTabRound ring-time course resolution (override ?? product default ?? null)", () => {
   it("resolves a line's course: override > product default > null", async () => {
-    // The verbatim task-3 brief test: steak carries a product default; bread carries neither a product
-    // default nor (effectively) a course, its explicit null override resolving to null.
+    // The verbatim task-3 brief test: steak carries a product default (no override → default wins);
+    // bread has no product default, so it resolves to null. NB under `override ?? product.course_id`
+    // the `courseId: null` on bread is indistinguishable from no override — it is the absent default,
+    // not the null override, that makes bread null here. Whether an explicit null should FORCE "no
+    // course" over a product default is deferred to Task 7's picker; this test does not turn on it.
     const { cfg, cafeId: steak, aguaId: bread, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const c = await asApp(cfg, (tx) =>
@@ -652,7 +655,7 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
       addTabRoundWith(tx, cfg, tabId, [line(steak), line(bread, { courseId: null })]),
     );
     expect(lineCourse(o, steak)).toBe(c.id); // product default (no override)
-    expect(lineCourse(o, bread)).toBeNull(); // explicit override to null
+    expect(lineCourse(o, bread)).toBeNull(); // no product default → null
   });
 
   it("a non-null line override WINS over the product's default course", async () => {
