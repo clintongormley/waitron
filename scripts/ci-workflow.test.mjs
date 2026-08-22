@@ -45,6 +45,28 @@ import {
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
+// The two `describe("the test shards")` cases below hand ci.yml's real filters to the real `pnpm ls`
+// (see `selects`/`membersDeclaringTests`, both via `pnpmLs`) rather than modelling `--filter` — the
+// whole point of this file. The coverage-partition case alone is ~9 sequential `pnpm ls` spawns (one
+// per shard, plus the members sweep), all with distinct filters so none can be deduped. That measured
+// ~1.5s warm here on 2026-08-22, but the same case timed out past Vitest's 5000ms default on the lint
+// job on PRs #128 and #129 — a cold CI runner has no warm pnpm store — so on that runner it took at
+// least ~3.3x the warm time.
+//
+// TWO failure modes, TWO timeouts, because one cannot cover the other:
+//   * SLOW-BUT-COMPLETING cold run — the flake above. `pnpmLs` runs SYNCHRONOUSLY (`spawnSync`), so
+//     between calls the worker's event loop turns and Vitest's per-test timer can fire; with the
+//     default 5000ms it fires mid-run and fails a healthy test. `PNPM_LS_TEST_TIMEOUT_MS` raises that
+//     per-test bound above the whole case's cold wall-clock so a healthy run finishes first.
+//   * GENUINE HANG in one `pnpm ls` — a `spawnSync` BLOCKS the event loop for its whole duration, so
+//     the Vitest timer above CANNOT fire while a child is stuck (this is what an earlier version of
+//     this comment got wrong). Only the kernel-level `timeout` option on `spawnSync` itself kills a
+//     hung child; `PNPM_LS_SPAWN_TIMEOUT_MS` is that per-call kill, and `pnpmLs` turns the killed
+//     result into a thrown error. It is smaller than the per-test bound so the clear per-call throw
+//     wins over a bare Vitest timeout.
+const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
+const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
+
 /**
  * ci.yml's jobs as `{id, body}`, in file order.
  *
@@ -161,6 +183,43 @@ const shards = jobs
   .map(({ id, step }) => ({ id, filters: literalFilters(step) }));
 
 /**
+ * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout.
+ *
+ * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
+ * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). Node kills the child
+ * on timeout and sets `result.error`. `spawn` is injected only so a test can assert this function
+ * actually passes the `timeout` — otherwise deleting it here would leave the suite green (§4).
+ */
+function spawnPnpm(args, spawn = spawnSync) {
+  return spawn("pnpm", args, {
+    encoding: "utf8",
+    cwd: repoRoot,
+    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
+  });
+}
+
+/**
+ * Run `pnpm <args>` via `run` and return its parsed-JSON stdout, or throw a clear Error.
+ *
+ * `run` is injected so the timeout/error path has an executable assertion without a real hang (see
+ * the `pnpmLs` suite): a killed or un-spawnable child sets `result.error`; a non-zero exit sets
+ * `result.status`. Both become a thrown Error naming the command, so a hang or failure fails the
+ * test loudly rather than surfacing as `expected null to be 0` — or, for a hang, never at all.
+ */
+function pnpmLs(args, run = spawnPnpm) {
+  const result = run(args);
+  if (result.error !== undefined) {
+    throw new Error(
+      `\`pnpm ${args.join(" ")}\` failed to run (killed after ${PNPM_LS_SPAWN_TIMEOUT_MS}ms?): ${result.error.message}`,
+    );
+  }
+  if (result.status !== 0) {
+    throw new Error(`\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+/**
  * What `pnpm <filters> ls --depth -1 --json` really selects, minus the workspace ROOT.
  *
  * The root is dropped by PATH rather than by name, exactly as `workspacePackages`
@@ -175,27 +234,20 @@ const shards = jobs
  * the extra one being the root.
  */
 function selects(filters) {
-  const result = spawnSync(
-    "pnpm",
-    [...filters.flatMap((filter) => ["--filter", filter]), "ls", "--depth", "-1", "--json"],
-    { encoding: "utf8", cwd: repoRoot },
-  );
-  expect(result.status).toBe(0);
-
-  return JSON.parse(result.stdout)
+  return pnpmLs([
+    ...filters.flatMap((filter) => ["--filter", filter]),
+    "ls",
+    "--depth",
+    "-1",
+    "--json",
+  ])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .map((pkg) => pkg.name);
 }
 
 /** Every workspace member (never the root) that declares a `test:coverage` script. */
 function membersDeclaringTests() {
-  const result = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
-    encoding: "utf8",
-    cwd: repoRoot,
-  });
-  expect(result.status).toBe(0);
-
-  return JSON.parse(result.stdout)
+  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter(
       (pkg) =>
@@ -205,6 +257,60 @@ function membersDeclaringTests() {
     )
     .map((pkg) => pkg.name);
 }
+
+// `pnpmLs`'s timeout/error path is the regression fix for the hang above, so it carries its own
+// assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
+// "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
+// proves spawnSync's `timeout` genuinely kills a hung child.
+describe("pnpmLs (the subprocess guard)", () => {
+  it("returns parsed stdout on a clean exit", () => {
+    const ok = () => ({
+      status: 0,
+      error: undefined,
+      stdout: '[{"name":"@waitron/x"}]',
+      stderr: "",
+    });
+    expect(pnpmLs(["ls"], ok)).toEqual([{ name: "@waitron/x" }]);
+  });
+
+  it("throws, naming the command and stderr, on a non-zero exit", () => {
+    const failed = () => ({ status: 1, error: undefined, stdout: "", stderr: "boom" });
+    expect(() => pnpmLs(["ls", "-r"], failed)).toThrow(/pnpm ls -r.*exited 1.*boom/);
+  });
+
+  it("throws, naming the command, when the child errors (the timeout-kill shape)", () => {
+    const killed = () => ({
+      status: null,
+      signal: "SIGTERM",
+      error: Object.assign(new Error("spawnSync pnpm ETIMEDOUT"), { code: "ETIMEDOUT" }),
+      stdout: "",
+      stderr: "",
+    });
+    expect(() => pnpmLs(["ls"], killed)).toThrow(/pnpm ls.*failed to run.*ETIMEDOUT/);
+  });
+
+  it("the default runner passes the per-call kill timeout to spawnSync", () => {
+    // Proves spawnPnpm ITSELF wires `timeout` — the two tests below use their own runners, so without
+    // this, deleting `timeout: PNPM_LS_SPAWN_TIMEOUT_MS` in spawnPnpm would leave every test green
+    // while the real `pnpm ls` calls run unbounded again (the gap Copilot flagged).
+    let opts;
+    const spy = (_cmd, _args, options) => {
+      opts = options;
+      return { status: 0, error: undefined, stdout: "[]", stderr: "" };
+    };
+    spawnPnpm(["ls"], spy);
+    expect(opts.timeout).toBe(PNPM_LS_SPAWN_TIMEOUT_MS);
+  });
+
+  it("really kills a hung child via spawnSync's own timeout", () => {
+    // The other half: proves the `timeout` option is not a no-op — a child that would sleep a minute,
+    // killed by a 500ms timeout (small so the test is fast; the spy above proves the real 30s value is
+    // the one spawnPnpm passes). status null, error set → pnpmLs throws.
+    const hang = () =>
+      spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
+    expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
+  });
+});
 
 describe("ci.yml's job graph", () => {
   it("was parsed at all", () => {
@@ -249,31 +355,35 @@ describe("the test shards", () => {
   //
   // Selections come from the real `pnpm ls` with ci.yml's real filters, so this measures what the
   // shards would actually select rather than what a model of `--filter` says they would.
-  it("cover every package declaring test:coverage exactly once, on a global scope", () => {
-    const declaring = membersDeclaringTests();
-    expect(declaring.length).toBeGreaterThan(0);
+  it(
+    "cover every package declaring test:coverage exactly once, on a global scope",
+    () => {
+      const declaring = membersDeclaringTests();
+      expect(declaring.length).toBeGreaterThan(0);
 
-    const runs = new Map();
-    for (const shard of shards) {
-      for (const name of selects(shard.filters)) {
-        runs.set(name, [...(runs.get(name) ?? []), shard.id]);
+      const runs = new Map();
+      for (const shard of shards) {
+        for (const name of selects(shard.filters)) {
+          runs.set(name, [...(runs.get(name) ?? []), shard.id]);
+        }
       }
-    }
 
-    // Nothing runs twice — two shards selecting one package burns a runner and doubles a suite.
-    expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
+      // Nothing runs twice — two shards selecting one package burns a runner and doubles a suite.
+      expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
 
-    // Nothing falls through. This is the direction that ships an untested package.
-    expect(declaring.filter((name) => !runs.has(name))).toEqual([]);
+      // Nothing falls through. This is the direction that ships an untested package.
+      expect(declaring.filter((name) => !runs.has(name))).toEqual([]);
 
-    // And the only selected members that declare no `test:coverage` are the ones declared test-less
-    // on purpose. Without this a package could be "covered" by a shard that then runs nothing for
-    // it — which is exactly what PACKAGES_WITHOUT_TESTS and the `runnable` guard exist to separate
-    // from a mistake.
-    expect([...runs.keys()].filter((name) => !declaring.includes(name)).sort()).toEqual(
-      [...PACKAGES_WITHOUT_TESTS].sort(),
-    );
-  });
+      // And the only selected members that declare no `test:coverage` are the ones declared test-less
+      // on purpose. Without this a package could be "covered" by a shard that then runs nothing for
+      // it — which is exactly what PACKAGES_WITHOUT_TESTS and the `runnable` guard exist to separate
+      // from a mistake.
+      expect([...runs.keys()].filter((name) => !declaring.includes(name)).sort()).toEqual(
+        [...PACKAGES_WITHOUT_TESTS].sort(),
+      );
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
 
   // The two light shards partition the non-own-shard packages: each subtracts its bin's COMPLEMENT
   // — every package in OWN_SHARD_PACKAGES plus every package in the OTHER bin — so what it selects is
@@ -294,13 +404,17 @@ describe("the test shards", () => {
     expect(excludedBy("test-light-b")).toEqual([...OWN_SHARD_PACKAGES, ...LIGHT_A_PACKAGES].sort());
   });
 
-  it("give each of those packages a shard that selects it and nothing else", () => {
-    for (const name of OWN_SHARD_PACKAGES) {
-      const dedicated = shards.filter((shard) => shard.filters.includes(name));
-      expect(dedicated).toHaveLength(1);
-      expect(selects(dedicated[0].filters)).toEqual([name]);
-    }
-  });
+  it(
+    "give each of those packages a shard that selects it and nothing else",
+    () => {
+      for (const name of OWN_SHARD_PACKAGES) {
+        const dedicated = shards.filter((shard) => shard.filters.includes(name));
+        expect(dedicated).toHaveLength(1);
+        expect(selects(dedicated[0].filters)).toEqual([name]);
+      }
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("the scope gates", () => {
