@@ -46,16 +46,26 @@ const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
 // The two `describe("the test shards")` cases below hand ci.yml's real filters to the real `pnpm ls`
-// (see `selects`/`membersDeclaringTests`) rather than modelling `--filter` — the whole point of this
-// file. The coverage-partition case alone is ~9 sequential `pnpm ls` spawns (one per shard, plus the
-// members sweep), all with distinct filters so none can be deduped. That measured ~1.5s warm here on
-// 2026-08-22, but the same case timed out past Vitest's 5000ms default on the lint job on PRs #128
-// and #129 — a cold CI runner has no warm pnpm store — so on that runner it took at least ~3.3x the
-// warm time. These cases are subprocess-bound and do no more work than those spawns, so they carry a
-// timeout calibrated to that — the same reason apps/server/vitest.config.ts sets a 180s hookTimeout
-// for its container suites — rather than racing pnpm's cold start. A genuine hang is still caught; it
-// just tolerates a slow cold runner.
-const PNPM_LS_TEST_TIMEOUT_MS = 30_000;
+// (see `selects`/`membersDeclaringTests`, both via `pnpmLs`) rather than modelling `--filter` — the
+// whole point of this file. The coverage-partition case alone is ~9 sequential `pnpm ls` spawns (one
+// per shard, plus the members sweep), all with distinct filters so none can be deduped. That measured
+// ~1.5s warm here on 2026-08-22, but the same case timed out past Vitest's 5000ms default on the lint
+// job on PRs #128 and #129 — a cold CI runner has no warm pnpm store — so on that runner it took at
+// least ~3.3x the warm time.
+//
+// TWO failure modes, TWO timeouts, because one cannot cover the other:
+//   * SLOW-BUT-COMPLETING cold run — the flake above. `pnpmLs` runs SYNCHRONOUSLY (`spawnSync`), so
+//     between calls the worker's event loop turns and Vitest's per-test timer can fire; with the
+//     default 5000ms it fires mid-run and fails a healthy test. `PNPM_LS_TEST_TIMEOUT_MS` raises that
+//     per-test bound above the whole case's cold wall-clock so a healthy run finishes first.
+//   * GENUINE HANG in one `pnpm ls` — a `spawnSync` BLOCKS the event loop for its whole duration, so
+//     the Vitest timer above CANNOT fire while a child is stuck (this is what an earlier version of
+//     this comment got wrong). Only the kernel-level `timeout` option on `spawnSync` itself kills a
+//     hung child; `PNPM_LS_SPAWN_TIMEOUT_MS` is that per-call kill, and `pnpmLs` turns the killed
+//     result into a thrown error. It is smaller than the per-test bound so the clear per-call throw
+//     wins over a bare Vitest timeout.
+const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
+const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 /**
  * ci.yml's jobs as `{id, body}`, in file order.
@@ -186,28 +196,47 @@ const shards = jobs
  * script`, exit 0, while the same filters through `pnpm ls --depth -1 --json` returned 19 entries,
  * the extra one being the root.
  */
-function selects(filters) {
-  const result = spawnSync(
-    "pnpm",
-    [...filters.flatMap((filter) => ["--filter", filter]), "ls", "--depth", "-1", "--json"],
-    { encoding: "utf8", cwd: repoRoot },
-  );
-  expect(result.status).toBe(0);
+/**
+ * Run `pnpm <args>` under the per-call kill timeout and return its parsed-JSON stdout.
+ *
+ * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
+ * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). On timeout Node kills
+ * the child and sets `result.error`; on any spawn failure likewise. Turn both into a thrown Error
+ * naming the command, so a hang fails the test loudly instead of surfacing as `expected null to be 0`.
+ */
+function pnpmLs(args) {
+  const result = spawnSync("pnpm", args, {
+    encoding: "utf8",
+    cwd: repoRoot,
+    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
+  });
+  if (result.error !== undefined) {
+    throw new Error(
+      `\`pnpm ${args.join(" ")}\` failed to run (killed after timeout?): ${result.error.message}`,
+    );
+  }
+  expect(
+    result.status,
+    `\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`,
+  ).toBe(0);
+  return JSON.parse(result.stdout);
+}
 
-  return JSON.parse(result.stdout)
+function selects(filters) {
+  return pnpmLs([
+    ...filters.flatMap((filter) => ["--filter", filter]),
+    "ls",
+    "--depth",
+    "-1",
+    "--json",
+  ])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .map((pkg) => pkg.name);
 }
 
 /** Every workspace member (never the root) that declares a `test:coverage` script. */
 function membersDeclaringTests() {
-  const result = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
-    encoding: "utf8",
-    cwd: repoRoot,
-  });
-  expect(result.status).toBe(0);
-
-  return JSON.parse(result.stdout)
+  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter(
       (pkg) =>
