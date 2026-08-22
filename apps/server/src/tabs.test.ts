@@ -24,6 +24,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
@@ -603,5 +604,77 @@ describe("listTablesWithState (occupancy)", () => {
     await seedFiredDelivery(cfg, cafeId, tableId);
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
+  });
+});
+
+// KDS-2 ring-time course resolution (design §2b). PGlite, not real Postgres: this is resolver/CRUD logic
+// (a plain read-then-insert of a nullable column), no privilege or concurrency dimension — the lighter
+// target per CLAUDE.md §4, as the surrounding tab suite already uses.
+type RoundLine = { productId: string; quantity: string; courseId?: string | null };
+/** A round line for `addTabRoundWith`; `courseId` OPTIONAL — absent = no override (fall to the product
+ *  default), present (incl. `null`) = the line-level override the resolver honours. */
+function line(productId: string, opts?: { courseId?: string | null }): RoundLine {
+  return { productId, quantity: "1", ...opts };
+}
+/** Ring a round, then read each resulting line's resolved `course_id` back (the load-bearing assertion —
+ *  a null-only check would prove nothing about the resolver). Runs inside the caller's tx, so it reads its
+ *  own writes. */
+async function addTabRoundWith(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lines: RoundLine[],
+): Promise<{ productId: string; courseId: string | null }[]> {
+  await addTabRound(tx, cfg, tabId, lines);
+  return tx
+    .select({ productId: workingOrderLines.productId, courseId: workingOrderLines.courseId })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+}
+function lineCourse(
+  rows: { productId: string; courseId: string | null }[],
+  productId: string,
+): string | null {
+  return rows.find((r) => r.productId === productId)!.courseId;
+}
+
+describe("addTabRound ring-time course resolution (override ?? product default ?? null)", () => {
+  it("resolves a line's course: override > product default > null", async () => {
+    // The verbatim task-3 brief test: steak carries a product default; bread carries neither a product
+    // default nor (effectively) a course, its explicit null override resolving to null.
+    const { cfg, cafeId: steak, aguaId: bread, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const c = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+    );
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, steak, c.id));
+    const o = await asApp(cfg, (tx) =>
+      addTabRoundWith(tx, cfg, tabId, [line(steak), line(bread, { courseId: null })]),
+    );
+    expect(lineCourse(o, steak)).toBe(c.id); // product default (no override)
+    expect(lineCourse(o, bread)).toBeNull(); // explicit override to null
+  });
+
+  it("a non-null line override WINS over the product's default course", async () => {
+    const { cfg, cafeId: prod, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const def = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
+    );
+    const override = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 2 }),
+    );
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, prod, def.id));
+    const o = await asApp(cfg, (tx) =>
+      addTabRoundWith(tx, cfg, tabId, [line(prod, { courseId: override.id })]),
+    );
+    expect(lineCourse(o, prod)).toBe(override.id);
+  });
+
+  it("resolves null when the line has no override AND the product no default course", async () => {
+    const { cfg, cafeId: prod, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const o = await asApp(cfg, (tx) => addTabRoundWith(tx, cfg, tabId, [line(prod)]));
+    expect(lineCourse(o, prod)).toBeNull();
   });
 });

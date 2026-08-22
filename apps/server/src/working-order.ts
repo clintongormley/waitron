@@ -93,7 +93,10 @@ async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  lines: { productId: string; quantity: string }[],
+  // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the product's
+  // default course; present (incl. `null`) = the line-level override. Only the tab round-send threads a
+  // value today (a future course picker); park/update pass none, so their lines take the product default.
+  lines: { productId: string; quantity: string; courseId?: string | null }[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   const available = await listAvailableProducts(tx, cfg.locationId);
   const byId = new Map(available.map((p) => [p.id, p]));
@@ -104,6 +107,20 @@ async function priceOrderLines(
     }
     return { product, quantity: line.quantity };
   });
+
+  // Each fired product's DEFAULT course, one batched read keyed by product id — the same
+  // `inArray(products.id, …)` idiom `fireLines` uses for its station routes below. `listAvailableProducts`
+  // (`AvailableProduct`, deliberately assignable to `PriceableProduct`) does not carry `course_id`, so the
+  // course default is read here rather than widening the catalogue surface. Every id is already known
+  // sellable (the `sale.unknown_product` gate above), so each resolves a row; RLS confines the read to the
+  // tenant. The resolver is `override ?? product.course_id` (spec §2b): a non-null line override wins,
+  // otherwise the product default, otherwise null (fires earliest).
+  const productIds = [...new Set(lines.map((line) => line.productId))];
+  const courseRows = await tx
+    .select({ id: products.id, courseId: products.courseId })
+    .from(products)
+    .where(inArray(products.id, productIds));
+  const courseByProduct = new Map(courseRows.map((row) => [row.id, row.courseId]));
 
   const priced = priceBasket(items);
   const lineRows = priced.lines.map((line, i) => ({
@@ -135,6 +152,9 @@ async function priceOrderLines(
     // `grossLineTotals`/`grossUnitPrices`.
     lineTotal: priced.grossLineTotals[i]!,
     category: line.category ?? null,
+    // KDS-2 ring-time course (§2b): the line-level override wins, else the product's default course, else
+    // null. `priced.lines` is in `lines` order, so row `i` reads its override from `lines[i]`.
+    courseId: lines[i]!.courseId ?? courseByProduct.get(lines[i]!.productId) ?? null,
   }));
   return { lineRows, priced };
 }
@@ -607,7 +627,10 @@ export async function addTabRound(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
-  lines: { productId: string; quantity: string }[],
+  // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
+  // where the line's course resolves to `override ?? product.course_id` (§2b). Optional, so existing
+  // callers (and the till's current `{productId, quantity}` send-round) are unchanged.
+  lines: { productId: string; quantity: string; courseId?: string | null }[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
   if (lines.length === 0) {

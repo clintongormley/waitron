@@ -1,9 +1,15 @@
-// Side-effect only: keeps this host's `station.*` codes (errors.ts) reachable from the file that throws
-// them — the reachability convention tables.ts/till-sale.ts follow. See errors.ts.
+// Side-effect only: keeps this host's `station.*`/`course.*` codes (errors.ts) reachable from the file
+// that throws them — the reachability convention tables.ts/till-sale.ts follow. See errors.ts.
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { categories, isUniqueViolation, kitchenStations, products } from "@waitron/db";
+import {
+  categories,
+  isUniqueViolation,
+  kitchenCourses,
+  kitchenStations,
+  products,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
@@ -267,4 +273,167 @@ export type BumpMode = "line" | "ticket";
  */
 export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
+}
+
+// ── KDS-2 kitchen courses (design §2a/§3a) ───────────────────────────────────────────────────────
+// Config verbs mirroring the station-config verbs above, minus the default concept: `kitchen_courses`
+// has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set
+// dance and no partial unique to protect. Same shape otherwise — plain inserts / by-id UPDATEs on the
+// caller's transaction under its tenant/app_user scope, `course.name_taken` on a duplicate
+// `(tenant, location, name)` and `course.not_found` for an id this venue may not reach; the
+// `till.configure` gate is applied at the ROUTE layer (Task 5), exactly as the station verbs rely on.
+
+/** A configured kitchen course as the CRUD surface returns it — the slim shape the Cursos config editor
+ *  and the course picker both read. `createdAt` is INTERNAL, not part of this surface (the same choice
+ *  {@link Station} makes for its own `createdAt`). No `isDefault`: courses have no default (spec §2b). */
+export interface Course {
+  id: string;
+  name: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/**
+ * Assert `courseId` names a LIVE course of THIS venue — present, `active`, and in `cfg.locationId`.
+ * NULL-or-false → `course.not_found`, folding "absent / another tenant's (RLS-hidden) / another venue's"
+ * and "deactivated" into the one code (errors.ts explains why the inactive case is not distinct), exactly
+ * as {@link requireLiveStation} does for a station. The tenant-consistent `products_course_fk` enforces
+ * only same-TENANT existence — it can see neither `active` nor the location — so this explicit read is
+ * what rejects a retired or cross-venue course the FK would accept. One round trip via a scalar subquery.
+ */
+async function requireLiveCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  courseId: string,
+): Promise<void> {
+  const { rows } = await tx.execute<{ active: boolean | null }>(
+    sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
+      where ${kitchenCourses.id} = ${courseId}
+        and ${kitchenCourses.locationId} = ${cfg.locationId}) as active`,
+  );
+  if (!rows[0]!.active) {
+    throw new AppError("course.not_found", { courseId });
+  }
+}
+
+/**
+ * Create a kitchen course in the till's venue (its `cfg.locationId`), returning the minted id. A
+ * duplicate `(tenant, location, name)` collides on `kitchen_courses_name_key` and is surfaced as
+ * `course.name_taken` rather than the raw 23505 — the same shape {@link createStation} maps
+ * `station.name_taken` with. Simpler than `createStation`: no default to adopt, so no clear-then-set.
+ */
+export async function createCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  input: { name: string; displayOrder?: number },
+): Promise<{ id: string }> {
+  try {
+    const [row] = await tx
+      .insert(kitchenCourses)
+      .values({
+        tenantId: cfg.tenantId,
+        locationId: cfg.locationId,
+        name: input.name,
+        displayOrder: input.displayOrder ?? 0,
+      })
+      .returning({ id: kitchenCourses.id });
+    return { id: row!.id };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AppError("course.name_taken", { name: input.name });
+    }
+    throw error;
+  }
+}
+
+/** The venue's ACTIVE courses, by `display_order` then `name` — the coursing SEQUENCE (spec §2a: lowest
+ *  display_order fires first). RLS confines the read to the tenant; the location filter narrows to this
+ *  till's venue — the same active-only, location-scoped shape {@link listStations} uses. */
+export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
+  return tx
+    .select({
+      id: kitchenCourses.id,
+      name: kitchenCourses.name,
+      displayOrder: kitchenCourses.displayOrder,
+      active: kitchenCourses.active,
+    })
+    .from(kitchenCourses)
+    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
+    .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
+}
+
+/**
+ * Edit a course's `name`/`displayOrder`/`active` (any subset). Reactivation is
+ * `updateCourse({ active: true })`, the `update`-shaped surface {@link updateStation} uses. An absent id
+ * (or another tenant's, RLS-hidden) throws `course.not_found`; a name collision throws `course.name_taken`.
+ */
+export async function updateCourse(
+  tx: Transaction,
+  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
+  // scope, so the config is unused here (the repo idiom for an interface-mandated unused param — see
+  // {@link updateStation}).
+  _cfg: TillConfig,
+  id: string,
+  patch: { name?: string; displayOrder?: number; active?: boolean },
+): Promise<void> {
+  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  if (patch.name !== undefined) set.name = patch.name;
+  if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
+  if (patch.active !== undefined) set.active = patch.active;
+
+  let updated: { id: string }[];
+  try {
+    updated = await tx
+      .update(kitchenCourses)
+      .set(set)
+      .where(eq(kitchenCourses.id, id))
+      .returning({ id: kitchenCourses.id });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      // Only `name` participates in a unique an UPDATE can trip here, so it was necessarily supplied.
+      throw new AppError("course.name_taken", { name: patch.name! });
+    }
+    throw error;
+  }
+  if (updated.length === 0) {
+    throw new AppError("course.not_found", { courseId: id });
+  }
+}
+
+/** Deactivate a course (`active = false`) — never a hard delete (a `ticket_items.course_id` snapshot may
+ *  reference it; app_user holds no DELETE on `kitchen_courses`). An absent id throws `course.not_found`.
+ *  Mirrors {@link deactivateStation}. */
+export async function deactivateCourse(
+  tx: Transaction,
+  // Unused here for the same reason as {@link updateCourse} — kept for the uniform verb surface.
+  _cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  const updated = await tx
+    .update(kitchenCourses)
+    .set({ active: false })
+    .where(eq(kitchenCourses.id, id))
+    .returning({ id: kitchenCourses.id });
+  if (updated.length === 0) {
+    throw new AppError("course.not_found", { courseId: id });
+  }
+}
+
+/**
+ * Set (or clear, with `null`) a product's DEFAULT kitchen course (KDS-2 §2b) — the per-product course a
+ * line falls to at ring time when the line carries no override. Same shape as {@link setProductStation}:
+ * a non-null `courseId` must be a LIVE course of this venue ({@link requireLiveCourse}, `course.not_found`
+ * otherwise), null clears it, and the UPDATE is by product id under RLS (a `productId` this tenant does
+ * not own is a no-op — the route layer resolves product ids, and KDS-2 mints no `product.not_found`).
+ */
+export async function setProductCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  productId: string,
+  courseId: string | null,
+): Promise<void> {
+  if (courseId !== null) {
+    await requireLiveCourse(tx, cfg, courseId);
+  }
+  await tx.update(products).set({ courseId }).where(eq(products.id, productId));
 }
