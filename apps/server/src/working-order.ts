@@ -754,6 +754,91 @@ export async function fireCourse(
 }
 
 /**
+ * BUMP a whole course to `ready` across every station (KDS-3 §3b) — the expediter's "this course is all
+ * plated" lever on the pass. A single set-based UPDATE advances EVERY fired, not-yet-`ready` item of this
+ * order + course — regardless of which station cooked it — straight to `ready`. It is {@link advanceTicket}'s
+ * bulk shape (same `fired_at IS NOT NULL` held-skip, same no-throw-on-empty convenience, same
+ * {@link advanceSet} stamp) keyed on COURSE (order + `course_id`) rather than on one station: a course's
+ * items fan out across stations and the pass bumps them together.
+ *
+ * Two deliberate differences from {@link advanceTicket}:
+ *  - it matches `state != 'ready'` (not the single legal predecessor `TICKET_TRANSITIONS.ready.from`), so a
+ *    `queued` item jumps STRAIGHT to `ready` — a whole-course plate-up, not a one-step walk. It reuses
+ *    {@link advanceSet}("ready"), which stamps only `ready_at` (never `preparing_at`) — the SAME payload
+ *    every "reach ready" write in KDS-1 uses. A `queued`-skips-`preparing` item therefore lands with
+ *    `preparing_at` still null, exactly as an `advanceTicket`-to-`ready` leaves an item that was already
+ *    `preparing`; nothing reads `preparing_at`, so there is no ordering invariant to hold.
+ *  - HELD items (`fired_at IS NULL`) are SKIPPED (the `fired_at IS NOT NULL` predicate), so a course still
+ *    holding un-fired items bumps only what was fired; the pass releases a held course via {@link fireCourse}
+ *    first, then bumps.
+ *
+ * No existence check and no throw: an unknown course, or a course with nothing left to bump, updates zero
+ * rows and returns — the same no-op convenience {@link advanceTicket} makes (a bulk bump has no single item
+ * to name in an error, and the pass re-bumps idempotently). Contrast {@link markCourseAway}, which DOES
+ * require the course. Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the
+ * update to the tenant and (orderId, courseId) address one order's items, so `_cfg` is unused — the uniform
+ * tab-verb signature shape {@link advanceTicket} keeps. OPERATIONAL, not fiscal: writes only the mutable
+ * `ticket_items` kitchen table. The `requireSession` gate lives at the route (Task 5), not here.
+ */
+export async function bumpCourseReady(
+  tx: Transaction,
+  _cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+): Promise<void> {
+  await tx
+    .update(ticketItems)
+    .set(advanceSet("ready"))
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.courseId, courseId),
+        ne(ticketItems.state, "ready"),
+        isNotNull(ticketItems.firedAt),
+      ),
+    );
+}
+
+/**
+ * DISPATCH a plated course to the floor (KDS-3 §3b) — the expediter's "this course is away" verb, the pass
+ * counterpart to {@link bumpCourseReady}. Stamps `away_at = now()` on every `ready` item of this order +
+ * course that is not already away. `away_at` is KDS-3's dispatch marker (the item has left the pass for the
+ * floor); it is the terminal display state after `ready` (item lifecycle held → fired → queued → preparing →
+ * ready → away, `ticket-items.ts`).
+ *
+ * Only `ready` items go away (`state = 'ready'`): you dispatch what the kitchen has PLATED, never a
+ * still-cooking (`queued`/`preparing`) line — those stay on the pass until bumped. The course must EXIST in
+ * this venue — an unknown or cross-venue id is `course.not_found` ({@link requireCourse}), the same
+ * EXISTENCE-not-liveness check {@link fireCourse} uses: a course DEACTIVATED while it holds plated items must
+ * still be dispatchable (the items already carry the `course_id` snapshot), so {@link requireCourse}, not
+ * {@link requireLiveCourse}. IDEMPOTENT: the `away_at IS NULL` predicate skips already-away items, so
+ * re-dispatching leaves their timestamps untouched (and a course with nothing `ready` updates zero rows).
+ *
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the update to the tenant.
+ * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table — no sale, tender, registro
+ * or huella. The `requireSession` gate lives at the route (Task 5), not here.
+ */
+export async function markCourseAway(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  courseId: string,
+): Promise<void> {
+  await requireCourse(tx, cfg, courseId);
+  await tx
+    .update(ticketItems)
+    .set({ awayAt: sql`now()` })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        eq(ticketItems.courseId, courseId),
+        eq(ticketItems.state, "ready"),
+        isNull(ticketItems.awayAt),
+      ),
+    );
+}
+
+/**
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
  * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
  * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts

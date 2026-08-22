@@ -34,6 +34,7 @@ import {
   advanceTicketItem,
   cancelPlacedOrder,
   getHeldOrder,
+  listExpoQueue,
   listHeldOrders,
   listStationQueue,
   markCollected,
@@ -2045,6 +2046,78 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       params: { workingOrderId: foreignId },
     });
     expect(await ticketStateOf(foreignId)).toBeNull(); // tenant B's refused call fired nothing
+  });
+});
+
+// KDS-3 Task 3 (folded in per the Task-2 review) — the cross-station expo/pass read over real Postgres.
+// `listExpoQueue` gathers a node's OPEN orders (with a not-yet-away item) across ALL stations; unlike the
+// per-station `listStationQueue` it takes NO station arg, so its only scoping is `node_id = cfg.nodeId`
+// plus the tenant-isolation policy `ticket_items` carries (FORCE RLS, Task 1). PGlite — a single-backend,
+// all-superuser connection — proves the join/grouping/exclusions (working-order.test.ts) but CANNOT show
+// either scope; these two tests close the Task-2 review's gap with the SAME node-symmetry + cross-tenant
+// shape the `listStationQueue` tests above use, retargeted at `listExpoQueue`. The reads run through
+// {@link asTenant} (a `withTenant` + `asAppUser` scope), as `app_user`, so RLS is in force, not bypassed.
+describe("listExpoQueue (KDS-3 cross-station expo/pass read) — node scope + RLS isolation", () => {
+  it("node scope is SYMMETRIC: each node's expo board shows only its own order, both non-empty", async () => {
+    const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
+    // A second node under the SAME tenant + location (addNode's 7b shape) — RLS is tenant-scoped and would
+    // NOT hide either node's items from the other; only `listExpoQueue`'s `node_id = cfg.nodeId` filter
+    // does. BOTH nodes fire a genuine order, so this proves "A shows A, B shows B", not "one empty, one
+    // not" — a measurement where both answers look alike measures nothing (CLAUDE.md §1).
+    const nodeB = await addNode(nodeA, "Servidor 2");
+
+    const idA = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeA, {
+      id: idA,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Node A order",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, nodeA, idA, OPERATOR);
+
+    const idB = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeB, {
+      id: idB,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Node B order",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, nodeB, idB, OPERATOR);
+
+    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
+    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
+
+    // Same tenant + location on both sides, each expo board holding exactly its own order, opposite
+    // membership — the node filter, not RLS, is what separates them.
+    expect(expoA.map((o) => o.orderId)).toEqual([idA]);
+    expect(expoB.map((o) => o.orderId)).toEqual([idB]);
+  });
+
+  it("cross-tenant isolation: tenant B cannot read tenant A's expo orders even at A's own node (RLS hides them)", async () => {
+    const { cfg: tenantA, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg: tenantB } = await modeVenue("ticket_then_pay"); // a wholly separate venue + tenant
+
+    const idA = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantA, {
+      id: idA,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, tenantA, idA, OPERATOR);
+
+    // Positive control: under tenant A's own scope the order IS on the board — so the empty B result
+    // below is ISOLATION, not "nothing was ever fired" (CLAUDE.md §1, both answers must not look alike).
+    expect(
+      (await asTenant(tenantA, (tx) => listExpoQueue(tx, tenantA))).map((o) => o.orderId),
+    ).toEqual([idA]);
+
+    // Query under tenant B's `app_user` scope but pointing `listExpoQueue` at tenant A's OWN node +
+    // location, so the `node_id = cfg.nodeId` filter would MATCH A's items — the ONLY thing that can hide
+    // them now is the tenant-isolation policy. It does: B's board is empty. This removes the node confound
+    // that a plain `listExpoQueue(tx, tenantB)` would leave (B's own node matches nothing regardless).
+    const bAtAsNode: TillConfig = {
+      ...tenantB,
+      nodeId: tenantA.nodeId,
+      locationId: tenantA.locationId,
+    };
+    expect(await asTenant(bAtAsNode, (tx) => listExpoQueue(tx, bAtAsNode))).toEqual([]);
   });
 });
 
