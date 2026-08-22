@@ -183,6 +183,42 @@ const shards = jobs
   .map(({ id, step }) => ({ id, filters: literalFilters(step) }));
 
 /**
+ * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout.
+ *
+ * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
+ * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). Node kills the child
+ * on timeout and sets `result.error`.
+ */
+function spawnPnpm(args) {
+  return spawnSync("pnpm", args, {
+    encoding: "utf8",
+    cwd: repoRoot,
+    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
+  });
+}
+
+/**
+ * Run `pnpm <args>` via `run` and return its parsed-JSON stdout, or throw a clear Error.
+ *
+ * `run` is injected so the timeout/error path has an executable assertion without a real hang (see
+ * the `pnpmLs` suite): a killed or un-spawnable child sets `result.error`; a non-zero exit sets
+ * `result.status`. Both become a thrown Error naming the command, so a hang or failure fails the
+ * test loudly rather than surfacing as `expected null to be 0` — or, for a hang, never at all.
+ */
+function pnpmLs(args, run = spawnPnpm) {
+  const result = run(args);
+  if (result.error !== undefined) {
+    throw new Error(
+      `\`pnpm ${args.join(" ")}\` failed to run (killed after ${PNPM_LS_SPAWN_TIMEOUT_MS}ms?): ${result.error.message}`,
+    );
+  }
+  if (result.status !== 0) {
+    throw new Error(`\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+/**
  * What `pnpm <filters> ls --depth -1 --json` really selects, minus the workspace ROOT.
  *
  * The root is dropped by PATH rather than by name, exactly as `workspacePackages`
@@ -196,32 +232,6 @@ const shards = jobs
  * script`, exit 0, while the same filters through `pnpm ls --depth -1 --json` returned 19 entries,
  * the extra one being the root.
  */
-/**
- * Run `pnpm <args>` under the per-call kill timeout and return its parsed-JSON stdout.
- *
- * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
- * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). On timeout Node kills
- * the child and sets `result.error`; on any spawn failure likewise. Turn both into a thrown Error
- * naming the command, so a hang fails the test loudly instead of surfacing as `expected null to be 0`.
- */
-function pnpmLs(args) {
-  const result = spawnSync("pnpm", args, {
-    encoding: "utf8",
-    cwd: repoRoot,
-    timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
-  });
-  if (result.error !== undefined) {
-    throw new Error(
-      `\`pnpm ${args.join(" ")}\` failed to run (killed after timeout?): ${result.error.message}`,
-    );
-  }
-  expect(
-    result.status,
-    `\`pnpm ${args.join(" ")}\` exited ${result.status}: ${result.stderr}`,
-  ).toBe(0);
-  return JSON.parse(result.stdout);
-}
-
 function selects(filters) {
   return pnpmLs([
     ...filters.flatMap((filter) => ["--filter", filter]),
@@ -246,6 +256,46 @@ function membersDeclaringTests() {
     )
     .map((pkg) => pkg.name);
 }
+
+// `pnpmLs`'s timeout/error path is the regression fix for the hang above, so it carries its own
+// assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
+// "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
+// proves spawnSync's `timeout` genuinely kills a hung child.
+describe("pnpmLs (the subprocess guard)", () => {
+  it("returns parsed stdout on a clean exit", () => {
+    const ok = () => ({
+      status: 0,
+      error: undefined,
+      stdout: '[{"name":"@waitron/x"}]',
+      stderr: "",
+    });
+    expect(pnpmLs(["ls"], ok)).toEqual([{ name: "@waitron/x" }]);
+  });
+
+  it("throws, naming the command and stderr, on a non-zero exit", () => {
+    const failed = () => ({ status: 1, error: undefined, stdout: "", stderr: "boom" });
+    expect(() => pnpmLs(["ls", "-r"], failed)).toThrow(/pnpm ls -r.*exited 1.*boom/);
+  });
+
+  it("throws, naming the command, when the child errors (the timeout-kill shape)", () => {
+    const killed = () => ({
+      status: null,
+      signal: "SIGTERM",
+      error: Object.assign(new Error("spawnSync pnpm ETIMEDOUT"), { code: "ETIMEDOUT" }),
+      stdout: "",
+      stderr: "",
+    });
+    expect(() => pnpmLs(["ls"], killed)).toThrow(/pnpm ls.*failed to run.*ETIMEDOUT/);
+  });
+
+  it("really kills a hung child via spawnSync's own timeout", () => {
+    // A child that would sleep a minute, killed by a 500ms timeout — proves the mechanism the default
+    // runner relies on (status null, error set), fast and deterministically.
+    const hang = () =>
+      spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
+    expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
+  });
+});
 
 describe("ci.yml's job graph", () => {
   it("was parsed at all", () => {
