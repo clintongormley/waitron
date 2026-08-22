@@ -1644,6 +1644,14 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     but the deeper design question — whether a kitchen-routing failure should ever block the fiscal sale, vs.
     file the sale and surface the routing failure out-of-band — is unresolved and worth an owner decision
     before a venue can end up default-less.
+  - **`kitchen_stations` / `ticket_items` are not enrolled in the commercial sync lane.** KDS-1's new
+    tenant-scoped tables are not in `packages/sync`'s `SYNC_SCHEMA_TABLES`/registry, so they don't replicate
+    to a cloud mirror or between nodes (the pre-push gate confirmed only that `working_orders.collected_at`
+    now flows through the existing `working_orders` enrolment — the generator derives the SET list from the
+    schema, so it replicated automatically). No guard requires new tables to enrol, and replication is a
+    deferred slice, so this is fine for single-node KDS-1; enrol them (registry entries — FK rank, lane,
+    capture ops, conflict key; both were built single-writer-per-row) when the multi-node / cloud-mirror
+    kitchen-sync slice lands.
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
