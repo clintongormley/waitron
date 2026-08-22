@@ -275,13 +275,14 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
 }
 
-/** The KDS-2 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
- *  per-course fire action; `kitchen` = the station display surfaces it. Governs only which UI shows the
- *  button — `fireCourse` is the same either way, and both surfaces are session-gated. Mirrors
- *  `locations.fire_control`'s pgEnum (`packages/db/src/schema/tenants.ts`), spelled as a literal union
- *  here because `@waitron/db`'s enumerated exports do NOT publish the `fireControlMode` enum object
- *  (CLAUDE.md §3). Extends to `expo` in KDS-3. */
-export type FireControl = "waiter" | "kitchen";
+/** The KDS-2/3 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
+ *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
+ *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
+ *  every surface is session-gated. Mirrors `locations.fire_control`'s pgEnum
+ *  (`packages/db/src/schema/tenants.ts`), spelled as a literal union here because `@waitron/db`'s
+ *  enumerated exports do NOT publish the `fireControlMode` enum object (CLAUDE.md §3) — so a new member
+ *  is added to this union, the dashboard/till mirrors, and the route validator by hand (the KDS-3 drift). */
+export type FireControl = "waiter" | "kitchen" | "expo";
 
 /**
  * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` under RLS.

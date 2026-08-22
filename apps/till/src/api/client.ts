@@ -54,13 +54,14 @@ export interface TillInfo {
    */
   bumpMode: "line" | "ticket";
   /**
-   * The venue's KDS fire-control mode (KDS-2 §2c, `locations.fire_control`): `waiter` (the tab surfaces
-   * the fire action) or `kitchen` (the station display surfaces it). Read once from `GET /api/till` on
-   * boot and threaded to the station-display screen so it shows the per-course kitchen-fire action only
-   * for a `kitchen` venue. A LOCAL mirror of the server's `fire_control` enum, deliberately NOT imported
-   * — same bundle-decoupling rationale as `bumpMode` above and every other type in this file.
+   * The venue's KDS fire-control mode (KDS-2/3 §2c, `locations.fire_control`): `waiter` (the tab surfaces
+   * the fire action), `kitchen` (the station display surfaces it) or `expo` (KDS-3 — the expo/pass display
+   * surfaces it). Read once from `GET /api/till` on boot and threaded to the station-display screen so it
+   * shows the per-course kitchen-fire action only for a `kitchen` venue. A LOCAL mirror of the server's
+   * `fire_control` enum, deliberately NOT imported — same bundle-decoupling rationale as `bumpMode` above
+   * and every other type in this file.
    */
-  fireControl: "waiter" | "kitchen";
+  fireControl: "waiter" | "kitchen" | "expo";
   /**
    * The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` — the options the tab-order
    * screen's per-line course picker offers, and the id→name source its "Fire <course>" actions read.

@@ -301,16 +301,20 @@ describe("kitchen-screen", () => {
     expect(q(el, "[data-test=fire-waiter]")!.getAttribute("variant")).toBe("secondary");
   });
 
-  it("toggles the fire-control mode to kitchen and back to waiter", async () => {
+  it("toggles the fire-control mode across kitchen, expo, and back to waiter", async () => {
     const api = stubApi();
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
     q(el, "[data-test=fire-kitchen]")!.click();
     await flush(el);
     expect(api.setFireControl).toHaveBeenNthCalledWith(1, "kitchen");
+    // The KDS-3 third option: `expo` routes the fire to the expo/pass display.
+    q(el, "[data-test=fire-expo]")!.click();
+    await flush(el);
+    expect(api.setFireControl).toHaveBeenNthCalledWith(2, "expo");
     q(el, "[data-test=fire-waiter]")!.click();
     await flush(el);
-    expect(api.setFireControl).toHaveBeenNthCalledWith(2, "waiter");
+    expect(api.setFireControl).toHaveBeenNthCalledWith(3, "waiter");
   });
 
   it("surfaces a rejected fire-control write as a localised role=alert banner", async () => {

@@ -490,6 +490,7 @@ export class KitchenScreen extends LitElement {
         <div class="bump-options">
           ${this.#fireOption("waiter", t("kitchen.fire_waiter"))}
           ${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}
+          ${this.#fireOption("expo", t("kitchen.fire_expo"))}
         </div>
       </section>
 

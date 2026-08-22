@@ -1460,7 +1460,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Read the venue's fire-control setting (spec §3a: read AND written with the other venue config, for the
-  // dashboard's toggle). Gated on till.configure. Returns { mode: "waiter" | "kitchen" }.
+  // dashboard's toggle). Gated on till.configure. Returns { mode: "waiter" | "kitchen" | "expo" }.
   app.get("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1470,16 +1470,19 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Set the venue's fire-control setting — body { mode: "waiter" | "kitchen" }. A missing or non-{waiter,
-  // kitchen} value is a request-shape fault → management.request_invalid naming the FIELD (which also keeps
-  // a bad value off the `fire_control_mode` enum column). `setFireControl` writes `locations.fire_control`
-  // scoped to this venue. The sibling of the `PUT /management-api/bump-mode` route above. Returns 204.
+  // Set the venue's fire-control setting — body { mode: "waiter" | "kitchen" | "expo" }. A missing or
+  // non-{waiter,kitchen,expo} value is a request-shape fault → management.request_invalid naming the FIELD
+  // (which also keeps a bad value off the `fire_control_mode` enum column). The literal set is checked by
+  // hand because `@waitron/db` does not publish the `fireControlMode` enum object (see `FireControl` in
+  // kitchen.ts) — a new enum member is added here AND to that union (the KDS-3 drift). `setFireControl`
+  // writes `locations.fire_control` scoped to this venue. Sibling of `PUT /management-api/bump-mode`.
+  // Returns 204.
   app.put("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
-      if (body.mode !== "waiter" && body.mode !== "kitchen") {
+      if (body.mode !== "waiter" && body.mode !== "kitchen" && body.mode !== "expo") {
         throw new AppError("management.request_invalid", { field: "mode" });
       }
       // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
