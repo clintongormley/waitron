@@ -45,6 +45,18 @@ import {
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
+// The two `describe("the test shards")` cases below hand ci.yml's real filters to the real `pnpm ls`
+// (see `selects`/`membersDeclaringTests`) rather than modelling `--filter` — the whole point of this
+// file. The coverage-partition case alone is ~9 sequential `pnpm ls` spawns (one per shard, plus the
+// members sweep), all with distinct filters so none can be deduped. That measured ~1.5s warm here on
+// 2026-08-22, but the same case timed out past Vitest's 5000ms default on the lint job on PRs #128
+// and #129 — a cold CI runner has no warm pnpm store — so on that runner it took at least ~3.3x the
+// warm time. These cases are subprocess-bound and do no more work than those spawns, so they carry a
+// timeout calibrated to that — the same reason apps/server/vitest.config.ts sets a 180s hookTimeout
+// for its container suites — rather than racing pnpm's cold start. A genuine hang is still caught; it
+// just tolerates a slow cold runner.
+const PNPM_LS_TEST_TIMEOUT_MS = 30_000;
+
 /**
  * ci.yml's jobs as `{id, body}`, in file order.
  *
@@ -249,31 +261,35 @@ describe("the test shards", () => {
   //
   // Selections come from the real `pnpm ls` with ci.yml's real filters, so this measures what the
   // shards would actually select rather than what a model of `--filter` says they would.
-  it("cover every package declaring test:coverage exactly once, on a global scope", () => {
-    const declaring = membersDeclaringTests();
-    expect(declaring.length).toBeGreaterThan(0);
+  it(
+    "cover every package declaring test:coverage exactly once, on a global scope",
+    () => {
+      const declaring = membersDeclaringTests();
+      expect(declaring.length).toBeGreaterThan(0);
 
-    const runs = new Map();
-    for (const shard of shards) {
-      for (const name of selects(shard.filters)) {
-        runs.set(name, [...(runs.get(name) ?? []), shard.id]);
+      const runs = new Map();
+      for (const shard of shards) {
+        for (const name of selects(shard.filters)) {
+          runs.set(name, [...(runs.get(name) ?? []), shard.id]);
+        }
       }
-    }
 
-    // Nothing runs twice — two shards selecting one package burns a runner and doubles a suite.
-    expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
+      // Nothing runs twice — two shards selecting one package burns a runner and doubles a suite.
+      expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
 
-    // Nothing falls through. This is the direction that ships an untested package.
-    expect(declaring.filter((name) => !runs.has(name))).toEqual([]);
+      // Nothing falls through. This is the direction that ships an untested package.
+      expect(declaring.filter((name) => !runs.has(name))).toEqual([]);
 
-    // And the only selected members that declare no `test:coverage` are the ones declared test-less
-    // on purpose. Without this a package could be "covered" by a shard that then runs nothing for
-    // it — which is exactly what PACKAGES_WITHOUT_TESTS and the `runnable` guard exist to separate
-    // from a mistake.
-    expect([...runs.keys()].filter((name) => !declaring.includes(name)).sort()).toEqual(
-      [...PACKAGES_WITHOUT_TESTS].sort(),
-    );
-  });
+      // And the only selected members that declare no `test:coverage` are the ones declared test-less
+      // on purpose. Without this a package could be "covered" by a shard that then runs nothing for
+      // it — which is exactly what PACKAGES_WITHOUT_TESTS and the `runnable` guard exist to separate
+      // from a mistake.
+      expect([...runs.keys()].filter((name) => !declaring.includes(name)).sort()).toEqual(
+        [...PACKAGES_WITHOUT_TESTS].sort(),
+      );
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
 
   // The two light shards partition the non-own-shard packages: each subtracts its bin's COMPLEMENT
   // — every package in OWN_SHARD_PACKAGES plus every package in the OTHER bin — so what it selects is
@@ -294,13 +310,17 @@ describe("the test shards", () => {
     expect(excludedBy("test-light-b")).toEqual([...OWN_SHARD_PACKAGES, ...LIGHT_A_PACKAGES].sort());
   });
 
-  it("give each of those packages a shard that selects it and nothing else", () => {
-    for (const name of OWN_SHARD_PACKAGES) {
-      const dedicated = shards.filter((shard) => shard.filters.includes(name));
-      expect(dedicated).toHaveLength(1);
-      expect(selects(dedicated[0].filters)).toEqual([name]);
-    }
-  });
+  it(
+    "give each of those packages a shard that selects it and nothing else",
+    () => {
+      for (const name of OWN_SHARD_PACKAGES) {
+        const dedicated = shards.filter((shard) => shard.filters.includes(name));
+        expect(dedicated).toHaveLength(1);
+        expect(selects(dedicated[0].filters)).toEqual([name]);
+      }
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("the scope gates", () => {
