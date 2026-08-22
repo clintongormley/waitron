@@ -46,3 +46,19 @@ export async function seedNode(
     values (${tenant}, ${location}, 'Test node') returning id`);
   return brandNodeId(result.rows[0]!.id);
 }
+
+/** Seeds one kitchen station for `tenantId`/`locationId` and returns its id. Run as the connection owner
+ * (superuser) — RLS is bypassed, so this is pure setup, exactly like {@link seedTenant}/{@link seedNode}.
+ * Defaults to the DEFAULT station named 'Cocina' — the fixture shape the till suites need so a fire's
+ * default-station fallback ({@link fireLines}) resolves; callers wanting a non-default or differently
+ * named station override `isDefault`/`name`. */
+export async function seedKitchenStation(
+  db: Database,
+  opts: { tenantId: TenantId; locationId: LocationId | string; name?: string; isDefault?: boolean },
+): Promise<string> {
+  const { tenantId, locationId, name = "Cocina", isDefault = true } = opts;
+  const result = await db.execute<{ id: string }>(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, is_default)
+    values (${tenantId}, ${locationId}, ${name}, ${isDefault}) returning id`);
+  return result.rows[0]!.id;
+}

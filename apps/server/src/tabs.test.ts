@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -60,9 +60,7 @@ async function setupVenue(): Promise<Seeded> {
   const locationId = loc.rows[0]!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
   // superuser here, as the surrounding venue rows are (RLS bypassed in this pure setup).
-  await db.execute(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, is_default)
-    values (${tenantId}, ${locationId}, 'Cocina', true)`);
+  await seedKitchenStation(db, { tenantId, locationId });
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));

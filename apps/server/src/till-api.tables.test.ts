@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
@@ -58,9 +58,7 @@ const suite = usePgliteDb({
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as
     // the PGlite superuser here, as the surrounding venue rows are (RLS bypassed in setup).
-    await db.execute(sql`
-      insert into kitchen_stations (tenant_id, location_id, name, is_default)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Cocina', true)`);
+    await seedKitchenStation(db, { tenantId, locationId: loc.rows[0]!.id });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
