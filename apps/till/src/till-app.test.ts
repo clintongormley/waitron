@@ -64,6 +64,7 @@ const freeTable: TableState = {
   hasOpenTab: false,
   pendingDeliveries: 0,
   pendingToServe: 0,
+  readyToServe: 0,
   status: null,
   // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
   posX: null,
@@ -84,6 +85,7 @@ const openTable: TableState = {
   tabTotal: "12.00",
   pendingDeliveries: 0,
   pendingToServe: 1,
+  readyToServe: 0,
   status: null,
   posX: null,
   posY: null,
@@ -2380,8 +2382,9 @@ describe("till-app", () => {
 
       expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
       expect(counter(el)).toBeNull();
-      // The basket survives the trip (till-owned), like the schedule/floor nav.
-      expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+      // The basket survives the trip (till-owned store, not per-counter), like the schedule/floor nav —
+      // still one line even while the counter is unmounted and the station screen is showing.
+      expect(c.store.lines).toHaveLength(1);
 
       // Back returns to the counter with the basket intact.
       emit(el.shadowRoot!.querySelector("till-station-screen")!, "back-to-counter");

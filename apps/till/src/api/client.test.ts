@@ -826,7 +826,7 @@ describe("TillApi", () => {
     expect(r).toEqual(statuses);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe and the tab fields", async () => {
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe and the tab fields", async () => {
     // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
     // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
     // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
@@ -844,6 +844,7 @@ describe("TillApi", () => {
         tabTotal: "12.50",
         pendingDeliveries: 0,
         pendingToServe: 2,
+        readyToServe: 3,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
         posX: 250,
@@ -860,6 +861,7 @@ describe("TillApi", () => {
         hasOpenTab: false,
         pendingDeliveries: 0,
         pendingToServe: 0,
+        readyToServe: 0,
         status: null,
         // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
         posX: null,
@@ -877,9 +879,16 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(rows);
-    // The two badge signals the floor screen renders survive the round-trip decoded, as do the FP-2
-    // placement fields (a placed table's coordinates, an unplaced table's nulls).
-    expect(r[0]).toMatchObject({ zoneId: "z1", pendingToServe: 2, posX: 250, shape: "round" });
+    // The badge signals the floor screen renders survive the round-trip decoded — `pendingToServe` AND
+    // `readyToServe` (KDS-1 §3d's "N listos") — as do the FP-2 placement fields (a placed table's
+    // coordinates, an unplaced table's nulls).
+    expect(r[0]).toMatchObject({
+      zoneId: "z1",
+      pendingToServe: 2,
+      readyToServe: 3,
+      posX: 250,
+      shape: "round",
+    });
     expect(r[1]).toMatchObject({ posX: null, shape: null });
   });
 

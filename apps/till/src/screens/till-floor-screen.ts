@@ -214,6 +214,15 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
+         the success-coloured border rather than a coloured fill, so the label stays theme text on a
+         neutral chip (the a11y-safe pattern the status chip uses); there is no on-success token. */
+      .badge.ready {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-success);
+      }
+
       /* The manual-status chip: label in the theme's text colour on a neutral chip, with the DATA-driven
          status colour as a border + a small swatch — never as a text background, so contrast is fixed by
          the tokens and the arbitrary status colour cannot fail a11y. */
@@ -564,6 +573,13 @@ export class TillFloorScreen extends LitElement {
           table.pendingToServe > 0
             ? html`<span class="badge to-serve" data-to-serve
                 >${table.pendingToServe} ${t("floor.to_serve")}</span
+              >`
+            : nothing
+        }
+        ${
+          table.readyToServe > 0
+            ? html`<span class="badge ready" data-ready
+                >${table.readyToServe} ${t("floor.ready")}</span
               >`
             : nothing
         }

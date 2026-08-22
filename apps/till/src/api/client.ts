@@ -351,12 +351,14 @@ export interface FloorZone {
  * One row of the live-floor occupancy read-model from `GET /api/tables/state` (FP-1, design §4). A LOCAL
  * mirror of the server's `TableState` (`apps/server/src/working-order.ts`'s `listTablesWithState` return),
  * NOT imported — same bundle-decoupling rationale as every other type in this file. The raw signals
- * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`) sit alongside the rolled-up `state` so the floor
- * plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits in, or null. The
- * `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`); `tabTotal` is the
- * open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL service status (a
- * colour badge), independent of occupancy, or null. `pendingToServe` counts the open tab's lines still
- * to deliver (`served_at IS NULL`); DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`, `readyToServe`) sit alongside the rolled-up
+ * `state` so the floor plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits
+ * in, or null. The `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`);
+ * `tabTotal` is the open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL
+ * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
+ * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
+ * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); both are DISTINCT from
+ * `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;
@@ -370,6 +372,7 @@ export interface TableState {
   tabTotal?: string;
   pendingDeliveries: number;
   pendingToServe: number;
+  readyToServe: number;
   status: { id: string; label: string; color: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the

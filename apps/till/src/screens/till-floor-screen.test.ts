@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
@@ -20,6 +21,7 @@ function table(over: Partial<TableState> = {}): TableState {
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
+    readyToServe: 0,
     status: null,
     posX: null,
     posY: null,
@@ -122,6 +124,38 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.textContent).toContain("47.50");
     // The "N still to serve" badge carries the pendingToServe count.
     expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("2");
+  });
+
+  it("shows the ready-to-serve badge with the readyToServe count (KDS-1 §3d, 'N listos')", async () => {
+    const { el } = await mount({
+      zones: [zone({ id: "z1", name: "Comedor" })],
+      tables: [
+        table({
+          id: "t1",
+          label: "4",
+          zoneId: "z1",
+          state: "open-tab",
+          hasOpenTab: true,
+          tabId: "wo-9",
+          tabLineCount: 3,
+          tabTotal: "47.50",
+          pendingToServe: 1,
+          readyToServe: 2,
+        }),
+      ],
+    });
+    // The "N listos" badge (kitchen-done, not yet carried out) carries the readyToServe count and its
+    // localised suffix — DISTINCT from the to-serve badge.
+    const ready = el.shadowRoot!.querySelector("[data-ready]")!;
+    expect(ready.textContent).toContain("2");
+    expect(ready.textContent).toContain(t("floor.ready"));
+  });
+
+  it("renders no ready-to-serve badge when readyToServe is 0", async () => {
+    const { el } = await mount({
+      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, readyToServe: 0 })],
+    });
+    expect(el.shadowRoot!.querySelector("[data-ready]")).toBeNull();
   });
 
   it("emits open-table with hasOpenTab:false when a free table is tapped", async () => {
