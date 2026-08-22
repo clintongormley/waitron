@@ -1661,8 +1661,8 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     deferred slice, so this is fine for single-node KDS-1; enrol them (registry entries — FK rank, lane,
     capture ops, conflict key; both were built single-writer-per-row) when the multi-node / cloud-mirror
     kitchen-sync slice lands.
-- **KDS-2 follow-ups (sub-project 12). None blocking.** The **A1/A2/E2+E3 fast-follow SHIPPED** (PR
-  number filled at land): the per-line `courseId` override is now `isUuid`+`requireLiveCourse`-screened
+- **KDS-2 follow-ups (sub-project 12). None blocking.** The **A1/A2/E2+E3 fast-follow BUILT 2026-08-22**
+  (PR number filled at land): the per-line `courseId` override is now `isUuid`+`requireLiveCourse`-screened
   in the shared ring-time resolver → `course.not_found` (was an opaque 500 / silent foreign-venue accept);
   `fireCourse` requires course EXISTENCE not liveness (a new `requireCourse` sibling), so a deactivated
   course's held items release (fixing the three-surface stuck-item edge); and `fireLines`'
