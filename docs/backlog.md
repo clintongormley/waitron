@@ -1661,36 +1661,25 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     deferred slice, so this is fine for single-node KDS-1; enrol them (registry entries — FK rank, lane,
     capture ops, conflict key; both were built single-writer-per-row) when the multi-node / cloud-mirror
     kitchen-sync slice lands.
-- **KDS-2 follow-ups (sub-project 12). None blocking; surfaced by the whole-branch review + the
-  finish-branch simplify pass. The first three are one small, focused fast-follow — all in
-  `working-order.ts`/`kitchen.ts`/`till-api.ts`, all tenant-safe, none blocks a sale.**
-  - **`courseId` override is unvalidated on the ring-time paths (A1).** The per-line `courseId` override
-    from the tab picker reaches `working_order_lines.course_id` (via `priceOrderLines`) and the round route
-    (`POST /api/working-orders/:id/round`) with no `isUuid`/`requireLiveCourse` screen — the ONE
-    course-consuming write path that skips the shared `requireLiveCourse` primitive every other path uses
-    (`setProductCourse`, `fireCourse`). A crafted bad id surfaces as an opaque 500 (`22P02` on garbage, `23503`
-    FK on a well-formed-but-absent id) instead of a clean `course.not_found` 404; a course of a **different
-    venue of the same tenant** is accepted (the FK is tenant-scoped only), producing a line whose course can
-    never be released (`fireCourse`'s `requireLiveCourse` is location-scoped). Tenant-safe + only reachable by
-    a crafted request (the real picker offers active courses only), so accepted for land. Fix: validate each
-    non-null override with `requireLiveCourse` in `priceOrderLines`/`addTabRound`, uniformly on the order and
-    round paths.
-  - **`fireCourse` requires course LIVENESS, not existence (A2) — the deactivated-course edge.** A course
-    deactivated while it holds items → `fireCourse` throws `course.not_found` (via `requireLiveCourse`), so
-    those held items are stuck (can't fire, can't advance). Now visible in **three** places: `fireCourse`
-    errors, the kitchen station display renders a fire button that errors on press, and the waiter tab
-    silently drops the fire action. Recoverable (reactivate the course → fire → re-deactivate). Fix: make
-    `fireCourse` require course **existence, not activeness** (the items already carry the `course_id`
-    snapshot and a zero-match UPDATE stays a no-op) — fixes all three surfaces in one place. Keep
-    `requireLiveCourse` for the config/override paths.
-  - **`fireLines` issues one avoidable query pair on every fire (E2+E3).** After the E1 fix (landed:
-    `courseId` threaded from callers, the `lineCourses` re-read gone, 5→4 reads), `fireLines` still runs
-    `existing` (all of the order's ticket items, to derive already-fired courses) + `courseOrderRows`
-    (course display-orders) as two reads. They fold into one `kitchen_courses LEFT JOIN ticket_items … GROUP
-    BY course` aggregate (4→3 reads, and `existing`'s cost stops scaling with the whole tab's item history).
-    DEFERRED from the simplify pass because it rewrites the fired_at query crust the whole-branch review had
-    just verified — worth its own focused TDD change against the 6 hold-and-fire cases, not a rushed pre-land
-    edit.
+- **KDS-2 follow-ups (sub-project 12). None blocking.** The **A1/A2/E2+E3 fast-follow BUILT 2026-08-22**
+  (PR number filled at land): the per-line `courseId` override is now `isUuid`+`requireLiveCourse`-screened
+  in the shared ring-time resolver → `course.not_found` (was an opaque 500 / silent foreign-venue accept);
+  `fireCourse` requires course EXISTENCE not liveness (a new `requireCourse` sibling), so a deactivated
+  course's held items release (fixing the three-surface stuck-item edge); and `fireLines`'
+  `existing`+`courseOrderRows` read pair merged into one `kitchen_courses ⋈ ticket_items` aggregate (4→3
+  reads, behaviour-identical for every coherent in-venue state, proven by the 6 hold-and-fire cases passing
+  with zero assertion edits). Remaining:
+  - **A foreign product-default course strands a line (shared-catalogue corner, from the E2+E3 review).**
+    `products.course_id`'s FK is tenant-scoped only, and `setProductCourse` validates against one config
+    location, so a catalogue shared across venues (`assignCatalogueToLocation`) can leave a product whose
+    default course belongs to a DIFFERENT venue. Selling it at the other venue with no override → the line
+    carries a foreign course; the A1 screen covers overrides but NOT defaults, so it slips through. After the
+    E2+E3 read-merge the venue-filtered aggregate excludes that foreign course, so `fireLines` HOLDS the line
+    and `fireCourse` then can't release it (`requireCourse` rejects the foreign id) — the item is stranded.
+    Reachable only in that incoherent config (per-venue courses vs a shared `course_id`), untested, no fiscal
+    effect (accepted + documented in the `fireLines` E2+E3 comments). Deeper fix: at ring time resolve an
+    unresolvable/foreign product default to null-course (fire immediately) rather than storing it — removes
+    the stranding AND makes the venue filter genuinely lossless; or location-scope `products.course_id`.
   - **`advanceTicketItem`'s error disambiguation is a post-UPDATE read (E4 refactor, non-issue).** The held
     vs. bad-transition 4xx is now decided by a SELECT after the conditional UPDATE (folded the held-check into
     the UPDATE for a one-query success path). A concurrent `fireCourse` in the window could swap which 4xx a

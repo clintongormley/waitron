@@ -50,6 +50,7 @@ import type { TicketState } from "./working-order.js";
 import {
   createCourse,
   createStation,
+  deactivateCourse,
   deactivateStation,
   setCategoryStation,
   setProductCourse,
@@ -1451,6 +1452,31 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     });
   });
 
+  it("releases a HELD course's items even after the course is DEACTIVATED (A2: existence, not liveness)", async () => {
+    // The deactivated-course edge: a course deactivated WHILE it holds items must still be fireable, or
+    // its held items are stranded (can't fire, can't advance). `fireCourse` now requires only that the
+    // course EXISTS in this venue (active OR inactive) — the items already carry the `course_id` snapshot
+    // — so the release works; the former `requireLiveCourse` gate threw `course.not_found` here forever.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
+
+      await deactivateCourse(tx, cfg, pri.id);
+      await fireCourse(tx, cfg, orderId, pri.id);
+      expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
+    });
+  });
+
   it("fireCourse rejects an unknown course with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
@@ -1464,6 +1490,110 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         code: "course.not_found",
         params: { courseId: missing },
       });
+    });
+  });
+});
+
+// KDS-2 A1 — the per-line `courseId` OVERRIDE is screened at the shared ring-time resolver
+// (`priceOrderLines`), the ONE course-write path that formerly skipped `requireLiveCourse`. A crafted
+// override — malformed, well-formed-but-unknown, a DIFFERENT venue's course of the same tenant (the
+// working_order_lines.course_id FK is tenant-scoped only, not location-scoped), or a deactivated one —
+// is a clean `course.not_found` rather than an opaque 500 (22P02/23503) or a silently-accepted
+// cross-venue line. The product DEFAULT (`product.course_id`) is an already-valid stored FK and is NOT
+// re-screened (that would reject a legitimately-deactivated default). Exercised through `addTabRound`
+// (the round path that threads the override today); the screen lives in `priceOrderLines`, so the order
+// paths are covered by the SAME code. PGlite: plain SQL + the tenant-consistent FK, no privilege or
+// concurrency dimension.
+// ---------------------------------------------------------------------------------------------------
+describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
+  /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
+  async function openEmptyTab(tx: Transaction, cfg: TillConfig): Promise<string> {
+    const tableId = await makeTable(tx, cfg);
+    const { tabId } = await openTab(tx, cfg, { tableId });
+    return tabId;
+  }
+
+  it("rejects a malformed (non-uuid) course override with course.not_found", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tabId = await openEmptyTab(tx, cfg);
+      await expect(
+        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: "not-a-uuid" }]),
+      ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: "not-a-uuid" } });
+    });
+  });
+
+  it("rejects an unknown (well-formed but absent) course override with course.not_found", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tabId = await openEmptyTab(tx, cfg);
+      const missing = randomUUID();
+      await expect(
+        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: missing }]),
+      ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
+    });
+  });
+
+  it("rejects a DIFFERENT venue's course of the same tenant with course.not_found", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tabId = await openEmptyTab(tx, cfg);
+      // A second venue of the SAME tenant, and a course that lives there. The tenant-consistent FK on
+      // working_order_lines.course_id would ACCEPT it (same tenant), but requireLiveCourse is
+      // location-scoped, so the cross-venue override is refused — the exact silent-accept bug A1 closes.
+      const loc2 = await tx.execute<{ id: string }>(sql`
+        insert into locations (tenant_id, name, invoice_locales, operation_description)
+        values (${cfg.tenantId}, 'Barra 2', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(loc2.rows[0]!.id) };
+      const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
+      await expect(
+        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),
+      ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: foreign.id } });
+    });
+  });
+
+  it("rejects a DEACTIVATED course override with course.not_found", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const tabId = await openEmptyTab(tx, cfg);
+      const dead = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      await deactivateCourse(tx, cfg, dead.id);
+      await expect(
+        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: dead.id }]),
+      ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead.id } });
+    });
+  });
+
+  it("accepts a valid active course override and resolves it (the override wins over the product default)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // The product DEFAULT differs from the override — proving the override WINS and is snapshotted,
+      // and that a legitimate active override is not rejected by the new screen.
+      const def = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const override = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, cafe, def.id);
+      const tabId = await openEmptyTab(tx, cfg);
+      await addTabRound(tx, cfg, tabId, [
+        { productId: cafe, quantity: "1", courseId: override.id },
+      ]);
+      const items = await courseItemsFor(tx, tabId);
+      expect(items).toHaveLength(1);
+      expect(items[0]!.courseId).toBe(override.id);
     });
   });
 });
