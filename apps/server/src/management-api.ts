@@ -10,7 +10,13 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  fireControlMode,
+  withTenant,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   authorizeManager,
   beginPasskeyAuthentication,
@@ -1471,22 +1477,27 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Set the venue's fire-control setting — body { mode: "waiter" | "kitchen" | "expo" }. A missing or
-  // non-{waiter,kitchen,expo} value is a request-shape fault → management.request_invalid naming the FIELD
-  // (which also keeps a bad value off the `fire_control_mode` enum column). The literal set is checked by
-  // hand because `@waitron/db` does not publish the `fireControlMode` enum object (see `FireControl` in
-  // kitchen.ts) — a new enum member is added here AND to that union (the KDS-3 drift). `setFireControl`
-  // writes `locations.fire_control` scoped to this venue. Sibling of `PUT /management-api/bump-mode`.
-  // Returns 204.
+  // out-of-enum value is a request-shape fault → management.request_invalid naming the FIELD (which also
+  // keeps a bad value off the `fire_control_mode` enum column). The valid set is DERIVED from the DB enum
+  // (`fireControlMode.enumValues`, re-exported by `@waitron/db`'s barrel just like the sibling `orderFlow`
+  // this file's neighbours import), so a new `ADD VALUE 'x'` in the migration is accepted here with no
+  // hand-edit — this is the one drift site typecheck cannot protect (`const mode: FireControl = body.mode`
+  // only rejects an EXTRA member, never a MISSING one, so a stale literal list would silently 400 a valid
+  // mode). `setFireControl` writes `locations.fire_control` scoped to this venue. Sibling of
+  // `PUT /management-api/bump-mode`. Returns 204.
   app.put("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
-      if (body.mode !== "waiter" && body.mode !== "kitchen" && body.mode !== "expo") {
+      if (
+        typeof body.mode !== "string" ||
+        !(fireControlMode.enumValues as readonly string[]).includes(body.mode)
+      ) {
         throw new AppError("management.request_invalid", { field: "mode" });
       }
-      // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
-      const mode: FireControl = body.mode;
+      // Membership above verifies `mode` is a real enum value; narrow it for the `withVenueAuth` closure.
+      const mode = body.mode as FireControl;
       await withVenueAuth(deps, cfg, sessionId, (tx) => setFireControl(tx, cfg, mode));
       return c.body(null, 204);
     }),

@@ -279,9 +279,12 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
  *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
  *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
  *  every surface is session-gated. Mirrors `locations.fire_control`'s pgEnum
- *  (`packages/db/src/schema/tenants.ts`), spelled as a literal union here because `@waitron/db`'s
- *  enumerated exports do NOT publish the `fireControlMode` enum object (CLAUDE.md §3) — so a new member
- *  is added to this union, the dashboard/till mirrors, and the route validator by hand (the KDS-3 drift). */
+ *  (`packages/db/src/schema/tenants.ts`). Kept as a hand-maintained literal union here (and mirrored in
+ *  the dashboard/till client types), so a new `ADD VALUE` means adding the member to each mirror — but a
+ *  MISSED mirror is a typecheck failure, so the drift is caught. The RUNTIME `fire-control` route
+ *  validator instead DERIVES its valid set from `fireControlMode.enumValues` (`@waitron/db` re-exports the
+ *  enum via its barrel, like the sibling `orderFlow`), because that is the one drift site typecheck cannot
+ *  protect — a stale literal list there would silently 400 a valid mode. */
 export type FireControl = "waiter" | "kitchen" | "expo";
 
 /**
