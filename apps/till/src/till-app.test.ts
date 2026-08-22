@@ -9,7 +9,7 @@ import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
-import type { TillPrepQueue } from "./widgets/prep-queue.js";
+import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
 import { LAYOUT_A, type LayoutDef } from "./layout.js";
 import type {
@@ -128,12 +128,22 @@ const placedResult = {
   vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
 };
 
-const prepEntry = {
-  id: "wo-1",
+const stationGroup = {
+  orderId: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
-  state: "queued" as const,
-  queuedAt: "2026-08-06T10:00:00.000Z",
+  queuedAt: "2026-08-17T10:00:00.000Z",
+  items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" as const }],
+};
+
+/** The venue's single default station — what `#refreshStationQueue` resolves to fetch the counter's
+ * default-station queue (Modes I/T). */
+const defaultStation = {
+  id: "st-default",
+  name: "Cocina",
+  displayOrder: 0,
+  isDefault: true,
+  active: true,
 };
 
 /**
@@ -161,8 +171,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
     placeOrder: vi.fn().mockResolvedValue(placedResult),
     collectOrder: vi.fn().mockResolvedValue(saleResult),
-    advancePrep: vi.fn().mockResolvedValue(undefined),
-    listPrepQueue: vi.fn().mockResolvedValue([]),
+    // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T) + the per-line advance.
+    listStations: vi.fn().mockResolvedValue([defaultStation]),
+    getStationQueue: vi.fn().mockResolvedValue([]),
+    advanceTicketItem: vi.fn().mockResolvedValue(undefined),
+    advanceTicket: vi.fn().mockResolvedValue(undefined),
     // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
@@ -197,10 +210,10 @@ const tableOrder = (el: TillApp) =>
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
 const tenderPay = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-/** The prep-queue widget nested inside the counter screen's shadow root, or `null` when the layout
- * (Mode P) omits it. */
-const prepQueueWidget = (el: TillApp) =>
-  counter(el)!.shadowRoot!.querySelector<TillPrepQueue>("till-prep-queue");
+/** The station-queue widget nested inside the counter screen's shadow root (the default-station queue),
+ * or `null` when the layout (Mode P) omits it. */
+const stationQueueWidget = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue");
 
 /** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -2004,26 +2017,28 @@ describe("till-app", () => {
   // and the prep queue rendered from fetched data.
   // ---------------------------------------------------------------------------------------------
 
-  describe("per-mode pay control + prep queue (7c)", () => {
-    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow, no prep queue fetched or rendered", async () => {
+  describe("per-mode pay control + station queue (KDS-1)", () => {
+    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow, no station queue fetched or rendered", async () => {
       const { el } = await mountApp(); // the till fixture defaults orderFlow: "prepay"
       const c = await toCounter(el);
       expect(tenderPay(el).mode).toBe("prepay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(prepQueueWidget(el)).toBeNull(); // Mode P's layout omits the widget entirely
-      expect(currentApi.listPrepQueue).not.toHaveBeenCalled();
+      expect(stationQueueWidget(el)).toBeNull(); // Mode P's layout omits the widget entirely
+      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(c.products).toEqual([cafe]); // sanity: still a normal counter otherwise
     });
 
-    it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the prep queue is fetched and rendered", async () => {
+    it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("invoice_first");
       expect(tenderPay(el).stage).toBe("order");
-      expect(prepQueueWidget(el)).not.toBeNull();
-      expect(currentApi.listPrepQueue).toHaveBeenCalledOnce(); // fetched on entering the counter
+      expect(stationQueueWidget(el)).not.toBeNull();
+      // Resolves the default station once, then reads its queue on entering the counter.
+      expect(currentApi.listStations).toHaveBeenCalledOnce();
+      expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
     });
 
     it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
@@ -2032,16 +2047,26 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
-      expect(prepQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).not.toBeNull();
     });
 
-    it("renders the prep queue from fetched data, not just an empty placeholder", async () => {
+    it("renders the station queue from fetched data, not just an empty placeholder", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        listPrepQueue: vi.fn().mockResolvedValue([prepEntry]),
+        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
       });
       await toCounter(el);
-      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+    });
+
+    it("no default station configured leaves the counter queue empty rather than throwing", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        listStations: vi.fn().mockResolvedValue([{ ...defaultStation, isDefault: false }]),
+      });
+      await toCounter(el);
+      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
+      expect(stationQueueWidget(el)!.groups).toEqual([]);
     });
 
     it("place-order (fresh basket): parks then places, moves to the collect stage, refreshes the prep queue", async () => {
@@ -2069,7 +2094,7 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull(); // stays on the counter (no ticket for a mere place)
       expect(ticket(el)).toBeNull();
       // once on entering the counter, once after the successful place (Modes I/T auto-enqueue).
-      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
     });
 
     it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
@@ -2299,38 +2324,59 @@ describe("till-app", () => {
       expect(tenderPay(el).stage).toBe("order");
     });
 
-    it("advance-prep: advances the entry, then refreshes the prep queue", async () => {
+    it("advance-ticket-item: advances the line, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        listPrepQueue: vi.fn().mockResolvedValueOnce([prepEntry]).mockResolvedValue([]),
+        getStationQueue: vi.fn().mockResolvedValueOnce([stationGroup]).mockResolvedValue([]),
       });
       const c = await toCounter(el);
-      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
 
-      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
       await flush(el);
 
-      expect(currentApi.advancePrep).toHaveBeenCalledWith("wo-1", "preparing");
+      expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing");
       // once on entering the counter, once after the advance.
-      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
-      expect(prepQueueWidget(el)!.entries).toEqual([]);
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+      expect(stationQueueWidget(el)!.groups).toEqual([]);
     });
 
-    it("a failed advance-prep still refreshes the queue and shows a non-fatal error", async () => {
+    it("a failed advance-ticket-item still refreshes the queue and shows a non-fatal error", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
-        advancePrep: vi.fn().mockRejectedValue({ code: "order_prep.invalid_transition" }),
+        advanceTicketItem: vi.fn().mockRejectedValue({ code: "ticket.invalid_transition" }),
       });
       const c = await toCounter(el);
 
-      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
       await flush(el);
 
       // the refresh runs even though the advance rejected — a stale entry corrects itself.
-      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("prep.advance_error"));
-      expect(el.shadowRoot!.textContent).not.toContain("order_prep.invalid_transition");
+      expect(banner.textContent).toContain(t("station.advance_error"));
+      expect(el.shadowRoot!.textContent).not.toContain("ticket.invalid_transition");
+    });
+
+    it("show-station: the counter nav switches to the station-display screen (basket-preserving)", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1"); // a basket in progress
+      await el.updateComplete;
+
+      emit(c, "show-station");
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      // The basket survives the trip (till-owned), like the schedule/floor nav.
+      expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+
+      // Back returns to the counter with the basket intact.
+      emit(el.shadowRoot!.querySelector("till-station-screen")!, "back-to-counter");
+      await flush(el);
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.store.lines).toHaveLength(1);
     });
   });
 
@@ -2372,7 +2418,7 @@ describe("till-app", () => {
       // the authored arrangement reached the counter verbatim (order preserved)
       expect(c.layout).toEqual(authoredReordered);
       // and under Mode P the authored prep-queue is present — the mode filter did NOT run
-      expect(prepQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).not.toBeNull();
     });
 
     it("threads an authored product-grid `columns` config end to end to the grid widget", async () => {
@@ -2405,7 +2451,7 @@ describe("till-app", () => {
           .mockResolvedValue({ ...till, orderFlow: "prepay", layout: defaultCopy, receipt: {} }),
       });
       await toCounter(el);
-      expect(prepQueueWidget(el)).toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
     it("falls back to #layoutFor() when GET /api/till OMITS `layout` (older server): Mode P drops prep-queue", async () => {
@@ -2413,7 +2459,7 @@ describe("till-app", () => {
       // applies the Mode-P prep-queue drop, the slice-1 behaviour, unchanged.
       const { el } = await mountApp();
       await toCounter(el);
-      expect(prepQueueWidget(el)).toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
     it("threads the receipt trim from getTill through to the ticket view", async () => {

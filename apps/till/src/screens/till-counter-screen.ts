@@ -10,11 +10,11 @@ import "../widgets/basket.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
-import "../widgets/prep-queue.js";
+import "../widgets/station-queue.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
 import "./till-allergen-screen.js";
-import type { HeldOrderSummary, OrderFlow, PrepQueueEntry, TillProduct } from "../api/client.js";
+import type { HeldOrderSummary, OrderFlow, StationQueueGroup, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
@@ -110,11 +110,18 @@ export class TillCounterScreen extends LitElement {
   /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /**
-   * This node's active prep-queue entries (7c prepare & collect), handed to the prep-queue widget
-   * (the app owns and refreshes them — see `till-prep-queue`'s own doc). Defaults empty so a layout
-   * that includes `prep-queue` renders its empty state until the app wires a live refresh.
+   * The DEFAULT station's queue (KDS-1, design §3e — "the counter prep-queue becomes the default
+   * station"), grouped by order, handed to the station-queue widget the `prep-queue` layout slot now
+   * renders (the app owns and refreshes them). Defaults empty so a layout that includes `prep-queue`
+   * renders its empty state until the app wires a live refresh.
    */
-  @property({ attribute: false }) prepQueue: PrepQueueEntry[] = [];
+  @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
+  /**
+   * The DEFAULT station's id (KDS-1), threaded to the station-queue widget — its whole-ticket bump is
+   * keyed by station. Absent when the venue has no default station configured. The counter's own queue is
+   * per-line (line mode), so this is passed for correctness rather than exercised here.
+   */
+  @property({ attribute: false }) defaultStationId?: string;
   /**
    * The location's pay-timing mode (7c prepare & collect), threaded straight through to the pay
    * widget's own `mode` — see `till-tender-pay`'s PER-MODE CONTROL doc for exactly which idle control
@@ -177,6 +184,12 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-floor", { bubbles: true, composed: true }));
   }
 
+  /** Announce that the operator (or kitchen staff) wants the station-display screen (KDS-1). The app
+   * switches to it WITHOUT clearing the basket — mirrors {@link #showFloor}. */
+  #showStation(): void {
+    this.dispatchEvent(new CustomEvent("show-station", { bubbles: true, composed: true }));
+  }
+
   /** Reveal the allergen lookup screen in place of the sale body. */
   #openAllergens(): void {
     this.showAllergens = true;
@@ -223,7 +236,14 @@ export class TillCounterScreen extends LitElement {
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
       case "prep-queue":
-        return html`<till-prep-queue .entries=${this.prepQueue}></till-prep-queue>`;
+        // KDS-1: the `prep-queue` layout slot now renders the default station's queue as a ticket RAIL
+        // (cards grouped by order — #63's counter UX), per-line bump (line mode). The kanban board + the
+        // station picker live on the dedicated station-display screen.
+        return html`<till-station-queue
+          .groups=${this.stationQueue}
+          .view=${"rail"}
+          .stationId=${this.defaultStationId}
+        ></till-station-queue>`;
     }
   }
 
@@ -240,6 +260,9 @@ export class TillCounterScreen extends LitElement {
             </wt-button>
             <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
               ${t("floor.open")}
+            </wt-button>
+            <wt-button class="station" variant="secondary" @click=${() => this.#showStation()}>
+              ${t("station.open")}
             </wt-button>
             <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
               ${t("schedule.open")}

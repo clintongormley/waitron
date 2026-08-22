@@ -35,7 +35,7 @@ describe("till-counter-screen", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);
   });
 
-  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders/prep-queue in aside", async () => {
+  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders/station-queue in aside", async () => {
     const { el } = await mount();
     const main = el.shadowRoot!.querySelector(".region-main")!;
     const aside = el.shadowRoot!.querySelector(".region-aside")!;
@@ -44,33 +44,35 @@ describe("till-counter-screen", () => {
     expect(main.querySelector("till-product-grid")).not.toBeNull();
     expect(aside.querySelector("till-product-grid")).toBeNull();
 
-    // basket, total, tender-pay, the held-orders list and the prep queue stack in the aside region
-    // and nowhere else
+    // basket, total, tender-pay, the held-orders list and the (default-station) queue stack in the
+    // aside region and nowhere else — the `prep-queue` layout slot now renders the station-queue widget
     expect(aside.querySelector("till-basket")).not.toBeNull();
     expect(aside.querySelector("till-total")).not.toBeNull();
     expect(aside.querySelector("till-tender-pay")).not.toBeNull();
     expect(aside.querySelector("till-held-orders")).not.toBeNull();
-    expect(aside.querySelector("till-prep-queue")).not.toBeNull();
+    expect(aside.querySelector("till-station-queue")).not.toBeNull();
     expect(main.querySelector("till-basket")).toBeNull();
     expect(main.querySelector("till-total")).toBeNull();
     expect(main.querySelector("till-tender-pay")).toBeNull();
     expect(main.querySelector("till-held-orders")).toBeNull();
-    expect(main.querySelector("till-prep-queue")).toBeNull();
+    expect(main.querySelector("till-station-queue")).toBeNull();
   });
 
-  it("threads the prep queue through to the prep-queue widget", async () => {
-    const prepQueue = [
+  it("threads the default station's queue (and station id) through to the station-queue widget as a rail", async () => {
+    const stationQueue = [
       {
-        id: "wo-1",
+        orderId: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
-        state: "queued" as const,
-        queuedAt: "2026-08-06T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
+        items: [{ id: "ti-1", workingOrderLineId: "wol-1", state: "queued" as const }],
       },
     ];
-    const { el } = await mount({ prepQueue });
-    const queue = el.shadowRoot!.querySelector("till-prep-queue")!;
-    expect(queue.entries).toBe(prepQueue);
+    const { el } = await mount({ stationQueue, defaultStationId: "st-1" });
+    const queue = el.shadowRoot!.querySelector("till-station-queue")!;
+    expect((queue as unknown as { groups: unknown }).groups).toBe(stationQueue);
+    expect((queue as unknown as { view: string }).view).toBe("rail");
+    expect((queue as unknown as { stationId: string }).stationId).toBe("st-1");
   });
 
   it("threads the held-orders list through to the held-orders widget", async () => {
