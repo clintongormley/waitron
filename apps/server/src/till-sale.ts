@@ -496,6 +496,14 @@ function settlementFor(
  *
  * `workingOrderId` tags the sale (`sales_working_order_id_key` = the idempotency key); `priced` is the
  * authoritative price (walk-up `priceBasket`, or a stored-lock `priceLockedLines`).
+ *
+ * `markCollected` stamps the ORDER-level `collected_at` handover marker (KDS-1 §3e) in the SAME settle
+ * UPDATE — passed `true` ONLY by `collectOrder`'s Mode-T branch (a counter collect hands the order to
+ * the customer, so it must leave its station queue). A walk-up/retrieved pay (`payWorkingOrder`) and a
+ * Mode-P prepay (which settles BEFORE `sendToPrep` fires) leave it `false`, so `collected_at` stays
+ * NULL and the order — once fired — stays on the station queue until it is actually collected. Stamping
+ * it here rather than in a later UPDATE is required: a settled → settled edit is rejected by
+ * `working_orders_enforce_transition`. NON-FISCAL — the alta path never reads it (H2 huella-identity).
  */
 async function fileImmediateSale(
   tx: Transaction,
@@ -505,6 +513,7 @@ async function fileImmediateSale(
   tender: TillTender,
   priced: PricedLines,
   operatorId?: string,
+  markCollected = false,
 ): Promise<TillSaleResult> {
   const isCard = tender.method === "card";
   const { settledAmount, change } = settlementFor(tender, priced.total);
@@ -553,10 +562,16 @@ async function fileImmediateSale(
 
   // → settled. `working_orders_enforce_transition` permits both open → settled (walk-up/pay) and
   // placed → settled (Mode-T collect); the `settled_at` biconditional requires the timestamp be set —
-  // the SAME instant the tender carries.
+  // the SAME instant the tender carries. A Mode-T collect (`markCollected`) ALSO stamps the order-level
+  // `collected_at` handover marker in this same transition (see the doc-comment) — same instant as
+  // `settled_at`; walk-up/prepay leave it NULL.
   await tx
     .update(workingOrders)
-    .set({ status: "settled", settledAt: settledAt.toISOString() })
+    .set({
+      status: "settled",
+      settledAt: settledAt.toISOString(),
+      ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
+    })
     .where(eq(workingOrders.id, workingOrderId));
 
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
@@ -1420,7 +1435,18 @@ export async function collectOrder(
 
         await tx
           .update(workingOrders)
-          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          // `collected_at` is the ORDER-level customer-handover marker (KDS-1 §3e): a counter order
+          // fired to a station leaves that station's queue (`listStationQueue` excludes
+          // `collected_at IS NOT NULL`) once collected. It is stamped in THIS same placed → settled
+          // UPDATE — a later UPDATE on the settled row would be a settled → settled edit, which
+          // `working_orders_enforce_transition` rejects (0030_prepare_collect.sql). Same instant as
+          // `settled_at` (the collect's own clock reading). NON-FISCAL: the alta path never reads it,
+          // and the H2 huella-identity test pins two records differing only in it hash identically.
+          .set({
+            status: "settled",
+            settledAt: settledAt.toISOString(),
+            collectedAt: settledAt.toISOString(),
+          })
           .where(eq(workingOrders.id, req.id));
 
         // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
@@ -1429,9 +1455,11 @@ export async function collectOrder(
       }
 
       // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
-      // order's stored locked lines and move placed → settled (the shared filing path).
+      // order's stored locked lines and move placed → settled (the shared filing path). `markCollected`
+      // = true stamps `collected_at` in that same settle UPDATE (this IS a collect), dropping the order
+      // from its station queue; the fiscal filing itself is byte-identical to a walk-up's.
       const priced = await priceStoredOrder(tx, req.id);
-      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
+      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId, true);
     },
     { nodeId: cfg.nodeId },
   );
