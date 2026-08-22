@@ -187,10 +187,11 @@ const shards = jobs
  *
  * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
  * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). Node kills the child
- * on timeout and sets `result.error`.
+ * on timeout and sets `result.error`. `spawn` is injected only so a test can assert this function
+ * actually passes the `timeout` — otherwise deleting it here would leave the suite green (§4).
  */
-function spawnPnpm(args) {
-  return spawnSync("pnpm", args, {
+function spawnPnpm(args, spawn = spawnSync) {
+  return spawn("pnpm", args, {
     encoding: "utf8",
     cwd: repoRoot,
     timeout: PNPM_LS_SPAWN_TIMEOUT_MS,
@@ -288,9 +289,23 @@ describe("pnpmLs (the subprocess guard)", () => {
     expect(() => pnpmLs(["ls"], killed)).toThrow(/pnpm ls.*failed to run.*ETIMEDOUT/);
   });
 
+  it("the default runner passes the per-call kill timeout to spawnSync", () => {
+    // Proves spawnPnpm ITSELF wires `timeout` — the two tests below use their own runners, so without
+    // this, deleting `timeout: PNPM_LS_SPAWN_TIMEOUT_MS` in spawnPnpm would leave every test green
+    // while the real `pnpm ls` calls run unbounded again (the gap Copilot flagged).
+    let opts;
+    const spy = (_cmd, _args, options) => {
+      opts = options;
+      return { status: 0, error: undefined, stdout: "[]", stderr: "" };
+    };
+    spawnPnpm(["ls"], spy);
+    expect(opts.timeout).toBe(PNPM_LS_SPAWN_TIMEOUT_MS);
+  });
+
   it("really kills a hung child via spawnSync's own timeout", () => {
-    // A child that would sleep a minute, killed by a 500ms timeout — proves the mechanism the default
-    // runner relies on (status null, error set), fast and deterministically.
+    // The other half: proves the `timeout` option is not a no-op — a child that would sleep a minute,
+    // killed by a 500ms timeout (small so the test is fast; the spy above proves the real 30s value is
+    // the one spawnPnpm passes). status null, error set → pnpmLs throws.
     const hang = () =>
       spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
     expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
