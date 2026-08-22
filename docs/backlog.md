@@ -1627,6 +1627,23 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     Verified harmless — drizzle resolves migrations by id/prevId, not by snapshot presence — but the next
     migration author should regenerate from a clean baseline or add the missing snapshot so `drizzle-kit`'s
     diff base stays accurate.
+  - **No guard prevents deactivating the venue's current default station (only a fail-loud safety net).**
+    The whole-branch review found that deactivating the default left `fireLines` silently routing to a dead
+    station; that was fixed (the fire fallback now requires `active = true`, so a deactivated default fails
+    loud with `station.no_default` instead of dropping food, and `setDefaultStation` already refuses a
+    deactivated target). But a manager CAN still deactivate the default via the Cocina panel, after which the
+    venue has no active default and firing (hence `placeOrder`) is blocked until a new default is set.
+    Follow-up: refuse deactivating the current default in `deactivateStation`/`updateStation` (and hide/disable
+    the deactivate button on the default in the dashboard) so the misconfiguration can't be created — the
+    manager sets a new default first. Pairs with the next item.
+  - **Open question: should a no-default-station venue block `placeOrder` (the sale) at all? (§5 tension.)**
+    `fireLines` throws `station.no_default` from inside `placeOrder`/`addTabRound`, so a venue with no active
+    default cannot place an order — which brushes against the fiscal invariant "nothing may block a sale on
+    anything but the sale itself; a till that cannot sell is a shop that cannot trade." Today the provisioning
+    seed makes this unreachable in practice (every venue gets a default) and the guard above would keep it so,
+    but the deeper design question — whether a kitchen-routing failure should ever block the fiscal sale, vs.
+    file the sale and surface the routing failure out-of-band — is unresolved and worth an owner decision
+    before a venue can end up default-less.
 - **Local dev run stack follow-ups (#100). None blocking; both surfaced by review, out of scope for
   the run-stack itself.**
   - **Let `boot.ts` / `config.ts` accept a native `null` from-source migrations root.**
