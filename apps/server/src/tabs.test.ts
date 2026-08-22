@@ -131,7 +131,11 @@ async function seedFiredDelivery(
       deliveryTableId: tableId,
     });
     const lines = await tx
-      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        courseId: workingOrderLines.courseId,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await fireLines(tx, cfg, id, lines);

@@ -842,7 +842,11 @@ async function placeOrderWith(
   const id = randomUUID();
   await createOpenOrder(tx, cfg, id, lines, null);
   const fired = await tx
-    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      courseId: workingOrderLines.courseId,
+    })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
@@ -953,7 +957,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       withTenant(db, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const fired = await tx
-          .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+          .select({
+            id: workingOrderLines.id,
+            productId: workingOrderLines.productId,
+            courseId: workingOrderLines.courseId,
+          })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, orderId));
         await fireLines(tx, cfg, orderId, fired);

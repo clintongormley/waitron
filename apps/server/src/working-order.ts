@@ -532,7 +532,7 @@ export async function fireLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  lines: { id: string; productId: string }[],
+  lines: { id: string; productId: string; courseId: string | null }[],
 ): Promise<void> {
   if (lines.length === 0) {
     return;
@@ -575,16 +575,13 @@ export async function fireLines(
 
   // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
 
-  // Each fired line's RESOLVED course, read straight from `working_order_lines` — Task 3 stored it at
-  // ring time as `<override> ?? product.course_id` (null = no course). Keyed by line id (the same id
-  // this fire snapshots as `working_order_line_id`), read HERE rather than widening the `lines` input, so
-  // the three fire callers (placeOrder / sendToPrep / addTabRound) stay `{id, productId}`.
-  const lineIds = lines.map((line) => line.id);
-  const lineCourses = await tx
-    .select({ id: workingOrderLines.id, courseId: workingOrderLines.courseId })
-    .from(workingOrderLines)
-    .where(inArray(workingOrderLines.id, lineIds));
-  const courseByLine = new Map(lineCourses.map((row) => [row.id, row.courseId]));
+  // Each fired line's RESOLVED course — Task 3 stored it at ring time as `<override> ?? product.course_id`
+  // (null = no course). Threaded in on the `lines` param (keyed by line id, the same id this fire snapshots
+  // as `working_order_line_id`) rather than re-read here: every caller already holds it — placeOrder and
+  // sendToPrep add `course_id` to the line select they already run, and addTabRound reads it back on the
+  // insert's RETURNING — so the value is `working_order_lines.course_id` exactly as a re-read would give,
+  // one round trip cheaper.
+  const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
   // The order's EXISTING ticket items (prior rounds), for two order-wide facts an auto-fire decision
   // needs — computed over the WHOLE order, not just this batch (a tab fires round by round):
@@ -748,11 +745,14 @@ export async function addTabRound(
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
   // lines and send each to the kitchen as a ticket item. `returning` gives the minted line ids
-  // (`defaultRandom`) that `fireLines` snapshots the resolved station onto.
-  const appendedLines = await tx
-    .insert(workingOrderLines)
-    .values(appended)
-    .returning({ id: workingOrderLines.id, productId: workingOrderLines.productId });
+  // (`defaultRandom`) that `fireLines` snapshots the resolved station onto, plus each line's resolved
+  // `course_id` that `fireLines` needs for the hold-and-fire decision (§3c) — read back here instead of
+  // `fireLines` re-selecting it.
+  const appendedLines = await tx.insert(workingOrderLines).values(appended).returning({
+    id: workingOrderLines.id,
+    productId: workingOrderLines.productId,
+    courseId: workingOrderLines.courseId,
+  });
   await fireLines(tx, cfg, tabId, appendedLines);
 }
 
@@ -1932,7 +1932,11 @@ export async function placeOrder(
       // ticket items advance queued → preparing → ready freely even after the order is fiscally frozen,
       // so they live in their own MUTABLE table, as `order_prep` did.
       const firedLines = await tx
-        .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+        })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
@@ -2066,7 +2070,11 @@ export async function sendToPrep(
     // one ticket item per line, station resolved + snapshotted — the same fire `placeOrder` runs at
     // placing.
     const firedLines = await tx
-      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        courseId: workingOrderLines.courseId,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
@@ -2179,11 +2187,14 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
 }
 
 /**
- * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. Each branch is a
- * single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
- * legal predecessor of to>` — so the legality of the move IS the write: a skip (`queued → ready`), a
- * repeat, a jump backwards, or an absent/foreign item (RLS hides another tenant's) all match no row, and
- * the empty `returning` throws `ticket.invalid_transition` naming the offending item. The per-line
+ * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. The common path is
+ * a single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
+ * legal predecessor of to> and fired_at is not null` — so the legality of the move IS the write: a skip
+ * (`queued → ready`), a repeat, a jump backwards, an absent/foreign item (RLS hides another tenant's), or
+ * a KDS-2 HELD item (`fired_at` NULL) all match no row. On an empty match a single disambiguating read
+ * then picks the code: an existing held item throws `ticket.item_held`, everything else
+ * `ticket.invalid_transition` naming the offending item — so the frequent success is one query and only
+ * the rare miss pays a second. The per-line
  * successor to #63's order-level `advancePrep`, over `ticket_items` — the same fail-closed
  * conditional-UPDATE shape `advancePrep` used over `order_prep`, and the shape `abandonHeldOrder` uses
  * for `working_orders`.
@@ -2227,26 +2238,36 @@ export async function advanceTicketItem(
   const validTo = to as Exclude<TicketState, "queued">;
 
   // KDS-2 hold-and-fire guard (§3c): a HELD item (`fired_at IS NULL`) cannot advance — the kitchen must
-  // not bump food it has not been told to start. Read the item's fired state first; an EXISTING held
-  // item is refused `ticket.item_held`, before the transition UPDATE could move it. An absent/foreign
-  // item (RLS-hidden) reads back `undefined` and falls through to the conditional UPDATE below, which
-  // refuses it `ticket.invalid_transition` (unchanged KDS-1 behaviour) — so this never turns a "no such
-  // item" into the held code. Placed after the `to`-validity check so a garbage/`queued` target is still
-  // a malformed request (`invalid_transition`) regardless of the item's fired state.
-  const [item] = await tx
-    .select({ firedAt: ticketItems.firedAt })
-    .from(ticketItems)
-    .where(eq(ticketItems.id, itemId));
-  if (item !== undefined && item.firedAt === null) {
-    throw new AppError("ticket.item_held", { ticketItemId: itemId });
-  }
-
+  // not bump food it has not been told to start. The guard is FOLDED into the UPDATE's WHERE as
+  // `fired_at IS NOT NULL` (alongside the id + predecessor-state predicates), so the common SUCCESS path
+  // — a fired item at the legal predecessor — is ONE query. Only when the UPDATE matches NO row (the rare
+  // failure) does a second read run to say WHICH miss it was: an EXISTING held item (`fired_at IS NULL`)
+  // is refused `ticket.item_held`; anything else — a wrong/absent predecessor state, or an absent/foreign
+  // RLS-hidden item that reads back `undefined` — is refused `ticket.invalid_transition` (unchanged KDS-1
+  // behaviour). So a "no such item" never becomes the held code, and a held item is refused `item_held`
+  // whatever its state (the `fired_at IS NOT NULL` predicate drops it before the state predicate can
+  // matter), exactly as the prior read-first form did. The held disambiguation sits under the
+  // `to`-validity check above, so a garbage/`queued` target is still a malformed request
+  // (`invalid_transition`) regardless of the item's fired state.
   const updated = await tx
     .update(ticketItems)
     .set(advanceSet(validTo))
-    .where(and(eq(ticketItems.id, itemId), eq(ticketItems.state, transition.from)))
+    .where(
+      and(
+        eq(ticketItems.id, itemId),
+        eq(ticketItems.state, transition.from),
+        isNotNull(ticketItems.firedAt),
+      ),
+    )
     .returning({ id: ticketItems.id });
   if (updated.length === 0) {
+    const [item] = await tx
+      .select({ firedAt: ticketItems.firedAt })
+      .from(ticketItems)
+      .where(eq(ticketItems.id, itemId));
+    if (item !== undefined && item.firedAt === null) {
+      throw new AppError("ticket.item_held", { ticketItemId: itemId });
+    }
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
 }
