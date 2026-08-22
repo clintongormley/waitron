@@ -29,6 +29,16 @@ export const orderFlow = pgEnum("order_flow", ["prepay", "invoice_first", "ticke
 export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
 
 /**
+ * The per-venue FIRE CONTROL mode (KDS-2, §2c). `waiter` (default): the tab-ordering screen surfaces
+ * the fire action per held course. `kitchen`: the station display surfaces it instead. Governs ONLY
+ * which UI shows the affordance — `fireCourse` is the same verb either way, and both surfaces are
+ * session-gated. Extensible with `expo` in KDS-3 (an additive enum value + a third surface). A pgEnum
+ * on `locations`, matching `bump_mode` / `order_flow`'s precedent on the same table (one declaration
+ * yields both the union and the constraint).
+ */
+export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen"]);
+
+/**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
@@ -105,6 +115,11 @@ export const locations = pgTable(
     // display also offers a whole-ticket bump. NOT NULL DEFAULT 'line' so existing location fixtures
     // stay inert, exactly as `order_flow` above defaults. Governs only the display convenience.
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
+    // The per-venue KDS fire-control mode (KDS-2, §2c): `waiter` (default) = the tab surfaces the fire
+    // action; `kitchen` = the station display surfaces it. NOT NULL DEFAULT 'waiter' so existing
+    // location fixtures stay inert, exactly as `bump_mode` / `order_flow` above default. Governs only
+    // which UI shows the affordance — the `fireCourse` verb is unchanged by it.
+    fireControl: fireControlMode("fire_control").notNull().default("waiter"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
     // each other; the cycle is harmless because every cross-module reference is a lazy

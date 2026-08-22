@@ -11,6 +11,7 @@ export * from "./order-amendments.js";
 export * from "./dining-tables.js";
 export * from "./floor-zones.js";
 export * from "./kitchen-stations.js";
+export * from "./kitchen-courses.js";
 export * from "./ticket-items.js";
 export * from "./catalogue.js";
 export * from "./recipes.js";

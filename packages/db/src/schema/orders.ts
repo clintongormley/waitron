@@ -183,6 +183,14 @@ export const workingOrderLines = pgTable(
     // RLS row-level). NON-FISCAL: never read into a filed record — the pay path rebuilds filed
     // sale_lines from the locked price snapshot, not from this column (design H2).
     servedAt: timestamp("served_at", { withTimezone: true, mode: "string" }),
+    // The kitchen COURSE this line was rung to (KDS-2, §2b), resolved at ring time as
+    // `<override> ?? product.course_id` and snapshotted onto the fired ticket item. Bare NULLABLE
+    // uuid: the tenant-consistent (tenant_id, course_id) → kitchen_courses(tenant_id, id) FK is
+    // hand-written in the --custom migration (no plain single-column `.references()`), the same split
+    // KDS-1's routing columns use. NULL = no course; such a line fires earliest (spec §2b). Additive
+    // nullable column; working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it.
+    // NON-FISCAL: never read into a filed record — kitchen coordination only.
+    courseId: uuid("course_id"),
   },
   (t) => [
     // Composite FK: a line cannot point at an order belonging to another

@@ -81,6 +81,12 @@ export const products = pgTable(
     // the category default or the location's default station. products' existing RLS policy + app_user
     // grants (0027) cover this additive column with no change.
     stationId: uuid("station_id"),
+    // The per-product DEFAULT kitchen course (KDS-2 coursing, §2b) — resolved onto the line at ring
+    // time (overridable there). Bare NULLABLE uuid: the tenant-consistent (tenant_id, course_id) →
+    // kitchen_courses(tenant_id, id) FK is hand-written in the --custom migration, exactly like
+    // `station_id` above. NULL = no default course; such a line fires earliest (spec §2b). products'
+    // existing RLS policy + app_user grants (0027) cover this additive column with no change.
+    courseId: uuid("course_id"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     pricingUnit: text("pricing_unit").notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),

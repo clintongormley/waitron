@@ -61,6 +61,16 @@ export const ticketItems = pgTable(
     queuedAt: timestamp("queued_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
     preparingAt: timestamp("preparing_at", { withTimezone: true, mode: "string" }),
     readyAt: timestamp("ready_at", { withTimezone: true, mode: "string" }),
+    // The kitchen COURSE this item was fired to (KDS-2, §2b), SNAPSHOTTED from the line at fire time
+    // (like `station_id` above) — re-pointing the product's course later never moves an already-fired
+    // item. Bare NULLABLE uuid: the tenant-consistent (tenant_id, course_id) → kitchen_courses(tenant_id,
+    // id) FK is hand-written in the --custom migration. NULL = no course (fires earliest, spec §2b).
+    courseId: uuid("course_id"),
+    // HELD vs FIRED (KDS-2, §2b). NULL = HELD: the item shows greyed on the station display and
+    // CANNOT advance (`queued → preparing → ready` is gated on `fired_at IS NOT NULL`, §3c). Set =
+    // FIRED (workable). The first course of an order auto-fires at fire time (`now()`); later courses
+    // are held until `fireCourse` stamps them.
+    firedAt: timestamp("fired_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide (23505)
