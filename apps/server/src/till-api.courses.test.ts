@@ -364,9 +364,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
 // KDS-3 expo (pass) routes: the cross-station queue read + the whole-course `ready`/`away` verbs, over
 // the SAME seeded courses/products/station as the KDS-2 block above (shared `suite`/`app`/`cookie`).
 type ExpoItem = {
-  id: string;
   name: Record<string, string>;
-  qty: string;
   stationName: string;
   state: string;
   firedAt: string | null;
@@ -374,17 +372,12 @@ type ExpoItem = {
 };
 type ExpoCourse = {
   courseId: string | null;
-  courseName: string | null;
-  displayOrder: number | null;
   fired: boolean;
   away: boolean;
   items: ExpoItem[];
 };
 type ExpoOrder = {
   orderId: string;
-  tableLabel?: string;
-  orderNumber: number;
-  openedMinutes: number;
   courses: ExpoCourse[];
 };
 
