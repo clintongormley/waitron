@@ -468,7 +468,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
   **KDS-1 SHIPPED 2026-08-22 (PR #129)** (designed + planned 2026-08-17 — brainstormed with the owner via the visual
   companion, full scope chosen then sliced **KDS-1 → KDS-2 → KDS-3**; **KDS-2 courses BUILT 2026-08-22**,
-  **KDS-3 expo BUILT 2026-08-22**; the always-on device identity remains to build, now unblocked; fiscal
+  **KDS-3 expo BUILT 2026-08-22**; the always-on device identity **BUILT 2026-08-25 (PR #134)**; fiscal
   firewall proven in Task 10 — see *Recently shipped* → KDS-1). **KDS-1** = `kitchen_stations` config (one
   default) + routing (`category.station_id` default, `product.station_id` override, snapshotted at fire
   time) + the big rework: **`order_prep` (one-row-per-order) is replaced by per-line/per-station
