@@ -42,45 +42,51 @@ export const ENROL_RATE_WINDOW_MS = 60_000;
  */
 export const ENROL_RATE_MAX = 30;
 
-export interface FixedWindowLimiterOptions {
-  /** The window length in milliseconds. */
-  windowMs: number;
-  /** The most `check()` calls allowed per window before it starts refusing. */
-  max: number;
-  /** Injectable clock (defaults to `Date.now`) — a test drives the window without a real sleep. */
+export interface EnrolRateLimiterOptions {
+  /**
+   * Injectable clock (defaults to `Date.now`) — the ONLY knob, so a test can drive the fixed window
+   * deterministically without a real sleep (CLAUDE.md §4). The window length and cap are NOT injectable:
+   * they are the production {@link ENROL_RATE_WINDOW_MS}/{@link ENROL_RATE_MAX} constants, baked in so
+   * this limiter can never be constructed with a different policy than the one it ships.
+   */
   now?: () => number;
 }
 
-export interface FixedWindowLimiter {
+export interface EnrolRateLimiter {
   /**
-   * Record one attempt. Throws `device.pairing_rate_limited` (→ HTTP 429) when this window has already
-   * seen `max` allowed attempts; otherwise returns, having counted this one. The first call after the
-   * window elapses opens a fresh window and resets the count.
+   * Record one enrol attempt. Throws `device.pairing_rate_limited` (→ HTTP 429) when this window has
+   * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
+   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and resets the count.
    */
   check(): void;
 }
 
 /**
- * A GLOBAL fixed-window counter. Not per-key (no per-IP/per-tenant bucket) by design — see the module
- * doc: the on-prem topology makes a per-IP key worthless, and one global bucket is exactly the
- * connection-pool protection wanted. State is two module-free closure variables, so a fresh limiter is
- * fully isolated (each test builds its own; production builds exactly one at boot).
+ * The GLOBAL, in-memory, per-process enrol rate-limiter (spec §8). A fixed-window counter with the
+ * window ({@link ENROL_RATE_WINDOW_MS}) and cap ({@link ENROL_RATE_MAX}) BAKED IN — this is not a
+ * general-purpose limiter, it exists only for `POST /api/device/enrol` and throws the device-specific
+ * `device.pairing_rate_limited`, so a generic `windowMs`/`max` API would misrepresent it (a name that
+ * promised a reusable primitive while hardcoding a device body — CLAUDE.md §1/§3). Not per-key (no
+ * per-IP/per-tenant bucket) by design — see the module doc: the on-prem topology makes a per-IP key
+ * worthless, and one global bucket is exactly the connection-pool protection wanted. State is two
+ * closure variables, so a fresh limiter is fully isolated (each test builds its own; production builds
+ * exactly one at boot); only the clock is injectable, for the test window-drive.
  */
-export function createFixedWindowLimiter(opts: FixedWindowLimiterOptions): FixedWindowLimiter {
-  const { windowMs, max, now = Date.now } = opts;
+export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
+  const { now = Date.now } = opts;
   let windowStart = now();
   let count = 0;
   return {
     check(): void {
       const t = now();
       // A new window opens the instant the current one has fully elapsed; the count resets with it.
-      if (t - windowStart >= windowMs) {
+      if (t - windowStart >= ENROL_RATE_WINDOW_MS) {
         windowStart = t;
         count = 0;
       }
-      // Refuse BEFORE counting this attempt, so at most `max` attempts are ever admitted per window and
-      // the counter cannot run away under a sustained flood (it stays pinned at `max`).
-      if (count >= max) {
+      // Refuse BEFORE counting this attempt, so at most `ENROL_RATE_MAX` attempts are ever admitted per
+      // window and the counter cannot run away under a sustained flood (it stays pinned at the cap).
+      if (count >= ENROL_RATE_MAX) {
         throw new AppError("device.pairing_rate_limited", {});
       }
       count += 1;

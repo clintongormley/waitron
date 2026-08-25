@@ -27,7 +27,12 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
-import { createFixedWindowLimiter, type FixedWindowLimiter } from "./enrol-rate-limit.js";
+import {
+  ENROL_RATE_MAX,
+  ENROL_RATE_WINDOW_MS,
+  createEnrolRateLimiter,
+  type EnrolRateLimiter,
+} from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import type { Logger } from "./logger.js";
@@ -250,10 +255,11 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
   );
 }
 
-function mountApp(cfg: TillConfig, enrolRateLimiter?: FixedWindowLimiter): Hono {
+function mountApp(cfg: TillConfig, enrolRateLimiter?: EnrolRateLimiter): Hono {
   const app = new Hono();
   // `enrolRateLimiter` omitted → mountDeviceApi builds the DEFAULT (generous 30/min) limiter, which no
-  // ordinary suite trips. The rate-limit test below injects a tight limiter over a controllable clock.
+  // ordinary suite trips. The rate-limit test below injects a limiter over a controllable clock (the cap
+  // is the baked-in `ENROL_RATE_MAX` — no longer injectable — so it pre-fills the window in-process).
   mountDeviceApi(app, { db: suite.admin, cfg, secureCookies: false, enrolRateLimiter }, noopLog);
   return app;
 }
@@ -608,7 +614,7 @@ describe("Device API over real Postgres", () => {
     // mgmt route that mints the code is NOT throttled — the limiter is on `/api/device/enrol` alone.
     const venue = await setupVenue();
     let fakeNow = 1_000;
-    const limiter = createFixedWindowLimiter({ windowMs: 60_000, max: 2, now: () => fakeNow });
+    const limiter = createEnrolRateLimiter({ now: () => fakeNow });
     const app = mountApp(venue.cfg, limiter);
 
     // Mint ONE valid code up front. It must SURVIVE the throttled attempt below (the guard short-circuits
@@ -618,6 +624,12 @@ describe("Device API over real Postgres", () => {
       body: { kind: "kds_station", stationId: venue.defaultStationId, label: "Pantalla Cocina" },
     });
     const { code } = (await codeRes.json()) as { code: string };
+
+    // The cap is now the baked-in production `ENROL_RATE_MAX` (no longer injectable). Pre-fill the window
+    // to TWO below the cap IN-PROCESS (no HTTP, no DB) so the two junk HTTP attempts below bring it exactly
+    // to the cap and the valid third attempt is the (cap+1)th — the same boundary the old tight limiter
+    // tested, without `ENROL_RATE_MAX` DB round trips.
+    for (let i = 0; i < ENROL_RATE_MAX - 2; i++) limiter.check();
 
     // Two junk attempts fill the window. Each COUNTS toward the cap — the check runs before body parsing,
     // so even an invalid code is throttled — yet each still reaches the handler and returns the normal 400.
@@ -640,7 +652,7 @@ describe("Device API over real Postgres", () => {
 
     // Advance PAST the window: the counter resets, and the SAME valid code STILL redeems — proving both
     // that the throttled attempt consumed nothing (the row survived) and that the window reset.
-    fakeNow += 60_001;
+    fakeNow += ENROL_RATE_WINDOW_MS + 1;
     const ok = await send(app, "POST", "/api/device/enrol", { body: { code } });
     expect(ok.status).toBe(200);
     const jar = deviceCookieFrom(ok);

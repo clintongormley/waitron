@@ -4,7 +4,7 @@
 // pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
 // `station.not_found` reach here through the value imports of the verbs/guard that throw them
 // (`device.js`, `device-session.js`, `working-order.js`); `device.pairing_rate_limited` reaches here
-// through the value import of `createFixedWindowLimiter` (`enrol-rate-limit.js`, which throws it); and
+// through the value import of `createEnrolRateLimiter` (`enrol-rate-limit.js`, which throws it); and
 // the management-session/authorization codes through `@waitron/identity`; the mgmt siblings
 // (`purchasing-api.ts`) rely on the same transitive reachability. See the note atop `errors.ts`.
 import "./errors.js";
@@ -18,13 +18,9 @@ import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
-import { enrolDevice, generatePairingCode, type DeviceKind } from "./device.js";
-import {
-  ENROL_RATE_MAX,
-  ENROL_RATE_WINDOW_MS,
-  createFixedWindowLimiter,
-  type FixedWindowLimiter,
-} from "./enrol-rate-limit.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
+import { requireBodyUuid, requireEnum } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -46,12 +42,12 @@ export interface DeviceApiDeps {
   secureCookies: boolean;
   /**
    * The redemption rate-limiter for `POST /api/device/enrol` (spec §8). Optional and injected ONLY by
-   * tests, which pass a tight limiter over a controllable clock to prove the window behaviour without a
-   * real sleep; production omits it and `mountDeviceApi` builds the default per-process, GLOBAL
-   * fixed-window limiter (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). See `enrol-rate-limit.ts` for why
-   * the limit is global-not-per-IP and in-memory-not-DB.
+   * tests, which pass a limiter over a controllable clock to prove the window behaviour without a real
+   * sleep; production omits it and `mountDeviceApi` builds the default per-process, GLOBAL enrol limiter
+   * (`createEnrolRateLimiter()`, which bakes in `ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). See
+   * `enrol-rate-limit.ts` for why the limit is global-not-per-IP and in-memory-not-DB.
    */
-  enrolRateLimiter?: FixedWindowLimiter;
+  enrolRateLimiter?: EnrolRateLimiter;
 }
 
 /**
@@ -109,26 +105,6 @@ function requireString(v: unknown, field: string): string {
   return v;
 }
 
-/** Screen the `kind` against the `device_kind` enum — anything else is `management.request_invalid`.
- * Read off `deviceKind.enumValues` (not a hardcoded `"kds_station"`) so a future additive kind is
- * accepted here the moment the enum widens, never silently rejected. */
-function requireKind(v: unknown): DeviceKind {
-  if (typeof v === "string" && (deviceKind.enumValues as readonly string[]).includes(v)) {
-    return v as DeviceKind;
-  }
-  throw new AppError("management.request_invalid", { field: "kind" });
-}
-
-/** Screen the `stationId` body field to a UUID SHAPE — a non-uuid would raise `22P02` in
- * `requireLiveStation` → an opaque 500, so a malformed one is a clean request-shape 400 here. A
- * well-formed but unknown/foreign station is left to the verb's `requireLiveStation` (`station.not_found`). */
-function requireStationId(v: unknown): string {
-  if (typeof v !== "string" || !isUuid(v)) {
-    throw new AppError("management.request_invalid", { field: "stationId" });
-  }
-  return v;
-}
-
 /**
  * Mounts the three device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`
  * convention, attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps
@@ -148,11 +124,9 @@ function requireStationId(v: unknown): string {
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
   // here so it is one bucket for the whole mounted API — in production `mountDeviceApi` is called once at
-  // boot, so "per-mount" is "per-process". A test may inject its own tight limiter (over a controllable
-  // clock); production omits it and gets the default `ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`.
-  const enrolLimiter =
-    deps.enrolRateLimiter ??
-    createFixedWindowLimiter({ windowMs: ENROL_RATE_WINDOW_MS, max: ENROL_RATE_MAX });
+  // boot, so "per-mount" is "per-process". A test may inject its own limiter (over a controllable clock);
+  // production omits it and gets the default `createEnrolRateLimiter()` (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`).
+  const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
@@ -258,8 +232,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const body =
         (await c.req.json<{ kind?: unknown; stationId?: unknown; label?: unknown }>()) ?? {};
-      const kind = requireKind(body.kind);
-      const stationId = requireStationId(body.stationId);
+      // `requireEnum` narrows `kind` to the `device_kind` pgEnum union (= `DeviceKind`) off
+      // `deviceKind.enumValues`, so a future additive kind is accepted the moment the enum widens;
+      // `requireBodyUuid` screens `stationId` to a UUID SHAPE (a non-uuid would `22P02` in
+      // `requireLiveStation` → an opaque 500). Both refuse a bad value as `management.request_invalid`
+      // naming the field — the SHARED request-screens the other gated surfaces validate through.
+      const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
+      const stationId = requireBodyUuid(body.stationId, "stationId");
       const label = requireString(body.label, "label");
       const result = await gated(sessionId, (tx) =>
         generatePairingCode(tx, deps.cfg, { kind, stationId, label }),
