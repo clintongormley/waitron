@@ -1339,9 +1339,9 @@ describe("TillApi", () => {
       }),
     );
 
-    await expect(
-      new TillApi("", fetchStub).enrolDevice("nope"),
-    ).rejects.toMatchObject({ code: "device.pairing_invalid" });
+    await expect(new TillApi("", fetchStub).enrolDevice("nope")).rejects.toMatchObject({
+      code: "device.pairing_invalid",
+    });
   });
 
   it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {

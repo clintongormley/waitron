@@ -522,7 +522,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -560,8 +562,12 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       }),
     );
     await flush(el);
-    expect((api as unknown as { markCollected: ReturnType<typeof vi.fn> }).markCollected).not.toHaveBeenCalled();
-    expect((api as unknown as { fireCourse: ReturnType<typeof vi.fn> }).fireCourse).not.toHaveBeenCalled();
+    expect(
+      (api as unknown as { markCollected: ReturnType<typeof vi.fn> }).markCollected,
+    ).not.toHaveBeenCalled();
+    expect(
+      (api as unknown as { fireCourse: ReturnType<typeof vi.fn> }).fireCourse,
+    ).not.toHaveBeenCalled();
     // Only the initial probe ran — a guarded stray event triggers no reload.
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
   });
