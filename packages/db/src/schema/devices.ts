@@ -1,11 +1,11 @@
 import {
   boolean,
-  index,
   pgEnum,
   pgTable,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants } from "./tenants.js";
@@ -140,6 +140,11 @@ export const devicePairingCodes = pgTable(
     // Composite (tenant_id, id) UNIQUE — the composite-FK target, as for the other tenant tables.
     unique("device_pairing_codes_tenant_id_key").on(t.tenantId, t.id),
     // The redemption lookup path: DELETE … WHERE tenant_id = $t AND code_sha256 = $h RETURNING.
-    index("device_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
+    // UNIQUE, not a plain index: `enrolDevice`'s DELETE … RETURNING reads only the FIRST row, so two
+    // rows sharing a (tenant, digest) would let one escape consumption — breaking the single-use
+    // invariant. The unique index makes that unrepresentable and serves the lookup identically; the
+    // generator's ~1-in-2^40 duplicate now fails the INSERT (the manager retries) rather than silently
+    // minting a consumable duplicate. tenant_id leads the key, so uniqueness is per-tenant.
+    uniqueIndex("device_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
 ).enableRLS();

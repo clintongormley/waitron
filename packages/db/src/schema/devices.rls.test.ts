@@ -235,6 +235,37 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     expect(deleted[0]!.id).toBe(id);
   });
 
+  it("device_pairing_codes: (tenant_id, code_sha256) is UNIQUE — a duplicate digest is rejected 23505", async () => {
+    // The redemption path (`enrolDevice`) deletes by (tenant_id, code_sha256) and reads only the FIRST
+    // returned row, so two rows sharing a digest would let one escape consumption — breaking the
+    // single-use invariant. A UNIQUE index on (tenant_id, code_sha256) makes that unrepresentable: the
+    // generator's ~1-in-2^40 duplicate code now fails the INSERT (the manager retries) instead of
+    // silently minting a consumable duplicate.
+    await seedPairingCode(TENANT_A, STATION_A, "sha-dup", "First");
+    const e = await captureError(() =>
+      seedPairingCode(TENANT_A, STATION_A, "sha-dup", "Duplicate"),
+    );
+    expect(pgErrorCode(e)).toBe("23505"); // unique_violation on (tenant_id, code_sha256)
+
+    // Proof by deletion of the guard (§4): with the UNIQUE index replaced by a PLAIN one inside a
+    // ROLLED-BACK tx, the SAME (tenant, digest) inserts a second time without error — attributing the
+    // 23505 above to the unique index, not to some other constraint. The rollback restores it for the
+    // shared clone. drop/create run as the owner (app_user holds no DDL), then `set local role app_user`
+    // inserts through the same app path the positive case used.
+    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+      await tx.execute(sql`drop index device_pairing_codes_lookup_idx`);
+      await tx.execute(
+        sql`create index device_pairing_codes_lookup_idx on device_pairing_codes (tenant_id, code_sha256)`,
+      );
+      await tx.execute(sql`set local role app_user`);
+      const inserted = await tx.execute<{ id: string }>(
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-dup', 'kds_station', ${STATION_A}, 'Now allowed') returning id`,
+      );
+      expect(inserted.rows).toHaveLength(1); // the duplicate digest inserts once the UNIQUE index is gone
+    });
+  });
+
   it("device_pairing_codes: app_user has NO UPDATE (a code is consumed, never edited)", async () => {
     const id = await seedPairingCode(TENANT_A, STATION_A, "sha-noupdate", "No-update probe");
     const e = await captureError(() =>

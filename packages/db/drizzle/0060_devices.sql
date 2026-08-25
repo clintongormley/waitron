@@ -32,4 +32,4 @@ ALTER TABLE "device_pairing_codes" ADD CONSTRAINT "device_pairing_codes_tenant_i
 ALTER TABLE "device_pairing_codes" ADD CONSTRAINT "device_pairing_codes_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "devices" ADD CONSTRAINT "devices_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "devices" ADD CONSTRAINT "devices_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "device_pairing_codes_lookup_idx" ON "device_pairing_codes" USING btree ("tenant_id","code_sha256");
+CREATE UNIQUE INDEX "device_pairing_codes_lookup_idx" ON "device_pairing_codes" USING btree ("tenant_id","code_sha256");
