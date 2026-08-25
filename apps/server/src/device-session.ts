@@ -83,8 +83,8 @@ export interface DeviceBinding {
  * missing cookie would, and the `active = true` filter is what makes revocation INSTANT: a revoked row
  * is simply not found, with no token lifetime to expire. `verifySecret` (scrypt, `@waitron/identity`)
  * is constant-time — the token is NEVER compared with `===`. On success the sighting is recorded
- * (`last_seen_at = now()`) and the binding returned; nothing is logged, and the token never leaves this
- * function.
+ * (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the binding
+ * returned; nothing is logged, and the token never leaves this function.
  *
  * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
  * group carrying only `{ tenantId }` can gate on it without contriving a full config.
@@ -124,10 +124,21 @@ export async function requireDevice(
     // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.
     if (!verifySecret(token, row.tokenHash)) throw new AppError("device.unauthorized", {});
 
+    // Record the sighting, but SKIP the write when `last_seen_at` is already within the last minute:
+    // `requireDevice` runs on EVERY authenticated request (the auth hot path), and the sole consumer
+    // renders last-seen only to the MINUTE (`devices-screen.ts`'s `#lastSeen` slices to `HH:MM`), so a
+    // sub-minute re-write is invisible write amplification. The gate keeps the FIRST sighting (NULL →
+    // written, the differential proof the test pins) and one write per minute thereafter. Parameterised
+    // by Drizzle — `id` binds as `$n`; the interval is a constant literal, never user input.
     await tx
       .update(devices)
       .set({ lastSeenAt: sql`now()` })
-      .where(eq(devices.id, deviceId));
+      .where(
+        and(
+          eq(devices.id, deviceId),
+          sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
+        ),
+      );
     return { deviceId, kind: row.kind, stationId: row.stationId };
   });
 }
