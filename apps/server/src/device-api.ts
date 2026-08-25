@@ -154,9 +154,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         return enrolDevice(tx, deps.cfg, { code });
       });
       // The cookie is `${deviceId}.${token}` — a selector plus the scrypt-checked validator. The token
-      // leaves the process ONLY here, in the Set-Cookie header; the JSON body carries just the id.
+      // is the ONLY secret and leaves the process ONLY here, in the Set-Cookie header; it is NEVER echoed
+      // in the body. The other three fields the verb returns — `kind`, `stationId`, `label` — are
+      // non-secret (the manager who minted the code chose them) and the T6 enrol-confirmation view wants
+      // them inline (spec §3b: the response is `{ deviceId, kind, stationId, label }`).
       setDeviceCookie(c, `${enrolled.deviceId}.${enrolled.token}`, deps.secureCookies);
-      return c.json({ deviceId: enrolled.deviceId }, 200);
+      return c.json(
+        {
+          deviceId: enrolled.deviceId,
+          kind: enrolled.kind,
+          stationId: enrolled.stationId,
+          label: enrolled.label,
+        },
+        200,
+      );
     }),
   );
 

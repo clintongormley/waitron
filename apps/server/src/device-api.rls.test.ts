@@ -312,17 +312,24 @@ describe("Device API over real Postgres", () => {
     const [ownItem, foreignItem] = items;
     await moveItemToStation(foreignItem!, fria.id);
 
-    // Enrol a device bound to the DEFAULT station (unauthenticated), and prove the cookie carries the
-    // bearer token while the JSON body does NOT (the token never leaves the Set-Cookie header).
+    // Enrol a device bound to the DEFAULT station (unauthenticated). The body echoes the non-secret
+    // fields the manager chose (spec §3b) — deviceId, kind, stationId, label — while the bearer token
+    // rides ONLY in the Set-Cookie header and is NEVER echoed in the body.
     const codeRes = await send(app, "POST", "/management-api/device-codes", {
       cookie: venue.managerCookie,
-      body: { kind: "kds_station", stationId: venue.defaultStationId, label: "P" },
+      body: { kind: "kds_station", stationId: venue.defaultStationId, label: "Pantalla Cocina" },
     });
     const { code } = (await codeRes.json()) as { code: string };
     const enrol = await send(app, "POST", "/api/device/enrol", { body: { code } });
     expect(enrol.status).toBe(200);
     const enrolBody = (await enrol.json()) as Record<string, unknown>;
-    expect(Object.keys(enrolBody)).toEqual(["deviceId"]); // ONLY the id — never the token
+    expect(enrolBody).toMatchObject({
+      deviceId: expect.any(String),
+      kind: "kds_station",
+      stationId: venue.defaultStationId,
+      label: "Pantalla Cocina",
+    });
+    expect(enrolBody).not.toHaveProperty("token"); // positive no-echo: the secret is never in the body
     const setCookie = enrol.headers.get("set-cookie")!;
     expect(setCookie).toContain(`${DEVICE_COOKIE}=`);
     expect(setCookie).toContain("HttpOnly");
