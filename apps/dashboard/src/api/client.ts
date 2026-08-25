@@ -363,6 +363,27 @@ export interface Course {
   active: boolean;
 }
 
+/**
+ * One `GET /management-api/devices` row as the device-management surface returns it — a faithful mirror
+ * of the server projection (`apps/server/src/device-api.ts`, `devices` columns). An enrolled always-on
+ * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
+ * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
+ * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
+ * redeemed its pairing code. The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
+ * server orders NEWEST-enrolled first; the screen renders that order as-is. NOT imported from `apps/server`
+ * (the #70 bundle rule the shapes above follow); a mismatch surfaces as a runtime shape error a view test
+ * catches, not a compile break.
+ */
+export interface DeviceRow {
+  id: string;
+  kind: string;
+  stationId: string | null;
+  label: string;
+  active: boolean;
+  lastSeenAt: string | null;
+  enrolledAt: string;
+}
+
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
  * per-course fire; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass display
  * surfaces it. Mirrors the server's `FireControl`. */
@@ -1100,6 +1121,35 @@ export class DashboardApi {
    * Answers an empty 204. */
   setFireControl(mode: FireControl): Promise<void> {
     return this.#request<void>("/management-api/fire-control", "PUT", { mode });
+  }
+
+  // ── Devices (always-on station enrolment, device-identity-1) ─────────────────────────────────────
+  // The three verbs the Devices screen drives, all device.manage-gated server-side. `listDevices` reads
+  // the enrolled devices (newest first); `createDeviceCode` mints a single-use pairing code returned
+  // ONCE (201, never re-fetchable); `revokeDevice` deactivates a device (an empty 204). Paths/bodies
+  // against apps/server/src/device-api.ts.
+
+  /** `GET /management-api/devices` — this tenant's enrolled devices, newest-enrolled first (the server's
+   * order; the screen does not re-sort). Each carries its bound station, active flag and last-seen time. */
+  listDevices(): Promise<DeviceRow[]> {
+    return this.#request<DeviceRow[]>("/management-api/devices", "GET");
+  }
+
+  /** `POST /management-api/device-codes` — mint a single-use pairing code bound to a station, returning
+   * the plaintext code ONCE (201). The code is never re-readable (like a passkey challenge handle); a
+   * bad/absent/retired station rejects `{ code: "station.not_found" }`. `kind` is a `device_kind` value —
+   * only `"kds_station"` today. */
+  createDeviceCode(input: { kind: string; stationId: string; label: string }): Promise<{
+    code: string;
+  }> {
+    return this.#request<{ code: string }>("/management-api/device-codes", "POST", input);
+  }
+
+  /** `POST /management-api/devices/:id/revoke` — revoke a device (flip `active = false`, instant): the
+   * device's cookie stops validating at once. Answers an empty 204; an unknown id rejects
+   * `{ code: "device.not_found" }`. Never a hard delete — a device is a durable identity. */
+  revokeDevice(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────

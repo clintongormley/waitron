@@ -66,6 +66,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
     // no stray rejection.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
+    // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
+    // resolve it so navigating to it leaves no stray rejection.
+    listDevices: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -91,6 +94,7 @@ const plannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-planned-actual-screen");
 const purchases = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-purchases-screen");
 const kitchen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-kitchen-screen");
+const devices = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-devices-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navStaff = (el: DashboardApp) =>
@@ -113,6 +117,8 @@ const navPurchases = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-purchases]");
 const navKitchen = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-kitchen]");
+const navDevices = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-devices]");
 
 /** The logged-in screen tags — exactly one is mounted at a time (the staff self-service face plus the
  * manager faces the shell test navigates). */
@@ -128,6 +134,7 @@ const SCREEN_TAGS = [
   "dashboard-planned-actual-screen",
   "dashboard-purchases-screen",
   "dashboard-kitchen-screen",
+  "dashboard-devices-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -389,6 +396,18 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(kitchen(el)).toBeTruthy();
     expect(mountedScreens(el)).toEqual(["dashboard-kitchen-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
+  it("navigates to the devices screen", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navDevices(el)).toBeTruthy();
+    navDevices(el)!.click();
+    await flush(el);
+    expect(devices(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-devices-screen"]);
     expect(countH1(el)).toBe(1);
   });
 

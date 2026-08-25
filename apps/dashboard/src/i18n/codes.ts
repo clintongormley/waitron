@@ -140,6 +140,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That course no longer exists",
     es: "Ese curso ya no existe",
   },
+  // Device management (apps/server/src/device-api.ts, device-identity-1). The revoke route rejects with
+  // this when the addressed device id names no device (absent, another tenant's, or a malformed id); the
+  // generate-code route's own faults (`station.not_found`, `management.request_invalid`) are mapped above.
+  "device.not_found": {
+    en: "That device no longer exists",
+    es: "Ese dispositivo ya no existe",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",

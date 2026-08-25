@@ -65,6 +65,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The recipe screen (reachable via the nav) loads ingredients on connect (listCatalogues is
     // already stubbed above); getProductRecipe/setProductRecipe only fire once a product is chosen.
     listIngredients: vi.fn().mockResolvedValue([]),
+    // The devices screen (reachable via the nav) loads both on connect; resolve them so navigating to it
+    // leaves no stray rejection.
+    listDevices: vi.fn().mockResolvedValue([]),
+    listStations: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -262,6 +266,25 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(recipe!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the devices screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the devices screen (its own <h1> "Dispositivos" is then the sole heading; the shell's
+    // nav chrome carries none, and the screen's section headings are <h2>), and scan the composed tree
+    // in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-devices]")!.click();
+    await flush(el);
+    const devices = el.shadowRoot!.querySelector("dashboard-devices-screen");
+    expect(devices).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(devices!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);
