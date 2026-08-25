@@ -30,6 +30,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You already have time off that overlaps those dates",
     es: "Ya tienes una ausencia que se solapa con esas fechas",
   },
+  // Device enrolment / auth (device-identity-1 §5a). The station display's enrol view surfaces a rejected
+  // pairing-code `{ code }` through this resolver so a setup operator sees WHY a code was refused;
+  // `device.unauthorized` is mapped for completeness (the display normally shows its enrol view on a 401
+  // rather than a banner). Never the raw code — the enrol infra's own contract.
+  "device.pairing_invalid": {
+    en: "That pairing code is not valid — check it and try again",
+    es: "Ese código de emparejamiento no es válido. Revísalo e inténtalo de nuevo",
+  },
+  "device.pairing_expired": {
+    en: "That pairing code has expired — ask for a new one",
+    es: "Ese código de emparejamiento ha caducado. Solicita uno nuevo",
+  },
+  "device.unauthorized": {
+    en: "This display isn't set up — enter a pairing code",
+    es: "Esta pantalla no está configurada. Introduce un código de emparejamiento",
+  },
   "session.required": {
     en: "Your shift session has ended — please log in again",
     es: "Tu sesión ha terminado. Vuelve a iniciar sesión",

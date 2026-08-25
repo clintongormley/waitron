@@ -1,12 +1,25 @@
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 // Side-effect import: registers <till-station-queue>, the shared queue renderer this screen wraps with a
 // picker + view toggle. The screen names it only as a tag below, so the rendering stays the widget's.
 import "../widgets/station-queue.js";
 import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
 import type { Station, StationQueueGroup, TicketState, TillApi } from "../api/client.js";
+
+/**
+ * The one item state a per-line advance to `to` legitimately STARTS from — the widget's `NEXT` map
+ * (`queued → preparing → ready`) inverted. A DEVICE has only a per-line advance verb ({@link
+ * TillApi.deviceAdvance}), so a whole-ticket bump (device mode, `bump_mode = ticket`) expands to one
+ * deviceAdvance per FIRED item at this predecessor state — mirroring what a per-line tap on each would
+ * do, and so never issuing an invalid skip (a queued item is not jumped straight to `ready`).
+ */
+const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
+  preparing: "queued",
+  ready: "preparing",
+};
 
 /**
  * The TILL station-display screen (KDS-1, design §5a): the kitchen's own view of one station's queue.
@@ -79,6 +92,28 @@ export class TillStationScreen extends LitElement {
         color: var(--wt-color-text-muted);
         text-align: center;
       }
+
+      /* The device-mode enrol view (§5a): a narrow reading column so the code field + button don't span
+         a wide kitchen display. The hint + field + button stack via the .screen column gap above. */
+      .enrol {
+        max-width: 24rem;
+      }
+
+      .enrol-hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+
+      /* The enrol error banner — the same danger-on-surface pairing the app + lock screen use (a11y-safe
+         in both themes), never behind muted text. */
+      .error {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
 
@@ -92,19 +127,46 @@ export class TillStationScreen extends LitElement {
    * straight to the widget. `kitchen` surfaces the display's "Empezar curso" action; `waiter` (the
    * default) surfaces none here (the tab screen fires — Task 7). */
   @property() fireControl: FireControlMode = "waiter";
+  /**
+   * DEVICE MODE (device-identity-1 §5a). Default `false` — the EXISTING session-gated operator path
+   * (listStations → picker → `advanceTicketItem`) runs exactly as before. When `true` the screen is an
+   * always-on ENROLLED display: it probes `getDeviceStation()` (no login), renders that ONE bound
+   * station's queue with NO picker and NO Back-to-counter, and bumps through `deviceAdvance`; a 401
+   * (`device.unauthorized`) shows the enrol view instead. Threaded from the app (boot probe, or the lock
+   * screen's "set up" affordance).
+   */
+  @property() deviceMode = false;
 
-  /** The venue's active stations (fetched once on connect). */
+  /** The venue's active stations (fetched once on connect). Operator path only. */
   @state() private stations: Station[] = [];
-  /** The station whose queue is showing — the default station on load, or whichever tab was tapped. */
+  /** The station whose queue is showing — the default station on load, or whichever tab was tapped
+   * (operator path); in device mode, the ONE station enrolment bound this display to. */
   @state() private activeStationId?: string;
   /** The active station's queue, grouped by order (reloaded after every advance). */
   @state() private groups: StationQueueGroup[] = [];
   /** The lens: kanban board (default) or ticket rail, flipped by the toggle. */
   @state() private view: "kanban" | "rail" = "kanban";
+  /**
+   * Which device-mode sub-view is showing (ignored unless {@link deviceMode}). Default `queue` — an
+   * ENROLLED display is the steady state, so it shows the queue chrome (empty until the probe resolves)
+   * rather than flashing the enrol view first; a failed/401 probe flips it to `enrol`.
+   */
+  @state() private deviceView: "queue" | "enrol" = "queue";
+  /** The pairing code the operator is typing into the enrol view. */
+  @state() private enrolCode = "";
+  /** The raw error CODE of a rejected enrol, surfaced via {@link codeMessage} (never the raw code) — or
+   * `undefined` for none. Cleared as the operator retypes. */
+  @state() private enrolErrorCode?: string;
+  /** Reentry guard for enrolment — one in-flight `enrolDevice` at a time (a double-tap is a no-op). */
+  @state() private enrolling = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    void this.#load();
+    if (this.deviceMode) {
+      void this.#loadDevice();
+    } else {
+      void this.#load();
+    }
   }
 
   /**
@@ -126,9 +188,37 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
+  /**
+   * DEVICE MODE probe (§5a): read the display's OWN bound station + queue with no login. A 200 renders
+   * the queue; a 401 (`device.unauthorized`) — or ANY probe failure — flips to the enrol view, the only
+   * actionable state a device without a session has (a transient failure recovers on a page reload,
+   * which re-probes). State-only after the await, so no `isConnected` guard (the sibling screens' reasoning).
+   */
+  async #loadDevice(): Promise<void> {
+    try {
+      const { station } = await this.api.getDeviceStation();
+      this.activeStationId = station.id;
+      this.groups = station.queue;
+      this.deviceView = "queue";
+    } catch {
+      this.deviceView = "enrol";
+    }
+  }
+
   /** (Re)load the ACTIVE station's queue. A failed read leaves the last-known queue in place (degrade
-   * gracefully — the kitchen display touches no fiscal path); no `isConnected` guard (state-only). */
+   * gracefully — the kitchen display touches no fiscal path); no `isConnected` guard (state-only). In
+   * device mode it re-reads through the DEVICE probe (`getDeviceStation`) instead of the session route. */
   async #reload(): Promise<void> {
+    if (this.deviceMode) {
+      try {
+        const { station } = await this.api.getDeviceStation();
+        this.activeStationId = station.id;
+        this.groups = station.queue;
+      } catch {
+        // Non-fatal — leave the last-known queue; a mid-session revocation recovers on reload.
+      }
+      return;
+    }
     if (this.activeStationId === undefined) return;
     try {
       this.groups = await this.api.getStationQueue(this.activeStationId);
@@ -170,19 +260,26 @@ export class TillStationScreen extends LitElement {
   /**
    * A per-line bump from the widget (`bump_mode = line`, the source of truth). Handle it HERE and stop it
    * — the app must not also see it (it owns the counter's own default-station widget). Advance, then
-   * reload on BOTH paths so a rejected move (a race, a since-advanced line) reconciles to server truth.
+   * reload on BOTH paths so a rejected move (a race, a since-advanced line) reconciles to server truth. In
+   * DEVICE mode the bump goes through the device-scoped `deviceAdvance` (no session) instead.
    */
   async #onAdvanceTicketItem(event: Event): Promise<void> {
     event.stopPropagation();
     const { itemId, to } = (
       event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
     ).detail;
-    await this.#advance(() => this.api.advanceTicketItem(itemId, to));
+    await this.#advance(() =>
+      this.deviceMode
+        ? this.api.deviceAdvance(itemId, to)
+        : this.api.advanceTicketItem(itemId, to),
+    );
   }
 
   /**
    * A whole-ticket bump from the widget (`bump_mode = ticket`, the convenience). Same handle-here-and-stop
-   * + advance-then-reconcile shape as {@link #onAdvanceTicketItem}, over the whole-ticket verb.
+   * + advance-then-reconcile shape as {@link #onAdvanceTicketItem}, over the whole-ticket verb. In DEVICE
+   * mode the server has ONLY a per-line device advance, so the whole-ticket bump expands to one
+   * `deviceAdvance` per advanceable item ({@link #deviceAdvanceTicket}).
    */
   async #onAdvanceTicket(event: Event): Promise<void> {
     event.stopPropagation();
@@ -193,7 +290,57 @@ export class TillStationScreen extends LitElement {
         to: Exclude<TicketState, "queued">;
       }>
     ).detail;
-    await this.#advance(() => this.api.advanceTicket(orderId, stationId, to));
+    await this.#advance(() =>
+      this.deviceMode
+        ? this.#deviceAdvanceTicket(orderId, to)
+        : this.api.advanceTicket(orderId, stationId, to),
+    );
+  }
+
+  /**
+   * The device-mode expansion of a whole-ticket bump: advance every FIRED item of `orderId` at the bound
+   * station whose legitimate next step is `to` (see {@link ADVANCE_FROM}), one `deviceAdvance` each —
+   * mirroring what a per-line tap on each would do, so a held course or a wrong-state line is skipped
+   * rather than sent an invalid transition. Reads the group off the last-loaded {@link groups}.
+   */
+  async #deviceAdvanceTicket(orderId: string, to: Exclude<TicketState, "queued">): Promise<void> {
+    const group = this.groups.find((candidate) => candidate.orderId === orderId);
+    if (group === undefined) return;
+    for (const item of group.items) {
+      if (item.firedAt !== null && item.state === ADVANCE_FROM[to]) {
+        await this.api.deviceAdvance(item.id, to);
+      }
+    }
+  }
+
+  /** Capture the enrol code field's new value and clear any stale error as the operator retypes. */
+  #onEnrolCode(event: Event): void {
+    event.stopPropagation();
+    this.enrolCode = (event as CustomEvent<{ value: string }>).detail.value;
+    this.enrolErrorCode = undefined;
+  }
+
+  /**
+   * Redeem the entered pairing code (§5a): `enrolDevice` sets the trusted device cookie server-side, then
+   * a re-probe ({@link #loadDevice}) drops the display straight into its bound queue. The code is sent
+   * VERBATIM — the server normalises it, the client does not. A refused code (invalid/expired) stays on
+   * the enrol view with the localized reason ({@link enrolErrorCode}, resolved by {@link codeMessage} — never
+   * the raw wire code) so the operator can try a fresh one. Reentry-guarded and blank-guarded like the
+   * lock screen's PIN submit.
+   */
+  async #enrol(): Promise<void> {
+    if (this.enrolCode === "" || this.enrolling) return;
+    this.enrolling = true;
+    this.enrolErrorCode = undefined;
+    try {
+      await this.api.enrolDevice(this.enrolCode);
+      this.enrolCode = "";
+      await this.#loadDevice();
+    } catch (error) {
+      this.enrolErrorCode = (error as { code?: string }).code ?? "server.internal";
+    } finally {
+      this.enrolling = false;
+    }
   }
 
   /**
@@ -225,6 +372,12 @@ export class TillStationScreen extends LitElement {
   }
 
   override render() {
+    return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
+  }
+
+  /** The SESSION-GATED operator display (KDS-1) — unchanged: title + view toggle + Back, the station
+   * picker, and the active station's queue. */
+  #renderOperator(): TemplateResult {
     return html`
       <section
         class="screen"
@@ -251,6 +404,79 @@ export class TillStationScreen extends LitElement {
           </div>
         </header>
         ${this.stations.length === 0 ? this.#noStations() : this.#body()}
+      </section>
+    `;
+  }
+
+  /**
+   * The DEVICE-mode display (§5a): the enrol view when this display holds no valid device cookie, else
+   * the bound station's queue with the view toggle but NO picker and NO Back-to-counter (a device has one
+   * fixed station and never logged in). The advance/collect/fire listeners are the SAME as the operator
+   * path — the handlers branch on {@link deviceMode} to route through the device-scoped verbs.
+   */
+  #renderDevice(): TemplateResult {
+    if (this.deviceView === "enrol") return this.#renderEnrol();
+    return html`
+      <section
+        class="screen"
+        aria-label=${t("station.title")}
+        @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
+        @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
+        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
+        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+      >
+        <header class="head">
+          <h1 class="title">${t("station.title")}</h1>
+          <div class="actions">
+            <wt-button
+              class="view-toggle"
+              data-view-toggle
+              variant="secondary"
+              @click=${() => this.#toggleView()}
+            >
+              ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
+            </wt-button>
+          </div>
+        </header>
+        <till-station-queue
+          .groups=${this.groups}
+          .view=${this.view}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .stationId=${this.activeStationId}
+        ></till-station-queue>
+      </section>
+    `;
+  }
+
+  /** The enrol view (§5a): a labelled pairing-code field → "Set up". On a refused code it shows the
+   * localized reason ({@link codeMessage}); on success the display re-probes into its bound queue. */
+  #renderEnrol(): TemplateResult {
+    return html`
+      <section class="screen enrol" aria-label=${t("device.enrol_title")}>
+        <header class="head">
+          <h1 class="title">${t("device.enrol_title")}</h1>
+        </header>
+        <p class="enrol-hint">${t("device.enrol_hint")}</p>
+        ${this.enrolErrorCode
+          ? html`<p class="error" role="alert">${codeMessage(this.enrolErrorCode)}</p>`
+          : nothing}
+        <wt-input
+          class="enrol-code"
+          data-enrol-code
+          .label=${t("device.enrol_code")}
+          .value=${this.enrolCode}
+          @wt-change=${(event: Event) => this.#onEnrolCode(event)}
+        ></wt-input>
+        <wt-button
+          class="enrol-submit"
+          data-enrol-submit
+          variant="primary"
+          ?disabled=${this.enrolCode === "" || this.enrolling}
+          @click=${() => void this.#enrol()}
+        >
+          ${t("device.enrol_submit")}
+        </wt-button>
       </section>
     `;
   }

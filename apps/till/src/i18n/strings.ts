@@ -88,6 +88,16 @@ export const en = {
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
+  // Device mode (device-identity-1 §5a) — the always-on KDS station display. `device.setup` is the lock
+  // screen's affordance that routes a FRESH (unenrolled) display to the station screen in device mode;
+  // the `device.enrol_*` keys are the enrol view shown there when no device cookie is present (a labelled
+  // pairing-code field → enrol). The pairing-code redemption ERRORS (`device.pairing_invalid`/
+  // `_expired`/`unauthorized`) are surfaced via `i18n/codes.ts`, not here — these are static UI copy.
+  "device.setup": "Set up as kitchen display",
+  "device.enrol_title": "Set up this kitchen display",
+  "device.enrol_hint": "Enter the pairing code shown on the dashboard",
+  "device.enrol_code": "Pairing code",
+  "device.enrol_submit": "Set up",
   // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
   // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
   // names the screen. The three per-course levers name the state they ADVANCE the course to: `expo.fire`
@@ -284,6 +294,11 @@ export const es: Record<StringKey, string> = {
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
+  "device.setup": "Configurar como pantalla de cocina",
+  "device.enrol_title": "Configurar esta pantalla de cocina",
+  "device.enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
+  "device.enrol_code": "Código de emparejamiento",
+  "device.enrol_submit": "Configurar",
   "expo.open": "Pase",
   "expo.title": "Pase",
   "expo.back": "Volver al mostrador",

@@ -353,6 +353,33 @@ export interface StationQueueGroup {
 }
 
 /**
+ * `POST /api/device/enrol` success (device-identity-1 §5a/§3b) — the four NON-SECRET fields the server
+ * echoes after redeeming a pairing code: the new device's id, its `kind`, the `stationId` it is bound to
+ * (fixed by enrolment), and the operator-chosen `label`. The trusted device TOKEN is deliberately ABSENT —
+ * it leaves the server ONLY in the httpOnly `Set-Cookie` header, never a JSON body (`device-api.ts`) — so
+ * the client never sees it. The enrol view shows these to confirm which station the display bound to. A
+ * LOCAL mirror of the server's enrol response, NOT imported — the same bundle-decoupling rationale as
+ * every other type in this file.
+ */
+export interface DeviceEnrolment {
+  deviceId: string;
+  kind: string;
+  stationId: string;
+  label: string;
+}
+
+/**
+ * `GET /api/device/station` success (device-identity-1 §5a) — the enrolled display's OWN bound station:
+ * its `id` and current `queue` (grouped by order, the SAME {@link StationQueueGroup} shape the
+ * session-gated `getStationQueue` returns). The station is fixed by enrolment, so there is no picker and
+ * no id to pass — the device cookie names it server-side. A LOCAL mirror of the server's response, NOT
+ * imported (the bundle rule).
+ */
+export interface DeviceStation {
+  station: { id: string; queue: StationQueueGroup[] };
+}
+
+/**
  * One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item carrying the
  * display fields the pass renders: the line's snapshotted `name` map + `qty`, the RESOLVED station name
  * (the cross-station label {@link StationQueueItem} deliberately omits, so the expediter sees the grill
@@ -780,6 +807,45 @@ export class TillApi {
     await this.#request<void>(`/api/orders/${orderId}/stations/${stationId}/advance`, "POST", {
       to,
     });
+  }
+
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display. These three verbs need
+  // NO operator session — the httpOnly device cookie rides `credentials: "include"` (set by
+  // `enrolDevice`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
+
+  /**
+   * Enrol this browser as a trusted device by redeeming a pairing code (device-identity-1 §5a/§3b) →
+   * `POST /api/device/enrol` with `{ code }`. UNAUTHENTICATED (no prior session), the till's `POST
+   * /api/session` counterpart: the server redeems the single-use code, mints the device token, and
+   * returns it ONLY in the httpOnly device cookie (never the body) — so this resolves the four
+   * NON-SECRET {@link DeviceEnrolment} fields the enrol view confirms. The `code` is sent VERBATIM: the
+   * server normalises it, the client does not. A random/consumed code rejects
+   * `{ code: "device.pairing_invalid" }`, one past its TTL `{ code: "device.pairing_expired" }`.
+   */
+  enrolDevice(code: string): Promise<DeviceEnrolment> {
+    return this.#request<DeviceEnrolment>("/api/device/enrol", "POST", { code });
+  }
+
+  /**
+   * The enrolled display's OWN bound station + queue (device-identity-1 §5a) → `GET /api/device/station`.
+   * The device cookie names the station server-side (fixed at enrolment), so there is no id to pass. A
+   * missing/rejected/revoked cookie rejects `{ code: "device.unauthorized" }` (401) — the signal the
+   * station screen reads to show its enrol view instead of the queue.
+   */
+  getDeviceStation(): Promise<DeviceStation> {
+    return this.#request<DeviceStation>("/api/device/station", "GET");
+  }
+
+  /**
+   * Advance ONE of the bound station's ticket items one kitchen step (device-identity-1 §5a) → `POST
+   * /api/device/ticket-items/:id/advance` with `{ to }` — the device-scoped counterpart to
+   * {@link advanceTicketItem}, with NO session and NO station param (the cookie's own station is the only
+   * one it may touch). `to` is the next state (`preparing`/`ready`); the server answers an empty 204. An
+   * item at ANOTHER station rejects `{ code: "device.forbidden_station" }` (403); an illegal transition
+   * or unknown item `{ code: "ticket.invalid_transition" }`.
+   */
+  async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
+    await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
   }
 
   /**

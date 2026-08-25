@@ -8,6 +8,7 @@ import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
@@ -216,6 +217,18 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
+    // Device mode (device-identity-1 §5a): the boot device probe. Defaults to a 401 — a NORMAL operator
+    // till is not an enrolled device — so every existing test boots to the lock screen as before; the
+    // device-boot test overrides it to resolve. `enrolDevice`/`deviceAdvance` are the station screen's
+    // (device mode), present so its own probe/enrol paths never hit an undefined method.
+    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    enrolDevice: vi.fn().mockResolvedValue({
+      deviceId: "dev-1",
+      kind: "kds_station",
+      stationId: "st-dev",
+      label: "Pase",
+    }),
+    deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -233,6 +246,8 @@ const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("ti
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+const station = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen");
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
@@ -390,6 +405,44 @@ describe("till-app", () => {
       }
     },
   );
+
+  // Device mode (device-identity-1 §5a): an enrolled display boots straight into its bound station; a
+  // normal operator till's 401 device probe leaves it on the lock screen with no boot error; and the
+  // lock screen's set-up affordance routes a fresh display into device mode to reach the enrol view.
+  it("boots an ENROLLED device straight into the station screen in device mode", async () => {
+    const { el } = await mountApp({
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+    });
+    await flush(el);
+    expect(currentApi.getDeviceStation).toHaveBeenCalled();
+    // Straight past the lock screen — a device never logs in.
+    expect(lock(el)).toBeNull();
+    const s = station(el);
+    expect(s).not.toBeNull();
+    expect(s!.deviceMode).toBe(true);
+  });
+
+  it("a normal operator till (401 device probe) stays on the lock screen with NO boot error", async () => {
+    // The default stub's getDeviceStation rejects `device.unauthorized` — the expected not-a-device case.
+    const { el } = await mountApp();
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    // A device-station 401 must NOT surface `boot.error` (that is only for a failed getTill).
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("the lock screen's set-up affordance routes a fresh display into device mode", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    // The lock screen emits `setup-device`; the app switches to the station screen in device mode so an
+    // unenrolled display can reach the enrol view.
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    const s = station(el);
+    expect(s).not.toBeNull();
+    expect(s!.deviceMode).toBe(true);
+  });
 
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
     const { el } = await mountApp();
