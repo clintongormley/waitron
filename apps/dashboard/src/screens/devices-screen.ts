@@ -202,8 +202,12 @@ export class DevicesScreen extends LitElement {
    * device set but never the station set, so re-fetching `listStations` — which the initial {@link #load}
    * does — would be pure waste; this fetches `listDevices` alone. It throws on failure like `listDevices`
    * itself: both callers already run it inside their own `try/catch` that maps the rejection to the
-   * `errorKey` banner via `codeOf` (the error-envelope pattern), so there is no separate handling here. */
+   * `errorKey` banner via `codeOf` (the error-envelope pattern), so there is no separate handling here.
+   * Disarms any armed revoke (mirroring {@link #load}): the armed row may no longer exist after the
+   * mutation, and a `#generate` while a revoke is armed on another row must not leave it armed — a no-op
+   * for the `#revoke` path, which {@link #onRevoke} already cleared before calling. */
   async #reloadDevices(): Promise<void> {
+    this.armedRevokeId = null;
     this.devices = await this.api.listDevices();
   }
 

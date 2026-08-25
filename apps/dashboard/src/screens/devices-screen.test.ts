@@ -320,6 +320,34 @@ describe("devices-screen", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2); // reloaded
   });
 
+  // The post-mutation reload disarms any armed revoke (mirroring #load): arming a revoke on one row then
+  // GENERATING a code must clear the armed state, so a stray armed row cannot survive an unrelated action.
+  // Proven by deletion: drop `this.armedRevokeId = null` from #reloadDevices and the row stays armed after
+  // generate (the assertions below flip red).
+  it("generating a code disarms an armed revoke", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    // Arm the revoke on d1 (first click) — the control flips to the confirm prompt.
+    q(el, "[data-test=revoke-d1]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=revoke-d1]")!.getAttribute("data-armed")).toBe("true");
+    expect((el as unknown as { armedRevokeId: string | null }).armedRevokeId).toBe("d1");
+
+    // Generate a pairing code (station seeded to s1 on load) — its devices reload must disarm the row.
+    typeLabel(el, "Pantalla Barra");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).toHaveBeenCalledTimes(1);
+    expect((el as unknown as { armedRevokeId: string | null }).armedRevokeId).toBeNull();
+    // The row's control reverted to the plain Revoke label, no longer the confirm prompt.
+    expect(q(el, "[data-test=revoke-d1]")!.getAttribute("data-armed")).toBeNull();
+    expect(text(el, "[data-test=revoke-d1]")).toBe(t("devices.revoke", "es-ES"));
+  });
+
   it("shows an error and keeps the list when a revoke is rejected", async () => {
     const api = stubApi({ revokeDevice: vi.fn().mockRejectedValue({ code: "device.not_found" }) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });

@@ -128,8 +128,10 @@ export async function requireDevice(
     // `requireDevice` runs on EVERY authenticated request (the auth hot path), and the sole consumer
     // renders last-seen only to the MINUTE (`devices-screen.ts`'s `#lastSeen` slices to `HH:MM`), so a
     // sub-minute re-write is invisible write amplification. The gate keeps the FIRST sighting (NULL →
-    // written, the differential proof the test pins) and one write per minute thereafter. Parameterised
-    // by Drizzle — `id` binds as `$n`; the interval is a constant literal, never user input.
+    // written, the differential proof the test pins) and one write per minute thereafter. Deferring the
+    // write until `last_seen_at` is ≥1 minute stale means the DISPLAYED last-seen can lag true activity by
+    // up to ~1 minute (not strictly sub-minute) — an acceptable bound for a coarse "last seen" indicator.
+    // Parameterised by Drizzle — `id` binds as `$n`; the interval is a constant literal, never user input.
     await tx
       .update(devices)
       .set({ lastSeenAt: sql`now()` })

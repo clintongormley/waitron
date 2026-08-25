@@ -389,6 +389,27 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
+  it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStation (fast-path, §5a)", async () => {
+    // The app already probed the device station at boot and hands it in as `initialDeviceStation`; the
+    // screen must ADOPT it and NOT fetch `GET /api/device/station` a second time — one authenticated queue
+    // read per enrolled-display boot, not two. getDeviceStation here returns a DISTINCT queue (barraQueue),
+    // so losing the fast-path would BOTH re-fetch AND render the wrong queue. Proven by deletion: remove the
+    // `initialDeviceStation` branch in #loadDevice and this goes red on the call count (and the groups).
+    const api = deviceApi({
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: barraQueue } }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      initialDeviceStation: { station: boundStation }, // boundStation.queue === cocinaQueue
+    });
+    await flush(el);
+    // No second probe, and the prop's queue rendered — never the fetch's barraQueue.
+    expect(api.getDeviceStation).not.toHaveBeenCalled();
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+    expect(queueWidget(el)!.stationId).toBe("st-dev");
+  });
+
   it("shows no Back-to-counter control in device mode (a device never logged in)", async () => {
     const api = deviceApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {

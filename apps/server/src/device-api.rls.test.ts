@@ -609,9 +609,12 @@ describe("Device API over real Postgres", () => {
 
   it("rate-limits enrol: the (cap+1)th attempt is 429 BEFORE the DB (no code consumed), then the window resets", async () => {
     // The redemption rate-limit (spec §8): a per-process, GLOBAL fixed-window counter checked at the TOP
-    // of the enrol handler, before the body is parsed and before the pairing-code DELETE. A tight limiter
-    // (cap 2) over a CONTROLLABLE clock proves the behaviour without a real sleep (CLAUDE.md §4). The
-    // mgmt route that mints the code is NOT throttled — the limiter is on `/api/device/enrol` alone.
+    // of the enrol handler, before the body is parsed and before the pairing-code DELETE. A CONTROLLABLE
+    // clock (`now`) plus an IN-PROCESS pre-fill of the baked-in `ENROL_RATE_MAX` (30) to two below the cap
+    // (the `limiter.check()` loop below) lets the two junk HTTP attempts bring the counter exactly to the
+    // cap and the valid third attempt be the (cap+1)th → 429 — proving the behaviour without a real sleep
+    // (CLAUDE.md §4) and without `ENROL_RATE_MAX` DB round trips. The mgmt route that mints the code is NOT
+    // throttled — the limiter is on `/api/device/enrol` alone.
     const venue = await setupVenue();
     let fakeNow = 1_000;
     const limiter = createEnrolRateLimiter({ now: () => fakeNow });
