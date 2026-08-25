@@ -198,6 +198,15 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** Reload the DEVICES only (not the stations) after a mutation. `#generate` and `#revoke` change the
+   * device set but never the station set, so re-fetching `listStations` — which the initial {@link #load}
+   * does — would be pure waste; this fetches `listDevices` alone. It throws on failure like `listDevices`
+   * itself: both callers already run it inside their own `try/catch` that maps the rejection to the
+   * `errorKey` banner via `codeOf` (the error-envelope pattern), so there is no separate handling here. */
+  async #reloadDevices(): Promise<void> {
+    this.devices = await this.api.listDevices();
+  }
+
   /** Capture the picked station. A native `<select>` `change` is `composed: false`, so `stopPropagation`
    * here is defensive consistency with the composed `wt-change` handler below, not a boundary guard. */
   #onStationChange(event: Event): void {
@@ -228,7 +237,7 @@ export class DevicesScreen extends LitElement {
       this.generatedCode = code;
       this.copied = false;
       this.label = "";
-      await this.#load();
+      await this.#reloadDevices();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -263,12 +272,14 @@ export class DevicesScreen extends LitElement {
     this.armedRevokeId = id;
   }
 
-  /** Revoke the device `id` holds, then reload. A rejection becomes the `errorKey` banner. */
+  /** Revoke the device `id` holds, then reload the device list (the station set is unchanged). A
+   * rejection becomes the `errorKey` banner. `#onRevoke` already cleared the armed state before calling
+   * this, so the devices-only reload needs no disarm. */
   async #revoke(id: string): Promise<void> {
     this.errorKey = null;
     try {
       await this.api.revokeDevice(id);
-      await this.#load();
+      await this.#reloadDevices();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
