@@ -4,7 +4,7 @@ import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deviceKind, devicePairingCodes, devices } from "@waitron/db";
+import { deviceKind, devicePairingCodes, devices, isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { hashSecret } from "@waitron/identity";
 import type { TillConfig } from "./till-config.js";
@@ -102,19 +102,44 @@ export async function generatePairingCode(
   tx: Transaction,
   cfg: TillConfig,
   input: { kind: DeviceKind; stationId: string; label: string },
+  // Injectable code source, defaulting to the real high-entropy generator — the ONLY knob, mirroring the
+  // enrol rate-limiter's injectable `now` (enrol-rate-limit.ts). It exists so a test can FORCE a digest
+  // collision deterministically (the ~2^-40 duplicate is unreachable by chance); production always uses
+  // the default.
+  codeSource: () => string = () => encodePairingCode(randomBytes(PAIRING_CODE_BYTES)),
 ): Promise<{ code: string }> {
   await requireLiveStation(tx, cfg, input.stationId);
-  const code = encodePairingCode(randomBytes(PAIRING_CODE_BYTES));
-  await tx.insert(devicePairingCodes).values({
-    tenantId: cfg.tenantId,
-    // The venue requireLiveStation just confirmed the station belongs to — the scope stamped onto the
-    // enrolled device, so it is fixed here rather than re-derived at redemption.
-    locationId: cfg.locationId,
-    codeSha256: createHash("sha256").update(code).digest("hex"),
-    deviceKind: input.kind,
-    stationId: input.stationId,
-    label: input.label,
-  });
+  const code = codeSource();
+  try {
+    await tx.insert(devicePairingCodes).values({
+      tenantId: cfg.tenantId,
+      // The venue requireLiveStation just confirmed the station belongs to — the scope stamped onto the
+      // enrolled device, so it is fixed here rather than re-derived at redemption.
+      locationId: cfg.locationId,
+      codeSha256: createHash("sha256").update(code).digest("hex"),
+      deviceKind: input.kind,
+      stationId: input.stationId,
+      label: input.label,
+    });
+  } catch (error) {
+    // A 23505 here is a digest collision on `device_pairing_codes_lookup_idx` — the UNIQUE index on
+    // (tenant_id, code_sha256) added for single-use safety (385b6248), so the redeeming DELETE …
+    // RETURNING can never consume a duplicate. The code is ~40-bit, so this needs the SHA-256 of a fresh
+    // random code to collide with an outstanding code's digest: astronomically rare (~2^-40 per mint ×
+    // outstanding codes) but real, and the raw constraint error would otherwise surface as an opaque
+    // `server.internal` 500. Map it to a clean, retryable domain code (the manager re-mints). The
+    // table's other two uniques — the `id` PK and `device_pairing_codes_tenant_id_key` (tenant_id, id) —
+    // both key on a fresh `defaultRandom()` uuid, a 2^-122 collision that is not realistically reachable,
+    // so a 23505 on THIS insert is the digest one; `isUniqueViolation` alone identifies it without a
+    // constraint-name check, exactly as passkey.ts's register insert reasons about its own fresh-uuid PK.
+    // The tx is aborted after the 23505, so the catch does NO further DB work — it just throws, and the
+    // caller's withTenant rolls back (nothing was written). Anything that is NOT a unique violation is a
+    // genuine failure and is rethrown unchanged.
+    if (isUniqueViolation(error)) {
+      throw new AppError("device.pairing_code_unavailable", {});
+    }
+    throw error;
+  }
   return { code };
 }
 

@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
+  AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -14,6 +15,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
+import type { DeviceKind } from "./device.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — MANDATORY for THIS suite (CLAUDE.md §4). The single-use guarantee is a
@@ -76,6 +78,13 @@ async function deviceCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
+async function pairingCodeCount(cfg: TillConfig): Promise<number> {
+  const { rows } = await suite.admin.execute<{ n: number }>(
+    sql`select count(*)::int as n from device_pairing_codes where tenant_id = ${cfg.tenantId}`,
+  );
+  return rows[0]!.n;
+}
+
 describe("device enrolment single-use race (real Postgres)", () => {
   it("two concurrent enrolments of ONE code create exactly one device; the loser is device.pairing_invalid", async () => {
     const { cfg, stationId } = await setupStation();
@@ -114,5 +123,60 @@ describe("device enrolment single-use race (real Postgres)", () => {
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
+  });
+});
+
+describe("device pairing-code digest collision (real Postgres)", () => {
+  it("maps a colliding-digest mint to device.pairing_code_unavailable, not a raw 23505", async () => {
+    // The ~2^-40 digest collision is unreachable by chance, so the `codeSource` seam FORCES it: two mints
+    // asked for the SAME code hash to the same code_sha256, and the second trips
+    // `device_pairing_codes_lookup_idx` — the UNIQUE index on (tenant_id, code_sha256) that 385b6248
+    // added for single-use safety — with 23505. `generatePairingCode` must translate that into the clean,
+    // retryable domain code rather than letting the raw driver error reach `run` as an opaque
+    // `server.internal` 500. Real Postgres (not PGlite) so the 23505 arrives through the PRODUCTION
+    // node-postgres driver shape `isUniqueViolation` walks, beside the DB-level duplicate proof in
+    // packages/db devices.rls.test.ts.
+    const { cfg, stationId } = await setupStation();
+    const forced = "COLLIDE7"; // any canonical Crockford-shaped code; returned by codeSource BOTH times
+    const first = await asApp(suite.admin, cfg, (tx) =>
+      generatePairingCode(
+        tx,
+        cfg,
+        { kind: "kds_station", stationId, label: "Pantalla" },
+        () => forced,
+      ),
+    );
+    expect(first.code).toBe(forced);
+
+    await expect(
+      asApp(suite.admin, cfg, (tx) =>
+        generatePairingCode(
+          tx,
+          cfg,
+          { kind: "kds_station", stationId, label: "Pantalla" },
+          () => forced,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "device.pairing_code_unavailable" });
+
+    // The collision rolled the second mint's tx back — exactly ONE code row survives for this tenant,
+    // and no partial second row landed.
+    expect(await pairingCodeCount(cfg)).toBe(1);
+  });
+
+  it("rethrows a NON-unique INSERT failure raw, not as device.pairing_code_unavailable", async () => {
+    // The false branch of the new catch — the negative control the `isUniqueViolation` siblings each
+    // carry (kitchen.ts / tables.ts). An INVALID `device_kind` enum value fails the INSERT with 22P02
+    // (invalid enum), NOT the 23505 unique; requireLiveStation passes (the station is valid), so the
+    // failure reaches the catch, where `isUniqueViolation` is false and `generatePairingCode` rethrows
+    // the raw driver error rather than mistranslating it as `device.pairing_code_unavailable`. (No
+    // privilege/concurrency dimension of its own — proven here beside the positive case against the
+    // production driver.)
+    const { cfg, stationId } = await setupStation();
+    const err = await asApp(suite.admin, cfg, (tx) =>
+      generatePairingCode(tx, cfg, { kind: "not_a_kind" as DeviceKind, stationId, label: "x" }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error); // rejected (a resolved {code} would fail this)
+    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 });

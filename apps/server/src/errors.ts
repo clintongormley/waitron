@@ -840,5 +840,28 @@ declare module "@waitron/shared" {
      * local STATUS map (the FIRST 429 in `apps/server`), not here. Never renamed once shipped.
      */
     "device.pairing_rate_limited": Record<string, never>;
+    /**
+     * A pairing code could not be minted because its SHA-256 digest collided with an outstanding code's
+     * — the `device_pairing_codes_lookup_idx` UNIQUE index on (tenant_id, code_sha256) rejected the
+     * INSERT with 23505. That index (added for single-use safety, 385b6248, so the redeeming
+     * `DELETE … RETURNING` can never consume a duplicate) makes a duplicate digest FAIL the mint rather
+     * than silently minting a consumable duplicate. The pairing code is ~40-bit Crockford entropy, so a
+     * fresh random code whose digest collides with an outstanding one is astronomically rare (~2^-40 per
+     * mint × outstanding codes) — but real, and `generatePairingCode` maps it to THIS code rather than
+     * letting the raw constraint error surface as an opaque `server.internal` 500. TRANSIENT: the remedy
+     * is simply to retry the mint, which draws a fresh code.
+     *
+     * NO params: there is nothing non-secret to carry (the code itself is a bearer secret, never echoed —
+     * the same no-leak discipline `device.pairing_invalid`/`device.pairing_expired`/
+     * `device.pairing_rate_limited` follow), and a blanket "retry" needs none. Distinct from
+     * `device.pairing_rate_limited` (a throttle refusing the enrol side before any DB work) and from the
+     * redemption faults `device.pairing_invalid`/`device.pairing_expired` (the REDEEM side): this is the
+     * GENERATE side failing to find a free code. `device.pairing_*` names the DOMAIN CONCEPT (device
+     * pairing), never the throwing package (`tenant.not_found`'s note gives the rule), and sits in the
+     * pairing family. Mapped to HTTP 409 by `device-api.ts`'s local STATUS map (a conflict on the digest,
+     * the same 409 the `isUniqueViolation`-mapped `station.name_taken`/`table.label_taken` take), not
+     * here. Never renamed once shipped.
+     */
+    "device.pairing_code_unavailable": Record<string, never>;
   }
 }

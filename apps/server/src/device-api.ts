@@ -67,9 +67,12 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    401), `device.forbidden_station` (a device bumping another station's item, 403), the pairing-code
  *    redemption faults (`device.pairing_invalid`/`device.pairing_expired`, 400),
  *    `device.pairing_rate_limited` (the enrol flood guard, the FIRST 429 in `apps/server` —
- *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work), `device.not_found`
- *    (the manager-facing revoke of an absent device id, 404) and `station.not_found` (minting a code against
- *    an unknown/foreign/retired station, 404, via `requireLiveStation`).
+ *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work),
+ *    `device.pairing_code_unavailable` (a mint whose digest collided with an outstanding code's, 409 —
+ *    `generatePairingCode` maps the `device_pairing_codes_lookup_idx` 23505 rather than surfacing a raw
+ *    500), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
+ *    `station.not_found` (minting a code against an unknown/foreign/retired station, 404, via
+ *    `requireLiveStation`).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
  *    `person.suspended`/`authorization.not_permitted` (403), thrown by `requireManagementSession` /
  *    `authorizeManager`, plus `management.request_invalid` (400) from the body/id screens.
@@ -83,6 +86,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.pairing_invalid": 400,
   "device.pairing_expired": 400,
   "device.pairing_rate_limited": 429,
+  "device.pairing_code_unavailable": 409,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
