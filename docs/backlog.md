@@ -490,7 +490,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-3*`. **So the KDS track's design is complete AND all
   three display slices are BUILT** (KDS-1 core, KDS-2 courses, KDS-3 expo); the always-on **device
-  identity-1 is also BUILT (2026-08-25, PR #TBD — see its own row below)**. **Kitchen printers (owner requirement
+  identity-1 is also BUILT (2026-08-25, PR #134 — see its own row below)**. **Kitchen printers (owner requirement
   2026-08-17)** grew into a **printing subsystem** (there is *no* printing in the tree today; the
   deli-hardware spec specifies but never built an ESC/POS-over-TCP:9100 server-driven `ReceiptPrinter`),
   split into two slices: **Printing subsystem — DESIGNED + PLANNED 2026-08-17** (a new infra sub-project) —
@@ -507,7 +507,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   + a kitchen-ticket ESC/POS formatter; a group printer (`ticket_scope='order'`) gets **one deduped
   consolidated ticket per fire**. Thin layer on the printing subsystem + KDS-1; non-fiscal. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-4-kitchen-printing*`. The
-  **always-on device identity-1** is **BUILT 2026-08-25, PR #TBD** (see its own row below).
+  **always-on device identity-1** is **BUILT 2026-08-25, PR #134** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
   verbs/widget) and **build-blocked on TS-1 + FP-1** (tab firing + the floor read) — execute after both
@@ -523,7 +523,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   (no customer/CRM entity); no online/QR/availability/reminders (all future). Non-fiscal. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-bookings-1*`. **Core is buildable independently**; the seat
   + floor features are **build-blocked on TS-1 + FP-1**.
-- **Device identity-1 (KDS spin-off, sub-project 12)** — **BUILT 2026-08-25, PR #TBD** (was DESIGNED +
+- **Device identity-1 (KDS spin-off, sub-project 12)** — **BUILT 2026-08-25, PR #134** (was DESIGNED +
   PLANNED 2026-08-17). The **first** client device-auth in the tree (previously none existed — till boot is
   unauthenticated, the only wire-token is the server-to-server sync Bearer). An **always-on** kitchen
   screen enrols once (an admin-minted **pairing code**, modelled on the WebAuthn-challenge single-use/TTL
@@ -589,7 +589,7 @@ KDS, bookings — now have a first slice specced + planned**, plus the **always-
 spin-off) specced + planned too, now unblocked (KDS-1 built). **KDS-2** (courses + fire control) and
 **KDS-3** (expo/pass) are **both now BUILT (2026-08-22)**. So **the KDS track's design is complete AND
 all three display slices (KDS-1/2/3) are BUILT**; the always-on **device identity-1 is now also BUILT
-(2026-08-25, PR #TBD)** — enrol + device cookie + `requireDevice` + the Devices screen + the spec §8
+(2026-08-25, PR #134)** — enrol + device cookie + `requireDevice` + the Devices screen + the spec §8
 enrol rate-limit (429). The **kitchen-printers** requirement grew into
 a **printing subsystem** (central printers + print agents + a transport-pluggable outbox) plus **KDS-4
 kitchen printing** (station→printer routing + print-on-fire) on top, **both now specced + planned**
