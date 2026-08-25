@@ -80,4 +80,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "report.export")).toBe(false);
     expect(roleHasPermission("supervisor", "report.export")).toBe(false);
   });
+  it("grants device.manage to manager and admin only (device-identity-1 station enrolment)", () => {
+    // A domain-named device-admin permission (generate pairing codes, list + revoke enrolled devices),
+    // granted to exactly the roles that hold the other manager write gates — manager and admin — and
+    // NEVER to staff or supervisor. The device ROUTES themselves are device-cookie-authenticated, not
+    // gated on this permission; device.manage gates only the enrol/list/revoke management surface
+    // (spec §3a/§3e). Staff must never hold it (least privilege — a kitchen operator cannot enrol or
+    // revoke a device).
+    expect(roleHasPermission("manager", "device.manage")).toBe(true);
+    expect(roleHasPermission("admin", "device.manage")).toBe(true);
+    expect(roleHasPermission("staff", "device.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "device.manage")).toBe(false);
+  });
 });

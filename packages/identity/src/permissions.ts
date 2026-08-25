@@ -43,6 +43,14 @@ export const PERMISSIONS = [
   // (purchase.manage) or staff admin (person.manage); granted to manager + admin, the dashboard's
   // audience (spec D7). Codes/permissions are never renamed once shipped.
   "report.export",
+  // Generating pairing codes and managing enrolled devices (a kitchen/station display binds to one
+  // kitchen_stations row via a single-use pairing code, then authenticates by a device cookie) from
+  // the management dashboard (device-identity-1). A domain-named DEVICE-ADMIN permission, distinct from
+  // staff admin (person.manage); granted to manager + admin, the same roles as the other management
+  // write gates. The device ROUTES themselves are device-cookie-authenticated (requireDevice), NOT
+  // gated on this — this gates only the enrol-code/list/revoke management surface (spec §3a/§3e).
+  // Codes/permissions are never renamed once shipped.
+  "device.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -66,6 +74,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "purchase.manage",
   "recipe.manage",
   "report.export",
+  "device.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
