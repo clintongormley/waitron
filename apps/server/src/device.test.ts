@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
@@ -14,7 +14,12 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import {
+  encodePairingCode,
+  enrolDevice,
+  generatePairingCode,
+  normalizePairingCode,
+} from "./device.js";
 import "./errors.js";
 
 // PGlite, not real Postgres, for the SEQUENTIAL crypto/round-trip properties here — generate a code,
@@ -157,5 +162,50 @@ describe("device pairing-code generation + enrolment", () => {
         generatePairingCode(tx, cfg, { kind: "kds_station", stationId: missing, label: "x" }),
       ),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
+  });
+
+  it("enrols when the operator types the code in lowercase (normalized before lookup)", async () => {
+    // The redemption is lenient regardless of the caller: enrolDevice normalizes the typed code FIRST,
+    // so a code typed back in lowercase still hashes to the canonical SHA-256 the row was stored under.
+    const cfg = await setupVenue();
+    const st = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "Cocina", isDefault: true }),
+    );
+    const { code } = await asApp(cfg, (tx) =>
+      generatePairingCode(tx, cfg, { kind: "kds_station", stationId: st.id, label: "x" }),
+    );
+    const dev = await asApp(cfg, (tx) => enrolDevice(tx, cfg, { code: code.toLowerCase() }));
+    expect(dev.stationId).toBe(st.id);
+  });
+});
+
+describe("normalizePairingCode", () => {
+  it("is the identity on any code the encoder emits (round-trip)", () => {
+    // A code the operator typed exactly as shown must survive normalization unchanged — so redemption of
+    // the canonical string is never altered. Every encoder output is uppercase, alphabet-only and
+    // separator-free, i.e. already canonical.
+    for (const bytes of [
+      Buffer.from([0, 0, 0, 0, 0]),
+      Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff]),
+      Buffer.from([0x01, 0x23, 0x45, 0x67, 0x89]),
+      randomBytes(5),
+      randomBytes(5),
+    ]) {
+      const canonical = encodePairingCode(bytes);
+      expect(normalizePairingCode(canonical)).toBe(canonical);
+    }
+  });
+
+  it("is lenient about case, the ambiguous letters I/L/O, spaces and hyphens", () => {
+    // INJECTIVITY: the Crockford alphabet excludes I, L, O and U, so mapping I/L → 1 and O → 0 only ever
+    // rewrites a character the encoder NEVER emits. It therefore cannot merge two distinct real codes —
+    // leniency here is not a security regression.
+    expect(normalizePairingCode("abcdefgh")).toBe("ABCDEFGH"); // case
+    expect(normalizePairingCode("O0O0O0O0")).toBe("00000000"); // O → 0
+    expect(normalizePairingCode("ILILILIL")).toBe("11111111"); // I / L → 1
+    expect(normalizePairingCode("ilILoO09")).toBe("11110009"); // mixed, all lenient rules at once
+    expect(normalizePairingCode("ABCD-EFGH")).toBe("ABCDEFGH"); // hyphen stripped
+    expect(normalizePairingCode("ABCD EFGH")).toBe("ABCDEFGH"); // space stripped
+    expect(normalizePairingCode("  ab-cd ef-gh ")).toBe("ABCDEFGH"); // combined
   });
 });

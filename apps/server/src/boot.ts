@@ -38,6 +38,7 @@ import {
 import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
+import { mountDeviceApi } from "./device-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -302,6 +303,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
+  // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
+  // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
+  // code, list devices, revoke one). It reuses the EXACT `db` and — unlike the sibling mounts, which
+  // pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because the
+  // device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
+  // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
+  // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
+  // device guard and the `device.manage` gate run per request.
+  mountDeviceApi(app, { db, cfg: till, secureCookies }, log);
   // The dashboard's management HTTP surface (manager login, staff/person management, passkey
   // ceremonies) on the SAME app, the identical convention `mountWebhook` and `mountTillApi` above
   // follow. It reuses the EXACT values `mountTillApi` receives so the two cannot drift: the same `db`,

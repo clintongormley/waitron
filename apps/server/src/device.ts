@@ -61,7 +61,7 @@ const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
  * byte — then read 5 bits at a time from the top. `bytes.length * 8` is a multiple of 5 for the 5-byte
  * pairing code, so the loop emits whole characters with nothing left over (no padding case to handle).
  */
-function encodePairingCode(bytes: Buffer): string {
+export function encodePairingCode(bytes: Buffer): string {
   let acc = 0n;
   for (const byte of bytes) acc = (acc << 8n) | BigInt(byte);
   let code = "";
@@ -69,6 +69,25 @@ function encodePairingCode(bytes: Buffer): string {
     code += CROCKFORD_ALPHABET[Number((acc >> BigInt(shift)) & 0x1fn)];
   }
   return code;
+}
+
+/**
+ * Fold an operator-typed pairing code back to the canonical form the encoder emits, so redemption is
+ * lenient regardless of how the code was transcribed off one screen onto another (§2c). Applied as the
+ * FIRST thing {@link enrolDevice} does, so the leniency holds for every caller (the route, a test, a
+ * future CLI) and is not the HTTP layer's job.
+ *
+ * Four normalizations, matching standard Crockford DECODE leniency: uppercase; strip the spaces and
+ * hyphens a human may group the code with; and map the visually-ambiguous letters `I`/`L` → `1` and
+ * `O` → `0`. This is safe by construction and NOT a hash or a comparison (the "reuse crypto, write none"
+ * rule, CLAUDE.md §3, governs hashing/constant-time compare, which stay in node:crypto/@waitron/identity):
+ * the encoder's alphabet is the RFC-4648 set MINUS I, L, O and U, so I/L/O are characters it can never
+ * emit. Rewriting a never-emitted character onto a canonical one is therefore INJECTIVE over real codes —
+ * it can never collapse two distinct minted codes into one, so there is no security regression, and on a
+ * canonical code (all four rules are no-ops) it is the identity.
+ */
+export function normalizePairingCode(input: string): string {
+  return input.toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
 }
 
 /**
@@ -128,7 +147,11 @@ export async function enrolDevice(
   label: string;
   token: string;
 }> {
-  const codeSha256 = createHash("sha256").update(input.code).digest("hex");
+  // Fold the typed code to its canonical form BEFORE hashing, so a lowercase / O-for-0 / I-for-1 /
+  // space-or-hyphen-grouped transcription still redeems the row stored under the canonical SHA-256
+  // (see {@link normalizePairingCode} for why this is injective and not a security regression).
+  const code = normalizePairingCode(input.code);
+  const codeSha256 = createHash("sha256").update(code).digest("hex");
   // Consume BEFORE anything else: the locking DELETE … RETURNING is the single-use guarantee under
   // concurrency (see the doc above). Parameterised by Drizzle — `code_sha256` binds as `$n`.
   const [row] = await tx
