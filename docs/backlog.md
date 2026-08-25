@@ -489,8 +489,8 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   runs it always-on. Non-fiscal; **fiscal firewall proven in Task 7** — see *Recently shipped* → KDS-3.
   Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-3*`. **So the KDS track's design is complete AND all
-  three display slices are BUILT** (KDS-1 core, KDS-2 courses, KDS-3 expo); the always-on device identity
-  remains to build. **Kitchen printers (owner requirement
+  three display slices are BUILT** (KDS-1 core, KDS-2 courses, KDS-3 expo); the always-on **device
+  identity-1 is also BUILT (2026-08-25, PR #TBD — see its own row below)**. **Kitchen printers (owner requirement
   2026-08-17)** grew into a **printing subsystem** (there is *no* printing in the tree today; the
   deli-hardware spec specifies but never built an ESC/POS-over-TCP:9100 server-driven `ReceiptPrinter`),
   split into two slices: **Printing subsystem — DESIGNED + PLANNED 2026-08-17** (a new infra sub-project) —
@@ -507,7 +507,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   + a kitchen-ticket ESC/POS formatter; a group printer (`ticket_scope='order'`) gets **one deduped
   consolidated ticket per fire**. Thin layer on the printing subsystem + KDS-1; non-fiscal. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-4-kitchen-printing*`. The
-  **always-on device identity** is **now specced + planned** (see its own row below).
+  **always-on device identity-1** is **BUILT 2026-08-25, PR #TBD** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
   verbs/widget) and **build-blocked on TS-1 + FP-1** (tab firing + the floor read) — execute after both
@@ -523,17 +523,31 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   (no customer/CRM entity); no online/QR/availability/reminders (all future). Non-fiscal. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-bookings-1*`. **Core is buildable independently**; the seat
   + floor features are **build-blocked on TS-1 + FP-1**.
-- **Device identity (KDS spin-off, sub-project 12)** — **DESIGNED + PLANNED 2026-08-17**. The **first**
-  client device-auth in the tree (today none exists — till boot is unauthenticated, the only wire-token is
-  the server-to-server sync Bearer). Lets an **always-on** kitchen screen enrol once (an admin-minted
-  **pairing code**, modelled on the WebAuthn-challenge single-use/TTL pattern) and authenticate itself via
-  an **httpOnly device cookie** (a scrypt-hashed token, reusing `hashSecret`/`verifySecret` — no new
-  crypto), scoped so a device may **only read + bump its bound `kitchen_station`** (no login, no selling).
-  A `devices` entity (general `kind`; only `kds_station` wired), a `requireDevice` guard, and a dashboard
-  **Devices** screen (generate code · revoke = instant). `device.manage`-gated; **security review before
-  build**. Non-fiscal. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-device-identity-1*`.
-  ~~Build-blocked on KDS-1~~ **now UNBLOCKED** (KDS-1 BUILT 2026-08-22 — it binds to a `kitchen_station` +
-  drives its display). Other `device_kind`s (trusting the till device), auto-rotation, remote wipe = future.
+- **Device identity-1 (KDS spin-off, sub-project 12)** — **BUILT 2026-08-25, PR #TBD** (was DESIGNED +
+  PLANNED 2026-08-17). The **first** client device-auth in the tree (previously none existed — till boot is
+  unauthenticated, the only wire-token is the server-to-server sync Bearer). An **always-on** kitchen
+  screen enrols once (an admin-minted **pairing code**, modelled on the WebAuthn-challenge single-use/TTL
+  pattern) and authenticates itself via an **httpOnly device cookie** (a scrypt-hashed token, reusing
+  `hashSecret`/`verifySecret` — no new crypto), scoped so a device may **only read + bump its bound
+  `kitchen_station`** (no login, no selling). A `devices` entity (general `kind`; only `kds_station`
+  wired), a `requireDevice` guard, and a dashboard **Devices** screen (generate code · revoke = instant),
+  all `device.manage`-gated. **The spec §8 net-new control landed here:** a **redemption rate-limit** on
+  the unauthenticated `POST /api/device/enrol` — a per-process, GLOBAL, in-memory fixed-window counter
+  (`enrol-rate-limit.ts`, 30 / 60s) checked at the TOP of the handler BEFORE the body parse and BEFORE the
+  pairing-code DELETE, so an enrol flood does zero DB work and can't exhaust the connection pool /
+  starve the sale path (CLAUDE.md §5); new code `device.pairing_rate_limited` → HTTP **429** (the first
+  429 in `apps/server`), proven by deletion. **Fiscal firewall proven, not asserted** (Part B grep: zero
+  `device` tokens in `packages/core/src/record-sale.ts` / `packages/fiscal-verifactu/src/backend.ts`,
+  both scanned; `inmutabilidad` + identity `permissions` + server `test:coverage` green). Non-fiscal. **A
+  separate adversarial security review runs AFTER this task** (spec §8 open items: cookie `Max-Age`
+  shortening + the rate-limit mechanism review). Spec + plan in
+  `docs/superpowers/{specs,plans}/2026-08-17-device-identity-1*`. **Follow-ups (all future, none blocking):**
+  (1) **device-scoped fire/collect routes** — a `fire_control=kitchen` or Mode-P KDS *device* display
+  cannot fire courses / hand off orders (this slice is **advance-only** per spec §3d; T6 hides those
+  buttons in device mode), so server-side `/api/device/*` fire + collect routes are needed; (2) other
+  `device_kind`s (till trust, customer-facing display), token **auto-rotation**, remote wipe; (3) per-venue
+  **timezone** for the dashboard Devices "last-seen" (renders UTC-to-the-minute today; `date-utils.ts` has
+  no datetime formatter).
 - **Table-service model extensions (owner-added 2026-08-22 — NOT yet designed).** Two capabilities the
   owner asked to keep on the roadmap. Both **reopen decisions the TS/KDS specs deliberately closed**, so
   they are recorded here with that provenance — a future session must **not** read the earlier
@@ -574,8 +588,9 @@ features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out
 KDS, bookings — now have a first slice specced + planned**, plus the **always-on device identity** (a KDS
 spin-off) specced + planned too, now unblocked (KDS-1 built). **KDS-2** (courses + fire control) and
 **KDS-3** (expo/pass) are **both now BUILT (2026-08-22)**. So **the KDS track's design is complete AND
-all three display slices (KDS-1/2/3) are BUILT** — only the always-on **device identity** (specced +
-planned, now unblocked) remains to build. The **kitchen-printers** requirement grew into
+all three display slices (KDS-1/2/3) are BUILT**; the always-on **device identity-1 is now also BUILT
+(2026-08-25, PR #TBD)** — enrol + device cookie + `requireDevice` + the Devices screen + the spec §8
+enrol rate-limit (429). The **kitchen-printers** requirement grew into
 a **printing subsystem** (central printers + print agents + a transport-pluggable outbox) plus **KDS-4
 kitchen printing** (station→printer routing + print-on-fire) on top, **both now specced + planned**
 (2026-08-17); the subsystem is largely independent of the table-service track. Its **customer-receipt +
