@@ -18,6 +18,7 @@ import "./screens/till-expo-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
+  DeviceStation,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -162,6 +163,15 @@ export class TillApp extends LitElement {
    * `case "station"`; default `false` keeps the operator "Kitchen" nav path unchanged.
    */
   @state() private deviceMode = false;
+  /**
+   * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
+   * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
+   * `GET /api/device/station` a SECOND time on mount (the boot probe already read it — one authenticated
+   * queue read per enrolled-display boot, not two). Set ONLY by {@link #boot} on a successful probe;
+   * stays `undefined` for a normal operator till and for the lock-screen "set up" path
+   * ({@link #onSetupDevice}), where the screen fetches on mount (and a 401 there shows the enrol view).
+   */
+  @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** The sellable products, loaded at login and handed to the counter's product grid. */
@@ -420,7 +430,10 @@ export class TillApp extends LitElement {
     // isConnected guard is needed (the DISCONNECT SAFETY note; the module-global `setLocale` above is the
     // only effect that took one).
     try {
-      await this.api.getDeviceStation();
+      // Stash the probe's resolved station and hand it to the station screen as `.initialDeviceStation`,
+      // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — one
+      // authenticated queue read per enrolled-display boot, not two.
+      this.initialDeviceStation = await this.api.getDeviceStation();
       this.deviceMode = true;
       this.screen = "station";
     } catch {
@@ -1273,6 +1286,7 @@ export class TillApp extends LitElement {
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
         ></till-station-screen>`;
       // KDS-3 (design §5): the expo/pass display. Like the station screen it OWNS its own fetching +
       // levers via `.api`, so the app just hands it the api + the venue fire-control mode (which gates

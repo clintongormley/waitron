@@ -7,7 +7,13 @@ import { codeMessage } from "../i18n/codes.js";
 // picker + view toggle. The screen names it only as a tag below, so the rendering stays the widget's.
 import "../widgets/station-queue.js";
 import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
-import type { Station, StationQueueGroup, TicketState, TillApi } from "../api/client.js";
+import type {
+  DeviceStation,
+  Station,
+  StationQueueGroup,
+  TicketState,
+  TillApi,
+} from "../api/client.js";
 
 /**
  * The one item state a per-line advance to `to` legitimately STARTS from — the widget's `NEXT` map
@@ -136,6 +142,16 @@ export class TillStationScreen extends LitElement {
    * screen's "set up" affordance).
    */
   @property() deviceMode = false;
+  /**
+   * The device station the app ALREADY probed at cold boot (device-identity-1 §5a), handed in so the
+   * screen does not fetch `GET /api/device/station` a SECOND time on mount (the boot probe and the mount
+   * `#loadDevice` were both reading the same authenticated queue — one read per enrolled-display boot is
+   * enough). Present only on the cold-boot path (`till-app`'s `#boot` stashes the probe result); absent
+   * on a fresh-display / lock-screen "set up" entry, where the probe never ran and `#loadDevice` fetches
+   * (a 401 there is the enrol-view case). Adopted ONCE — a later enrol re-probe always fetches the freshly
+   * bound station (see {@link #loadDevice}).
+   */
+  @property({ attribute: false }) initialDeviceStation?: DeviceStation;
 
   /** The venue's active stations (fetched once on connect). Operator path only. */
   @state() private stations: Station[] = [];
@@ -159,6 +175,9 @@ export class TillStationScreen extends LitElement {
   @state() private enrolErrorCode?: string;
   /** Reentry guard for enrolment — one in-flight `enrolDevice` at a time (a double-tap is a no-op). */
   @state() private enrolling = false;
+  /** Whether {@link initialDeviceStation} has been adopted (a one-shot — see {@link #loadDevice}). Not
+   * reactive: it gates a fetch, never the render. */
+  #initialConsumed = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -195,6 +214,19 @@ export class TillStationScreen extends LitElement {
    * which re-probes). State-only after the await, so no `isConnected` guard (the sibling screens' reasoning).
    */
   async #loadDevice(): Promise<void> {
+    // Cold-boot fast path: the app already probed the device station and handed it in as
+    // `initialDeviceStation`, so adopt it ONCE and skip the redundant fetch — one authenticated queue
+    // read per enrolled-display boot, not two. `#initialConsumed` makes it a one-shot: every LATER call
+    // (the enrol re-probe in `#enrol`, or a fresh-display mount that carried no prop) fetches instead, so
+    // a freshly enrolled display still reads its newly bound station rather than reusing a stale initial.
+    if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
+      this.#initialConsumed = true;
+      const { station } = this.initialDeviceStation;
+      this.activeStationId = station.id;
+      this.groups = station.queue;
+      this.deviceView = "queue";
+      return;
+    }
     try {
       const { station } = await this.api.getDeviceStation();
       this.activeStationId = station.id;
@@ -269,9 +301,7 @@ export class TillStationScreen extends LitElement {
       event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
     ).detail;
     await this.#advance(() =>
-      this.deviceMode
-        ? this.api.deviceAdvance(itemId, to)
-        : this.api.advanceTicketItem(itemId, to),
+      this.deviceMode ? this.api.deviceAdvance(itemId, to) : this.api.advanceTicketItem(itemId, to),
     );
   }
 
@@ -383,47 +413,39 @@ export class TillStationScreen extends LitElement {
     return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
   }
 
-  /** The SESSION-GATED operator display (KDS-1) — unchanged: title + view toggle + Back, the station
-   * picker, and the active station's queue. */
+  /** The SESSION-GATED operator display (KDS-1): the shared queue surface WITH the Back-to-counter
+   * control, over the station-picker body (or the no-stations message). */
   #renderOperator(): TemplateResult {
-    return html`
-      <section
-        class="screen"
-        aria-label=${t("station.title")}
-        @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
-        @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
-        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
-        @fire-course=${(event: Event) => void this.#onFireCourse(event)}
-      >
-        <header class="head">
-          <h1 class="title">${t("station.title")}</h1>
-          <div class="actions">
-            <wt-button
-              class="view-toggle"
-              data-view-toggle
-              variant="secondary"
-              @click=${() => this.#toggleView()}
-            >
-              ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
-            </wt-button>
-            <wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
-              ${t("station.back")}
-            </wt-button>
-          </div>
-        </header>
-        ${this.stations.length === 0 ? this.#noStations() : this.#body()}
-      </section>
-    `;
+    return this.#renderQueueSurface({
+      showBack: true,
+      body: this.stations.length === 0 ? this.#noStations() : this.#body(),
+    });
   }
 
   /**
    * The DEVICE-mode display (§5a): the enrol view when this display holds no valid device cookie, else
-   * the bound station's queue with the view toggle but NO picker and NO Back-to-counter (a device has one
-   * fixed station and never logged in). The advance/collect/fire listeners are the SAME as the operator
-   * path — the handlers branch on {@link deviceMode} to route through the device-scoped verbs.
+   * the shared queue surface with NO Back-to-counter and NO picker (a device has one fixed station and
+   * never logged in) over an ADVANCE-ONLY queue. The advance/collect/fire listeners are the SAME as the
+   * operator path — wired once by the shared surface; the handlers branch on {@link deviceMode} to route
+   * through the device-scoped verbs, and {@link #onMarkCollected}/{@link #onFireCourse} keep their
+   * device-mode guards as defense-in-depth (§3d).
    */
   #renderDevice(): TemplateResult {
     if (this.deviceView === "enrol") return this.#renderEnrol();
+    return this.#renderQueueSurface({ showBack: false, body: this.#queue(true) });
+  }
+
+  /**
+   * The queue surface SHARED by the operator and device displays: the `<section class="screen">`, the
+   * header (title + board/rail view toggle, plus the Back-to-counter control when `showBack`), and the
+   * FOUR queue events wired to their handlers — byte-identical on both paths, which is the whole point of
+   * the extraction (the two renders repeated it verbatim). The paths differ only in `showBack` and the
+   * `body` they pass (the picker/no-stations body vs an advance-only queue). The four `@…` listeners are
+   * wired here on BOTH paths deliberately: in device mode the advance-only widget never renders the
+   * collect/fire buttons, but the listeners stay bound and the handlers self-guard (belt-and-braces, §3d)
+   * so a stray composed event can never reach a session verb a device holds no cookie for.
+   */
+  #renderQueueSurface(opts: { showBack: boolean; body: TemplateResult }): TemplateResult {
     return html`
       <section
         class="screen"
@@ -444,16 +466,21 @@ export class TillStationScreen extends LitElement {
             >
               ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
             </wt-button>
+            ${
+              opts.showBack
+                ? html`<wt-button
+                    class="back"
+                    data-back
+                    variant="secondary"
+                    @click=${() => this.#back()}
+                  >
+                    ${t("station.back")}
+                  </wt-button>`
+                : nothing
+            }
           </div>
         </header>
-        <till-station-queue
-          .groups=${this.groups}
-          .view=${this.view}
-          .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
-          .stationId=${this.activeStationId}
-          .advanceOnly=${true}
-        ></till-station-queue>
+        ${opts.body}
       </section>
     `;
   }
@@ -467,9 +494,11 @@ export class TillStationScreen extends LitElement {
           <h1 class="title">${t("device.enrol_title")}</h1>
         </header>
         <p class="enrol-hint">${t("device.enrol_hint")}</p>
-        ${this.enrolErrorCode
-          ? html`<p class="error" role="alert">${codeMessage(this.enrolErrorCode)}</p>`
-          : nothing}
+        ${
+          this.enrolErrorCode
+            ? html`<p class="error" role="alert">${codeMessage(this.enrolErrorCode)}</p>`
+            : nothing
+        }
         <wt-input
           class="enrol-code"
           data-enrol-code
@@ -495,20 +524,28 @@ export class TillStationScreen extends LitElement {
     return html`<p class="empty">${t("station.no_stations")}</p>`;
   }
 
-  /** The picker + the active station's queue. */
+  /** The picker + the active station's queue (the operator body). */
   #body(): TemplateResult {
     return html`
       <nav class="picker" aria-label=${t("station.pick")}>
         ${this.stations.map((station) => this.#pick(station))}
       </nav>
-      <till-station-queue
-        .groups=${this.groups}
-        .view=${this.view}
-        .bumpMode=${this.bumpMode}
-        .fireControl=${this.fireControl}
-        .stationId=${this.activeStationId}
-      ></till-station-queue>
+      ${this.#queue(false)}
     `;
+  }
+
+  /** The active/bound station's queue widget, shared by both paths. `advanceOnly` hides the collect/fire
+   * controls (device mode, §3d); the operator path passes `false` and keeps them. The other five props
+   * are identical on both paths, so this is the one place they are threaded to the widget. */
+  #queue(advanceOnly: boolean): TemplateResult {
+    return html`<till-station-queue
+      .groups=${this.groups}
+      .view=${this.view}
+      .bumpMode=${this.bumpMode}
+      .fireControl=${this.fireControl}
+      .stationId=${this.activeStationId}
+      .advanceOnly=${advanceOnly}
+    ></till-station-queue>`;
   }
 
   #pick(station: Station): TemplateResult {
