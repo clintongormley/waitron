@@ -352,6 +352,10 @@ export class TillStationScreen extends LitElement {
    */
   async #onMarkCollected(event: Event): Promise<void> {
     event.stopPropagation();
+    // DEVICE mode has no collect route (advance-only, §3d) — the advance-only widget never renders the
+    // button, so this cannot fire from the UI; guard anyway (belt-and-braces), so a stray composed event
+    // never reaches the session `markCollected` a device holds no cookie for.
+    if (this.deviceMode) return;
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
     await this.#advance(() => this.api.markCollected(orderId));
   }
@@ -366,6 +370,10 @@ export class TillStationScreen extends LitElement {
    */
   async #onFireCourse(event: Event): Promise<void> {
     event.stopPropagation();
+    // DEVICE mode has no fire route (advance-only, §3d) — same belt-and-braces guard as
+    // {@link #onMarkCollected}: the advance-only widget hides the button, so a stray composed event never
+    // reaches the session `fireCourse`.
+    if (this.deviceMode) return;
     const { orderId, courseId } = (event as CustomEvent<{ orderId: string; courseId: string }>)
       .detail;
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
@@ -444,6 +452,7 @@ export class TillStationScreen extends LitElement {
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
           .stationId=${this.activeStationId}
+          .advanceOnly=${true}
         ></till-station-queue>
       </section>
     `;

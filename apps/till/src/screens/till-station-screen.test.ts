@@ -474,6 +474,98 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.getDeviceStation).toHaveBeenCalledTimes(2);
   });
 
+  it("threads advanceOnly=true to the widget so it hides the collect/fire buttons (device has no such route)", async () => {
+    const api = deviceApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    expect(queueWidget(el)!.advanceOnly).toBe(true);
+  });
+
+  it("device mode hides the Collect button on a settled order (no device collect route, §3d)", async () => {
+    // boundStation's cocinaQueue is a SETTLED Mode-P order → collectable on the OPERATOR path; in device
+    // mode the advance-only widget must not render the handover button. Switch to the rail lens (where
+    // the per-order collect lives) and assert it is absent from the widget's shadow.
+    const api = deviceApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(queueWidget(el)!.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+  });
+
+  it("device mode hides the kitchen-fire button on a held course (no device fire route, §3d)", async () => {
+    const heldCourseQueue: StationQueueGroup[] = [
+      {
+        orderId: "wo-h",
+        orderNumber: 9,
+        label: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
+        status: "placed",
+        items: [
+          {
+            id: "it-h",
+            workingOrderLineId: "wl-h",
+            state: "queued",
+            descriptions: { "es-ES": "Solomillo" },
+            quantity: "1.000",
+            // A HELD later course — normally fireable under `fire_control = 'kitchen'`.
+            course: { id: "co-h", name: "Principales", displayOrder: 2 },
+            firedAt: null,
+          },
+        ],
+      },
+    ];
+    const api = deviceApi({
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue } }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      fireControl: "kitchen",
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(queueWidget(el)!.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+  });
+
+  it("device mode ignores a stray mark-collected / fire-course (belt-and-braces: no session verb, no reload)", async () => {
+    // The advance-only widget never renders these buttons, so the events cannot fire from the UI; the
+    // handlers guard anyway, so a stray composed event never reaches the session verbs (which a device
+    // has no cookie for) nor triggers a reload.
+    const api = deviceApi({ markCollected: vi.fn(), fireCourse: vi.fn() });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("mark-collected", {
+        detail: { orderId: "wo-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: "wo-1", courseId: "co-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect((api as unknown as { markCollected: ReturnType<typeof vi.fn> }).markCollected).not.toHaveBeenCalled();
+    expect((api as unknown as { fireCourse: ReturnType<typeof vi.fn> }).fireCourse).not.toHaveBeenCalled();
+    // Only the initial probe ran — a guarded stray event triggers no reload.
+    expect(api.getDeviceStation).toHaveBeenCalledOnce();
+  });
+
   it("a failed device reload after a bump leaves the last-known queue in place (degrade gracefully)", async () => {
     // The probe succeeds on connect, then the post-bump reload rejects (e.g. a mid-session revocation):
     // the display keeps its last-known queue rather than blanking — the kitchen display touches no fiscal

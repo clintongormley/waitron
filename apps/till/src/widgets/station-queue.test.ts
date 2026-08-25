@@ -262,6 +262,18 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
   });
 
+  it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
+    // In device mode the queue is advance-only: there is no device collect route, so the Mode-P handover
+    // button must not render (a button that isn't there can't emit a no-op mark-collected).
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups, // groupB (wo-2) is settled → normally collectable
+      view: "rail",
+      stationId: "st-1",
+      advanceOnly: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+  });
+
   it("age-colours each ticket by how long its oldest line has waited (fresh / warm / hot)", async () => {
     // `now` is injected so the buckets are deterministic. groupA queued at 10:00Z, groupB at 10:05Z.
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → hot, B: 7 min → warm
@@ -455,5 +467,22 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       fireControl: "kitchen", // even in kitchen mode, kanban has no per-order card to host the action
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+  });
+
+  it("advanceOnly: suppresses the kitchen-fire button on a held course (device mode has no fire route, §3d)", async () => {
+    // Device mode is advance-only: there is no device fire route, so even a held course under
+    // `fire_control = 'kitchen'` shows no Empezar curso button (it would only 401 → no-op).
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder], // Principales (co-main) is held → normally fireable under kitchen
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+      advanceOnly: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
+    // The held line is still greyed + non-advanceable — advanceOnly hides the FIRE button, not the greying.
+    expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
+      true,
+    );
   });
 });

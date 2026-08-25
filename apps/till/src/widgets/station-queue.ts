@@ -281,6 +281,14 @@ export class TillStationQueue extends LitElement {
   /** Whether THIS display owns the per-course fire action (KDS-2 §5a) — `kitchen` shows "Empezar curso"
    * on a held course's rail section; `waiter` (the default) shows none (the tab screen fires, Task 7). */
   @property() fireControl: FireControlMode = "waiter";
+  /**
+   * ADVANCE-ONLY (device-identity-1 §5a). When `true` the widget renders NEITHER the Mode-P collect
+   * handover NOR the kitchen-fire button — an enrolled DEVICE display has an advance-only surface (spec
+   * §3d: the device routes are the per-line advance alone; there is no device collect/fire route, so
+   * those buttons would only 401 → silently no-op). Default `false` keeps the operator display unchanged
+   * (it owns a session and both verbs). Advancing itself, and the held-line greying, are unaffected.
+   */
+  @property({ type: Boolean }) advanceOnly = false;
   /** Injectable clock for age colouring; defaults to the wall clock. Set in tests for deterministic buckets. */
   @property({ attribute: false }) now?: number;
 
@@ -416,6 +424,8 @@ export class TillStationQueue extends LitElement {
    *  (via {@link #fire}); the label names the course for an accessible control. Under `waiter` the tab
    *  screen owns the fire (Task 7), so this renders nothing here. */
   #fireAction(group: StationQueueGroup, section: CourseSection): TemplateResult | typeof nothing {
+    // Advance-only device display: no device fire route (§3d), so never offer the fire button.
+    if (this.advanceOnly) return nothing;
     if (this.fireControl !== "kitchen" || section.course === null || !section.held) return nothing;
     const course = section.course;
     return html`<button
@@ -433,6 +443,8 @@ export class TillStationQueue extends LitElement {
    * filters both, so `settled` is the whole collectability test). An `open` (tab) or `placed` (awaiting the
    * fiscal collect) order renders none. The label names the order for an accessible control. */
   #collectAction(group: StationQueueGroup): TemplateResult | typeof nothing {
+    // Advance-only device display: no device collect route (§3d), so never offer the handover button.
+    if (this.advanceOnly) return nothing;
     if (group.status !== "settled") return nothing;
     return html`<button
       class="collect"
