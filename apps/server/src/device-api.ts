@@ -150,10 +150,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // unauthenticated route from starving the sale path (CLAUDE.md §5, "nothing may block a sale").
       // Defense-in-depth over the code's own ~40-bit / single-use / 15-min-TTL controls (enrol-rate-limit.ts).
       enrolLimiter.check();
-      // Coerced to `{}` so a `null`/non-object body reaches the screen as a 400 naming `code`, never a
-      // TypeError. The code is screened to a string before the verb (its `normalizePairingCode` would
-      // TypeError on a non-string) — a missing one is `management.request_invalid` naming the field.
-      const body = (await c.req.json<{ code?: unknown }>()) ?? {};
+      // Parsed DEFENSIVELY, guarding BOTH failure modes of `c.req.json()`. (1) It THROWS a `SyntaxError`
+      // on an empty or malformed body — `.catch(() => ({}))` turns that into `{}`. (2) It returns `null`
+      // (NO throw) for a literal JSON `null` body — the trailing `?? {}` turns that into `{}` too.
+      // Without the `.catch`, an empty/malformed body reaches `run` as a NON-AppError → an opaque
+      // `server.internal` 500; without the `?? {}`, `null.code` would TypeError to the same 500. Either
+      // way a degenerate body now flows to the `code` screen → a clean `management.request_invalid` 400
+      // naming the field (the verb's `normalizePairingCode` would TypeError on a non-string, so the
+      // string screen must run first).
+      const body: { code?: unknown } =
+        (await c.req.json<{ code?: unknown }>().catch(() => ({}))) ?? {};
       const code = requireString(body.code, "code");
       const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -204,7 +210,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
-      const body = await c.req.json<{ to?: string }>();
+      // Parsed DEFENSIVELY (as the enrol route above), guarding both `c.req.json()` failure modes: the
+      // `.catch(() => ({}))` turns an empty/malformed-body THROW into `{}`, and the `?? {}` turns a
+      // literal JSON `null` (which parses to `null` WITHOUT throwing) into `{}`. Without them a
+      // degenerate body reaches `run` as a non-AppError, or `null.to` TypeErrors — either way an opaque
+      // 500. With them `to` is undefined and reaches `advanceTicketItem`'s transition screen — the SAME
+      // `ticket.invalid_transition` an absent/garbage target gives, never a 500.
+      const body: { to?: string } = (await c.req.json<{ to?: string }>().catch(() => ({}))) ?? {};
       // `to` reaches `advanceTicketItem` as-is (cast): the verb owns target validation, refusing
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;

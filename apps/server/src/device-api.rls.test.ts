@@ -433,6 +433,34 @@ describe("Device API over real Postgres", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "code" } } });
   });
 
+  it("POST /api/device/enrol with an EMPTY or MALFORMED body → 400 management.request_invalid, never a 500", async () => {
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
+    // could run — so without a defensive parse the throw reaches `run` as a NON-AppError and becomes an
+    // opaque `server.internal` 500 (the `?? {}` only ever caught a literal JSON `null`). The guarded
+    // parse coerces a parse failure to `{}`, so the body flows to the `code` screen → a clean 400. This
+    // is the receipt for that fix: BEFORE it, both requests below were 500.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+
+    // An EMPTY body (the `send` helper omits the body and content-type entirely).
+    const empty = await app.request("/api/device/enrol", { method: "POST" });
+    expect(empty.status).toBe(400);
+    expect(
+      (await empty.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "code" } } });
+
+    // A MALFORMED body (`"{"`) — sent raw, since `send` would JSON.stringify it into valid JSON.
+    const malformed = await app.request("/api/device/enrol", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    });
+    expect(malformed.status).toBe(400);
+    expect(
+      (await malformed.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "code" } } });
+  });
+
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
@@ -469,6 +497,52 @@ describe("Device API over real Postgres", () => {
       body: { to: "preparing" },
     });
     expect(malformed.status).toBe(409);
+  });
+
+  it("advance with an EMPTY, MALFORMED, or null body degrades to 409 ticket.invalid_transition, never a 500", async () => {
+    // Same defensive-parse fix as enrol: a valid device + a valid item id, but the body is degenerate.
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty/malformed body (→ opaque 500 without the
+    // `.catch`) and returns `null` for a literal JSON `null` (→ a `null.to` TypeError 500 without the
+    // `?? {}`). The guarded parse coerces all three to `{}`, so `to` is undefined and reaches
+    // `advanceTicketItem`'s transition screen → the SAME 409 an absent/garbage target gives. BEFORE the
+    // fix the empty/malformed requests were 500 (the original route had no `?? {}` at all, so null was
+    // a 500 too).
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const { items } = await fireOrder(venue);
+    const { jar } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+    // An EMPTY body on a real, own-station item.
+    const empty = await app.request(`/api/device/ticket-items/${items[0]}/advance`, {
+      method: "POST",
+      headers: { cookie: jar },
+    });
+    expect(empty.status).toBe(409);
+    expect((await empty.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "ticket.invalid_transition" },
+    });
+
+    // A MALFORMED body (`"{"`) — sent raw.
+    const malformedBody = await app.request(`/api/device/ticket-items/${items[0]}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: jar },
+      body: "{",
+    });
+    expect(malformedBody.status).toBe(409);
+    expect((await malformedBody.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "ticket.invalid_transition" },
+    });
+
+    // A literal JSON `null` body (`send` serialises `null` to the 4-byte `"null"`): parses to `null`
+    // without throwing, so the `?? {}` — not the `.catch` — is what saves it from a `null.to` 500.
+    const nullBody = await send(app, "POST", `/api/device/ticket-items/${items[0]}/advance`, {
+      cookie: jar,
+      body: null,
+    });
+    expect(nullBody.status).toBe(409);
+    expect((await nullBody.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "ticket.invalid_transition" },
+    });
   });
 
   it("the management routes require device.manage — 401 unauthenticated, 403 for a staff session", async () => {
