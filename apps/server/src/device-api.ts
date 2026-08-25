@@ -242,8 +242,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.post("/management-api/device-codes", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body =
-        (await c.req.json<{ kind?: unknown; stationId?: unknown; label?: unknown }>()) ?? {};
+      // Parsed DEFENSIVELY, both failure modes of `c.req.json()` (see the enrol route): `.catch(() => ({}))`
+      // turns an empty/malformed body's `SyntaxError` into `{}`, and the trailing `?? {}` turns a literal
+      // `null` body into `{}` — either degenerate body then flows to the field screens below → a clean
+      // `management.request_invalid` 400, never an opaque `server.internal` 500.
+      const body: { kind?: unknown; stationId?: unknown; label?: unknown } =
+        (await c.req
+          .json<{ kind?: unknown; stationId?: unknown; label?: unknown }>()
+          .catch(() => ({}))) ?? {};
       // `requireEnum` narrows `kind` to the `device_kind` pgEnum union (= `DeviceKind`) off
       // `deviceKind.enumValues`, so a future additive kind is accepted the moment the enum widens;
       // `requireBodyUuid` screens `stationId` to a UUID SHAPE (a non-uuid would `22P02` in

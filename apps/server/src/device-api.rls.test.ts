@@ -661,6 +661,29 @@ describe("Device API over real Postgres", () => {
     expect(
       (await nullBody.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
+
+    // An EMPTY body (no body, no content-type) with a valid manager session reaches the gated handler,
+    // where `c.req.json()` THROWS — the guarded parse coerces it to `{}` → the kind screen → a clean 400,
+    // never an opaque 500 (the same fix the enrol route carries; without it this was a 500).
+    const empty = await app.request("/management-api/device-codes", {
+      method: "POST",
+      headers: { cookie: venue.managerCookie },
+    });
+    expect(empty.status).toBe(400);
+    expect(
+      (await empty.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
+
+    // A MALFORMED body (`"{"`) — sent raw so it is not valid JSON — is likewise coerced to `{}` → 400.
+    const malformed = await app.request("/management-api/device-codes", {
+      method: "POST",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: "{",
+    });
+    expect(malformed.status).toBe(400);
+    expect(
+      (await malformed.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
   });
 
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
