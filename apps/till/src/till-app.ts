@@ -18,6 +18,7 @@ import "./screens/till-expo-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
+  DeviceStation,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -154,6 +155,23 @@ export class TillApp extends LitElement {
   readonly #store = new WorkingOrderStore();
 
   @state() private screen: Screen = "lock";
+  /**
+   * Whether the station screen runs in DEVICE mode (device-identity-1 §5a) — an always-on enrolled KDS
+   * display with no login. Set `true` by {@link #boot} when the device probe succeeds (an already-enrolled
+   * display boots straight into its queue) or by {@link #onSetupDevice} when the lock screen's "set up"
+   * affordance routes a FRESH display in to reach the enrol view. Threaded to `<till-station-screen>` in
+   * `case "station"`; default `false` keeps the operator "Kitchen" nav path unchanged.
+   */
+  @state() private deviceMode = false;
+  /**
+   * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
+   * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
+   * `GET /api/device/station` a SECOND time on mount (the boot probe already read it — one authenticated
+   * queue read per enrolled-display boot, not two). Set ONLY by {@link #boot} on a successful probe;
+   * stays `undefined` for a normal operator till and for the lock-screen "set up" path
+   * ({@link #onSetupDevice}), where the screen fetches on mount (and a 401 there shows the enrol view).
+   */
+  @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** The sellable products, loaded at login and handed to the counter's product grid. */
@@ -399,8 +417,27 @@ export class TillApp extends LitElement {
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
-      // a detached element (see above).
+      // a detached element (see above). Return BEFORE the device probe: a till that could not read its own
+      // setup is not a display to route into device mode.
       this.errorKey = "boot.error";
+      return;
+    }
+    // DEVICE PROBE (device-identity-1 §5a). An already-ENROLLED display holds the device cookie, so this
+    // succeeds and the app boots STRAIGHT into device mode — the station screen with no login (it re-reads
+    // its own bound queue). A normal operator till has no such cookie → 401 (`device.unauthorized`), the
+    // EXPECTED not-a-device case: swallow it and stay on `lock`. Deliberately NOT `boot.error` — a
+    // device-station 401 is not a boot failure (that is getTill's alone). State-only writes, so no
+    // isConnected guard is needed (the DISCONNECT SAFETY note; the module-global `setLocale` above is the
+    // only effect that took one).
+    try {
+      // Stash the probe's resolved station and hand it to the station screen as `.initialDeviceStation`,
+      // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — one
+      // authenticated queue read per enrolled-display boot, not two.
+      this.initialDeviceStation = await this.api.getDeviceStation();
+      this.deviceMode = true;
+      this.screen = "station";
+    } catch {
+      // Not an enrolled device (or a transient probe failure) — remain a normal operator till on `lock`.
     }
   }
 
@@ -747,9 +784,21 @@ export class TillApp extends LitElement {
 
   /** Show the station-display screen (KDS-1) — the kitchen's own view, reached from the counter's
    * "Kitchen" nav. Basket-preserving like the schedule/floor nav (the basket is till-owned); the screen
-   * owns its own fetching via `.api`, so this just switches. */
+   * owns its own fetching via `.api`, so this just switches. Operator path, so `deviceMode` stays false. */
   #onShowStation(): void {
     this.errorKey = undefined;
+    this.screen = "station";
+  }
+
+  /**
+   * Route a FRESH (unenrolled) display into device mode from the lock screen's "set up as kitchen display"
+   * affordance (device-identity-1 §5a). The station screen mounts in device mode, probes its own device
+   * station (401, since there is no cookie yet), and shows the enrol view so the operator can pair the
+   * display with a code. State-only switch, like {@link #onShowStation}.
+   */
+  #onSetupDevice(): void {
+    this.errorKey = undefined;
+    this.deviceMode = true;
     this.screen = "station";
   }
 
@@ -1148,6 +1197,7 @@ export class TillApp extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
+        @setup-device=${() => this.#onSetupDevice()}
         @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
@@ -1235,6 +1285,8 @@ export class TillApp extends LitElement {
           .api=${this.api}
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
         ></till-station-screen>`;
       // KDS-3 (design §5): the expo/pass display. Like the station screen it OWNS its own fetching +
       // levers via `.api`, so the app just hands it the api + the venue fire-control mode (which gates

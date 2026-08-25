@@ -1523,3 +1523,84 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 });
+
+describe("DashboardApi — devices (device-identity-1)", () => {
+  // The three verbs the Devices screen drives (device-identity-1's /management-api/devices,
+  // /management-api/device-codes and /management-api/devices/:id/revoke routes, device.manage-gated).
+  // GET decodes the device list (newest-enrolled first, server-ordered), POST returns the one-time code
+  // (201), the revoke POST resolves undefined on an empty 204. Paths/bodies asserted against
+  // apps/server/src/device-api.ts.
+
+  const rows = [
+    {
+      id: "d1",
+      kind: "kds_station",
+      stationId: "s1",
+      label: "Pantalla Cocina",
+      active: true,
+      lastSeenAt: "2026-08-25T14:30:00.000Z",
+      enrolledAt: "2026-08-20T09:00:00.000Z",
+    },
+    {
+      id: "d2",
+      kind: "kds_station",
+      stationId: null,
+      label: "Pase",
+      active: false,
+      lastSeenAt: null,
+      enrolledAt: "2026-08-19T09:00:00.000Z",
+    },
+  ];
+
+  it("listDevices GETs /management-api/devices with credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listDevices()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createDeviceCode POSTs { kind, stationId, label } and returns the one-time code (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ code: "ABCD2345" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(
+      await api.createDeviceCode({ kind: "kds_station", stationId: "s1", label: "Pantalla" }),
+    ).toEqual({ code: "ABCD2345" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-codes", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "kds_station", stationId: "s1", label: "Pantalla" }),
+    });
+  });
+
+  it("revokeDevice POSTs the device's revoke route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.revokeDevice("d1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/revoke", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("createDeviceCode rejects with { code } on a non-2xx (station not found)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "station.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.createDeviceCode({ kind: "kds_station", stationId: "nope", label: "X" }),
+    ).rejects.toMatchObject({ code: "station.not_found" });
+  });
+
+  it("revokeDevice rejects with { code } on a non-2xx (device not found)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "device.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
+  });
+});

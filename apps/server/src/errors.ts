@@ -739,5 +739,129 @@ declare module "@waitron/shared" {
      * `credentials.invalid_field` follow by echoing names, never values.
      */
     "management.request_invalid": { field: string };
+    /**
+     * A request to a device-authenticated route (a KDS station display, device-identity-1 §3c) carried
+     * no usable device identity — the `waitron_device` cookie was absent, malformed (no `.` separator,
+     * or a non-uuid selector), named no device, carried a token that did not `verifySecret` against the
+     * row's `token_hash`, or named a device that has been REVOKED (`active = false`, instant revocation).
+     * All of those fold into THIS one code: to the presenter "no such device", "wrong token" and
+     * "revoked" are the same fact ("this cookie does not authenticate here"), and a distinct code for any
+     * of them would confirm a device's existence or revocation state to whoever asked — the same
+     * fail-closed reasoning `node.not_found` and `payment.webhook_signature_invalid` use. NO params: the
+     * cookie's selector and token are a bearer secret and must never land in an error's params (the
+     * no-leak discipline `session.required` and `payment.webhook_signature_invalid` follow), and there
+     * is nothing non-secret left to carry.
+     *
+     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
+     * (`tenant.not_found`'s note above gives the rule); `server.*` is reserved for facts about the
+     * process itself, and a failed device authentication is a fact about the request. Mapped to HTTP 401
+     * by `device-api.ts`'s local STATUS map (Task 5), not here — this file only DECLARES the code, the
+     * route layer owns the status, the same split every other code in this file follows. Never renamed
+     * once shipped.
+     */
+    "device.unauthorized": Record<string, never>;
+    /**
+     * A device tried to advance a kitchen ticket item that belongs to a DIFFERENT station than the one
+     * it is bound to (device-identity-1 §3d — least privilege: a device reads and bumps only its OWN
+     * station). `device-api.ts`'s advance route fetches the item's `station_id` and asserts it equals the
+     * requesting device's own `stationId` BEFORE calling `advanceTicketItem`; a mismatch throws THIS.
+     * `stationId` names the ITEM's station — the station the device is not bound to and may not touch —
+     * echoed because a station id is a within-tenant uuid this codebase treats as non-secret
+     * (`station.not_found` echoes its own `stationId` the same way), and naming which station the item is
+     * on is what makes the refusal actionable. Qualified `stationId` to match the domain-record family
+     * (`station.not_found`'s `stationId`).
+     *
+     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 403 by `device-api.ts`'s local STATUS
+     * map (Task 5), not here. Never renamed once shipped.
+     */
+    "device.forbidden_station": { stationId: string };
+    /**
+     * A device enrolment (`POST /api/device/enrol`, device-identity-1 §3b) presented a pairing code that
+     * redeemed nothing — the locking `DELETE FROM device_pairing_codes WHERE code_sha256 = sha256(code)
+     * RETURNING` (the single-use `consumeChallenge` shape) matched no row: the code never existed, was
+     * mistyped, or was ALREADY consumed (each code is single-use, and a concurrent redeem the row-lock
+     * serialised loses here too). All fold into THIS one code. NO params: a pairing code is a bearer
+     * SECRET a caller can mis-send, and it must never land in an error's params — the same no-leak
+     * discipline `management.request_invalid` follows for a PIN and `session.required` for the session
+     * cookie; there is nothing non-secret to carry.
+     *
+     * `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
+     * map (Task 5), not here. Distinct from `device.pairing_expired`, where a row WAS found but has
+     * lapsed. Never renamed once shipped.
+     */
+    "device.pairing_invalid": Record<string, never>;
+    /**
+     * A device enrolment presented a pairing code that redeemed a row, but the row is older than
+     * `PAIRING_TTL_MS` (device-identity-1 §3b step 2 — the deleted row is rolled back with the tx so it
+     * lapses by TTL rather than being burned, the WebAuthn `consumeChallenge` semantic). NO params, for
+     * the same reason as `device.pairing_invalid`: the code is a bearer secret and is never echoed, and
+     * there is nothing non-secret to carry. Distinct from `device.pairing_invalid` (which matched no row
+     * at all): this says the code was real but has expired, so the remedy is to generate a fresh one.
+     *
+     * `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package. Mapped to HTTP
+     * 400 by `device-api.ts`'s local STATUS map (Task 5), not here. Never renamed once shipped.
+     */
+    "device.pairing_expired": Record<string, never>;
+    /**
+     * No such device for this tenant — the device management surface (`POST /management-api/devices/:id/
+     * revoke` and the list, device-identity-1 §3e) named a device id that matches nothing: absent, or
+     * another tenant's that RLS hides (both report THIS one code, the fail-closed shape
+     * `node.not_found`/`station.not_found` use). Deliberately DISTINCT from `device.unauthorized`: this
+     * is the MANAGER-facing surface (an authenticated `device.manage` holder acting on a device by id),
+     * where echoing the id is safe and actionable — a mistyped uuid identifies nothing on its own;
+     * `device.unauthorized` is the DEVICE-auth guard, which folds "unknown id" in and carries NO params
+     * precisely so it cannot confirm a device's existence to an unauthenticated caller. `deviceId` is the
+     * caller-supplied uuid the dashboard already holds, not a secret; qualified `deviceId` to match the
+     * domain-record not_found family (`station.not_found`'s `stationId`).
+     *
+     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 404 by `device-api.ts`'s local STATUS
+     * map (Task 5), not here. Never renamed once shipped.
+     */
+    "device.not_found": { deviceId: string };
+    /**
+     * Too many device-enrolment attempts reached `POST /api/device/enrol` in one fixed window — the
+     * per-process, GLOBAL, in-memory rate limit (`enrol-rate-limit.ts`, device-identity-1 §8 open item)
+     * refused this attempt at the TOP of the handler, BEFORE the body is parsed and BEFORE the
+     * pairing-code DELETE runs. Defense-in-depth over the primary controls (the code is ~40-bit,
+     * single-use, 15-min TTL, so brute-force over HTTP is already infeasible) PLUS DoS / connection-pool
+     * protection: rejecting before any DB work is what keeps an enrol flood from exhausting the pool and
+     * starving the sale path (the fiscal invariant "nothing may block a sale", CLAUDE.md §5). The limit is
+     * GLOBAL rather than per-IP because the on-prem server sits behind the snitun tunnel / a reverse
+     * proxy, so every client presents one address and a per-IP key would buy nothing.
+     *
+     * NO params: this is a blanket throttle, not a fact about the caller's code, and there is nothing
+     * non-secret to carry (the pairing code is a bearer secret and is never echoed — the same no-leak
+     * discipline `device.pairing_invalid`/`device.pairing_expired` follow). `device.pairing_*` names the
+     * DOMAIN CONCEPT (device enrolment/redemption), never the throwing package (`tenant.not_found`'s note
+     * gives the rule), and sits in the pairing-redemption family. Mapped to HTTP 429 by `device-api.ts`'s
+     * local STATUS map (the FIRST 429 in `apps/server`), not here. Never renamed once shipped.
+     */
+    "device.pairing_rate_limited": Record<string, never>;
+    /**
+     * A pairing code could not be minted because its SHA-256 digest collided with an outstanding code's
+     * — the `device_pairing_codes_lookup_idx` UNIQUE index on (tenant_id, code_sha256) rejected the
+     * INSERT with 23505. That index (added for single-use safety, 385b6248, so the redeeming
+     * `DELETE … RETURNING` can never consume a duplicate) makes a duplicate digest FAIL the mint rather
+     * than silently minting a consumable duplicate. The pairing code is ~40-bit Crockford entropy, so a
+     * fresh random code whose digest collides with an outstanding one is astronomically rare (~2^-40 per
+     * mint × outstanding codes) — but real, and `generatePairingCode` maps it to THIS code rather than
+     * letting the raw constraint error surface as an opaque `server.internal` 500. TRANSIENT: the remedy
+     * is simply to retry the mint, which draws a fresh code.
+     *
+     * NO params: there is nothing non-secret to carry (the code itself is a bearer secret, never echoed —
+     * the same no-leak discipline `device.pairing_invalid`/`device.pairing_expired`/
+     * `device.pairing_rate_limited` follow), and a blanket "retry" needs none. Distinct from
+     * `device.pairing_rate_limited` (a throttle refusing the enrol side before any DB work) and from the
+     * redemption faults `device.pairing_invalid`/`device.pairing_expired` (the REDEEM side): this is the
+     * GENERATE side failing to find a free code. `device.pairing_*` names the DOMAIN CONCEPT (device
+     * pairing), never the throwing package (`tenant.not_found`'s note gives the rule), and sits in the
+     * pairing family. Mapped to HTTP 409 by `device-api.ts`'s local STATUS map (a conflict on the digest,
+     * the same 409 the `isUniqueViolation`-mapped `station.name_taken`/`table.label_taken` take), not
+     * here. Never renamed once shipped.
+     */
+    "device.pairing_code_unavailable": Record<string, never>;
   }
 }

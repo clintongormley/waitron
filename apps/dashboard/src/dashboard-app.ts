@@ -19,6 +19,7 @@ import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/recipe-screen.js";
+import "./screens/devices-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -26,11 +27,11 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * author the catalogue, arrange the till layout, edit the receipt trim, configure the table service
  * statuses, arrange the floor plan (zones + tables), configure the kitchen (stations + bump mode),
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
- * purchase invoices, or author ingredients and product recipes. Exactly one shows at a time. `staff`,
- * `catalogue`, `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`,
- * `planned-actual`, `purchases` and `recipe` are the twelve MANAGER faces the nav switches between;
- * `my-schedule` is the sole face of a `staff`-role session and carries no nav. All logged-in faces
- * share the same chrome (logout, plus the nav for a non-staff session).
+ * purchase invoices, author ingredients and product recipes, or manage enrolled devices. Exactly one
+ * shows at a time. `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`,
+ * `approvals`, `planned-actual`, `purchases`, `recipe` and `devices` are the thirteen MANAGER faces the
+ * nav switches between; `my-schedule` is the sole face of a `staff`-role session and carries no nav. All
+ * logged-in faces share the same chrome (logout, plus the nav for a non-staff session).
  */
 type Screen =
   | "login"
@@ -46,7 +47,8 @@ type Screen =
   | "approvals"
   | "planned-actual"
   | "purchases"
-  | "recipe";
+  | "recipe"
+  | "devices";
 
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
@@ -66,9 +68,10 @@ type Screen =
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `staff` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the twelve manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`,
- *    `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases` and `recipe` — a plain local state
- *    change, no server call. A `staff` session has no nav (the self-service view is its only face);
+ *    the thirteen manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`,
+ *    `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe` and `devices` — a plain
+ *    local state change, no server call. A `staff` session has no nav (the self-service view is its only
+ *    face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -84,7 +87,8 @@ type Screen =
  * `<h1>Cocina</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
  * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
  * the sole `<h1>Previsto vs real</h1>`, `dashboard-purchases-screen` the sole `<h1>Compras</h1>`,
- * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, and `dashboard-login-screen`
+ * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, `dashboard-devices-screen` the sole
+ * `<h1>Dispositivos</h1>`, and `dashboard-login-screen`
  * none — so the shell adds no competing `<h1>`: its
  * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
  * exactly one `<h1>` in the DOM at a time.
@@ -215,7 +219,7 @@ export class DashboardApp extends LitElement {
     `;
   }
 
-  /** The manager nav — the eleven-face switcher, shown only for a NON-staff session (a `staff` person
+  /** The manager nav — the thirteen-face switcher, shown only for a NON-staff session (a `staff` person
    * has just the self-service view, so no nav). Extracted so the `render` chrome reads as
    * "nav-or-nothing, then logout". */
   #nav(): TemplateResult {
@@ -293,6 +297,12 @@ export class DashboardApp extends LitElement {
           @click=${() => (this.screen = "recipe")}
           >${t("nav.recipe")}</wt-button
         >
+        <wt-button
+          variant=${this.screen === "devices" ? "primary" : "secondary"}
+          data-test="nav-devices"
+          @click=${() => (this.screen = "devices")}
+          >${t("nav.devices")}</wt-button
+        >
       </nav>
     `;
   }
@@ -336,6 +346,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-purchases-screen .api=${this.api}></dashboard-purchases-screen>`;
       case "recipe":
         return html`<dashboard-recipe-screen .api=${this.api}></dashboard-recipe-screen>`;
+      case "devices":
+        return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
       default:
         return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
     }

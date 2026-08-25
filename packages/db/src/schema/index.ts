@@ -13,6 +13,7 @@ export * from "./floor-zones.js";
 export * from "./kitchen-stations.js";
 export * from "./kitchen-courses.js";
 export * from "./ticket-items.js";
+export * from "./devices.js";
 export * from "./catalogue.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";

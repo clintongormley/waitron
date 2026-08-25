@@ -244,4 +244,26 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  // Device mode (device-identity-1 §5a): the roster view carries a "set up as kitchen display"
+  // affordance so a FRESH (unenrolled) display can reach the enrol view; it emits `setup-device`, which
+  // the app turns into the device-mode station screen. The operator PIN login is untouched.
+  it("emits setup-device from the kitchen-display set-up affordance (roster view)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const spy = vi.fn();
+    el.addEventListener("setup-device", spy);
+    click(el, "[data-setup-device]");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("hides the set-up affordance in PIN mode (it belongs to the roster view, not operator login)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(query(el, "[data-setup-device]")).not.toBeNull();
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    // In PIN mode the operator is logging in — the display set-up affordance is gone.
+    expect(query(el, "[data-setup-device]")).toBeNull();
+  });
 });

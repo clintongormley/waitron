@@ -38,6 +38,7 @@ export {
   suspendPerson,
 } from "./staff.js";
 export type { PersonSummary, StaffListEntry } from "./staff.js";
+export { hashSecret, verifySecret } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   MIN_PASSWORD_LENGTH,

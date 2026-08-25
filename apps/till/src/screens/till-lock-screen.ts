@@ -113,6 +113,18 @@ export class TillLockScreen extends LitElement {
       .actions wt-button {
         flex: 1;
       }
+
+      /* The kitchen-display set-up affordance (device-identity-1 §5a) — set off below the roster by a
+         divider so it never competes with an operator picking their name. Secondary weight, full width. */
+      .device-setup {
+        margin-top: var(--wt-space-4);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
+      }
+
+      .setup-device {
+        width: 100%;
+      }
     `,
   ];
 
@@ -200,7 +212,24 @@ export class TillLockScreen extends LitElement {
     return html`
       <h1 class="heading">${t("login.pick_operator")}</h1>
       ${this.#renderRoster()}
+      <div class="device-setup">
+        <wt-button
+          class="setup-device"
+          data-setup-device
+          variant="secondary"
+          @click=${() => this.#setupDevice()}
+        >
+          ${t("device.setup")}
+        </wt-button>
+      </div>
     `;
+  }
+
+  /** Route a FRESH display into device mode (device-identity-1 §5a): emit a composed, bubbling
+   * `setup-device` the app turns into the device-mode station screen (which shows the enrol view). Kept
+   * off the PIN view (roster mode only), so an operator logging in never sees it. */
+  #setupDevice(): void {
+    this.dispatchEvent(new CustomEvent("setup-device", { bubbles: true, composed: true }));
   }
 
   #renderRoster() {

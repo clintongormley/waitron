@@ -133,3 +133,71 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 });
+
+/** A device-mode `TillApi`: the enrolled display's probe/enrol/advance verbs (device-identity-1 §5a). */
+function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
+  return {
+    getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: groups } }),
+    enrolDevice: vi.fn().mockResolvedValue({
+      deviceId: "dev-1",
+      kind: "kds_station",
+      stationId: "st-dev",
+      label: "Pase",
+    }),
+    deviceAdvance: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as TillApi;
+}
+
+describe.each(["light", "dark"] as const)(
+  "till-station-screen device mode a11y (%s theme)",
+  (theme) => {
+    it("has no violations on the enrolled device queue (no picker, view toggle only)", async () => {
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api: deviceStubApi(), deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations on the ENROL view (labelled code field + submit)", async () => {
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        {
+          api: deviceStubApi({
+            getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+          }),
+          deviceMode: true,
+        },
+        theme,
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations on the enrol ERROR banner (danger-on-surface, its own colour combo)", async () => {
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        {
+          api: deviceStubApi({
+            getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+            enrolDevice: vi.fn().mockRejectedValue({ code: "device.pairing_expired" }),
+          }),
+          deviceMode: true,
+        },
+        theme,
+      );
+      await flush(el);
+      // Drive an enrol failure so the role="alert" banner renders for the sweep.
+      el.shadowRoot!.querySelector<HTMLElement>("[data-enrol-code]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "STALE" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-enrol-submit]")!.click();
+      await flush(el);
+      await expectNoA11yViolations(host);
+    });
+  },
+);

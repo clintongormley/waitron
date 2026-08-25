@@ -121,3 +121,59 @@ describe("the held-ticket error code carries its declared params", () => {
     expect(error.params).toEqual({ ticketItemId });
   });
 });
+
+// device-identity-1 (Task 2) station enrolment + device authentication. As with every block above,
+// each `it` only proves the code is REGISTERED with the right param SHAPE — the construction
+// typechecks solely because errors.ts's `declare module` augmentation is loaded (the side-effect
+// import above), so the fail-first signal for these registration tests is `tsc --noEmit`, NOT the
+// runtime run (AppError does no runtime validation of the code, so `new AppError("device.unauthorized",
+// {})` would run green even with the code undeclared). The real throwers arrive in later tasks: the
+// enrol verb (pairing_invalid/pairing_expired, T3), `requireDevice` (unauthorized, T4), and the
+// device-scoped advance + management routes (forbidden_station/not_found, T5). The two no-param codes
+// carry `Record<string, never>` — a pairing code and the device cookie are bearer SECRETS never echoed
+// (the no-leak discipline, CLAUDE.md §1); `stationId`/`deviceId` follow the qualified domain-record
+// family (station.not_found's `stationId`). The HTTP statuses (401/403/400/400/404) are NOT here — they
+// live in device-api.ts's local STATUS map (Task 5), the same declare-here / status-in-route split the
+// station.*/course.* codes above follow.
+describe("the device error codes carry their declared params", () => {
+  it("constructs device.unauthorized with no params (a bearer device cookie is never echoed)", () => {
+    const error = new AppError("device.unauthorized", {});
+    expect(error.code).toBe("device.unauthorized");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs device.forbidden_station naming the item's station, matching station.not_found's shape", () => {
+    const stationId = "77777777-7777-7777-7777-777777777777";
+    const error = new AppError("device.forbidden_station", { stationId });
+    expect(error.code).toBe("device.forbidden_station");
+    expect(error.params).toEqual({ stationId });
+  });
+
+  it("constructs device.pairing_invalid with no params (a pairing code is never echoed)", () => {
+    const error = new AppError("device.pairing_invalid", {});
+    expect(error.code).toBe("device.pairing_invalid");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs device.pairing_expired with no params (a pairing code is never echoed)", () => {
+    const error = new AppError("device.pairing_expired", {});
+    expect(error.code).toBe("device.pairing_expired");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs device.not_found with the qualified deviceId, matching station.not_found's shape", () => {
+    const deviceId = "88888888-8888-8888-8888-888888888888";
+    const error = new AppError("device.not_found", { deviceId });
+    expect(error.code).toBe("device.not_found");
+    expect(error.params).toEqual({ deviceId });
+  });
+
+  it("constructs device.pairing_rate_limited with no params (a blanket enrol-flood throttle)", () => {
+    // The real thrower is `enrol-rate-limit.ts`'s limiter, at the TOP of the enrol route (device-identity-1
+    // §8). No params — it is a blanket throttle, not a fact about the caller's code, and the pairing code
+    // is a bearer secret never echoed (the no-leak discipline pairing_invalid/pairing_expired follow).
+    const error = new AppError("device.pairing_rate_limited", {});
+    expect(error.code).toBe("device.pairing_rate_limited");
+    expect(error.params).toEqual({});
+  });
+});

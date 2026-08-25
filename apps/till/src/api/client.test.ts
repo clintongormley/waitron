@@ -1301,4 +1301,123 @@ describe("TillApi", () => {
       }),
     ).rejects.toMatchObject({ code: "placement.invalid" });
   });
+
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display's three verbs. The
+  // httpOnly device cookie rides `credentials: "include"` exactly like the operator session, so these
+  // never send a token themselves. ---
+
+  it("enrolDevice POSTs { code } to /api/device/enrol and returns the 4 non-secret fields", async () => {
+    // The server echoes { deviceId, kind, stationId, label }; the token leaves ONLY in the Set-Cookie
+    // header, never the body (device-api.ts), so the client shape carries no token.
+    const enrolment = {
+      deviceId: "dev-1",
+      kind: "kds_station",
+      stationId: "st-1",
+      label: "Pase cocina",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(enrolment));
+
+    const r = await new TillApi("", fetchStub).enrolDevice("ABCD-1234");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/enrol",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        // The code is sent verbatim — the server normalises it, the client does not.
+        body: JSON.stringify({ code: "ABCD-1234" }),
+      }),
+    );
+    expect(r).toEqual(enrolment);
+  });
+
+  it("enrolDevice surfaces { code } for an invalid pairing code", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.pairing_invalid" } }), {
+        status: 400,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).enrolDevice("nope")).rejects.toMatchObject({
+      code: "device.pairing_invalid",
+    });
+  });
+
+  it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {
+    const station = {
+      id: "st-1",
+      queue: [
+        {
+          orderId: "wo-1",
+          orderNumber: 7,
+          label: "Mesa 4",
+          queuedAt: "2026-08-17T10:00:00.000Z",
+          status: "settled",
+          items: [
+            {
+              id: "ti-1",
+              workingOrderLineId: "wol-1",
+              state: "queued",
+              descriptions: { "es-ES": "Paella" },
+              quantity: "2.000",
+              course: null,
+              firedAt: "2026-08-17T10:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ station }));
+
+    const r = await new TillApi("", fetchStub).getDeviceStation();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/station",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual({ station });
+  });
+
+  it("getDeviceStation surfaces { code: 'device.unauthorized' } when the cookie is missing/rejected", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.unauthorized" } }), {
+        status: 401,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).getDeviceStation()).rejects.toMatchObject({
+      code: "device.unauthorized",
+    });
+  });
+
+  it("deviceAdvance POSTs { to } to the device ticket-item advance route (empty 204 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(
+      new TillApi("", fetchStub).deviceAdvance("ti-1", "preparing"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/ticket-items/ti-1/advance",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to: "preparing" }),
+      }),
+    );
+  });
+
+  it("deviceAdvance surfaces { code: 'device.forbidden_station' } for a foreign item", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.forbidden_station" } }), {
+        status: 403,
+      }),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).deviceAdvance("ti-foreign", "ready"),
+    ).rejects.toMatchObject({ code: "device.forbidden_station" });
+  });
 });

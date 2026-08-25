@@ -43,7 +43,7 @@ export interface Station {
  * the shape tables.ts's `setTableStatus` uses; RLS confines the read to the tenant, the `location_id`
  * predicate narrows it to this venue.
  */
-async function requireLiveStation(
+export async function requireLiveStation(
   tx: Transaction,
   cfg: TillConfig,
   stationId: string,

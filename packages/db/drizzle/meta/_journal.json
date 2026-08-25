@@ -421,6 +421,20 @@
       "when": 1787415499902,
       "tag": "0059_kds3_away_expo",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1787681192045,
+      "tag": "0060_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1787681192046,
+      "tag": "0061_devices_rls",
+      "breakpoints": true
     }
   ]
 }

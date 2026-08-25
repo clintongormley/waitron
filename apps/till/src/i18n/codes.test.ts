@@ -39,3 +39,23 @@ it("defaults to the module locale when none is passed (shipped default es-ES)", 
   setLocale("en");
   expect(codeMessage("swap.not_found")).toBe("That swap could not be found");
 });
+
+it("resolves the device pairing-code errors to specific, actionable copy (device-identity-1 §5a)", () => {
+  // The enrol view surfaces a rejected `{ code }` through this resolver, so an operator setting up a
+  // display sees why a code was refused (wrong/used vs expired) — never the raw wire code.
+  expect(codeMessage("device.pairing_invalid", "en")).toBe(
+    "That pairing code is not valid — check it and try again",
+  );
+  expect(codeMessage("device.pairing_expired", "en")).toBe(
+    "That pairing code has expired — ask for a new one",
+  );
+  expect(codeMessage("device.pairing_invalid", "es")).toBe(
+    "Ese código de emparejamiento no es válido. Revísalo e inténtalo de nuevo",
+  );
+  expect(codeMessage("device.pairing_expired", "es")).toBe(
+    "Ese código de emparejamiento ha caducado. Solicita uno nuevo",
+  );
+  expect(codeMessage("device.unauthorized", "en")).toBe(
+    "This display isn't set up — enter a pairing code",
+  );
+});
