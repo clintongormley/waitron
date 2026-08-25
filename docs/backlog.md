@@ -538,16 +538,22 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   starve the sale path (CLAUDE.md §5); new code `device.pairing_rate_limited` → HTTP **429** (the first
   429 in `apps/server`), proven by deletion. **Fiscal firewall proven, not asserted** (Part B grep: zero
   `device` tokens in `packages/core/src/record-sale.ts` / `packages/fiscal-verifactu/src/backend.ts`,
-  both scanned; `inmutabilidad` + identity `permissions` + server `test:coverage` green). Non-fiscal. **A
-  separate adversarial security review runs AFTER this task** (spec §8 open items: cookie `Max-Age`
-  shortening + the rate-limit mechanism review). Spec + plan in
+  both scanned; `inmutabilidad` + identity `permissions` + server `test:coverage` green). Non-fiscal. **The
+  adversarial security review is COMPLETE — SIGN-OFF** (§8 open items resolved: keep the long cookie
+  `Max-Age` — it is client-side UX, not a security control, since there is no server-side token TTL; the
+  global per-process enrol rate-limit mechanism approved). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-device-identity-1*`. **Follow-ups (all future, none blocking):**
   (1) **device-scoped fire/collect routes** — a `fire_control=kitchen` or Mode-P KDS *device* display
   cannot fire courses / hand off orders (this slice is **advance-only** per spec §3d; T6 hides those
   buttons in device mode), so server-side `/api/device/*` fire + collect routes are needed; (2) other
   `device_kind`s (till trust, customer-facing display), token **auto-rotation**, remote wipe; (3) per-venue
   **timezone** for the dashboard Devices "last-seen" (renders UTC-to-the-minute today; `date-utils.ts` has
-  no datetime formatter).
+  no datetime formatter); (4) **server-wide safe-JSON-body helper** — the `(await c.req.json()) ?? {}`
+  pattern degrades an empty/malformed body to an opaque 500 (the `?? {}` only ever caught a literal JSON
+  `null`), across `recipe-api`/`catalogue-api`/`me-api`/`workforce-api`/`management-api` (device-api's own
+  three routes were fixed defensively on PR #134, Copilot-flagged); a shared `readJsonBody` that
+  `.catch(() => ({}))`s the throw would make the whole surface screen malformed bodies to a clean 400
+  instead of 500.
 - **Table-service model extensions (owner-added 2026-08-22 — NOT yet designed).** Two capabilities the
   owner asked to keep on the roadmap. Both **reopen decisions the TS/KDS specs deliberately closed**, so
   they are recorded here with that provenance — a future session must **not** read the earlier
