@@ -167,4 +167,13 @@ describe("the device error codes carry their declared params", () => {
     expect(error.code).toBe("device.not_found");
     expect(error.params).toEqual({ deviceId });
   });
+
+  it("constructs device.pairing_rate_limited with no params (a blanket enrol-flood throttle)", () => {
+    // The real thrower is `enrol-rate-limit.ts`'s limiter, at the TOP of the enrol route (device-identity-1
+    // §8). No params — it is a blanket throttle, not a fact about the caller's code, and the pairing code
+    // is a bearer secret never echoed (the no-leak discipline pairing_invalid/pairing_expired follow).
+    const error = new AppError("device.pairing_rate_limited", {});
+    expect(error.code).toBe("device.pairing_rate_limited");
+    expect(error.params).toEqual({});
+  });
 });

@@ -821,5 +821,24 @@ declare module "@waitron/shared" {
      * map (Task 5), not here. Never renamed once shipped.
      */
     "device.not_found": { deviceId: string };
+    /**
+     * Too many device-enrolment attempts reached `POST /api/device/enrol` in one fixed window — the
+     * per-process, GLOBAL, in-memory rate limit (`enrol-rate-limit.ts`, device-identity-1 §8 open item)
+     * refused this attempt at the TOP of the handler, BEFORE the body is parsed and BEFORE the
+     * pairing-code DELETE runs. Defense-in-depth over the primary controls (the code is ~40-bit,
+     * single-use, 15-min TTL, so brute-force over HTTP is already infeasible) PLUS DoS / connection-pool
+     * protection: rejecting before any DB work is what keeps an enrol flood from exhausting the pool and
+     * starving the sale path (the fiscal invariant "nothing may block a sale", CLAUDE.md §5). The limit is
+     * GLOBAL rather than per-IP because the on-prem server sits behind the snitun tunnel / a reverse
+     * proxy, so every client presents one address and a per-IP key would buy nothing.
+     *
+     * NO params: this is a blanket throttle, not a fact about the caller's code, and there is nothing
+     * non-secret to carry (the pairing code is a bearer secret and is never echoed — the same no-leak
+     * discipline `device.pairing_invalid`/`device.pairing_expired` follow). `device.pairing_*` names the
+     * DOMAIN CONCEPT (device enrolment/redemption), never the throwing package (`tenant.not_found`'s note
+     * gives the rule), and sits in the pairing-redemption family. Mapped to HTTP 429 by `device-api.ts`'s
+     * local STATUS map (the FIRST 429 in `apps/server`), not here. Never renamed once shipped.
+     */
+    "device.pairing_rate_limited": Record<string, never>;
   }
 }

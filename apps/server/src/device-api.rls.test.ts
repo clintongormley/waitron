@@ -27,6 +27,7 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createFixedWindowLimiter, type FixedWindowLimiter } from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import type { Logger } from "./logger.js";
@@ -249,9 +250,11 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
   );
 }
 
-function mountApp(cfg: TillConfig): Hono {
+function mountApp(cfg: TillConfig, enrolRateLimiter?: FixedWindowLimiter): Hono {
   const app = new Hono();
-  mountDeviceApi(app, { db: suite.admin, cfg, secureCookies: false }, noopLog);
+  // `enrolRateLimiter` omitted → mountDeviceApi builds the DEFAULT (generous 30/min) limiter, which no
+  // ordinary suite trips. The rate-limit test below injects a tight limiter over a controllable clock.
+  mountDeviceApi(app, { db: suite.admin, cfg, secureCookies: false, enrolRateLimiter }, noopLog);
   return app;
 }
 
@@ -596,5 +599,52 @@ describe("Device API over real Postgres", () => {
       cookie: venue.managerCookie,
     });
     expect(malformed.status).toBe(404);
+  });
+
+  it("rate-limits enrol: the (cap+1)th attempt is 429 BEFORE the DB (no code consumed), then the window resets", async () => {
+    // The redemption rate-limit (spec §8): a per-process, GLOBAL fixed-window counter checked at the TOP
+    // of the enrol handler, before the body is parsed and before the pairing-code DELETE. A tight limiter
+    // (cap 2) over a CONTROLLABLE clock proves the behaviour without a real sleep (CLAUDE.md §4). The
+    // mgmt route that mints the code is NOT throttled — the limiter is on `/api/device/enrol` alone.
+    const venue = await setupVenue();
+    let fakeNow = 1_000;
+    const limiter = createFixedWindowLimiter({ windowMs: 60_000, max: 2, now: () => fakeNow });
+    const app = mountApp(venue.cfg, limiter);
+
+    // Mint ONE valid code up front. It must SURVIVE the throttled attempt below (the guard short-circuits
+    // before the DELETE), so it can still redeem once the window resets.
+    const codeRes = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: { kind: "kds_station", stationId: venue.defaultStationId, label: "Pantalla Cocina" },
+    });
+    const { code } = (await codeRes.json()) as { code: string };
+
+    // Two junk attempts fill the window. Each COUNTS toward the cap — the check runs before body parsing,
+    // so even an invalid code is throttled — yet each still reaches the handler and returns the normal 400.
+    for (const junk of ["BADCODE1", "BADCODE2"]) {
+      const r = await send(app, "POST", "/api/device/enrol", { body: { code: junk } });
+      expect(r.status).toBe(400);
+      expect((await r.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "device.pairing_invalid" },
+      });
+    }
+
+    // The THIRD attempt in the SAME window — with the VALID code — is refused 429 BEFORE any DB work, so
+    // the code is NOT consumed. THE GUARD: deleting `enrolLimiter.check()` from device-api.ts's enrol
+    // route makes this redeem the code and return 200, flipping the assertion red; restoring it green.
+    const limited = await send(app, "POST", "/api/device/enrol", { body: { code } });
+    expect(limited.status).toBe(429);
+    expect((await limited.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.pairing_rate_limited" },
+    });
+
+    // Advance PAST the window: the counter resets, and the SAME valid code STILL redeems — proving both
+    // that the throttled attempt consumed nothing (the row survived) and that the window reset.
+    fakeNow += 60_001;
+    const ok = await send(app, "POST", "/api/device/enrol", { body: { code } });
+    expect(ok.status).toBe(200);
+    const jar = deviceCookieFrom(ok);
+    const stationRes = await send(app, "GET", "/api/device/station", { cookie: jar });
+    expect(stationRes.status).toBe(200);
   });
 });

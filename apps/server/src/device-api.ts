@@ -3,9 +3,10 @@
 // (the body/id screens) and `ticket.invalid_transition` (the malformed-item-id screen). The device
 // pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
 // `station.not_found` reach here through the value imports of the verbs/guard that throw them
-// (`device.js`, `device-session.js`, `working-order.js`), and the management-session/authorization codes
-// through `@waitron/identity`; the mgmt siblings (`purchasing-api.ts`) rely on the same transitive
-// reachability. See the note atop `errors.ts`.
+// (`device.js`, `device-session.js`, `working-order.js`); `device.pairing_rate_limited` reaches here
+// through the value import of `createFixedWindowLimiter` (`enrol-rate-limit.js`, which throws it); and
+// the management-session/authorization codes through `@waitron/identity`; the mgmt siblings
+// (`purchasing-api.ts`) rely on the same transitive reachability. See the note atop `errors.ts`.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -18,6 +19,12 @@ import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode, type DeviceKind } from "./device.js";
+import {
+  ENROL_RATE_MAX,
+  ENROL_RATE_WINDOW_MS,
+  createFixedWindowLimiter,
+  type FixedWindowLimiter,
+} from "./enrol-rate-limit.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -37,6 +44,14 @@ export interface DeviceApiDeps {
   db: Database;
   cfg: TillConfig;
   secureCookies: boolean;
+  /**
+   * The redemption rate-limiter for `POST /api/device/enrol` (spec §8). Optional and injected ONLY by
+   * tests, which pass a tight limiter over a controllable clock to prove the window behaviour without a
+   * real sleep; production omits it and `mountDeviceApi` builds the default per-process, GLOBAL
+   * fixed-window limiter (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). See `enrol-rate-limit.ts` for why
+   * the limit is global-not-per-IP and in-memory-not-DB.
+   */
+  enrolRateLimiter?: FixedWindowLimiter;
 }
 
 /**
@@ -54,8 +69,10 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *
  *  - The device-auth + enrol codes: `device.unauthorized` (the guard's fold of missing/unknown/revoked,
  *    401), `device.forbidden_station` (a device bumping another station's item, 403), the pairing-code
- *    redemption faults (`device.pairing_invalid`/`device.pairing_expired`, 400), `device.not_found` (the
- *    manager-facing revoke of an absent device id, 404) and `station.not_found` (minting a code against
+ *    redemption faults (`device.pairing_invalid`/`device.pairing_expired`, 400),
+ *    `device.pairing_rate_limited` (the enrol flood guard, the FIRST 429 in `apps/server` —
+ *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work), `device.not_found`
+ *    (the manager-facing revoke of an absent device id, 404) and `station.not_found` (minting a code against
  *    an unknown/foreign/retired station, 404, via `requireLiveStation`).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
  *    `person.suspended`/`authorization.not_permitted` (403), thrown by `requireManagementSession` /
@@ -69,6 +86,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.forbidden_station": 403,
   "device.pairing_invalid": 400,
   "device.pairing_expired": 400,
+  "device.pairing_rate_limited": 429,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -128,6 +146,14 @@ function requireStationId(v: unknown): string {
  *     `authorizeManager`s `device.manage` (403) before the op runs, in exactly one place.
  */
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
+  // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
+  // here so it is one bucket for the whole mounted API — in production `mountDeviceApi` is called once at
+  // boot, so "per-mount" is "per-process". A test may inject its own tight limiter (over a controllable
+  // clock); production omits it and gets the default `ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`.
+  const enrolLimiter =
+    deps.enrolRateLimiter ??
+    createFixedWindowLimiter({ windowMs: ENROL_RATE_WINDOW_MS, max: ENROL_RATE_MAX });
+
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
@@ -144,6 +170,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── Enrol (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────────────
   app.post("/api/device/enrol", (c) =>
     run(c, log, async () => {
+      // Rate-limit FIRST — before the body is parsed and before `enrolDevice`'s locking DELETE — so an
+      // enrol flood is refused (429 `device.pairing_rate_limited`) with ZERO DB work: no connection is
+      // drawn from the pool and no pairing code is touched, which is what keeps a flood on this
+      // unauthenticated route from starving the sale path (CLAUDE.md §5, "nothing may block a sale").
+      // Defense-in-depth over the code's own ~40-bit / single-use / 15-min-TTL controls (enrol-rate-limit.ts).
+      enrolLimiter.check();
       // Coerced to `{}` so a `null`/non-object body reaches the screen as a 400 naming `code`, never a
       // TypeError. The code is screened to a string before the verb (its `normalizePairingCode` would
       // TypeError on a non-string) — a missing one is `management.request_invalid` naming the field.
