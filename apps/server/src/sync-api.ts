@@ -43,14 +43,16 @@ function logLimit(raw: string | undefined): number {
  * The `?after=` cursor as a NON-NEGATIVE bigint, defaulting to `0n` (serve from the start) for anything
  * that is NOT one: a missing/empty param, a non-integer string (`abc`, `1.5` — each makes `BigInt(...)`
  * THROW a SyntaxError), or a negative value. A cursor is a monotonic non-negative `seq`, so the sibling
- * of `logLimit` above: plain `BigInt(c.req.query("after") ?? "0")` let a non-integer `after` throw
- * straight into this endpoint's boundary as an opaque `server.internal` 500 for a malformed peer
+ * of `logLimit` above: plain `BigInt(c.req.query("after") ?? "0")` let a non-integer input throw
+ * straight into the endpoint's boundary as an opaque `server.internal` 500 for a malformed peer
  * request rather than a served page. Same fail-safe posture as `logLimit`'s clamp and for the same
- * reason — this machine-to-machine surface has no 400 param-invalid convention (its boundary answers
- * only `sync.node_unauthorized` -> 401, everything else -> opaque 500) and its sole caller (`pull.ts`)
- * always sends a valid non-negative `after`, so a garbage cursor SAFELY means "from the start", never a
- * 500. `BigInt("")` is already `0n`, so empty needs no special case; the `try/catch` is for the throwing
- * (`abc`, `1.5`) forms, and `> 0n ? n : 0n` folds a negative cursor back to the start. */
+ * reason. This helper now feeds TWO node-token routes — `/sync-api/log`'s `?after=` cursor and
+ * `/sync-api/cursor`'s `lastAppliedSeq` body field — and NEITHER has a 400 param-invalid convention
+ * (both boundaries answer only `sync.node_unauthorized` -> 401, everything else -> opaque 500); both
+ * are driven by `pull.ts` (the log drain and the cursor report), which always sends a valid
+ * non-negative value, so a garbage input SAFELY folds to seq 0 ("from the start"), never a 500.
+ * `BigInt("")` is already `0n`, so empty needs no special case; the `try/catch` is for the throwing
+ * (`abc`, `1.5`) forms, and `> 0n ? n : 0n` folds a negative value back to the start. */
 function afterSeq(raw: string | undefined): bigint {
   if (raw === undefined) return 0n;
   try {
@@ -62,12 +64,14 @@ function afterSeq(raw: string | undefined): bigint {
 }
 
 /**
- * The `?lane=` query param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a
- * missing param, `ordered`, or garbage — to `ordered`. Same machine-to-machine fail-safe posture this
- * endpoint takes for `after`/`limit` (no 400 convention): the ordered tables never silently disappear,
- * and the fast tick always sends `lane=fast` explicitly (spec §4c). The lane is the WIRE dimension —
- * the route maps it to `tablesForLane(lane)` SERVER-SIDE and never accepts a client-supplied table
- * list (both nodes run the same enrolment registry). */
+ * The `lane` param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a missing
+ * param, `ordered`, or garbage — to `ordered`. Used by BOTH node-token routes: `/sync-api/log` reads
+ * it from the `?lane=` query and maps it to `tablesForLane(lane)` SERVER-SIDE (it never accepts a
+ * client-supplied table list — both nodes run the same enrolment registry), while `/sync-api/cursor`
+ * reads it from the POST body to key which lane's cursor the subscriber is reporting. Same
+ * machine-to-machine fail-safe posture both take for `after`/`limit` (no 400 convention): the ordered
+ * lane is never silently lost, and the fast tick always sends `lane=fast` explicitly (spec §4c). The
+ * lane is the WIRE dimension, mapped to server-side meaning by each route. */
 function laneParam(raw: string | undefined): SyncLane {
   return raw === "fast" ? "fast" : "ordered";
 }
@@ -80,10 +84,13 @@ export interface SyncApiDeps {
   nodeTokens: string[]; // the accepted inbound token SET (rotation overlap window, spec §2)
 }
 
-/** Constant-time Bearer check against the accepted SET. Iterates EVERY member without an
- * early return, so request timing leaks neither which token matched nor the set size; a blank
- * presented token or an empty set fails closed BEFORE any match can be recorded (the empty-secret
- * trap, CLAUDE.md §3). */
+/** Constant-time Bearer check against the accepted SET. Iterates EVERY member without an early
+ * return and OR-s the per-member `timingSafeEqual`, so a hit and a miss take the same time — there is
+ * no early return and no position-dependent short-circuit — and request timing therefore cannot
+ * distinguish a matching token from a non-matching one, nor reveal WHICH member matched. (It does not
+ * hide the set SIZE: the loop's wall-clock is inherently ∝ the number of members, which is operator
+ * config, not a secret worth constant-timing.) A blank presented token or an empty set fails closed
+ * BEFORE any match can be recorded (the empty-secret trap, CLAUDE.md §3). */
 function requireNodeTokens(c: Context, nodeTokens: readonly string[]): void {
   const header = c.req.header("Authorization") ?? "";
   const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";

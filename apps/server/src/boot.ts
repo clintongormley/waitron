@@ -489,6 +489,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         sleep: realSleep,
         signal: syncController.signal, // the same controller close() aborts
         tickMs: syncConfig.retentionTickMs,
+        // Opt-in lag alarm (spec §3.2): when WAITRON_SYNC_LAG_ALARM_ROWS is set the sweep emits the
+        // retention-variant sync.stream_stalled past this threshold — the operator signal an eviction
+        // decision reads. Undefined (unset) leaves the sweep prune-only.
+        lagAlarmRows: syncConfig.lagAlarmRows,
         log,
       });
       retentionWorker.catch((err) =>

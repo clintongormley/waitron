@@ -499,6 +499,10 @@ describe("startServer, against a real container as the deployment role", () => {
       // cannot pass by coincidence with any other tick value in this env.
       WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
       WAITRON_SYNC_RETENTION_TICK_MS: "33000",
+      // The lag alarm is opt-in (spec §3.2). A distinctive value so the pass-through assertion below
+      // cannot pass by coincidence with any other number in this env — proves config → boot wires the
+      // threshold into runRetentionSweep, which is what makes sync.stream_stalled reachable in prod.
+      WAITRON_SYNC_LAG_ALARM_ROWS: "7",
     });
     try {
       const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
@@ -540,6 +544,9 @@ describe("startServer, against a real container as the deployment role", () => {
       const sweep = vi.mocked(runRetentionSweep).mock.calls[0]![0];
       expect(sweep.tickMs).toBe(33_000);
       expect(sweep.signal).toBe(ordered!.signal); // one controller aborts pull workers AND the sweep
+      // The configured lag threshold reached runRetentionSweep — so its sync.stream_stalled branch is
+      // now live in prod when WAITRON_SYNC_LAG_ALARM_ROWS is set (spec §3.2, the wiring B8 omitted).
+      expect(sweep.lagAlarmRows).toBe(7);
     } finally {
       await server.close();
     }
@@ -633,6 +640,11 @@ describe("startServer, against a real container as the deployment role", () => {
       headers: { Authorization: "Bearer boot-node-token" },
     });
     expect(hello.status).toBe(200);
+
+    // The alarm is opt-in: WAITRON_SYNC_LAG_ALARM_ROWS is unset here, so boot passes lagAlarmRows
+    // undefined and the sweep is prune-only (its sync.stream_stalled branch never runs). The
+    // complementary direction to the "set → 7" assertion in the retention-scheduled test above.
+    expect(vi.mocked(runRetentionSweep).mock.calls[0]![0].lagAlarmRows).toBeUndefined();
 
     // close() RESOLVES despite the retention worker rejection (the swallow), and the guaranteed
     // teardown ran: the listener is gone, which it could only be if close() got PAST the swallowed

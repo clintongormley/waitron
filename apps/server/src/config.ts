@@ -200,6 +200,15 @@ export interface SyncTransportConfig {
    * leaves the scheduled sweep OFF — sync still runs, the log just grows unpruned, which boot makes
    * loud via `sync.retention_unconfigured` (spec §3.2/§8: opt-in here, documented-required in prod). */
   retentionDatabaseUrl?: string;
+  /** OPTIONAL: the lag threshold (in rows) past which the retention sweep emits the retention-variant
+   * `sync.stream_stalled` for a subscriber — the operator alarm that INFORMS a manual eviction (spec
+   * §3.2). From WAITRON_SYNC_LAG_ALARM_ROWS (a positive int). The alarm is OPT-IN, mirroring
+   * retentionDatabaseUrl above: present ONLY when the variable is set; ABSENT (not
+   * present-but-undefined) leaves the sweep prune-only — it still prunes every tick, it just never
+   * alarms. A non-positive value is refused (`server.config_invalid`) — a threshold of 0/negative
+   * rows is a misconfiguration, not "alarm on everything". Its default is a tuning target, not a
+   * settled constant (spec §8), so there is no baked-in default: unset means the alarm is off. */
+  lagAlarmRows?: number;
 }
 
 /** Parses a comma-separated accepted-token SET. `required` fails closed on unset/empty (a blank
@@ -253,6 +262,10 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     }
     return { nodeId: peer.nodeId, url: peer.url, token: peer.token };
   });
+  // Parsed once here so the conditional spread below reads the same value the validation throws on:
+  // undefined when unset/empty (alarm off), a positive int otherwise, throwing config_invalid for a
+  // non-positive one.
+  const lagAlarmRows = optionalPositiveInt(env, "WAITRON_SYNC_LAG_ALARM_ROWS");
   return {
     nodeTokens: tokenSet(env, "WAITRON_SYNC_NODE_TOKEN"),
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
@@ -270,6 +283,11 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     ...(isUnset(env.WAITRON_SYNC_RETENTION_DATABASE_URL)
       ? {}
       : { retentionDatabaseUrl: env.WAITRON_SYNC_RETENTION_DATABASE_URL }),
+    // The lag alarm is opt-in too: `optionalPositiveInt` returns undefined for an unset/empty value
+    // (field omitted → prune-only sweep) and THROWS `server.config_invalid` for a non-positive one, so
+    // a blank never silently means "alarm on everything" and a present-but-undefined key never leaks
+    // in (the same omit-when-unset shape as retentionDatabaseUrl above, CLAUDE.md §3).
+    ...(lagAlarmRows === undefined ? {} : { lagAlarmRows }),
   };
 }
 

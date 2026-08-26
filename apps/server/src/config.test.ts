@@ -600,6 +600,33 @@ describe("loadSyncConfig", () => {
     );
   });
 
+  it("sets lagAlarmRows only when WAITRON_SYNC_LAG_ALARM_ROWS is a positive int (absent → field omitted; non-positive → throws)", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    // Set to a positive int → field carries the threshold.
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "1000" })!.lagAlarmRows).toBe(
+      1000,
+    );
+    // Unset → the key is OMITTED entirely (the alarm is opt-in; boot then passes lagAlarmRows
+    // undefined → runRetentionSweep stays prune-only). `not.toHaveProperty` distinguishes an omitted
+    // key from a present-but-undefined one, which an `=== undefined` check would not.
+    expect(loadSyncConfig(base)).not.toHaveProperty("lagAlarmRows");
+    // Empty string is unset too — omit the field, never a present-but-undefined key.
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "" })).not.toHaveProperty(
+      "lagAlarmRows",
+    );
+    // A non-positive value is refused (server.config_invalid) — the same posture positiveInt takes.
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "0" })).toThrow(
+      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
+    );
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "-5" })).toThrow(
+      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
+    );
+  });
+
   it("refuses a blank node token (VAR= is unset, must fail closed, never mean 'no auth')", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
