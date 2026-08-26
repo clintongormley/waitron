@@ -6,6 +6,7 @@ import {
   resolveActiveLocale,
   resolveVenueLocale,
   SUPPORTED_LOCALE_CODES,
+  SUPPORTED_LOCALES,
 } from "./locales.js";
 
 describe("isSupportedLocale", () => {
@@ -66,6 +67,13 @@ describe("resolveActiveLocale (person ?? venue, always supported)", () => {
   it("an unsupported venue default degrades to the English floor", () => {
     expect(resolveActiveLocale(null, "ca-ES")).toBe("en-GB");
   });
+});
+
+it("SUPPORTED_LOCALES pins the shipped catalogue, codes and endonym labels", () => {
+  expect([...SUPPORTED_LOCALES]).toEqual([
+    { code: "es-ES", label: "Español" },
+    { code: "en-GB", label: "English" },
+  ]);
 });
 
 it("SUPPORTED_LOCALE_CODES matches the shipped catalogue set", () => {

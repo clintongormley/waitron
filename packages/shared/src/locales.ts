@@ -51,7 +51,6 @@ export function resolveVenueLocale(input: {
     input.override ?? undefined,
     input.province != null ? PROVINCE_DEFAULT_LOCALE[input.province] : undefined,
     input.country != null ? COUNTRY_DEFAULT_LOCALE[input.country] : undefined,
-    FALLBACK_LOCALE,
   ];
   for (const candidate of candidates) {
     if (isSupportedLocale(candidate)) return candidate;
