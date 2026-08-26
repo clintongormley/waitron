@@ -29,7 +29,7 @@ async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -38,7 +38,7 @@ async function setup(): Promise<PrintConfig> {
 async function seedAgent(cfg: PrintConfig): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Cocina agent', 'scrypt$fixture') returning id`);
+    values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen agent', 'scrypt$fixture') returning id`);
   return rows[0]!.id;
 }
 
@@ -75,7 +75,7 @@ async function errorOf(fn: () => Promise<unknown>): Promise<unknown> {
 }
 
 /** Create a network_tcp printer bound to `agentId` and return its id. */
-async function seedPrinter(cfg: PrintConfig, agentId: string, name = "Cocina"): Promise<string> {
+async function seedPrinter(cfg: PrintConfig, agentId: string, name = "Kitchen"): Promise<string> {
   const { id } = await asTx(cfg, (tx) =>
     createPrinter(tx, cfg, { name, transport: "network_tcp", agentId, host: "10.0.0.9" }),
   );
@@ -111,7 +111,7 @@ describe("createPrinter", () => {
     // default applies" claim in printers.ts: the stored port must be 9100, not NULL.
     const { id } = await asTx(cfg, (tx) =>
       createPrinter(tx, cfg, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "network_tcp",
         agentId,
         host: "10.0.0.9",
@@ -127,7 +127,7 @@ describe("createPrinter", () => {
     const agentId = await seedAgent(cfg);
     const { id } = await asTx(cfg, (tx) =>
       createPrinter(tx, cfg, {
-        name: "Barra USB",
+        name: "Bar USB",
         transport: "usb",
         agentId,
         usbPath: "/dev/usb/lp0",
@@ -139,7 +139,7 @@ describe("createPrinter", () => {
   it("inserts an agent-less cloud_poll printer", async () => {
     const cfg = await setup();
     const { id } = await asTx(cfg, (tx) =>
-      createPrinter(tx, cfg, { name: "Nube", transport: "cloud_poll", pollId: "poll-123" }),
+      createPrinter(tx, cfg, { name: "Cloud", transport: "cloud_poll", pollId: "poll-123" }),
     );
     expect((await printerRow(id)).transport).toBe("cloud_poll");
   });
@@ -205,7 +205,7 @@ describe("updatePrinter", () => {
     // CHECK asserts the transport's REQUIRED fields are present, not that the others are absent.
     await asTx(cfg, (tx) =>
       updatePrinter(tx, cfg, id, {
-        name: "Cocina 2",
+        name: "Kitchen 2",
         host: "10.0.0.20",
         port: 9200,
         pollId: "poll-extra",
@@ -214,7 +214,7 @@ describe("updatePrinter", () => {
       }),
     );
     const row = await fullRow(id);
-    expect(row.name).toBe("Cocina 2");
+    expect(row.name).toBe("Kitchen 2");
     expect(row.host).toBe("10.0.0.20");
     expect(row.ticket_scope).toBe("order");
     expect(row.active).toBe(false);

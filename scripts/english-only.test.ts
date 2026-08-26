@@ -1,5 +1,5 @@
 /**
- * The English-only vocabulary guard's suite. It scans the fourteen generic packages' `src/`, so it
+ * The English-only vocabulary guard's suite. It scans the sixteen generic packages' `src/`, so it
  * polices the tree rather than any one package, and it lives in the repo-level Vitest project for
  * that reason — see the repo-root `vitest.config.ts` for what that project is and which two gates
  * run it.
@@ -34,7 +34,7 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
-  it("scopes itself to the fifteen generic packages", () => {
+  it("scopes itself to the sixteen generic packages", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
       "core",
@@ -51,6 +51,7 @@ describe("configuration", () => {
       "layouts",
       "recipes",
       "purchasing",
+      "printing",
     ]);
   });
 
@@ -201,7 +202,7 @@ describe("the labour vocabulary (sub-project 16) fires", () => {
   it("flags Spanish labour identifiers and column names, so packages/workforce is guarded", () => {
     // The list carried fiscal/POS terms but no labour terms until sub-project 16 added them. This
     // proves the additions actually fire — a token added to SPANISH_WORDS but never matched would
-    // be dead weight. The negative direction (they stay silent on the fourteen generics, including the
+    // be dead weight. The negative direction (they stay silent on the sixteen generics, including the
     // new English packages/workforce) is proven by the describe.each block at the bottom passing.
     expect(findSpanish('jornadaLaboral: text("jornada_laboral"),').map((v) => v.word)).toEqual([
       "jornada",

@@ -1,9 +1,13 @@
-// Side-effect only: loads this host's errors.ts augmentation for the codes THESE routes throw directly
-// — `management.request_invalid` (the body/query screens, via `request-screens.js`) and
-// `device.pairing_rate_limited` (the enrol flood guard, via `enrol-rate-limit.js`, which throws it at
-// the TOP of the enrol handler). The printing codes this surface answers — `printer.*`/`agent.*` — are
-// declared in @waitron/printing's own errors.ts and reach here through the VALUE imports of its verbs
-// below (enrolAgent/generateAgentCode/createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
+// Side-effect only: loads this host's errors.ts augmentation for the apps/server code THESE routes
+// throw directly — `management.request_invalid` (the body/query screens, via `request-screens.js` and
+// the local field screens). `device.pairing_rate_limited` is NOT thrown out of here: the enrol flood
+// guard (`enrol-rate-limit.js`, which carries its own errors.js) throws it at the TOP of the enrol
+// handler, and the handler immediately CATCHES it and re-throws this surface's own
+// `agent.pairing_rate_limited` (see the route), so a rate-limited enrol answers in the `agent.*`
+// namespace and `device.*` never escapes. The printing codes this surface answers —
+// `printer.*`/`agent.*`, that translated `agent.pairing_rate_limited` included — are declared in
+// @waitron/printing's own errors.ts and reach here through the VALUE imports of its verbs below
+// (enrolAgent/generateAgentCode/createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
 // reportPrintJob and, transitively, requireAgent's authenticateAgent); `shared.invalid_id` (thrown by
 // `requireUuidParam`) loads via the AppError value import. The device-api sibling relies on the same
 // transitive reachability. See the note atop errors.ts.

@@ -25,7 +25,7 @@ async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(admin);
   const { rows } = await admin.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -83,11 +83,11 @@ describe("double-pull race (real Postgres)", () => {
     const agentId = (
       await suite.admin.execute<{ id: string }>(sql`
         insert into print_agents (tenant_id, location_id, name, token_hash)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Cocina', 'scrypt$fixture') returning id`)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`)
     ).rows[0]!.id;
     const printerId = await asApp(suite.admin, cfg, (tx) =>
       createPrinter(tx, cfg, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "network_tcp",
         agentId,
         host: "10.0.0.9",

@@ -40,17 +40,18 @@ describe("esc() ESC/POS builder", () => {
   });
 
   it("chains commands in call order into one contiguous byte stream", () => {
-    const bytes = [...esc().init().line("Mesa 4").feed(2).cut().kick().bytes()];
+    const bytes = [...esc().init().line("Table 4").feed(2).cut().kick().bytes()];
     expect(bytes).toEqual([
       0x1b,
       0x40, // init
-      0x4d,
-      0x65,
-      0x73,
+      0x54,
       0x61,
+      0x62,
+      0x6c,
+      0x65,
       0x20,
       0x34,
-      0x0a, // "Mesa 4" + LF
+      0x0a, // "Table 4" + LF
       0x1b,
       0x64,
       0x02, // feed 2

@@ -27,14 +27,14 @@ async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
 async function seedAgent(cfg: PrintConfig): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Cocina agent', 'scrypt$fixture') returning id`);
+    values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen agent', 'scrypt$fixture') returning id`);
   return rows[0]!.id;
 }
 
@@ -73,7 +73,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     const agentId = await seedAgent(cfg);
     await withTenant(suite.db, cfg.tenantId, async (tx) => {
       const p = await createPrinter(tx, cfg, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "network_tcp",
         agentId,
         host: "10.0.0.9",

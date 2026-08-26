@@ -58,9 +58,10 @@ follow.
    piece. See *Open threads → Sync*.
 3. **Reporting fiscal remainder** — rectificativas boxes (40/41), the prorrata rule (44),
    intra-community/import boxes (32–39), plus the two pre-filing caveats a human must clear.
-4. **Printing + hardware surface** — the printing subsystem, KDS-4 kitchen printing, counter
-   receipt + cash-drawer printing, cash-drawer authorization. All specced + planned (2026-08-17),
-   none built. Real deli hardware need; mechanical to build; security review before build.
+4. **Printing + hardware surface** — the **printing subsystem is built** (agents/printers/outbox/
+   runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed). Remaining on the
+   track: `cloud_poll` transports (fast-follow), KDS-4 kitchen printing, counter receipt + cash-drawer
+   printing, cash-drawer authorization, the expo device kind. Real deli hardware need; mechanical.
 5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
    PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
    **no cloud / deploy / hosting / domain infrastructure yet** (verified 2026-08-26 — no Dockerfile,
@@ -115,8 +116,9 @@ partial scope; the detail for a live thread is under *Open threads*.
 
 **Cross-cutting infra:** sync/replication (outbox + transport + payments fast lane + node-token
 rotation/retention — see *Open threads → Sync*) · SIF topology (`#33`, `node_id` re-key — see *SIF
-topology follow-ups*) · device identity-1 · CI/test infra (scoped CI, pre-push hook, shared-container
-test rollout, job-sharding).
+topology follow-ups*) · device identity-1 · printing subsystem (`@waitron/printing` —
+agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras dashboard) · CI/test infra (scoped CI,
+pre-push hook, shared-container test rollout, job-sharding).
 
 ---
 
@@ -169,15 +171,16 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 
 ### Printing + hardware surface (top-tier #4)
 
-There is **no printing in the tree today**. All specced + planned 2026-08-17; security review before
-build. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
+The **printing subsystem is built and security-reviewed** (2026-08-17..26); the consumers below are
+still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
 
-- **Printing subsystem** (`printing-subsystem*`) — a new infra sub-project: central-managed `printers`
-  plus **print agents** (local processes that enrol/revoke centrally via a pairing code reusing the
-  device-identity crypto, **pull** jobs from a central `print_jobs` **outbox**, **push** to the
-  physical printer, **report** status), a transport abstraction (`usb` + `network_tcp` first,
-  `cloud_poll` a fast-follow), an ESC/POS builder, central dashboard management. **Printing never
-  blocks a fire/sale** (outbox). Largely independent of the table-service track.
+- **Printing subsystem** (`printing-subsystem*`) — **BUILT** (`@waitron/printing` + `print-api`
+  routes + the Impresoras dashboard): central-managed `printers` plus **print agents** (enrol/revoke
+  via a pairing code reusing the device-identity crypto; **pull** jobs from a central `print_jobs`
+  **outbox** under `for update skip locked`, **push** to the printer, **report** status), `usb` +
+  `network_tcp` transports, an ESC/POS builder, central dashboard management. **Printing never blocks
+  a fire/sale** (outbox INSERT only). `cloud_poll` transport is a fast-follow (below); robustness
+  follow-ups in *Debt*.
 - **KDS-4 kitchen printing** (`kds-4-kitchen-printing*`) — `station_printers` m2m + print-on-fire (an
   outbox INSERT, never blocking) + a kitchen-ticket formatter; a group printer gets one deduped
   consolidated ticket per fire. Thin layer on the subsystem + KDS-1.
@@ -436,6 +439,19 @@ here is the cross-cutting or genuinely-decision-bearing work.
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make
   the job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed
   cause — if it recurs, per-test timeout + Playwright trace).
+
+**Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
+
+- **`NetworkTcpTransport` has no socket timeout** — a printer that accepts the TCP connection but never
+  drains blocks that agent's push until the OS default. Bound it with a per-send connect/write timeout.
+- **A crashed agent strands a claimed job in `printing` forever** — the pull flips `queued`→`printing`
+  under `for update skip locked`, but nothing re-queues a row whose agent died mid-push. Needs a reaper
+  (a `claimed_at`/lease column + a sweep design), so deliberately out of the build slice.
+- **Retry spacing is the agent's batch interval, not a per-job backoff** — `MAX_DELIVERY_ATTEMPTS` (5)
+  bounds attempts, but `print_jobs` carries no next-attempt timestamp, so a flapping printer burns the
+  cap at loop speed. A time-scheduled backoff needs a new column.
+- **The Impresoras editor leaves agent/transport re-binding read-only** — the management API already
+  accepts a re-bind (PATCH `agentId`/`transport`/connection fields); wire the inline dashboard edit.
 
 **Product decisions (defensible before production; decide before it):**
 

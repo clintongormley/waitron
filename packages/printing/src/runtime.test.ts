@@ -23,11 +23,11 @@ async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
-async function seedAgent(cfg: PrintConfig, name = "Cocina agent"): Promise<string> {
+async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into print_agents (tenant_id, location_id, name, token_hash)
     values (${cfg.tenantId}, ${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
@@ -36,7 +36,7 @@ async function seedAgent(cfg: PrintConfig, name = "Cocina agent"): Promise<strin
 
 async function seedPrinter(tx: Transaction, cfg: PrintConfig, agentId: string): Promise<string> {
   const { id } = await createPrinter(tx, cfg, {
-    name: "Cocina",
+    name: "Kitchen",
     transport: "network_tcp",
     agentId,
     host: "10.0.0.9",
@@ -87,13 +87,13 @@ describe("runAgentOnce (pull → push → report)", () => {
         tx,
         cfg,
         printerId,
-        esc().text("Mesa 4").cut().bytes(),
+        esc().text("Table 4").cut().bytes(),
       );
 
       const sink = new FakeSink();
       const result = await runAgentOnce({ tx, cfg, agentId, transport: sink });
 
-      expect(sink.written).toEqual([{ printerId, bytes: esc().text("Mesa 4").cut().bytes() }]);
+      expect(sink.written).toEqual([{ printerId, bytes: esc().text("Table 4").cut().bytes() }]);
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
       const row = await jobRow(tx, jobId);
       expect(row.status).toBe("done");

@@ -26,7 +26,7 @@ async function setup(): Promise<PrintAgentConfig> {
   const tenantId = await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    values (${tenantId}, 'Bar', array[${LOCALE}], 'Sale on premises') returning id`);
   return { tenantId, locationId: loc.rows[0]!.id };
 }
 
@@ -71,7 +71,7 @@ describe("generateAgentCode + enrolAgent", () => {
   it("generate → enrol mints a verifySecret-able token; the stored hash is NOT the plaintext", async () => {
     const cfg = await setup();
     const { code } = await asApp(suite.admin, cfg, (tx) =>
-      generateAgentCode(tx, cfg, { label: "Cocina USB" }),
+      generateAgentCode(tx, cfg, { label: "Kitchen USB" }),
     );
     const { agentId, token } = await asApp(suite.admin, cfg, (tx) => enrolAgent(tx, cfg, { code }));
 
@@ -92,7 +92,7 @@ describe("generateAgentCode + enrolAgent", () => {
     const { rows } = await suite.admin.execute<{ name: string; location_id: string }>(
       sql`select name, location_id from print_agents where id = ${agentId}`,
     );
-    expect(rows[0]!.name).toBe("Cocina USB");
+    expect(rows[0]!.name).toBe("Kitchen USB");
     expect(rows[0]!.location_id).toBe(cfg.locationId);
     const codes = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from print_agent_pairing_codes where tenant_id = ${cfg.tenantId}`,
@@ -194,6 +194,33 @@ describe("authenticateAgent", () => {
         await codeOf(() => asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, bad))),
       ).toBe("agent.unauthorized");
     }
+  });
+
+  it("an agent enrolled in tenant A cannot authenticate under tenant B's cfg", async () => {
+    const { cfg: cfgA, agentId, token } = await enrolled();
+    const cfgB = await setup();
+
+    // Sanity FIRST: the very same token DOES authenticate under its own tenant, so the rejection below
+    // is about the tenant SCOPE and not a token that simply never verifies.
+    const own = await asApp(suite.admin, cfgA, (tx) => authenticateAgent(tx, cfgA, token));
+    expect(own.agentId).toBe(agentId);
+
+    // Under tenant B's cfg the SAME token is refused. Run through the RLS-BYPASSING superuser
+    // connection: `withTenant` sets only the `app.tenant_id` GUC — it does NOT `set role app_user`, so
+    // RLS is not enforced here — which leaves `authenticateAgent`'s explicit `tenant_id = cfg.tenantId`
+    // predicate as the SOLE guard under test, the thing that makes it provable by deletion. In
+    // production `authenticateAgent` always runs under `withTenant` + `asAppUser`, where RLS is a
+    // redundant SECOND layer (agent.ts: "belt-and-braces beside the tx's RLS scoping"); running this
+    // through `asApp` would let RLS reject the cross-tenant read on its own and MASK whether the
+    // predicate does any work — the CLAUDE.md §1 "both answers look alike" false pass. Proven
+    // load-bearing by deletion: drop the `eq(printAgents.tenantId, cfg.tenantId)` clause from
+    // `authenticateAgent`'s SELECT and this cross-tenant auth WRONGLY SUCCEEDS (the row is found on the
+    // RLS-free connection and its secret verifies), flipping this assertion red; restore and it is green.
+    expect(
+      await codeOf(() =>
+        withTenant(suite.admin, cfgB.tenantId, (tx) => authenticateAgent(tx, cfgB, token)),
+      ),
+    ).toBe("agent.unauthorized");
   });
 });
 
