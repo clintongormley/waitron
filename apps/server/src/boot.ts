@@ -50,7 +50,7 @@ import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
-import { runSyncPull, type SyncLane } from "@waitron/sync";
+import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -411,6 +411,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const syncController = new AbortController();
   let syncDb: Database | undefined;
   let syncWorker: Promise<void> | undefined;
+  // The retention sweep's OWN pool + worker, declared beside the pull worker's so close() below tears
+  // both down. Both `undefined` unless sync is on AND a retention role is configured (the sweep is
+  // opt-in — see the wiring inside the `if` below).
+  let retentionDb: Database | undefined;
+  let retentionWorker: Promise<void> | undefined;
   if (syncConfig !== undefined) {
     syncDb = await createPostgresDb(syncConfig.databaseUrl);
     mountSyncApi(
@@ -465,6 +470,36 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // silently if it ever did happen for real, with sync stopped and no log line to say why. Log it
     // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
     syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
+
+    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the previously-unwired
+    // pruneSyncLog. Opt-in: only when a `sync_retention`-member URL is configured. It opens its OWN
+    // pool (that dedicated whole-log, cross-tenant role — NOT the app/sync_tailer pools, which cannot
+    // DELETE sync_log) and starts runRetentionSweep under the SAME syncController the pull worker uses,
+    // so close()'s single `syncController.abort()` stops the sweep too. Each tick prunes the log to the
+    // min across every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER
+    // alive-filters the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn
+    // down in close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
+    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires under a
+    // mocked worker in the test, but an unhandled rejection in the pre-close() window would be silent
+    // otherwise.
+    if (syncConfig.retentionDatabaseUrl !== undefined) {
+      retentionDb = await createPostgresDb(syncConfig.retentionDatabaseUrl);
+      retentionWorker = runRetentionSweep({
+        db: retentionDb,
+        sleep: realSleep,
+        signal: syncController.signal, // the same controller close() aborts
+        tickMs: syncConfig.retentionTickMs,
+        log,
+      });
+      retentionWorker.catch((err) =>
+        log("error", "sync.worker_rejected", { errorCode: codeOf(err) }),
+      );
+    } else {
+      // Sync is on but no retention role is configured: the log will grow unpruned. Loud, not fatal
+      // (spec §3.2/§8 — opt-in, documented-required-in-prod), so an existing sync host that has not
+      // provisioned the role still boots unchanged.
+      log("warn", "sync.retention_unconfigured", {});
+    }
   }
 
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
@@ -636,6 +671,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // path that failed. close() resolves either way; the worker's own errors are logged inside
       // runSyncPull (sync.pull_failed / sync.stream_stalled), not here.
       if (syncWorker !== undefined) await syncWorker.catch(() => {});
+      // The retention sweep worker, torn down the identical way: `syncController.abort()` above already
+      // stopped it (it shares that signal), so this only awaits its settle, swallowing a rejection so
+      // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
+      // swallowed inside runRetentionSweep, not here.
+      if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
       // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
@@ -648,6 +688,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       } finally {
         await db.close();
         if (syncDb !== undefined) await syncDb.close();
+        if (retentionDb !== undefined) await retentionDb.close();
       }
       log("info", "server.stopped");
     },
