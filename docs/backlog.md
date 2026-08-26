@@ -37,8 +37,10 @@ records, never-reused invoice numbers.
 One ranked list. **1–5 are the owner-chosen top tier** (2026-08-26); **6–8 are next**; smaller items
 follow.
 
-> **Elevated 2026-08-26 (owner): appliance onboarding — free tier (slices 1–4) — is the next *build*
-> job**, ahead of the numbered tier below. Rationale: it is the one deployment path that needs
+> **Elevated 2026-08-26 (owner): appliance onboarding — free tier (in-repo, no cloud/hardware) — is
+> the current *build* focus, ahead of the numbered tier below.** Slice **1a — serve the built SPAs
+> from the box — LANDED (#137, 2026-08-26)**; **slice 1b (setup-mode boot for an unprovisioned box)
+> is next.** Rationale: it is the one deployment path that needs
 > **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
 > laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
 > sync's cloud-mirror leg (#2), and the appliance *paid* tier all wait on a "Waitron cloud" that **does
@@ -223,15 +225,21 @@ question (below).
 - The **on-device agent** (own spec/spike) — the enabler for a till to host a print agent, the majority
   (single-box) venue's only box-death printing path (see *Failover printing*); but it **requires a native
   app**, so it is **parked behind the go-native decision** (a per-OS call, distribution §2); the
-  **appliance image + AP-mode onboarding** — now
-  designed, [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md): the
-  browser-based first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free
-  self-signed / paid real-cert tier split, a demo/live fiscal fork orthogonal to it, plus
-  backup/break-glass and an optional boot passphrase; **slices 1–4 are in-repo/buildable-now**
-  (serve the built PWAs + setup-mode boot, cert minting + persisted secrets + the wizard, mDNS +
-  trust UX, backup/status/break-glass), 5–7 are firmware/OS-image/paid-tier; and the **reroute**
-  itself (the till reaches any live server — selling is active-active — keeping a stable local origin
-  in front).
+  **appliance image + AP-mode onboarding** — now designed
+  ([spec](superpowers/specs/2026-08-26-appliance-onboarding-design.md) +
+  [1a plan](superpowers/plans/2026-08-26-onboarding-slice1a-serve-spas.md)): the browser-based
+  first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free self-signed / paid
+  real-cert tier split, a demo/live fiscal fork orthogonal to it, plus backup/break-glass and an
+  optional boot passphrase. Free-tier build order (all in-repo, no cloud/hardware): **1a serve the
+  built SPAs from the box — LANDED #137** (`apps/server/src/spa-api.ts` + boot wiring;
+  `WAITRON_{TILL,DASHBOARD}_APP_DIR`; till at `/`, dashboard at `/manage`); **1b setup-mode boot —
+  next** (unprovisioned box → serve the wizard; restructure boot/config so the server starts without
+  a venue; a `dev:onboard` mode); then 2 cert-minting + persisted secrets + the wizard, 3
+  mDNS/`waitron.local` + per-device trust UX, 4 backup/status/break-glass. Slices 5–7 (AP-mode
+  firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. *1a note:* it serves the SPA
+  bundles only — making them **installable** PWAs (service worker + web manifest, for
+  Add-to-Home-Screen) is a later slice. And the **reroute** itself (the till reaches any live server —
+  selling is active-active — keeping a stable local origin in front).
 
 ### Recipes → stock → procurement (next #6)
 
