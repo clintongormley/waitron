@@ -142,6 +142,14 @@ export interface RunSyncPullDeps extends SyncPullDeps {
   /** The per-batch pull, injectable so the loop-control test drives it off a real DB/network; defaults
    * to the real syncPullOnce, which boot uses. */
   pullOnce?: (deps: SyncPullDeps, peer: PullPeer) => Promise<SyncPullResult>;
+  /** Reports this subscriber's cursor for a drained peer back to that peer (POST /sync-api/cursor),
+   * so the SOURCE gains cross-node visibility for retention (spec §3.1). Injectable for the loop test;
+   * defaults to a real POST via `http`. Best-effort — a failure is logged and swallowed, never
+   * affecting the pull's own success/backoff. */
+  reportCursor?: (
+    peer: PullPeer,
+    report: { subscriberId: string; lane: SyncLane; lastAppliedSeq: string },
+  ) => Promise<void>;
 }
 
 /** The next backoff for a peer: minIdleMs on the first failure, then doubling, capped at maxBackoffMs. */
@@ -190,6 +198,22 @@ function nextBackoff(current: number, minIdleMs: number, maxBackoffMs: number): 
 export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
   const pullOnce = deps.pullOnce ?? syncPullOnce;
   const lane: SyncLane = deps.lane ?? "ordered";
+  // The cursor-report POST (spec §3.1): default to a real POST via `http` to the peer's
+  // /sync-api/cursor, carrying the peer's Bearer token and a JSON `{subscriberId, lane, lastAppliedSeq}`
+  // body — the shape the source's POST /sync-api/cursor route consumes. Injectable so the loop test
+  // captures it without the network.
+  const report =
+    deps.reportCursor ??
+    (async (
+      peer: PullPeer,
+      r: { subscriberId: string; lane: SyncLane; lastAppliedSeq: string },
+    ) => {
+      await deps.http(`${trimSlash(peer.url)}/sync-api/cursor`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${peer.token}`, "content-type": "application/json" },
+        body: JSON.stringify(r),
+      });
+    });
   const backoff = new Map<string, number>(); // per-peer current backoff (ms); 0 = healthy
 
   while (!deps.signal.aborted) {
@@ -204,6 +228,21 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
         while (!deps.signal.aborted) {
           const result = await pullOnce(deps, peer);
           if (result.fetched < deps.batchLimit || !result.advanced) break;
+        }
+        // Best-effort cursor report (spec §3.1): read the (subscriber, origin=peer, lane) cursor and
+        // report it to the peer so the SOURCE gains cross-node visibility for retention. Wrapped in its
+        // OWN try/catch — a report failure (or a cursor-read failure) is operational metadata only, so
+        // it is logged and swallowed here and must NEVER fail the peer or grow its backoff. Runs before
+        // backoff.set(peer.nodeId, 0) so a healthy drain still resets backoff even when the report throws.
+        try {
+          const seq = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
+          await report(peer, {
+            subscriberId: deps.subscriberId,
+            lane,
+            lastAppliedSeq: seq.toString(),
+          });
+        } catch {
+          deps.log("warn", "sync.cursor_report_failed", { originId: peer.nodeId, lane });
         }
         backoff.set(peer.nodeId, 0); // healthy this round
       } catch {
