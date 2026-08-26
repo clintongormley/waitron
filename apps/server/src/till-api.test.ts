@@ -568,6 +568,43 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     }
   });
 
+  it("400s (locale.unsupported) an EMPTY or MALFORMED body, never a 500", async () => {
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
+    // could run — so without a defensive `.catch` the throw reaches `run` as a NON-AppError and becomes
+    // an opaque `server.internal` 500 (the `?? {}` alone only ever caught a literal JSON `null`, proven
+    // by the sibling test above). The guarded parse coerces a parse failure to `{}` too, so the body
+    // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6004");
+    try {
+      // An EMPTY body under a JSON content-type.
+      const empty = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: "",
+      });
+      expect(empty.status).toBe(400);
+      expect(await empty.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+
+      // A MALFORMED body — not valid JSON at all.
+      const malformed = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: "not json",
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
   it("401s (session.required) when no session cookie is sent", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

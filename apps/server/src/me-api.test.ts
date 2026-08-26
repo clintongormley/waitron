@@ -614,4 +614,37 @@ describe("mountMeApi — set your own locale", () => {
       error: { code: "locale.unsupported" },
     });
   });
+
+  it("400s (locale.unsupported) an EMPTY or MALFORMED body, never a 500", async () => {
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
+    // could run — so without a defensive `.catch` the throw reaches `run` as a NON-AppError and becomes
+    // an opaque `server.internal` 500 (the `?? {}` alone only ever caught a literal JSON `null`, proven
+    // by the sibling test above). The guarded parse coerces a parse failure to `{}` too, so the body
+    // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
+    const app = mountApp();
+    const cookie = await cookieFor(me);
+
+    // An EMPTY body (`send` would omit the body and content-type entirely for `undefined`, so call
+    // `app.request` directly to send a real empty body under a JSON content-type).
+    const empty = await app.request("/management-api/session/me/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: "",
+    });
+    expect(empty.status).toBe(400);
+    expect((await empty.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "locale.unsupported" },
+    });
+
+    // A MALFORMED body — sent raw, since `send` would JSON.stringify it into valid JSON.
+    const malformed = await app.request("/management-api/session/me/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: "not json",
+    });
+    expect(malformed.status).toBe(400);
+    expect((await malformed.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "locale.unsupported" },
+    });
+  });
 });

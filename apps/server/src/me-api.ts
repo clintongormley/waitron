@@ -125,14 +125,20 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   // Set the SIGNED-IN person's OWN UI-language preference (`persons.locale`) — the dashboard twin of the
   // till's `PUT /api/session/locale`. Identity is the SESSION's person (`resolveManagementSession`'s
   // `personId`, resolved INSIDE `asStaff`), NEVER a body field: the body carries `locale` and nothing
-  // else, so a hostile `personId` in it is ignored and a person can only set their own locale. A
-  // missing/non-string `locale` coerces to `""`, which `setPersonLocale`'s `assertSupportedLocale`
-  // rejects as `locale.unsupported` (400) — the ONE rejection path, no separate request-invalid branch.
-  // Returns 204 (no body), matching the accept/other 204 verbs on this surface.
+  // else, so a hostile `personId` in it is ignored and a person can only set their own locale. Parsed
+  // DEFENSIVELY, guarding BOTH failure modes of `c.req.json()` (the pattern `device-api.ts` uses): it
+  // THROWS a `SyntaxError` on an empty or malformed body — `.catch(() => ({}))` turns that into `{}` —
+  // and it returns `null` (no throw) for a literal JSON `null` body, which the trailing `?? {}` also
+  // turns into `{}`. Either degenerate body then flows through the same `locale` coercion below, so a
+  // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
+  // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no separate
+  // request-invalid branch and never an opaque `server.internal` 500. Returns 204 (no body), matching
+  // the accept/other 204 verbs on this surface.
   app.put("/management-api/session/me/locale", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ locale?: unknown }>()) ?? {};
+      const body: { locale?: unknown } =
+        (await c.req.json<{ locale?: unknown }>().catch(() => ({}))) ?? {};
       const locale = typeof body.locale === "string" ? body.locale : "";
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
