@@ -131,10 +131,21 @@ async function main(): Promise<void> {
   console.log("");
   console.log("dev-onboard: migrated an UNPROVISIONED database — the box will boot in SETUP MODE.");
   console.log("");
-  console.log("  server     http://localhost:8080");
-  console.log("  status     http://localhost:8080/setup-api/status   (provisioned: false)");
+  console.log(
+    "  server     https://localhost:8080   (self-signed cert — browser warning is expected)",
+  );
+  console.log("  status     https://localhost:8080/setup-api/status   (provisioned: false)");
   console.log("");
-  console.log("Next: `pnpm dev` (or `pnpm --filter @waitron/server dev`) to boot in setup mode.");
+  console.log(
+    "Next: `pnpm dev` (or `pnpm --filter @waitron/server dev`) to boot in setup mode. First",
+  );
+  console.log(
+    "setup boot mints a self-signed CA + leaf into WAITRON_STATE_DIR (default apps/server/src/state,",
+  );
+  console.log("gitignored) and serves HTTPS from it. Verify manually with:");
+  console.log("");
+  console.log("  curl -sk https://127.0.0.1:8080/setup-api/status");
+  console.log('  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:8080/');
 }
 
 // Run only when invoked directly (`tsx scripts/dev-onboard.ts`), never when imported by a test — the
