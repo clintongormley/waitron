@@ -796,9 +796,10 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
       #82's optional stretch, deferred because it touches the shell session state machine.
     - the 14 EU allergen names in `domain.ts` are duplicated verbatim from `apps/till/src/i18n/allergen-names.ts`
       (a deliberate bundle-decoupling mirror — the dashboard can't import `@waitron/catalogue`, and no
-      shared browser-safe copy module exists). These are **regulated** names (EU 1169/2011 Annex II),
-      so either hoist them to a shared browser-safe module both apps import, or add a drift-guard test
-      pinning the two tables equal so a corrected spelling can't diverge unnoticed.
+      shared browser-safe copy module exists). These are **regulated** names (EU 1169/2011 Annex II).
+      **Drift-guard DONE (#136, 2026-08-26):** `scripts/allergen-names-drift.test.ts` pins the two
+      tables equal (en+es, exactly the 14 EU codes, non-vacuous — proven by deletion). The
+      shared-browser-safe-module hoist remains an option if a third consumer ever appears.
     - `t()` resolves the full locale tag via the `catalogues` alias map (`"es-ES"` → `es`) while
       `codeMessage`/`domain` region-strip by regex; identical for `es-ES` today, but any other `es-*`
       region would render chrome in English and codes/tokens in Spanish. Unreachable until a locale
@@ -961,10 +962,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   - **One till per server.** `boot.ts` resolves a single `WAITRON_TILL_*` identity; multiple tills
     served by one server (and the roster/session model that implies) is later.
   - **Small review Minors (none blocking):**
-    - **Normalize the real-Postgres test filename.** `apps/server/src/till-api.realpg.test.ts` uses a
-      one-off `.realpg.test.ts` suffix where the package's other container suites are `*.rls.test.ts`
-      (`pass.rls`, `webhook.rls`); rename for consistency (it is not a `.preprod` suite, which
-      `vitest.config.ts` excludes).
+    - **Normalize the real-Postgres test filename — DONE (already landed; struck 2026-08-26).** No
+      `*.realpg.test.ts` exists in the tree; the suite is `till-api.rls.test.ts`, already consistent
+      with the package's other `*.rls.test.ts` container suites.
     - **`#boot` has no `catch` → unhandled rejection — DONE (#110, 2026-08-19; campaign small-item-pool P8).**
       `till-app.ts`'s `firstUpdated` fired `void this.#boot()`, and `#boot` `await`ed `this.api.getTill()`
       with no `try/catch`, so a server unreachable at boot surfaced as an unhandled promise rejection and the
@@ -977,9 +977,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
       es-ES receipt) — display/flow only, the server still files the correct fiscal record regardless of the
       client's display config; `#onLoggedIn`'s own unguarded `listProducts()` await is a sibling of the same
       class. Gating login on a failed boot until a reload would be the enhancement.
-    - **Basket remove control is below the touch target.** The per-line remove button renders at
-      `size="sm"` (`apps/till/src/widgets/basket.ts:101`), under the 44 px minimum a touch POS wants —
-      bump it for finger use.
+    - **Basket remove control is below the touch target — DONE (#136, 2026-08-26).** The per-line
+      remove button was `size="sm"` (32px `min-height`); bumped to `size="md"` (the 44px `--wt-tap-min`
+      base) in `apps/till/src/widgets/basket.ts`.
     - **Add a basket drift-guard regression test for a rounding-sensitive weighed line.** The store's
       running-total / drift guard lacks a regression test pinning a weighed line whose gross rounds in
       a way that could drift the displayed total from the authoritative re-price.
@@ -1313,12 +1313,10 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `settle-invoice-first.ts`; scoped against the tree, not the note). All now import the single
   `@waitron/shared` `percentOf`; values byte-identical (huella input unchanged, both reviewers +
   fiscal suites confirmed). **Deferred test-quality follow-up (Copilot, suppressed/non-blocking, no
-  owner needed):** the `percentOf` float-exactness test (`packages/shared/src/percent-of.test.ts:53`,
-  inherited verbatim from the retired `core/vat.test.ts`) asserts `30.00 × 10% = "3.00"` — inputs
-  exactly float-representable, so it passes even under a `Number` implementation and does not guard the
-  BigInt property its name claims. Swap for a midpoint that diverges under float (one producing an
-  `x.xx5` that IEEE-754 stores just below, e.g. via a two-place rate), so the test fails if the codec
-  regresses. (2) **A sargable
+  owner needed) — DONE (#136, 2026-08-26):** the `percentOf` float-exactness test asserted
+  `30.00 × 10% = "3.00"` — inputs exactly float-representable, so it passed even under a `Number` codec
+  and guarded nothing. Swapped for 21% of 3.50 = 0.735 → "0.74", which a `Number`+`.toFixed(2)` codec
+  rounds to "0.73"; proven by deletion (Number codec → new fixture red, old fixture green). (2) **A sargable
   business-day filter.** `businessDayClause` wraps the column in `(col AT TIME ZONE tz - cutover)::date`,
   which cannot use the `(tenant_id, issued_at)` index, so the aggregates scan the tenant slice. The
   rewrite to half-open UTC bounds (`col >= start AND col < end`) is index-usable, but has a DST subtlety
