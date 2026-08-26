@@ -197,7 +197,8 @@ build. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
   merge**. Follow-ons: **un-pin an IP printer from its single `agent_id`** (any LAN agent serves;
   distinct-agents race test + location-scoped-authz review); **agents share the till's `[local → cloud]`
   failover list** (no outbox replication needed); **a till hosts a print agent** — the **majority
-  (single-box) venue's box-death path, so high priority → raises the on-device-agent spec's priority**;
+  (single-box) venue's box-death path (high importance), but the on-device agent it needs requires a
+  native app → parked behind the go-native decision**;
   **at-least-once delivery + active failure escalation at the till/KDS** (Slice-B). **`cloud_poll` low
   priority** (single poll URL, no firmware failover — but it *does* confirm physical print). Gated on the
   on-device agent + till failover list.
@@ -219,9 +220,10 @@ question (below).
   must flow to a secondary read-only the way catalogue does; the *session* must **not** replicate
   (write-amplification + single-writer conflict). Re-establishment: PIN-re-prompt v1 → portable
   signed token later.
-- The **on-device agent** (own spec/spike) — **priority raised**: it is the enabler for a till to host
-  a print agent, the majority (single-box) venue's only box-death printing path (see *Failover
-  printing*); the **appliance image + AP-mode onboarding** — now
+- The **on-device agent** (own spec/spike) — the enabler for a till to host a print agent, the majority
+  (single-box) venue's only box-death printing path (see *Failover printing*); but it **requires a native
+  app**, so it is **parked behind the go-native decision** (a per-OS call, distribution §2); the
+  **appliance image + AP-mode onboarding** — now
   designed, [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md): the
   browser-based first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free
   self-signed / paid real-cert tier split, a demo/live fiscal fork orthogonal to it, plus
