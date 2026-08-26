@@ -112,9 +112,12 @@ export const printAgentPairingCodes = pgTable(
     // The redemption lookup path: DELETE … WHERE tenant_id = $t AND code_sha256 = $h RETURNING.
     // UNIQUE, not a plain index: the redeem reads only the FIRST row, so two rows sharing a
     // (tenant, digest) would let one escape consumption — breaking the single-use invariant. The
-    // unique index makes that unrepresentable and serves the lookup identically; the generator's
-    // ~1-in-2^40 duplicate now fails the INSERT (the manager retries) rather than silently minting a
-    // consumable duplicate. tenant_id leads the key, so uniqueness is per-tenant.
+    // unique index makes that unrepresentable and serves the lookup identically; a colliding digest
+    // fails the INSERT rather than silently minting a consumable duplicate. Unlike
+    // `device_pairing_codes` (whose ~40-bit human-transcribed Crockford code carries a real ~2^-40
+    // collision the minter maps/retries), `generateAgentCode` (packages/printing) draws a 256-bit code
+    // (`randomBytes(32).base64url`), so this unique index is a defense-in-depth BACKSTOP unreachable in
+    // practice — no retry path hangs off it. tenant_id leads the key, so uniqueness is per-tenant.
     uniqueIndex("print_agent_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
 ).enableRLS();
