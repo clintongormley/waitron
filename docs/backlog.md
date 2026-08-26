@@ -189,15 +189,18 @@ build. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server
   Direct Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
-- **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) —
-  decision-capture for how printing survives a local-box death (the corner the subsystem deferred).
-  Chosen mechanism: USB/IP printers driven by local agents on **boxes *and* tills**. Three follow-on
-  deltas, none build-now: **un-pin an IP printer from its single serving `agent_id`** (any eligible LAN
-  agent serves; adds a distinct-agents race test + a location-scoped-authz security review); **agents
-  share the till's `[local → cloud]` failover list** (needs no outbox replication — the acting node
-  enqueues into its own outbox); **a till may host a print agent** (needs the on-device agent).
-  **`cloud_poll` demoted to low priority** (was a fast-follow) — one poll URL, no firmware failover, so
-  it covers only one failure axis per printer. Gated on the on-device agent + the till failover list.
+- **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) — how
+  printing survives a local-box death (the corner the subsystem deferred). Mechanism: USB/IP printers
+  driven by local agents on **boxes *and* tills**. **One build-now item:** a **lease/reclaim for stuck
+  `printing` jobs** — the outbox silently drops a job whose agent dies mid-claim (no `claimed_at`; the
+  pull never re-selects `printing`), a correctness gap to fix in `feat/printing-subsystem` **before
+  merge**. Follow-ons: **un-pin an IP printer from its single `agent_id`** (any LAN agent serves;
+  distinct-agents race test + location-scoped-authz review); **agents share the till's `[local → cloud]`
+  failover list** (no outbox replication needed); **a till hosts a print agent** — the **majority
+  (single-box) venue's box-death path, so high priority → raises the on-device-agent spec's priority**;
+  **at-least-once delivery + active failure escalation at the till/KDS** (Slice-B). **`cloud_poll` low
+  priority** (single poll URL, no firmware failover — but it *does* confirm physical print). Gated on the
+  on-device agent + till failover list.
 - **Expo device kind** (`expo-device-kind*`) — an `expo_pass` device so the KDS-3 pass screen runs
   always-on, joining KDS-3 to device-identity.
 
@@ -216,7 +219,9 @@ question (below).
   must flow to a secondary read-only the way catalogue does; the *session* must **not** replicate
   (write-amplification + single-writer conflict). Re-establishment: PIN-re-prompt v1 → portable
   signed token later.
-- The **on-device agent** (own spec/spike); the **appliance image + AP-mode onboarding** — now
+- The **on-device agent** (own spec/spike) — **priority raised**: it is the enabler for a till to host
+  a print agent, the majority (single-box) venue's only box-death printing path (see *Failover
+  printing*); the **appliance image + AP-mode onboarding** — now
   designed, [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md): the
   browser-based first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free
   self-signed / paid real-cert tier split, a demo/live fiscal fork orthogonal to it, plus
