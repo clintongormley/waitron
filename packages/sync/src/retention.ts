@@ -125,3 +125,25 @@ export async function lagFor(db: Database): Promise<SubscriberLag[]> {
     alive: row.alive,
   }));
 }
+
+/**
+ * Releases a genuinely-dead subscriber by DELETEing all its `sync_cursor` rows (every origin, every
+ * lane), so `pruneSyncLog`'s per-origin `min(last_applied_seq)` no longer includes it and the next
+ * sweep advances the log past its position. Runs as a `sync_retention` member — the DELETE grant
+ * `0003_sync_cursor_evict.sql` added (`sync_tailer`/`app_user` are NOT widened, CLAUDE.md §3).
+ *
+ * EXPLICIT, NEVER AUTOMATIC (spec §3.4, an inherited owner decision): "slow" and "dead" are
+ * indistinguishable from the log, so an operator invokes this only after independently confirming
+ * the node is gone — auto-evicting a slow-but-alive node is silent, unrecoverable data loss. Nothing
+ * in this package calls it on a timer; `runRetentionSweep` never does. `.execute` exposes `.rows`
+ * not pg's `.rowCount` (client.ts), so `returning subscriber_id` makes the count readable.
+ */
+export async function evictSubscriber(
+  db: Database,
+  subscriberId: string,
+): Promise<{ deleted: number }> {
+  const deleted = await db.execute(
+    sql`delete from sync_cursor where subscriber_id = ${subscriberId} returning subscriber_id`,
+  );
+  return { deleted: deleted.rows.length };
+}

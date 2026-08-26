@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { lagFor, pruneSyncLog } from "./retention.js";
+import { evictSubscriber, lagFor, pruneSyncLog } from "./retention.js";
 import type { SyncLane } from "./registry.js";
 
 // Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
@@ -326,6 +326,47 @@ describe("fast and ordered lanes track independent cursors; retention waits for 
       const result = await pruneSyncLog(pruner);
       expect(result).toEqual({ pruned: 2, highWater: 2n }); // held at the FAST lane
       expect(await remainingSeqs()).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    } finally {
+      await pruner.close();
+    }
+  });
+});
+
+describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)", () => {
+  it("evictSubscriber releases a dead subscriber's cursor so retention advances past it", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(10, a, b);
+    await setCursor("peerB", 10, true); // caught up
+    await setCursor("cloud", 4, false); // dead, holding the log at 4
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 4, highWater: 4n }); // held by `cloud`
+      const evicted = await evictSubscriber(pruner, "cloud");
+      expect(evicted).toEqual({ deleted: 1 });
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 6, highWater: 10n }); // advances past dead `cloud`
+      expect(await remainingSeqs()).toEqual([]);
+    } finally {
+      await pruner.close();
+    }
+  });
+
+  it("the DELETE grant is load-bearing: without it evictSubscriber cannot release the cursor", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(2, a, b);
+    await setCursor("cloud", 0, false);
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      await postgres.admin.execute(sql.raw(`revoke delete on sync_cursor from sync_retention`));
+      try {
+        await expect(evictSubscriber(pruner, "cloud")).rejects.toThrow(); // 42501 permission denied
+      } finally {
+        await postgres.admin.execute(sql.raw(`grant delete on sync_cursor to sync_retention`));
+      }
+      expect(await evictSubscriber(pruner, "cloud")).toEqual({ deleted: 1 }); // restored → works
     } finally {
       await pruner.close();
     }
