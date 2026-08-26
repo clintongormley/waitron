@@ -548,19 +548,26 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`https://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 
-  it("setup mode honours an operator-supplied WAITRON_TLS_* pair over minting its own", async () => {
+  it("setup mode serves an operator-supplied WAITRON_TLS_* cert while STILL generating its own box secrets", async () => {
     // The operator brings their own cert: `config.tls` is set from WAITRON_TLS_CERT_FILE/_KEY_FILE, so
-    // the setup branch serves THAT and never calls `ensureBoxSecrets` — so the state dir's
-    // `tls/server.crt` is never created (the mint branch is skipped entirely). This is the
-    // prove-by-deletion target: forcing the branch to ALWAYS mint (ignoring `config.tls`) creates that
-    // file despite the operator cert AND serves the wrong leaf, failing both assertions below.
+    // the setup branch serves THAT leaf as the front door. But `ensureBoxSecrets` runs on EVERY setup
+    // boot regardless (its two halves are independently presence-gated), so the box STILL mints its own
+    // self-signed fallback cert AND generates `secrets.env` — the vault key slice 2b needs must exist
+    // whichever front-door cert is served. Both facts are asserted below: the operator leaf verifies
+    // (its CA, not the box CA), and `secrets.env` is written.
+    //
+    // Prove-by-deletion target for "operator wins": forcing the code to ignore `config.tls` (serve the
+    // ensured BOX leaf instead) makes the operator-CA-trusting client's handshake fail
+    // (`CERT_SIGNATURE_FAILURE`) — the box leaf is not signed by the operator CA.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-op-tls-"));
     const certDir = await mkdtemp(join(tmpdir(), "waitron-boot-op-cert-"));
-    // A pre-minted operator cert pair, carrying 127.0.0.1 as an iPAddress SAN so a loopback dial
-    // verifies against it — `mintSelfSignedServerCert` is the same minter `ensureBoxSecrets` wraps.
+    // A pre-minted operator cert pair with a DISTINCTIVE identity (hostnames ["operator.example"]) so
+    // it cannot be confused with the box's own fallback leaf (hostnames ["waitron.local","localhost"]);
+    // it also carries 127.0.0.1 as an iPAddress SAN so a loopback dial verifies against it.
+    // `mintSelfSignedServerCert` is the same minter `ensureBoxSecrets` wraps.
     const material = mintSelfSignedServerCert({
-      hostnames: ["localhost"],
+      hostnames: ["operator.example"],
       ipAddresses: ["127.0.0.1"],
       now: new Date(),
     });
@@ -578,19 +585,26 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_TLS_KEY_FILE: keyFile,
       WAITRON_ENV: "preproduction",
     });
-    // Trust the OPERATOR CA (not any box-minted one): HTTPS serving from the operator leaf is what
-    // verifies here.
+    // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
+    // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
     const dispatcher = new Agent({ connect: { ca: material.caCertPem } });
     const via = { dispatcher } as RequestInit & { dispatcher: Agent };
     try {
-      // HTTPS still serves — from the OPERATOR cert (dialled trusting the operator CA).
+      // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ provisioned: false });
 
-      // The operator cert WON: `ensureBoxSecrets` was never called, so the box minted NOTHING in the
-      // state dir — no `tls/server.crt`. (Prove-by-deletion: an always-mint branch creates this file.)
-      expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(false);
+      // (b) The box STILL generated its own secrets under operator TLS — `secrets.env` carries the
+      // vault key slice 2b loads. This is the finding this fix decoupled: gating the whole
+      // `ensureBoxSecrets` call on `config.tls === undefined` would have stranded this box with none.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+
+      // The box's OWN fallback leaf was minted too (the always-mint half), even though the operator's
+      // cert is the one served — so a later boot that drops the operator vars still has a cert to serve.
+      expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
     } finally {
       await server.close();
       await dispatcher.close();

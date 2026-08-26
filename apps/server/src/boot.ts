@@ -416,24 +416,25 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // real setup wizard app arrives in slice 2; the media store is trading-only, so it is not created
     // here either.
     mountSetup(app, { environment: config.environment }, log);
-    // NEW in slice 2a: the box serves this setup surface over HTTPS. An operator who supplied their
-    // own WAITRON_TLS_* pair keeps it — `config.tls` WINS; otherwise the box mints (or reuses) its own
-    // self-signed cert under the state dir and serves from that. `ensureBoxSecrets` is idempotent
-    // (presence-guarded), so a reused box keeps its already-trusted cert byte-for-byte rather than
-    // minting a fresh one every boot. Only the leaf `{ certFile, keyFile }` feeds `config.tls`; the
-    // returned `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so
-    // it is narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity
-    // window is anchored to real boot time. This mirrors the trading branch's own TLS handling, which
-    // reads `config.tls` unchanged — that path is untouched.
-    let tls = config.tls;
-    if (tls === undefined) {
-      const ensured = await ensureBoxSecrets({
-        stateDir: config.stateDir,
-        hostnames: ["waitron.local", "localhost"],
-        now,
-      });
-      tls = { certFile: ensured.certFile, keyFile: ensured.keyFile };
-    }
+    // NEW in slice 2a: the box serves this setup surface over HTTPS. `ensureBoxSecrets` runs on EVERY
+    // setup boot, unconditionally — its two halves are independently presence-gated inside (mint the
+    // self-signed cert quartet only when absent; generate `secrets.env`'s vault key + node token only
+    // when absent), so it is cheap and idempotent, and a reused box keeps both byte-for-byte. It runs
+    // regardless of `config.tls` because the box's OWN secrets (the vault key above all — slice 2b
+    // loads it to seal the first provisioned credential) must exist whichever front-door cert is
+    // served; gating the whole call on `config.tls === undefined` would strand an operator-TLS box with
+    // no vault key. THEN the served cert is chosen: an operator who supplied their own WAITRON_TLS_*
+    // pair keeps it — `config.tls` WINS — otherwise the box serves its own freshly-ensured self-signed
+    // leaf as the fallback. Only the leaf `{ certFile, keyFile }` feeds `config.tls`; the returned
+    // `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so it is
+    // narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity window
+    // is anchored to real boot time. The trading `else` branch reads `config.tls` unchanged — untouched.
+    const ensured = await ensureBoxSecrets({
+      stateDir: config.stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now,
+    });
+    const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
     const server = startListening({ ...config, tls }, app, now, log);
     return makeStartedServer(server, health, log, {
       // A setup box runs no background work, so there is nothing to abort or await.
