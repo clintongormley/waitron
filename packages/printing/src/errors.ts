@@ -39,5 +39,13 @@ declare module "@waitron/shared" {
     /** The pairing code matched but had lapsed past its TTL, so it is no longer honoured — a fresh code
      * must be generated. NO params, distinct from `agent.pairing_invalid`: here the code WAS ours. */
     "agent.pairing_expired": Record<string, never>;
+    /** The agent enrol flood guard refused this attempt before any DB work — too many enrol redemptions
+     * in the current window. NO params (an oracle-free throttle, the `agent.pairing_*` shape). The
+     * print-agent enrol surface shares the enrol rate-limit MECHANISM with device enrolment but answers
+     * in its OWN namespace: the shared limiter throws the device-namespaced code and the print enrol
+     * route translates it to THIS one, so a single enrolment flow never answers across two namespaces
+     * (device enrolment keeps `device.pairing_rate_limited`). Codes name the domain concept and are
+     * never renamed once shipped (CLAUDE.md §1/§3). */
+    "agent.pairing_rate_limited": Record<string, never>;
   }
 }

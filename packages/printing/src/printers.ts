@@ -50,6 +50,11 @@ export function isPgError(error: unknown, sqlstate: string): boolean {
  * `createPrinter`'s pre-check names it precisely on the common path).
  */
 function translatePrinterWriteError(error: unknown, agentId: string | undefined): never {
+  // ASSUMPTION: the only client-reachable FK on `printers` is the composite (tenant_id, agent_id) →
+  // print_agents — `tenant_id`/`location_id` come from server-controlled `cfg`, never client input — so
+  // a 23503 on a printer write means the agent binding. If a future schema adds another client-supplied
+  // FK column to `printers`, this blanket mapping must narrow (e.g. read the constraint name) rather
+  // than mislabel that violation `agent.not_found`.
   if (agentId !== undefined && isPgError(error, FOREIGN_KEY_VIOLATION)) {
     throw new AppError("agent.not_found", { id: agentId });
   }

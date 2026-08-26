@@ -44,4 +44,10 @@ describe("the printer / agent error codes carry their declared params", () => {
     expect(error.code).toBe("agent.pairing_expired");
     expect(error.params).toEqual({});
   });
+
+  it("constructs agent.pairing_rate_limited with NO params (the enrol flood guard, own namespace)", () => {
+    const error = new AppError("agent.pairing_rate_limited", {});
+    expect(error.code).toBe("agent.pairing_rate_limited");
+    expect(error.params).toEqual({});
+  });
 });

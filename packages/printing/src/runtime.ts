@@ -124,17 +124,32 @@ export async function claimPrintJobs(
 }
 
 /**
- * REPORT (design §3c step 3) — record one job's delivery outcome, AGENT-SCOPED. Extracted from
- * `runAgentOnce` (Controller Ruling 6) so the SERVER path can report in a SEPARATE request from the
- * claim (the remote agent pushes the bytes, then POSTs the result). The `from printers p … and
- * p.agent_id = ${agentId}` join is the AUTHORIZATION scope: an agent can only report on jobs served by
- * its OWN printers, so a cross-agent report mutates nothing (`{ updated: false }`) — proven by deletion
- * of that predicate. `done` sets `delivered_at`; `failed` records `last_error` and bumps `attempts`
- * (the bounded-retry counter). All values bind as `$n`, never concatenated.
+ * REPORT (design §3c step 3) — record one job's delivery outcome, AGENT-SCOPED and IDEMPOTENT.
+ * Extracted from `runAgentOnce` (Controller Ruling 6) so the SERVER path can report in a SEPARATE
+ * request from the claim (the remote agent pushes the bytes, then POSTs the result). Two predicates
+ * guard every report:
+ *  - `from printers p … and p.agent_id = ${agentId}` is the AUTHORIZATION scope: an agent can only
+ *    report on jobs served by its OWN printers, so a cross-agent report mutates nothing
+ *    (`{ updated: false }`) — proven by deletion of that predicate.
+ *  - `and print_jobs.status = 'printing'` is the IDEMPOTENCY guard: a report only applies to a
+ *    currently-CLAIMED job. Without it a duplicated report (a retried HTTP request) on the `failed`
+ *    path would bump `attempts` a second time, burning the 5-attempt cap faster than deliveries
+ *    warrant; with it, a second report on an already-terminal (`done`/`failed`) job is a no-op. It
+ *    holds for `runAgentOnce` too, which reports the job it just claimed to `printing` in the same tx.
+ *
+ * `done` sets `delivered_at`; `failed` records `last_error` and bumps `attempts` (the bounded-retry
+ * counter). All values bind as `$n`, never concatenated.
  *
  * Returns whether a row matched. The server route treats a no-match as an idempotent no-op (a job that
  * is not this agent's, already terminal, or unknown) rather than an oracle, so it never discloses which
  * job ids exist.
+ *
+ * RECLAIM NUANCE (deliberately not over-built): a `failed` job under the cap is re-claimed
+ * (`failed`→`printing`) by a later batch, so a duplicate report that arrives AFTER a re-claim finds the
+ * job `printing` again and legitimately bumps `attempts` — indistinguishable at this layer from the
+ * genuine report for that new claim. The `status = 'printing'` guard gives true idempotency for the
+ * common case (a duplicate arriving before any re-claim); the post-reclaim race would need a per-claim
+ * token the outbox schema does not carry, which is out of this slice.
  */
 export async function reportPrintJob(
   tx: Transaction,
@@ -151,6 +166,7 @@ export async function reportPrintJob(
             and print_jobs.printer_id = p.id
             and print_jobs.tenant_id = ${cfg.tenantId}
             and print_jobs.id = ${jobId}
+            and print_jobs.status = 'printing'
             and p.agent_id = ${agentId}
           returning print_jobs.id`)
       : await tx.execute<{ id: string }>(sql`
@@ -161,6 +177,7 @@ export async function reportPrintJob(
             and print_jobs.printer_id = p.id
             and print_jobs.tenant_id = ${cfg.tenantId}
             and print_jobs.id = ${jobId}
+            and print_jobs.status = 'printing'
             and p.agent_id = ${agentId}
           returning print_jobs.id`);
   return { updated: result.rows.length > 0 };

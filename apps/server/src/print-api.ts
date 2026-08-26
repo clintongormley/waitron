@@ -11,7 +11,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import {
   asAppUser,
   printAgents,
@@ -58,9 +58,10 @@ export interface PrintApiDeps {
    * The redemption rate-limiter for `POST /print-api/agent/enrol` — the SAME per-process, in-memory,
    * GLOBAL fixed-window guard the device enrol route uses (`enrol-rate-limit.ts`). Optional and
    * injected ONLY by tests (which pass a limiter over a controllable clock); production omits it and
-   * `mountPrintApi` builds the default (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). It throws the
-   * device-namespaced `device.pairing_rate_limited` — the shared primitive's baked-in code, reused
-   * verbatim here rather than forking a second limiter for a code that would mean the same thing.
+   * `mountPrintApi` builds the default (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). The shared
+   * limiter throws the device-namespaced `device.pairing_rate_limited`; the enrol route TRANSLATES that
+   * to this surface's own `agent.pairing_rate_limited` (see the route), so the print enrolment flow
+   * answers every pairing outcome in ONE namespace (`agent.*`), never leaking `device.*`.
    */
   enrolRateLimiter?: EnrolRateLimiter;
 }
@@ -87,7 +88,8 @@ const RECENT_JOBS_LIMIT = 100;
  *  - Agent auth/enrol: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401),
  *    `agent.pairing_invalid` (an unknown/consumed/foreign code, 404 — a not-found, oracle-free) and
  *    `agent.pairing_expired` (a code that WAS ours but lapsed, 410 Gone — distinct by design),
- *    `device.pairing_rate_limited` (the enrol flood guard, 429, thrown BEFORE any DB work).
+ *    `agent.pairing_rate_limited` (the enrol flood guard, 429, thrown BEFORE any DB work — the enrol
+ *    route translates the shared limiter's device-namespaced throw to this `agent.*` code).
  *  - Printer/agent management: `printer.not_found` (an absent printer id, 404),
  *    `printer.invalid_config` (a transport short of its required fields, 422 Unprocessable — the config
  *    is well-formed JSON but semantically invalid), `agent.not_found` (an absent agent id on revoke, or
@@ -100,7 +102,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "agent.unauthorized": 401,
   "agent.pairing_invalid": 404,
   "agent.pairing_expired": 410,
-  "device.pairing_rate_limited": 429,
+  "agent.pairing_rate_limited": 429,
   "printer.not_found": 404,
   "printer.invalid_config": 422,
   "agent.not_found": 404,
@@ -217,8 +219,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       // Rate-limit FIRST — before the body is parsed and before `enrolAgent`'s locking DELETE — so an
       // enrol flood is refused (429) with ZERO DB work, keeping a flood on this unauthenticated route
-      // from starving the sale path (CLAUDE.md §5). The device enrol route's exact posture.
-      enrolLimiter.check();
+      // from starving the sale path (CLAUDE.md §5). The device enrol route's exact posture. The shared
+      // limiter throws the DEVICE-namespaced `device.pairing_rate_limited`; TRANSLATE it to this
+      // surface's own `agent.pairing_rate_limited` so the print enrolment flow answers every pairing
+      // outcome in ONE namespace (codes name the domain concept, CLAUDE.md §1/§3). Any other throw
+      // (there is none today) propagates unchanged.
+      try {
+        enrolLimiter.check();
+      } catch (error) {
+        // `createEnrolRateLimiter().check()` throws ONLY `device.pairing_rate_limited`
+        // (enrol-rate-limit.ts), so the guard below is defense-in-depth: it is unreachable today (the
+        // catch always sees exactly that code) but kept so a future limiter that threw something else
+        // would propagate it verbatim rather than be mislabelled. v8-ignored as documented-unreachable
+        // (the boot.ts / chain.ts shape); the reachable translation on the next line stays counted and
+        // IS exercised by the rate-limit test.
+        /* v8 ignore start */
+        if (!isAppError(error) || error.code !== "device.pairing_rate_limited") throw error;
+        /* v8 ignore stop */
+        throw new AppError("agent.pairing_rate_limited", {});
+      }
       const body: { code?: unknown } =
         (await c.req.json<{ code?: unknown }>().catch(() => ({}))) ?? {};
       const code = requireString(body.code, "code");

@@ -192,8 +192,10 @@ describe("mountPrintApi — agent enrol", () => {
     for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
     const limited = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "x" } });
     expect(limited.status).toBe(429);
+    // This surface answers in its OWN namespace: the shared limiter throws `device.pairing_rate_limited`
+    // and the enrol route translates it to `agent.pairing_rate_limited` (never leaking `device.*`).
     expect((await limited.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.pairing_rate_limited" },
+      error: { code: "agent.pairing_rate_limited" },
     });
     // Advance past the window — the counter resets and a well-formed enrol reaches the handler again
     // (a 404 for the junk code, i.e. it got PAST the limiter to the DB).
@@ -303,20 +305,52 @@ describe("mountPrintApi — agent claim + report", () => {
 
   it("a report for another agent's job is an idempotent no-op (204, the job is NOT mutated)", async () => {
     // THE GUARD (proven by deletion): `reportPrintJob`'s `and p.agent_id = ${agentId}` join scopes the
-    // report to the caller's own printers. Deleting that predicate makes this cross-agent report mutate
-    // agent A's job (status → done), flipping the `toBe("queued")` assertion red.
+    // report to the caller's own printers. The OTHER agent CLAIMS the job first so it is `printing` (not
+    // `queued`) — otherwise the idempotency guard (`status = 'printing'`) alone would block the report
+    // and the agent-scope deletion would FALSE-pass. With the job `printing`, deleting the `p.agent_id`
+    // predicate makes this cross-agent report mutate the other agent's job (status → done), flipping the
+    // `toBe("printing")` assertion red.
     const app = mountApp();
     const mine = await enrolAgent(app, "Mine");
     const other = await enrolAgent(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
+    await send(app, "GET", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
 
     const res = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: mine.token,
       body: { status: "done" },
     });
     expect(res.status).toBe(204); // idempotent sink — no oracle
-    expect((await jobRow(jobId)).status).toBe("queued"); // the other agent's job is untouched
+    expect((await jobRow(jobId)).status).toBe("printing"); // the other agent's claimed job is untouched
+  });
+
+  it("a duplicated failed report is idempotent — attempts is bumped ONCE (the status='printing' guard)", async () => {
+    // THE GUARD (proven by deletion): the `and print_jobs.status = 'printing'` predicate makes a report
+    // apply only to a currently-claimed job. Deleting it from `reportPrintJob`'s failed path lets the
+    // SECOND failed report bump `attempts` to 2, flipping the `toBe(1)` assertion red — a retried report
+    // would otherwise burn the 5-attempt cap faster than deliveries warrant.
+    const app = mountApp();
+    const { agentId, token } = await enrolAgent(app);
+    const printerId = await createPrinterVia(app, agentId);
+    const jobId = await enqueue(printerId, new Uint8Array([1]));
+    await send(app, "GET", "/print-api/agent/jobs", { bearer: token }); // claim → printing
+
+    const first = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
+      bearer: token,
+      body: { status: "failed", error: "offline" },
+    });
+    expect(first.status).toBe(204);
+    // The retried report — same job, now `failed` (not `printing`) — is a 204 no-op.
+    const second = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
+      bearer: token,
+      body: { status: "failed", error: "offline again" },
+    });
+    expect(second.status).toBe(204);
+    const row = await jobRow(jobId);
+    expect(row.status).toBe("failed");
+    expect(row.attempts).toBe(1); // bumped ONCE despite two failed reports
+    expect(row.last_error).toBe("offline"); // the second report changed nothing
   });
 
   it("report screens the status (a bad/absent status → 400) and the job id shape (non-uuid → 400)", async () => {
