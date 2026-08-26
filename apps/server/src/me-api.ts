@@ -10,7 +10,7 @@ import {
   requestSwap,
   absenceKind,
 } from "@waitron/workforce";
-import { resolveManagementSession } from "@waitron/identity";
+import { resolveManagementSession, setPersonLocale } from "@waitron/identity";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
@@ -59,6 +59,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
+  // The signed-in person picked an unsupported UI language on `PUT /management-api/session/me/locale`
+  // — a request-shape fault, 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity).
+  "locale.unsupported": 400,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "absence.invalid": 400,
@@ -116,6 +119,26 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         resolveManagementSession(tx, sessionId),
       );
       return c.json({ personId, role, locale, venueLocale: deps.venueLocale });
+    }),
+  );
+
+  // Set the SIGNED-IN person's OWN UI-language preference (`persons.locale`) — the dashboard twin of the
+  // till's `PUT /api/session/locale`. Identity is the SESSION's person (`resolveManagementSession`'s
+  // `personId`, resolved INSIDE `asStaff`), NEVER a body field: the body carries `locale` and nothing
+  // else, so a hostile `personId` in it is ignored and a person can only set their own locale. A
+  // missing/non-string `locale` coerces to `""`, which `setPersonLocale`'s `assertSupportedLocale`
+  // rejects as `locale.unsupported` (400) — the ONE rejection path, no separate request-invalid branch.
+  // Returns 204 (no body), matching the accept/other 204 verbs on this surface.
+  app.put("/management-api/session/me/locale", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = (await c.req.json<{ locale?: unknown }>()) ?? {};
+      const locale = typeof body.locale === "string" ? body.locale : "";
+      await asStaff(async (tx) => {
+        const { personId } = await resolveManagementSession(tx, sessionId);
+        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
+      return c.body(null, 204);
     }),
   );
 

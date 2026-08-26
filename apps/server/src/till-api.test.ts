@@ -481,6 +481,106 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 });
 
+describe("PUT /api/session/locale (set your OWN UI locale)", () => {
+  // Log in a FRESH staff person rather than the shared `ana`, so the row this route MUTATES is
+  // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Ana)
+  // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
+  async function loginFresh(pin: string): Promise<{ personId: string; sessionId: string }> {
+    const row = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${cfg.tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
+    const personId = row.rows[0]!.id;
+    const session = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginWithPin(tx, { tenantId: cfg.tenantId, tillId: cfg.tillId, personId, pin });
+    });
+    return { personId, sessionId: session.id };
+  }
+  async function cleanup(personId: string): Promise<void> {
+    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
+  }
+
+  it("204s and writes the session person's persons.locale for a supported value", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6001");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify({ locale: "en-GB" }),
+      });
+      expect(res.status).toBe(204);
+      // The operator's OWN row now carries the chosen locale (the write ran under the session's identity).
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBe("en-GB");
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("400s (locale.unsupported) an unsupported value, leaving the row unchanged", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6002");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify({ locale: "ca-ES" }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+      // `setPersonLocale` validates BEFORE it writes, so an unsupported value never reaches the row.
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("400s (locale.unsupported) a missing/null body — coerced to '' → the ONE rejection path", async () => {
+    // A `null` JSON body → `?? {}` → an absent `locale` → the `typeof … ? … : ""` coercion → "", which
+    // `assertSupportedLocale` rejects as `locale.unsupported` exactly like any other unsupported value.
+    // There is no separate request-invalid branch — a missing/non-string locale is the same 400.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6003");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify(null),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("401s (session.required) when no session cookie is sent", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/session/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ locale: "en-GB" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
     const app = new Hono();

@@ -10,6 +10,7 @@ import {
   listActiveStaff,
   loginWithPin,
   roleHasPermission,
+  setPersonLocale,
 } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { getLayout } from "@waitron/layouts";
@@ -138,6 +139,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "session.not_open": 401,
   "session.required": 401,
+  // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
+  // fault, so 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity), BEFORE any write.
+  "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
   "sale.unsupported_tender": 400,
@@ -408,6 +412,26 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       clearSessionCookie(c);
       return c.json({ ok: true });
+    }),
+  );
+
+  // Set the LOGGED-IN operator's OWN UI-language preference (`persons.locale`). SESSION-GUARDED, and
+  // the guard — not the body — supplies the identity: the write targets `session.personId`, so an
+  // operator can only ever set THEIR OWN locale (the body carries `locale` and nothing else). A
+  // missing/non-string `locale` coerces to `""`, which `setPersonLocale`'s `assertSupportedLocale`
+  // rejects as `locale.unsupported` (400) exactly as any other unsupported value — the ONE rejection
+  // path, so there is no separate request-invalid branch. Runs under `withTenant` + `asAppUser` (RLS
+  // scopes the UPDATE to this till's tenant), and returns 204 on success (no body).
+  app.put("/api/session/locale", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const body = (await c.req.json<{ locale?: unknown }>()) ?? {};
+      const locale = typeof body.locale === "string" ? body.locale : "";
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
+      return c.body(null, 204);
     }),
   );
 

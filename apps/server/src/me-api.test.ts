@@ -526,3 +526,92 @@ describe("mountMeApi — absences", () => {
     });
   });
 });
+
+describe("mountMeApi — set your own locale", () => {
+  // Seed a FRESH staff person for each mutating test, so the row this route writes is disposable and no
+  // sibling whoami assertion (which pins `me`'s locale to null) is disturbed. The management session is
+  // opened via `cookieFor` (the production `startManagementSession` path). Cleaned up in a finally (§4).
+  async function freshPerson(pin: string): Promise<string> {
+    const row = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
+    return row.rows[0]!.id;
+  }
+  async function cleanup(personId: string): Promise<void> {
+    await suite.db.execute(sql`delete from management_sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
+  }
+
+  it("PUT /management-api/session/me/locale 204s and writes the SESSION person's locale", async () => {
+    const personId = await freshPerson("4001");
+    try {
+      const res = await send(mountApp(), "PUT", "/management-api/session/me/locale", {
+        cookie: await cookieFor(personId),
+        body: { locale: "en-GB" },
+      });
+      expect(res.status).toBe(204);
+      const row = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(row.rows[0]!.locale).toBe("en-GB");
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("IGNORES a body personId naming ANOTHER person — only the session's own row changes", async () => {
+    // The crux of this surface: identity is the SESSION's person, never a body field. The body names
+    // `colleague`, but only the session person's row may change. A route that (wrongly) read
+    // `body.personId` would leave the session person untouched AND flip `colleague` — both assertions
+    // below catch that (this is the by-deletion proof's target, brief Step 6).
+    const sessionPerson = await freshPerson("4002");
+    try {
+      const before = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${colleague}`,
+      );
+      const res = await send(mountApp(), "PUT", "/management-api/session/me/locale", {
+        cookie: await cookieFor(sessionPerson),
+        body: { locale: "en-GB", personId: colleague },
+      });
+      expect(res.status).toBe(204);
+      // The session person's OWN row changed...
+      const mine = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${sessionPerson}`,
+      );
+      expect(mine.rows[0]!.locale).toBe("en-GB");
+      // ...and the body-named colleague's row did NOT.
+      const theirs = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${colleague}`,
+      );
+      expect(theirs.rows[0]!.locale).toBe(before.rows[0]!.locale ?? null);
+    } finally {
+      await cleanup(sessionPerson);
+    }
+  });
+
+  it("400s (locale.unsupported) an unsupported value", async () => {
+    // `me` carries no preference and this rejects before any write, so the shared row is not mutated.
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/locale", {
+      cookie: await cookieFor(me),
+      body: { locale: "ca-ES" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "locale.unsupported" },
+    });
+  });
+
+  it("400s (locale.unsupported) a missing/null body — coerced to '' → the ONE rejection path", async () => {
+    // A `null` JSON body → `?? {}` → an absent `locale` → the `typeof … ? … : ""` coercion → "", which
+    // `assertSupportedLocale` rejects as `locale.unsupported`. No separate request-invalid branch — a
+    // missing/non-string locale is the same 400 as any other unsupported value.
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/locale", {
+      cookie: await cookieFor(me),
+      body: null,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "locale.unsupported" },
+    });
+  });
+});
