@@ -189,6 +189,15 @@ build. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server
   Direct Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
+- **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) —
+  decision-capture for how printing survives a local-box death (the corner the subsystem deferred).
+  Chosen mechanism: USB/IP printers driven by local agents on **boxes *and* tills**. Three follow-on
+  deltas, none build-now: **un-pin an IP printer from its single serving `agent_id`** (any eligible LAN
+  agent serves; adds a distinct-agents race test + a location-scoped-authz security review); **agents
+  share the till's `[local → cloud]` failover list** (needs no outbox replication — the acting node
+  enqueues into its own outbox); **a till may host a print agent** (needs the on-device agent).
+  **`cloud_poll` demoted to low priority** (was a fast-follow) — one poll URL, no firmware failover, so
+  it covers only one failure axis per printer. Gated on the on-device agent + the till failover list.
 - **Expo device kind** (`expo-device-kind*`) — an `expo_pass` device so the KDS-3 pass screen runs
   always-on, joining KDS-3 to device-identity.
 
@@ -257,6 +266,12 @@ decided the topology; §14 defers the buildable pieces:
 
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
+- **Split-brain needs its own cross-cutting design** — under a partition two nodes can both act as
+  primary, giving two outboxes and a double-serve + double-sell risk; the "every till and agent picks
+  the single first-reachable node from one shared list" convergence is necessary but **not sufficient**.
+  Spans selling, the fiscal chain (new-chain-on-partition is the existing safety valve), payments
+  (`resolvePending`) and printing alike — **examine in detail, not scoped to printing** (owner request
+  2026-08-26, raised by [failover-printing design §7](superpowers/specs/2026-08-26-failover-printing-design.md)).
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
   it runs.
 - **Till UX for the timed-out card case** (retry / alternative tender / wait).
