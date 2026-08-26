@@ -132,10 +132,16 @@ describe("devSetup against real Postgres", () => {
     const config = loadConfig(written, "/dev/null/migrations", "/dev/null/media");
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
-    expect(config.till.tenantId).toBe(first.env.WAITRON_TILL_TENANT_ID);
-    expect(config.till.tillId).toBe(first.env.WAITRON_TILL_TILL_ID);
-    expect(config.till.seriesId).toBe(first.env.WAITRON_TILL_SERIES_ID);
-    expect(config.till.locationId).toBe(first.env.WAITRON_TILL_LOCATION_ID);
+    // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the five ids into `config.till`
+    // (never setup mode's `undefined` — which is exactly the state dev-setup exists to make
+    // impossible). Assert it is present, then read the fiscal ids off it — the `?.` keeps each
+    // assertion honest (an undefined till would fail the `toBe`, not throw) now that `config.till` is
+    // optional (slice 1b).
+    expect(config.till).toBeDefined();
+    expect(config.till?.tenantId).toBe(first.env.WAITRON_TILL_TENANT_ID);
+    expect(config.till?.tillId).toBe(first.env.WAITRON_TILL_TILL_ID);
+    expect(config.till?.seriesId).toBe(first.env.WAITRON_TILL_SERIES_ID);
+    expect(config.till?.locationId).toBe(first.env.WAITRON_TILL_LOCATION_ID);
     // The generated credentials key is a valid 32-byte base64 ring.
     const ring = loadKeyRing(written);
     expect(ring.current.key).toHaveLength(32);

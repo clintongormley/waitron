@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
-import { loadTillConfig } from "./till-config.js";
+import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -66,10 +66,16 @@ export interface ServerConfig {
    */
   tls?: { certFile: string; keyFile: string };
   /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
-   * resolved once here via `loadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
+   * resolved once here via `tryLoadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
    * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
-   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note). */
-  till: Omit<TillConfig, "orderFlow">;
+   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note).
+   *
+   * OPTIONAL (slice 1b): an unprovisioned box has no venue, so the five `WAITRON_TILL_*_ID` are
+   * absent and this is `undefined` — SETUP MODE. `tryLoadTillConfig` returns it undefined when NONE
+   * of the five are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
+   * half-configured server is a bug, never a setup box). Boot branches on `config.till === undefined`
+   * (a later slice-1b task); until then boot narrows it once before its trading-only consumers. */
+  till?: Omit<TillConfig, "orderFlow">;
   /** The WebAuthn Relying Party ID the dashboard's passkey ceremonies are bound to — the registrable
    * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
    * passkey is bound to its RP ID at registration and only offered back on that same RP ID, so this
@@ -160,8 +166,13 @@ type Env = Record<string, string | undefined>;
  * value is missing, and `VAR=` must be reported as missing rather than accepted as the empty
  * string. Leaving that one site hand-inlined would have made this the second definition of "unset"
  * in the file rather than the only one.
+ *
+ * Exported so `till-config.ts`'s `tryLoadTillConfig` gates the five `WAITRON_TILL_*_ID` on the SAME
+ * absent-or-empty rule — a `VAR=` line counts as unset for "which of the five are present?" exactly
+ * as it does everywhere else here, rather than a second, subtly-different definition of "unset"
+ * living in that file.
  */
-function isUnset(raw: string | undefined): raw is undefined | "" {
+export function isUnset(raw: string | undefined): raw is undefined | "" {
   return raw === undefined || raw === "";
 }
 
@@ -482,7 +493,9 @@ export function loadConfig(
     // The till's own fiscal identity, resolved the same way every other caller does — see
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
     // still reports the DATABASE_URL fault first, matching this file's existing ordering.
-    till: loadTillConfig(env),
+    // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the five ids set → undefined (setup mode),
+    // ALL set → the loaded identity, a PARTIAL set → throws (a half-configured server is a bug).
+    till: tryLoadTillConfig(env),
     // The dashboard's passkey RP ID + origin: loopback defaults in preproduction/dev, but REQUIRED in
     // production so a real deployment can never silently bind passkeys to `localhost` (see
     // `requiredInProduction` and the `DEFAULT_MANAGEMENT_*` note). Same `isUnset` empty-string rule

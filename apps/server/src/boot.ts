@@ -204,6 +204,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (config.tillAppDir !== undefined) {
     assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
   }
+  // TODO(slice-1b task 3): moves into the trading branch. `config.till` became optional this task
+  // (setup mode leaves it undefined), but the three trading-only consumers below still assume a
+  // provisioned till — the reconciler's `nodeId`, the webhook's `nodeId`, and the `readOrderFlow`
+  // merge that forms the full `TillConfig`. Task 3 branches boot on `config.till === undefined` and
+  // moves all three inside the branch where the till is proven present, at which point this guard is
+  // REMOVED. For now it narrows `config.till` once, here, so those sites typecheck at the task
+  // boundary. Behaviour is UNCHANGED: every code path today provides the five WAITRON_TILL_*_ID, so
+  // `config.till` is always defined and this throw never fires — a setup box reaching boot is exactly
+  // what task 3 introduces, and it will no longer reach this line.
+  if (config.till === undefined) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TILL_TENANT_ID",
+      reason: "till_config_missing",
+    });
+  }
   // The env this function was given, straight through: `loadKeyRing` owns the four
   // WAITRON_CREDENTIALS_KEY* names and their validation, and re-declaring them here would be a
   // second source of truth. (Not literally `process.env` — that is true only when `bin.ts` is the
