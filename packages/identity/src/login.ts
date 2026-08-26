@@ -14,6 +14,10 @@ export interface Session {
    * gate's looked-up `persons.role`. Convenience only: every server gate re-derives the role from the
    * session and re-checks the permission (`authorize`), so a tampered client value grants nothing. */
   role: PersonRoleValue;
+  /** The operator's preferred UI language (a supported-locale code), or `null` for no preference —
+   * the credential gate's looked-up `persons.locale`. Carried through so the till can render in the
+   * operator's language from the login response; `null` means fall back to the venue default. */
+  locale: string | null;
 }
 
 /** Opens a shift session for a person at a till after verifying their PIN. RLS-scoped: `personId`
@@ -25,7 +29,7 @@ export async function loginWithPin(
   // The shared credential gate (not_found → suspended → pin.invalid). Login does not GATE on the role,
   // but it surfaces it in the returned session (see {@link Session.role}). `authorize`'s override
   // branch runs the identical credential sequence.
-  const { role } = await verifyPersonCredential(tx, input.personId, input.pin);
+  const { role, locale } = await verifyPersonCredential(tx, input.personId, input.pin);
 
   const [row] = await tx
     .insert(sessions)
@@ -37,6 +41,7 @@ export async function loginWithPin(
     personId: input.personId,
     tillId: input.tillId,
     role,
+    locale,
   };
 }
 

@@ -1,7 +1,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { authorizeManager } from "./manager-login.js";
 import { hashPin } from "./verify-pin.js";
@@ -97,6 +97,22 @@ export async function setPassword(
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
     .where(eq(persons.id, input.personId));
+}
+
+/**
+ * Sets a person's preferred UI language. Validates against the supported set (throws
+ * `locale.unsupported`) so a bad code never reaches the row. Unlike every other mutator in this file
+ * there is NO `authorizeManager` gate: a person sets their OWN locale, so the server routes pass the
+ * SESSION's `personId` (never a body value), and RLS scopes the UPDATE to the current tenant. It
+ * takes `tenantId` for signature parity with the gated mutators and to name the tenant the write is
+ * scoped to, though the RLS predicate — not this argument — is what enforces it.
+ */
+export async function setPersonLocale(
+  tx: Transaction,
+  input: { tenantId: string; personId: string; locale: string },
+): Promise<void> {
+  const locale = assertSupportedLocale(input.locale);
+  await tx.update(persons).set({ locale }).where(eq(persons.id, input.personId));
 }
 
 /** Suspends a person: keeps the row (and its history) while refusing login. Gated on

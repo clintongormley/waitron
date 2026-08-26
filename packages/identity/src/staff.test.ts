@@ -96,6 +96,7 @@ describe("createPerson", () => {
       personId: id,
       tillId,
       role: "supervisor",
+      locale: null,
     });
   });
 
@@ -208,6 +209,7 @@ describe("resetPin", () => {
       personId: targetId,
       tillId,
       role: "staff",
+      locale: null,
     });
 
     const oldPin = await codeOf(() =>
@@ -325,6 +327,7 @@ describe("suspendPerson / reactivatePerson", () => {
       personId: targetId,
       tillId,
       role: "staff",
+      locale: null,
     });
   });
 

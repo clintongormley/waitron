@@ -38,8 +38,16 @@ describe("loginWithPin", () => {
     // toEqual, not toMatchObject: every field of Session is pinned, so an unlisted extra key would
     // fail rather than be silently ignored (CLAUDE.md §4). id is a fresh uuid, hence expect.any.
     // `role` is the person's own role (seedPerson's default is "staff"), surfaced so the till can
-    // gate its manager-only affordances client-side (the server still re-checks every gate).
-    expect(session).toEqual({ id: expect.any(String), tenantId, personId, tillId, role: "staff" });
+    // gate its manager-only affordances client-side (the server still re-checks every gate). `locale`
+    // is the person's preferred UI language, null for a seedPerson with no preference set.
+    expect(session).toEqual({
+      id: expect.any(String),
+      tenantId,
+      personId,
+      tillId,
+      role: "staff",
+      locale: null,
+    });
 
     const rows = await suite.db.execute<{ ended_at: string | null }>(
       sql`select ended_at from sessions where id = ${session.id}`,
@@ -58,6 +66,20 @@ describe("loginWithPin", () => {
     );
 
     expect(session.role).toBe("manager");
+  });
+
+  it("carries the person's set locale in the session (not just the null default)", async () => {
+    // Proves `locale` is the LOOKED-UP persons.locale threaded through verifyPersonCredential, not a
+    // hardcoded null — a mutant dropping the field (or returning null) fails here.
+    const tillId = await seedTill(suite.db, tenantId);
+    const personId = await seedPerson(suite.db, tenantId);
+    await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
+
+    const session = await run((tx) =>
+      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+    );
+
+    expect(session.locale).toBe("es-ES");
   });
 
   it("throws pin.invalid when the PIN does not verify", async () => {
