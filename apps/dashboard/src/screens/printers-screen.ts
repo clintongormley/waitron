@@ -18,6 +18,7 @@ import type {
   PrintTransport,
   Printer,
   PrinterInput,
+  PrinterPatch,
 } from "../api/client.js";
 
 /** A printer the row editor holds in local, editable state — a defensive copy of the loaded {@link Printer}
@@ -346,20 +347,27 @@ export class PrintersScreen extends LitElement {
     field(event.detail.value);
   }
 
-  /** Create a printer from the new-printer form, then reload. A blank name is a no-op. Only non-empty
-   * connection fields are sent — the server owns the per-transport required-field check
-   * (`printer.invalid_config`), so the screen stays a thin sender. On success the form's name +
-   * connection fields reset; on rejection the `errorKey` banner shows and the form is left for a retry. */
+  /** Create a printer from the new-printer form, then reload. A blank name is a no-op. Only the
+   * connection fields relevant to the chosen TRANSPORT are sent, and only when non-empty — the server
+   * owns the per-transport required-field check (`printer.invalid_config`), so the screen stays a thin
+   * sender, but the DB CHECK asserts only that the required fields are PRESENT (it does not forbid
+   * extras), so a stray field from another transport would persist as meaningless config. The create
+   * form only ever offers `usb`/`network_tcp` (`cloud_poll` is dropped from the dropdown), so `pollId`
+   * is never sent here. On success the form's name + connection fields reset; on rejection the
+   * `errorKey` banner shows and the form is left for a retry. */
   async #createPrinter(): Promise<void> {
     this.errorKey = null; // also dismisses a prior banner on the blank-name early return below
     const name = this.newPrinterName.trim();
     if (name === "") return;
     const input: PrinterInput = { name, transport: this.newTransport };
     if (this.newAgentId !== "") input.agentId = this.newAgentId;
-    if (this.newHost.trim() !== "") input.host = this.newHost.trim();
-    if (this.newPort.trim() !== "") input.port = Number(this.newPort);
-    if (this.newUsbPath.trim() !== "") input.usbPath = this.newUsbPath.trim();
-    if (this.newPollId.trim() !== "") input.pollId = this.newPollId.trim();
+    if (this.newTransport === "usb") {
+      if (this.newUsbPath.trim() !== "") input.usbPath = this.newUsbPath.trim();
+    } else {
+      // network_tcp — the only other transport the create dropdown offers (never cloud_poll).
+      if (this.newHost.trim() !== "") input.host = this.newHost.trim();
+      if (this.newPort.trim() !== "") input.port = Number(this.newPort);
+    }
     await this.#mutate(async () => {
       await this.api.createPrinter(input);
       this.newPrinterName = "";
@@ -392,23 +400,30 @@ export class PrintersScreen extends LitElement {
 
   /** Persist the CURRENT values of the printer row `id` holds, then reload. Reads the row from state at
    * click time (not a captured render closure), so an edit made just before the click is what persists.
-   * An empty connection field is sent as a clearing `null`; the port string is parsed to an int. A
-   * vanished row is a no-op. A rejection becomes the `errorKey` banner. */
+   * Only the connection fields relevant to the row's own TRANSPORT are sent (the DB CHECK asserts the
+   * required fields are present but does not forbid extras, so a stray field from another transport
+   * would persist as meaningless config); within that transport an empty field is sent as a clearing
+   * `null`, and the port string is parsed to an int. A vanished row is a no-op. A rejection becomes the
+   * `errorKey` banner. */
   async #savePrinter(id: string): Promise<void> {
     this.errorKey = null; // also dismisses a prior banner on the vanished-row early return below
     const row = this.printers.find((p) => p.id === id);
     if (row === undefined) return;
-    await this.#mutate(() =>
-      this.api.updatePrinter(id, {
-        name: row.name,
-        host: row.host === "" ? null : row.host,
-        port: row.port.trim() === "" ? null : Number(row.port),
-        usbPath: row.usbPath === "" ? null : row.usbPath,
-        pollId: row.pollId === "" ? null : row.pollId,
-        ticketScope: row.ticketScope,
-        active: row.active,
-      }),
-    );
+    const patch: PrinterPatch = {
+      name: row.name,
+      ticketScope: row.ticketScope,
+      active: row.active,
+    };
+    if (row.transport === "usb") {
+      patch.usbPath = row.usbPath === "" ? null : row.usbPath;
+    } else if (row.transport === "network_tcp") {
+      patch.host = row.host === "" ? null : row.host;
+      patch.port = row.port.trim() === "" ? null : Number(row.port);
+    } else {
+      // cloud_poll — the only remaining transport.
+      patch.pollId = row.pollId === "" ? null : row.pollId;
+    }
+    await this.#mutate(() => this.api.updatePrinter(id, patch));
   }
 
   /** Soft-delete (deactivate) the printer `id` holds, then reload. A rejection becomes the `errorKey`

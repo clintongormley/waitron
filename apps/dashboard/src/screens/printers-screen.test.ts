@@ -346,7 +346,7 @@ describe("printers-screen", () => {
 
   // ── Printers: create ─────────────────────────────────────────────────────────────────────────────
 
-  it("creates a network_tcp printer with the picked agent, host and port, then reloads", async () => {
+  it("creates a network_tcp printer with only host+port, never usbPath or pollId, then reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -357,6 +357,12 @@ describe("printers-screen", () => {
     pickSelect(el, "[data-test=new-agent]", "a1");
     typeField(el, "[data-test=new-host]", "10.0.0.50");
     typeField(el, "[data-test=new-port]", "9200");
+    // The form renders every transport's connection inputs. Type into the OTHER transports' fields
+    // too: the fix must scope the payload to network_tcp and NOT forward a stray usb_path / poll_id
+    // (the Copilot finding — the DB CHECK asserts required fields are present but does not forbid
+    // extras, so a stray field would persist as meaningless config). Pre-fix these WOULD have been sent.
+    typeField(el, "[data-test=new-usb-path]", "/dev/usb/lp0");
+    typeField(el, "[data-test=new-poll-id]", "poll-stray");
     await el.updateComplete;
     q(el, "[data-test=add-printer]")!.click();
     await flush(el);
@@ -368,10 +374,13 @@ describe("printers-screen", () => {
       host: "10.0.0.50",
       port: 9200,
     });
+    const arg = vi.mocked(api.createPrinter).mock.calls[0]![0];
+    expect(arg).not.toHaveProperty("usbPath");
+    expect(arg).not.toHaveProperty("pollId");
     expect(api.listPrinters).toHaveBeenCalledTimes(2);
   });
 
-  it("creates a usb printer with an agent and a device path", async () => {
+  it("creates a usb printer with only usbPath, never host/port/pollId", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -381,6 +390,10 @@ describe("printers-screen", () => {
     await el.updateComplete;
     pickSelect(el, "[data-test=new-agent]", "a1");
     typeField(el, "[data-test=new-usb-path]", "/dev/usb/lp0");
+    // Stray fields the form still renders — must NOT be forwarded onto a usb printer (see above).
+    typeField(el, "[data-test=new-host]", "10.0.0.99");
+    typeField(el, "[data-test=new-port]", "9100");
+    typeField(el, "[data-test=new-poll-id]", "poll-stray");
     await el.updateComplete;
     q(el, "[data-test=add-printer]")!.click();
     await flush(el);
@@ -391,6 +404,10 @@ describe("printers-screen", () => {
       agentId: "a1",
       usbPath: "/dev/usb/lp0",
     });
+    const arg = vi.mocked(api.createPrinter).mock.calls[0]![0];
+    expect(arg).not.toHaveProperty("host");
+    expect(arg).not.toHaveProperty("port");
+    expect(arg).not.toHaveProperty("pollId");
   });
 
   it("offers only network_tcp and usb in the create-form transport selector (no cloud_poll)", async () => {
@@ -445,14 +462,19 @@ describe("printers-screen", () => {
 
   // ── Printers: edit / deactivate / test-print ─────────────────────────────────────────────────────
 
-  it("saves an edited printer's current field values and reloads", async () => {
+  it("saves an edited network_tcp printer's host+port (never usbPath/pollId) and reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
+    // p1 is network_tcp. Type into the usb-path and poll-id inputs the row still renders — the fix
+    // must scope the PATCH to network_tcp and NOT forward them (the Copilot finding). Pre-fix both
+    // usbPath and pollId WOULD have been included in the payload.
     typeField(el, "[data-test=printer-name-p1]", "Cocina 2");
     typeField(el, "[data-test=printer-host-p1]", "10.0.0.20");
     typeField(el, "[data-test=printer-port-p1]", "9300");
+    typeField(el, "[data-test=printer-usb-path-p1]", "/dev/usb/lp1");
+    typeField(el, "[data-test=printer-poll-id-p1]", "poll-x");
     toggleSwitch(el, "[data-test=printer-ticket-scope-p1]", true); // → "order"
     await el.updateComplete;
     q(el, "[data-test=save-printer-p1]")!.click();
@@ -462,37 +484,103 @@ describe("printers-screen", () => {
       name: "Cocina 2",
       host: "10.0.0.20",
       port: 9300,
-      usbPath: null,
-      pollId: null,
       ticketScope: "order",
       active: true,
     });
+    const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("usbPath");
+    expect(patch).not.toHaveProperty("pollId");
     expect(api.listPrinters).toHaveBeenCalledTimes(2);
   });
 
-  it("saves edited usb-path and poll-id connection fields as non-null values", async () => {
+  it("clears an edited network_tcp printer's emptied host+port to null", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    typeField(el, "[data-test=printer-usb-path-p1]", "/dev/usb/lp1");
-    typeField(el, "[data-test=printer-poll-id-p1]", "poll-x");
+    typeField(el, "[data-test=printer-host-p1]", "");
+    typeField(el, "[data-test=printer-port-p1]", "");
     await el.updateComplete;
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
 
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
       name: "Cocina",
-      host: "10.0.0.9",
-      port: 9100,
-      usbPath: "/dev/usb/lp1",
-      pollId: "poll-x",
+      host: null,
+      port: null,
       ticketScope: "station",
       active: true,
     });
   });
 
-  it("reactivates a deactivated printer and clears its empty connection fields to null", async () => {
+  it("saves an edited usb printer's usbPath (never host/port/pollId)", async () => {
+    const usb: Printer = {
+      id: "p3",
+      name: "USB",
+      transport: "usb",
+      agentId: "a1",
+      host: null,
+      port: null,
+      usbPath: "/dev/usb/lp0",
+      pollId: null,
+      ticketScope: "station",
+      active: true,
+    };
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([usb]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    typeField(el, "[data-test=printer-usb-path-p3]", "/dev/usb/lp9");
+    // Stray fields the row renders — must NOT be forwarded onto a usb printer's PATCH.
+    typeField(el, "[data-test=printer-host-p3]", "10.0.0.1");
+    typeField(el, "[data-test=printer-poll-id-p3]", "poll-y");
+    await el.updateComplete;
+    q(el, "[data-test=save-printer-p3]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).toHaveBeenCalledWith("p3", {
+      name: "USB",
+      usbPath: "/dev/usb/lp9",
+      ticketScope: "station",
+      active: true,
+    });
+    const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("host");
+    expect(patch).not.toHaveProperty("port");
+    expect(patch).not.toHaveProperty("pollId");
+  });
+
+  it("clears an edited usb printer's emptied usbPath to null", async () => {
+    const usb: Printer = {
+      id: "p3",
+      name: "USB",
+      transport: "usb",
+      agentId: "a1",
+      host: null,
+      port: null,
+      usbPath: "/dev/usb/lp0",
+      pollId: null,
+      ticketScope: "station",
+      active: true,
+    };
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([usb]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    typeField(el, "[data-test=printer-usb-path-p3]", "");
+    await el.updateComplete;
+    q(el, "[data-test=save-printer-p3]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).toHaveBeenCalledWith("p3", {
+      name: "USB",
+      usbPath: null,
+      ticketScope: "station",
+      active: true,
+    });
+  });
+
+  it("reactivates a cloud_poll printer sending only its pollId (never host/port/usbPath)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -505,12 +593,31 @@ describe("printers-screen", () => {
 
     expect(api.updatePrinter).toHaveBeenCalledWith("p2", {
       name: "Nube",
-      host: null,
-      port: null,
-      usbPath: null,
       pollId: "poll-1",
       ticketScope: "station",
       active: true,
+    });
+    const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("host");
+    expect(patch).not.toHaveProperty("port");
+    expect(patch).not.toHaveProperty("usbPath");
+  });
+
+  it("clears an edited cloud_poll printer's emptied pollId to null", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    typeField(el, "[data-test=printer-poll-id-p2]", "");
+    await el.updateComplete;
+    q(el, "[data-test=save-printer-p2]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).toHaveBeenCalledWith("p2", {
+      name: "Nube",
+      pollId: null,
+      ticketScope: "station",
+      active: false,
     });
   });
 
