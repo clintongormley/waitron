@@ -2,9 +2,62 @@
 // throws them — the reachability convention every code-throwing file in the tree follows, guarded
 // tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
 import "./errors.js";
+import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+
+/** The pg SQLSTATEs the printer writes may raise once the app-layer required-field pre-check passes,
+ * so a driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
+ * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
+ * behind `REQUIRED_FIELDS`); `23503` is the composite `(tenant_id, agent_id) → print_agents` FK (a
+ * printer bound to an agent id that names no agent in this tenant). Both are walked down the cause
+ * chain because Drizzle wraps every failed query in a `DrizzleQueryError` whose own `.code` is
+ * undefined — the SQLSTATE lives on `.cause.code` (node-postgres), or one level deeper under PGlite —
+ * exactly as `@waitron/db`'s `isUniqueViolation` does for `23505`. */
+const CHECK_VIOLATION = "23514";
+const FOREIGN_KEY_VIOLATION = "23503";
+
+/** Is this (or anything it wraps) the given pg SQLSTATE? Walks the cause chain (Drizzle wraps the real
+ * error; PGlite nests it one level deeper still), stopping at a fixed depth so a self-referential
+ * `cause` cannot spin forever — the `isUniqueViolation` shape, generalised to one code. Exported for a
+ * direct unit test (printers.error.test.ts), NOT from the package barrel: it is an internal driver-error
+ * detail, not public API. */
+export function isPgError(error: unknown, sqlstate: string): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    if (
+      typeof current === "object" &&
+      "code" in current &&
+      (current as { code?: unknown }).code === sqlstate
+    ) {
+      return true;
+    }
+    const next = (current as { cause?: unknown }).cause;
+    if (next === current) return false;
+    current = next;
+  }
+  return false;
+}
+
+/**
+ * Translate a printer write's driver error into a friendly domain code, or rethrow. The composite
+ * `(tenant_id, agent_id)` FK violation (a printer pointed at an agent id that does not exist in this
+ * tenant) becomes `agent.not_found` (the Task-4 forward note); the transport-fields CHECK violation
+ * becomes `printer.invalid_config`. Anything else propagates unchanged (the route boundary opaques it
+ * to a 500). `agentId` is echoed on `agent.not_found` for the operator; a CHECK violation carries the
+ * stable `transport_fields` reason (the specific missing field is unknowable from the SQLSTATE alone —
+ * `createPrinter`'s pre-check names it precisely on the common path).
+ */
+function translatePrinterWriteError(error: unknown, agentId: string | undefined): never {
+  if (agentId !== undefined && isPgError(error, FOREIGN_KEY_VIOLATION)) {
+    throw new AppError("agent.not_found", { id: agentId });
+  }
+  if (isPgError(error, CHECK_VIOLATION)) {
+    throw new AppError("printer.invalid_config", { reason: "transport_fields" });
+  }
+  throw error;
+}
 
 /**
  * The tenant + venue scope every central printing verb (`createPrinter`, `enqueuePrintJob`) runs
@@ -76,21 +129,159 @@ export async function createPrinter(
     });
   }
 
-  const [row] = await tx
-    .insert(printers)
-    .values({
-      tenantId: cfg.tenantId,
-      locationId: cfg.locationId,
-      name: input.name,
-      transport: input.transport,
-      // Undefined connection fields are OMITTED by drizzle, so each falls to its column default —
-      // NULL for the transport-specific columns, 9100 for `port` (schema/printers.ts).
-      agentId: input.agentId,
-      host: input.host,
-      port: input.port,
-      usbPath: input.usbPath,
-      pollId: input.pollId,
-    })
+  try {
+    const [row] = await tx
+      .insert(printers)
+      .values({
+        tenantId: cfg.tenantId,
+        locationId: cfg.locationId,
+        name: input.name,
+        transport: input.transport,
+        // Undefined connection fields are OMITTED by drizzle, so each falls to its column default —
+        // NULL for the transport-specific columns, 9100 for `port` (schema/printers.ts).
+        agentId: input.agentId,
+        host: input.host,
+        port: input.port,
+        usbPath: input.usbPath,
+        pollId: input.pollId,
+      })
+      .returning({ id: printers.id });
+    return { id: row!.id };
+  } catch (error) {
+    // A bad `agent_id` (an agent that does not exist in this tenant) raises the composite FK's 23503,
+    // mapped to a friendly `agent.not_found` rather than an opaque 500 (the Task-4 forward note).
+    return translatePrinterWriteError(error, input.agentId);
+  }
+}
+
+/**
+ * The fields a `printer.manage` operator may edit on an existing printer (design §6, the Impresoras
+ * config form). Every field is OPTIONAL — a PATCH touches only what it names — and the connection
+ * fields plus `agentId` accept an explicit `null` to CLEAR them (e.g. moving a printer off an agent),
+ * which `undefined` (absent) does not. `transport`/`ticketScope`/`active` round out the editable
+ * config. The transport-fields CHECK and the composite agent FK remain the DB INTEGRITY backstop, so a
+ * partial edit that leaves a transport short of a required field surfaces as `printer.invalid_config`
+ * (23514) and a bad agent as `agent.not_found` (23503), never a raw constraint 500.
+ */
+export interface UpdatePrinterInput {
+  name?: string;
+  transport?: PrintTransport;
+  agentId?: string | null;
+  host?: string | null;
+  port?: number | null;
+  usbPath?: string | null;
+  pollId?: string | null;
+  ticketScope?: "station" | "order";
+  active?: boolean;
+}
+
+/** One printer's config row as the management surface lists/reads it (design §6). */
+export interface PrinterRow {
+  id: string;
+  name: string;
+  transport: PrintTransport;
+  agentId: string | null;
+  host: string | null;
+  port: number | null;
+  usbPath: string | null;
+  pollId: string | null;
+  ticketScope: "station" | "order";
+  active: boolean;
+}
+
+/**
+ * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written — an
+ * absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's screen
+ * decides what changes. `0` rows updated (an id in no visible row, RLS-hidden or unknown) →
+ * `printer.not_found`. The transport-fields CHECK / agent FK are the DB backstop, translated to
+ * `printer.invalid_config` / `agent.not_found` (`createPrinter`'s reasoning, for the update path).
+ * The tenant predicate is belt-and-braces beside the tx's RLS scoping; all values bind as `$n`.
+ */
+export async function updatePrinter(
+  tx: Transaction,
+  cfg: PrintConfig,
+  id: string,
+  patch: UpdatePrinterInput,
+): Promise<void> {
+  // Build the SET from only the keys the caller supplied, so an absent field is untouched and an
+  // explicit `null` is written. An empty patch is a no-op edit (0 changes) that still 404s a missing id.
+  const set: Record<string, unknown> = {};
+  if (patch.name !== undefined) set.name = patch.name;
+  if (patch.transport !== undefined) set.transport = patch.transport;
+  if (patch.agentId !== undefined) set.agentId = patch.agentId;
+  if (patch.host !== undefined) set.host = patch.host;
+  if (patch.port !== undefined) set.port = patch.port;
+  if (patch.usbPath !== undefined) set.usbPath = patch.usbPath;
+  if (patch.pollId !== undefined) set.pollId = patch.pollId;
+  if (patch.ticketScope !== undefined) set.ticketScope = patch.ticketScope;
+  if (patch.active !== undefined) set.active = patch.active;
+
+  // An empty patch (no field named) is a legitimate no-op — but drizzle's `.set({})` THROWS ("No
+  // values to set"), so short-circuit to an existence check: a missing id is still a clean 404, a
+  // present one a no-op. `printers` carries no `updated_at`, so there is nothing an empty edit would
+  // touch anyway.
+  if (Object.keys(set).length === 0) {
+    const [exists] = await tx
+      .select({ id: printers.id })
+      .from(printers)
+      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)));
+    if (exists === undefined) throw new AppError("printer.not_found", { id });
+    return;
+  }
+
+  let updated: { id: string }[];
+  try {
+    updated = await tx
+      .update(printers)
+      .set(set)
+      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
+      .returning({ id: printers.id });
+  } catch (error) {
+    return translatePrinterWriteError(error, patch.agentId ?? undefined);
+  }
+  if (updated.length === 0) throw new AppError("printer.not_found", { id });
+}
+
+/**
+ * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a `print_jobs`
+ * history references it and `app_user` holds no DELETE on `printers`. `0` rows (unknown or RLS-hidden
+ * id) → `printer.not_found`. The tenant predicate is belt-and-braces beside RLS; values bind as `$n`.
+ */
+export async function deactivatePrinter(
+  tx: Transaction,
+  cfg: PrintConfig,
+  id: string,
+): Promise<void> {
+  const updated = await tx
+    .update(printers)
+    .set({ active: false })
+    .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
     .returning({ id: printers.id });
-  return { id: row!.id };
+  if (updated.length === 0) throw new AppError("printer.not_found", { id });
+}
+
+/**
+ * List this tenant's printers by name (design §6, the Impresoras surface). `printers` carries no
+ * created_at, so the stable order for a config list is `name` rather than an insertion proxy. No
+ * explicit tenant filter is needed for isolation — the tx's RLS scoping confines the read — but the
+ * tenant predicate is kept belt-and-braces beside it, the `authenticateAgent`/`enqueuePrintJob` shape.
+ * Returns both active and deactivated printers so the surface can show and reactivate them.
+ */
+export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
+  return tx
+    .select({
+      id: printers.id,
+      name: printers.name,
+      transport: printers.transport,
+      agentId: printers.agentId,
+      host: printers.host,
+      port: printers.port,
+      usbPath: printers.usbPath,
+      pollId: printers.pollId,
+      ticketScope: printers.ticketScope,
+      active: printers.active,
+    })
+    .from(printers)
+    .where(eq(printers.tenantId, cfg.tenantId))
+    .orderBy(printers.name);
 }

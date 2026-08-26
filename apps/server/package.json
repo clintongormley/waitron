@@ -42,6 +42,7 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
+    "@waitron/printing": "workspace:*",
     "@waitron/provisioning": "workspace:*",
     "@waitron/purchasing": "workspace:*",
     "@waitron/recipes": "workspace:*",

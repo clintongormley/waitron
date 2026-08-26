@@ -1,5 +1,4 @@
-import { eq, sql } from "drizzle-orm";
-import { printJobs } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "./printers.js";
 import type { PrinterTarget, Transport } from "./transport.js";
@@ -22,7 +21,7 @@ import type { PrinterTarget, Transport } from "./transport.js";
  */
 
 /** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
-const PULL_BATCH_LIMIT = 50;
+export const PULL_BATCH_LIMIT = 50;
 
 /**
  * How many delivery attempts a job gets before it stops being retried (design §3c "bounded"). A
@@ -57,7 +56,7 @@ export interface AgentRunResult {
 /** One claimed job plus its printer's connection facts, read via the RETURNING join. A `type` (not an
  * `interface`) so it satisfies `tx.execute`'s `Record<string, unknown>` row constraint — an interface
  * is open and TS will not give it an implicit index signature (the drain.ts `DueRow` precedent). */
-type ClaimedJob = {
+export type ClaimedJob = {
   id: string;
   printer_id: string;
   payload: Buffer;
@@ -67,19 +66,33 @@ type ClaimedJob = {
   usb_path: string | null;
 };
 
-export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
-  const { tx, cfg, agentId, transport } = deps;
+/** The outcome an agent reports for one job (design §3c step 3). `done` → delivered; `failed` carries
+ * the transport's error message, which the report records into `last_error` and bumps `attempts`. */
+export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
 
-  // 1. PULL — LOCK a batch of this agent's due jobs, then flip them to `printing`.
-  //
-  // Two statements in one transaction, deliberately: the locking SELECT is the claim, and keeping the
-  // status filter OUT of the follow-up UPDATE's predicate is what makes `for update … skip locked`
-  // UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
-  // both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
-  // exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated;
-  // the join to `printers` on `(tenant_id, id)` is the authorization scope — only THIS agent's
-  // printers' jobs. A `failed` job under the attempt cap is re-claimed here (the retry); at the cap it
-  // is filtered out (the bound). `for update of j` locks only the `print_jobs` rows, not `printers`.
+/**
+ * PULL (design §3c step 1) — atomically CLAIM a batch of this agent's due jobs, flipping them
+ * `queued`/`failed`→`printing`, and RETURN each with its printer's connection facts. Extracted from
+ * `runAgentOnce` (Controller Ruling 6) so the SERVER path can claim-and-COMMIT within one HTTP request
+ * (the route's `withTenant` transaction is the commit boundary) and then return the claimed jobs to a
+ * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
+ * mode) still calls this, then pushes+reports in the SAME transaction.
+ *
+ * Two statements in one transaction, deliberately: the locking SELECT is the claim, and keeping the
+ * status filter OUT of the follow-up UPDATE's predicate is what makes `for update … skip locked`
+ * UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
+ * both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
+ * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated; the
+ * join to `printers` on `(tenant_id, id)` is the authorization scope — only THIS agent's printers'
+ * jobs (a cross-agent pull claims nothing). A `failed` job under the attempt cap is re-claimed here
+ * (the retry); at the cap it is filtered out (the bound). `for update of j` locks only the
+ * `print_jobs` rows, not `printers`.
+ */
+export async function claimPrintJobs(
+  tx: Transaction,
+  cfg: { tenantId: string },
+  agentId: string,
+): Promise<ClaimedJob[]> {
   const picked = await tx.execute<{ id: string }>(sql`
     select j.id from print_jobs j
     join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
@@ -90,7 +103,7 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
     limit ${PULL_BATCH_LIMIT}
     for update of j skip locked
   `);
-  if (picked.rows.length === 0) return { claimed: 0, delivered: 0, failed: 0 };
+  if (picked.rows.length === 0) return [];
   const ids = picked.rows.map((r) => r.id);
 
   // Mark the locked rows `printing` and return each with its printer's connection facts (the RETURNING
@@ -107,13 +120,67 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
     returning print_jobs.id, print_jobs.printer_id, print_jobs.payload,
               p.transport, p.host, p.port, p.usb_path
   `);
+  return claimed.rows;
+}
+
+/**
+ * REPORT (design §3c step 3) — record one job's delivery outcome, AGENT-SCOPED. Extracted from
+ * `runAgentOnce` (Controller Ruling 6) so the SERVER path can report in a SEPARATE request from the
+ * claim (the remote agent pushes the bytes, then POSTs the result). The `from printers p … and
+ * p.agent_id = ${agentId}` join is the AUTHORIZATION scope: an agent can only report on jobs served by
+ * its OWN printers, so a cross-agent report mutates nothing (`{ updated: false }`) — proven by deletion
+ * of that predicate. `done` sets `delivered_at`; `failed` records `last_error` and bumps `attempts`
+ * (the bounded-retry counter). All values bind as `$n`, never concatenated.
+ *
+ * Returns whether a row matched. The server route treats a no-match as an idempotent no-op (a job that
+ * is not this agent's, already terminal, or unknown) rather than an oracle, so it never discloses which
+ * job ids exist.
+ */
+export async function reportPrintJob(
+  tx: Transaction,
+  cfg: { tenantId: string },
+  input: { agentId: string; jobId: string; outcome: JobOutcome },
+): Promise<{ updated: boolean }> {
+  const { agentId, jobId, outcome } = input;
+  const result =
+    outcome.status === "done"
+      ? await tx.execute<{ id: string }>(sql`
+          update print_jobs set status = 'done', delivered_at = now()
+          from printers p
+          where print_jobs.tenant_id = p.tenant_id
+            and print_jobs.printer_id = p.id
+            and print_jobs.tenant_id = ${cfg.tenantId}
+            and print_jobs.id = ${jobId}
+            and p.agent_id = ${agentId}
+          returning print_jobs.id`)
+      : await tx.execute<{ id: string }>(sql`
+          update print_jobs
+             set status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1
+          from printers p
+          where print_jobs.tenant_id = p.tenant_id
+            and print_jobs.printer_id = p.id
+            and print_jobs.tenant_id = ${cfg.tenantId}
+            and print_jobs.id = ${jobId}
+            and p.agent_id = ${agentId}
+          returning print_jobs.id`);
+  return { updated: result.rows.length > 0 };
+}
+
+export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
+  const { tx, cfg, agentId, transport } = deps;
+
+  // 1. PULL — claim a batch of this agent's due jobs (the locking `claimPrintJobs`, flipping them to
+  //    `printing`), returning each with its printer's connection facts so the push needs no second read.
+  const claimed = await claimPrintJobs(tx, cfg, agentId);
 
   // 2/3. PUSH each job, then REPORT its outcome. Per-job try/catch ISOLATES a down/erroring printer:
   //      its failure marks only that job `failed` and the loop moves on, so one dead printer never
-  //      blocks another printer's jobs in the same batch (design §3c).
+  //      blocks another printer's jobs in the same batch (design §3c). Both the claim above and each
+  //      report below run in the SAME transaction here (local mode); the server path splits them across
+  //      two HTTP requests, calling the identical `claimPrintJobs`/`reportPrintJob` pieces.
   let delivered = 0;
   let failed = 0;
-  for (const job of claimed.rows) {
+  for (const job of claimed) {
     const target: PrinterTarget = {
       id: job.printer_id,
       transport: job.transport,
@@ -126,19 +193,17 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       // interface deals in Uint8Array and the fake sink's capture compares byte-for-byte against an
       // `esc().bytes()` (also a Uint8Array), free of any Buffer-vs-Uint8Array identity mismatch.
       await transport.send(target, new Uint8Array(job.payload));
-      await tx
-        .update(printJobs)
-        .set({ status: "done", deliveredAt: sql`now()` })
-        .where(eq(printJobs.id, job.id));
+      await reportPrintJob(tx, cfg, { agentId, jobId: job.id, outcome: { status: "done" } });
       delivered += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await tx
-        .update(printJobs)
-        .set({ status: "failed", lastError: message, attempts: sql`${printJobs.attempts} + 1` })
-        .where(eq(printJobs.id, job.id));
+      await reportPrintJob(tx, cfg, {
+        agentId,
+        jobId: job.id,
+        outcome: { status: "failed", error: message },
+      });
       failed += 1;
     }
   }
-  return { claimed: claimed.rows.length, delivered, failed };
+  return { claimed: claimed.length, delivered, failed };
 }

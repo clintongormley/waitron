@@ -117,6 +117,9 @@ importers:
       '@waitron/payments-stripe':
         specifier: workspace:*
         version: link:../../packages/payments-stripe
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../../packages/printing
       '@waitron/provisioning':
         specifier: workspace:*
         version: link:../../packages/provisioning

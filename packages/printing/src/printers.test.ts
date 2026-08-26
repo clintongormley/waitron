@@ -4,8 +4,15 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { createPrinter } from "./printers.js";
-import type { PrintConfig } from "./printers.js";
+import { randomUUID } from "node:crypto";
+import {
+  createPrinter,
+  deactivatePrinter,
+  isPgError,
+  listPrinters,
+  updatePrinter,
+} from "./printers.js";
+import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
@@ -54,6 +61,46 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
   } catch (error) {
     return (error as { code?: string }).code;
   }
+}
+
+/** The raw rejected value (or undefined if `fn` resolved), for asserting an error propagated UNCHANGED
+ * (the translate-or-rethrow fallthrough) rather than being translated to a domain code. */
+async function errorOf(fn: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await fn();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+/** Create a network_tcp printer bound to `agentId` and return its id. */
+async function seedPrinter(cfg: PrintConfig, agentId: string, name = "Cocina"): Promise<string> {
+  const { id } = await asTx(cfg, (tx) =>
+    createPrinter(tx, cfg, { name, transport: "network_tcp", agentId, host: "10.0.0.9" }),
+  );
+  return id;
+}
+
+async function fullRow(printerId: string): Promise<{
+  name: string;
+  host: string | null;
+  usb_path: string | null;
+  ticket_scope: string;
+  active: boolean;
+  agent_id: string | null;
+}> {
+  const { rows } = await suite.db.execute<{
+    name: string;
+    host: string | null;
+    usb_path: string | null;
+    ticket_scope: string;
+    active: boolean;
+    agent_id: string | null;
+  }>(
+    sql`select name, host, usb_path, ticket_scope, active, agent_id from printers where id = ${printerId}`,
+  );
+  return rows[0]!;
 }
 
 describe("createPrinter", () => {
@@ -126,5 +173,189 @@ describe("createPrinter", () => {
         asTx(cfg, (tx) => createPrinter(tx, cfg, { name: "Bad", transport: "cloud_poll" })),
       ),
     ).toBe("printer.invalid_config");
+  });
+
+  it("maps a bind to an unknown agent (the composite FK, 23503) → agent.not_found", async () => {
+    // The pre-check passes (agentId + host both PRESENT), so the write reaches the DB, where the
+    // (tenant_id, agent_id) → print_agents composite FK has no matching row → 23503, translated friendly.
+    const cfg = await setup();
+    const ghost = randomUUID();
+    expect(
+      await codeOf(() =>
+        asTx(cfg, (tx) =>
+          createPrinter(tx, cfg, {
+            name: "Ghost",
+            transport: "network_tcp",
+            agentId: ghost,
+            host: "10.0.0.1",
+          }),
+        ),
+      ),
+    ).toBe("agent.not_found");
+  });
+});
+
+describe("updatePrinter", () => {
+  it("applies a partial edit (only the named fields change) and 204-equivalents (resolves)", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    // Every editable field present at once — so each `if (patch.X !== undefined)` set-branch is
+    // exercised (port/pollId/active included). The extra pollId on a network_tcp row is allowed: the
+    // CHECK asserts the transport's REQUIRED fields are present, not that the others are absent.
+    await asTx(cfg, (tx) =>
+      updatePrinter(tx, cfg, id, {
+        name: "Cocina 2",
+        host: "10.0.0.20",
+        port: 9200,
+        pollId: "poll-extra",
+        ticketScope: "order",
+        active: false,
+      }),
+    );
+    const row = await fullRow(id);
+    expect(row.name).toBe("Cocina 2");
+    expect(row.host).toBe("10.0.0.20");
+    expect(row.ticket_scope).toBe("order");
+    expect(row.active).toBe(false);
+    const { rows } = await suite.db.execute<{ port: number; poll_id: string | null }>(
+      sql`select port, poll_id from printers where id = ${id}`,
+    );
+    expect(rows[0]!.port).toBe(9200);
+    expect(rows[0]!.poll_id).toBe("poll-extra");
+  });
+
+  it("clears a nullable field with an explicit null (usb_path stays null; a re-bind to another agent)", async () => {
+    const cfg = await setup();
+    const first = await seedAgent(cfg);
+    const second = await suite.db.execute<{ id: string }>(sql`
+      insert into print_agents (tenant_id, location_id, name, token_hash)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Second', 'scrypt$fixture') returning id`);
+    const id = await seedPrinter(cfg, first);
+    await asTx(cfg, (tx) =>
+      updatePrinter(tx, cfg, id, { agentId: second.rows[0]!.id, usbPath: null }),
+    );
+    const row = await fullRow(id);
+    expect(row.agent_id).toBe(second.rows[0]!.id);
+    expect(row.usb_path).toBeNull();
+  });
+
+  it("an EMPTY patch is a no-op on an existing printer, and 404s a missing one", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    // Empty patch, existing id → resolves (no-op), never a drizzle "No values to set" throw.
+    await expect(asTx(cfg, (tx) => updatePrinter(tx, cfg, id, {}))).resolves.toBeUndefined();
+    // Empty patch, unknown id → printer.not_found.
+    expect(await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, cfg, randomUUID(), {})))).toBe(
+      "printer.not_found",
+    );
+  });
+
+  it("an unknown printer id → printer.not_found", async () => {
+    const cfg = await setup();
+    expect(
+      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, cfg, randomUUID(), { name: "X" }))),
+    ).toBe("printer.not_found");
+  });
+
+  it("a transport change that leaves a required field absent (CHECK 23514) → printer.invalid_config", async () => {
+    // network_tcp → usb needs usb_path; the row has host but no usb_path, so the transport-fields CHECK
+    // fails on the update. `agentId` is NOT in the patch (undefined), exercising the FK-branch skip.
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    expect(
+      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { transport: "usb" }))),
+    ).toBe("printer.invalid_config");
+  });
+
+  it("a re-bind to an unknown agent (FK 23503) → agent.not_found", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    const ghost = randomUUID();
+    expect(
+      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { agentId: ghost }))),
+    ).toBe("agent.not_found");
+  });
+
+  it("a driver error that is NEITHER the FK NOR the CHECK propagates UNCHANGED (the rethrow branch)", async () => {
+    // An invalid enum value reaches the `transport` column as 22P02 — not 23503/23514 — so
+    // translatePrinterWriteError must rethrow it rather than mistranslate it to a printing code.
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    const err = await errorOf(() =>
+      asTx(cfg, (tx) =>
+        updatePrinter(tx, cfg, id, { transport: "carrier_pigeon" as PrintTransport }),
+      ),
+    );
+    expect(err).toBeDefined();
+    // NOT translated: the two mapped domain codes must not appear on the rethrown error.
+    expect((err as { code?: string }).code).not.toBe("agent.not_found");
+    expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
+  });
+});
+
+describe("deactivatePrinter", () => {
+  it("flips active=false (never a delete) and 404s an unknown id", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const id = await seedPrinter(cfg, agentId);
+    await asTx(cfg, (tx) => deactivatePrinter(tx, cfg, id));
+    expect((await fullRow(id)).active).toBe(false);
+    // The row still exists (deactivated, not deleted).
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from printers where id = ${id}`,
+    );
+    expect(rows[0]!.n).toBe(1);
+    expect(await codeOf(() => asTx(cfg, (tx) => deactivatePrinter(tx, cfg, randomUUID())))).toBe(
+      "printer.not_found",
+    );
+  });
+});
+
+describe("listPrinters", () => {
+  it("lists this tenant's printers by name (active and deactivated)", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const bId = await seedPrinter(cfg, agentId, "Bravo");
+    const aId = await seedPrinter(cfg, agentId, "Alfa");
+    await asTx(cfg, (tx) => deactivatePrinter(tx, cfg, bId));
+    const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
+    const mine = rows.filter((r) => r.id === aId || r.id === bId);
+    expect(mine.map((r) => r.name)).toEqual(["Alfa", "Bravo"]); // sorted by name
+    expect(mine.find((r) => r.id === bId)!.active).toBe(false); // a deactivated printer still lists
+    expect(mine.find((r) => r.id === aId)!.port).toBe(9100);
+  });
+});
+
+describe("isPgError (internal SQLSTATE cause-walk)", () => {
+  it("recognises a bare driver error", () => {
+    expect(isPgError(Object.assign(new Error("fk"), { code: "23503" }), "23503")).toBe(true);
+  });
+
+  it("recognises a violation wrapped in a cause chain (drizzle wraps the real error)", () => {
+    const inner = Object.assign(new Error("fk"), { code: "23503" });
+    expect(
+      isPgError(new Error("outer", { cause: new Error("mid", { cause: inner }) }), "23503"),
+    ).toBe(true);
+  });
+
+  it("does not match a different SQLSTATE", () => {
+    expect(isPgError(Object.assign(new Error("unique"), { code: "23505" }), "23503")).toBe(false);
+  });
+
+  it("terminates on a self-referential cause chain", () => {
+    const looped: Error & { cause?: unknown } = new Error("loop");
+    looped.cause = looped;
+    expect(isPgError(looped, "23503")).toBe(false);
+  });
+
+  it("returns false for a non-object value", () => {
+    expect(isPgError(null, "23503")).toBe(false);
+    expect(isPgError(undefined, "23503")).toBe(false);
+    expect(isPgError("nope", "23503")).toBe(false);
   });
 });

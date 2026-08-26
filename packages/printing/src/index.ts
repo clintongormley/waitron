@@ -11,11 +11,23 @@ import "./errors.js";
 
 export { PAIRING_TTL_MS, authenticateAgent, enrolAgent, generateAgentCode } from "./agent.js";
 export type { PrintAgentConfig } from "./agent.js";
-export { createPrinter } from "./printers.js";
-export type { CreatePrinterInput, PrintConfig, PrintTransport } from "./printers.js";
+export { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
+export type {
+  CreatePrinterInput,
+  PrintConfig,
+  PrinterRow,
+  PrintTransport,
+  UpdatePrinterInput,
+} from "./printers.js";
 export { enqueuePrintJob } from "./outbox.js";
 export { EscBuilder, esc } from "./escpos.js";
 export { FakeSink, NetworkTcpTransport, RoutingTransport, UsbTransport } from "./transport.js";
 export type { PrinterTarget, Transport, TransportAdapters } from "./transport.js";
-export { MAX_DELIVERY_ATTEMPTS, runAgentOnce } from "./runtime.js";
-export type { AgentRunResult, AgentRuntimeDeps } from "./runtime.js";
+export {
+  MAX_DELIVERY_ATTEMPTS,
+  PULL_BATCH_LIMIT,
+  claimPrintJobs,
+  reportPrintJob,
+  runAgentOnce,
+} from "./runtime.js";
+export type { AgentRunResult, AgentRuntimeDeps, ClaimedJob, JobOutcome } from "./runtime.js";
