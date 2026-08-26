@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, resolve, extname, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { Context, Hono } from "hono";
+import { getMimeType } from "hono/utils/mime";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -26,31 +27,6 @@ const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 /** index.html and any non-hashed file carry a stable URL whose CONTENTS change on each deploy, so they
  * must be revalidated — otherwise a browser pins a stale index.html and never sees the new bundle. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
-
-/** The Content-Type each served extension maps to. A built SPA only ever emits this handful; anything
- * unknown falls back to `application/octet-stream` (see `contentTypeFor`) rather than guessing. */
-const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-  ".woff": "font/woff",
-  ".ttf": "font/ttf",
-  ".txt": "text/plain; charset=utf-8",
-  ".webmanifest": "application/manifest+json",
-};
-
-const contentTypeFor = (path: string): string =>
-  CONTENT_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";
 
 /**
  * Resolve a request's relative path to an absolute file inside `root`, or `null` if it would escape
@@ -150,7 +126,11 @@ async function sendFile(
     // `Uint8Array<ArrayBuffer>`, so `new Uint8Array(…)` copies into a plainly-backed array of that type.
     const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(await readFile(absolutePath));
     return c.body(bytes, 200, {
-      "Content-Type": contentTypeFor(absolutePath),
+      // Hono ships an extension→Content-Type table for its own static server; reuse it rather than
+      // hand-maintaining a local map that silently drifts from it. Unknown extensions → octet-stream
+      // (getMimeType returns undefined), as before. (Unlike media-api.ts's closed 3-type upload
+      // allowlist, a built SPA emits an open set of file types, which is exactly getMimeType's job.)
+      "Content-Type": getMimeType(absolutePath) ?? "application/octet-stream",
       "Cache-Control": cacheControl,
     });
   } catch (error) {
