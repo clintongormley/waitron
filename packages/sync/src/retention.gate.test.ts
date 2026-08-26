@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { recordSubscriberCursor } from "./cursor-report.js";
 import { evictSubscriber, lagFor, pruneSyncLog } from "./retention.js";
 import type { SyncLane } from "./registry.js";
 
@@ -327,6 +328,50 @@ describe("fast and ordered lanes track independent cursors; retention waits for 
       expect(result).toEqual({ pruned: 2, highWater: 2n }); // held at the FAST lane
       expect(await remainingSeqs()).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
     } finally {
+      await pruner.close();
+    }
+  });
+});
+
+describe("recordSubscriberCursor gives the source cross-node visibility (spec §3.1)", () => {
+  it("recordSubscriberCursor makes a source-side prune advance (cross-node visibility, spec §3.1)", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    // sync_log rows are ORIGIN's own captured writes; a source pruning ITS OWN log needs an
+    // origin=ORIGIN cursor, which in the real topology only a subscriber's report creates.
+    await seedLog(6, a, b);
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
+    try {
+      // Control (the §1 gap): with NO reported cursor for origin=ORIGIN, the source prunes nothing.
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 0, highWater: 0n });
+      expect(await remainingSeqs()).toEqual([1, 2, 3, 4, 5, 6]);
+      // A subscriber reports it has applied up to seq 4 of ORIGIN → the source can now release 1..4.
+      await recordSubscriberCursor(tailer, {
+        subscriberId: "peerB",
+        originId: ORIGIN,
+        lane: "ordered",
+        lastAppliedSeq: 4n,
+      });
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 4, highWater: 4n });
+      // Monotonic: a stale lower report never regresses; heartbeat: updated_at bumps on a same-seq report.
+      const before = await postgres.admin.execute<{ ts: string }>(
+        sql`select updated_at::text as ts from sync_cursor where subscriber_id = 'peerB'`,
+      );
+      await recordSubscriberCursor(tailer, {
+        subscriberId: "peerB",
+        originId: ORIGIN,
+        lane: "ordered",
+        lastAppliedSeq: 2n, // lower → must NOT regress
+      });
+      const after = await postgres.admin.execute<{ seq: string; ts: string }>(
+        sql`select last_applied_seq::text as seq, updated_at::text as ts from sync_cursor where subscriber_id = 'peerB'`,
+      );
+      expect(after.rows[0]!.seq).toBe("4"); // held (monotonic)
+      expect(after.rows[0]!.ts).not.toBe(before.rows[0]!.ts); // updated_at bumped (heartbeat)
+    } finally {
+      await tailer.close();
       await pruner.close();
     }
   });
