@@ -2,7 +2,7 @@ import { mkdir, writeFile, access } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { generateKeyRing } from "@waitron/provisioning";
+import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 /**
@@ -28,7 +28,7 @@ export interface EnsureBoxSecretsDeps {
   now: () => Date;
   // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
-  makeKeyRing?: () => { key: string; version: number }; // default generateKeyRing
+  makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
   makeToken?: () => string; // default randomBytes(32).toString("hex")
   listIpv4?: () => string[]; // default: non-internal IPv4s from os
 }

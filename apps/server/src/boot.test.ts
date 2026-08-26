@@ -262,6 +262,23 @@ async function freePort(): Promise<number> {
 }
 
 /**
+ * A `fetch` init that trusts `ca` for an HTTPS dial against a self-signed leaf — the same
+ * `undici` `Agent` + cast the two HTTPS boot tests below each need, differing only in which CA
+ * they trust (the box-minted one vs. an operator-supplied one). `close()` wraps the dispatcher's
+ * own `close()` so callers still tear it down explicitly in their `finally`, alongside the server.
+ */
+function httpsVia(ca: string | Buffer): {
+  via: RequestInit & { dispatcher: Agent };
+  close: () => Promise<void>;
+} {
+  const dispatcher = new Agent({ connect: { ca } });
+  return {
+    via: { dispatcher } as RequestInit & { dispatcher: Agent },
+    close: () => dispatcher.close(),
+  };
+}
+
+/**
  * Polls `predicate` up to `POLL_TRIES` times, `POLL_INTERVAL_MS` apart, returning its first
  * defined result, or `undefined` once the budget is spent. The budget (200 x 50ms = 10s) lives
  * here once for `waitForPass`, `waitForExit` and `waitForEvent` below, all three of which are
@@ -493,8 +510,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // `dispatcher` on its init. The leaf carries `127.0.0.1` as an iPAddress SAN (ensureBoxSecrets adds
     // it unconditionally), so a loopback dial verifies.
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
-    const dispatcher = new Agent({ connect: { ca } });
-    const via = { dispatcher } as RequestInit & { dispatcher: Agent };
+    const { via, close } = httpsVia(ca);
     try {
       // The setup status fact sheet (Task 2's `mountSetup`), over HTTPS — proof `config.environment`
       // threaded through the setup branch into `mountSetup`, and that the minted cert actually serves.
@@ -538,7 +554,7 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(fetch(`http://127.0.0.1:${port}/setup-api/status`)).rejects.toThrow();
     } finally {
       await server.close();
-      await dispatcher.close();
+      await close();
       await rm(stateDir, { recursive: true, force: true });
     }
     // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
@@ -587,8 +603,7 @@ describe("startServer, against a real container as the deployment role", () => {
     });
     // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
     // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
-    const dispatcher = new Agent({ connect: { ca: material.caCertPem } });
-    const via = { dispatcher } as RequestInit & { dispatcher: Agent };
+    const { via, close } = httpsVia(material.caCertPem);
     try {
       // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
@@ -607,7 +622,7 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
     } finally {
       await server.close();
-      await dispatcher.close();
+      await close();
       await rm(stateDir, { recursive: true, force: true });
       await rm(certDir, { recursive: true, force: true });
     }
