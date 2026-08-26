@@ -1,17 +1,26 @@
-// Bounded sync_log retention and per-subscriber lag, for the commercial-lane outbox.
+// Bounded sync_log retention, per-subscriber lag, explicit eviction, and the scheduled retention
+// sweep, for the commercial-lane outbox.
 //
-// Both run as a member of the dedicated `sync_retention` role (packages/sync/drizzle/
-// 0001_sync_retention.sql), whose per-role permissive policy makes them WHOLE-LOG, cross-tenant: they
-// set NO `app.tenant_id` and operate across every tenant at once. That is why neither may run as
-// `app_user` or `sync_tailer` — `sync_tailer`'s SELECT is per-tenant, and no other role holds DELETE
-// on `sync_log` at all (CLAUDE.md §3 "never widen a grant"; the mechanism was proven as a genuine
-// non-superuser member in retention.gate.test.ts, since a superuser prune bypasses RLS — a false
-// pass, CLAUDE.md §4).
+// Every DELETE/read here runs as a member of the dedicated `sync_retention` role (packages/sync/
+// drizzle/0001_sync_retention.sql, plus the sync_cursor DELETE grant in 0003_sync_cursor_evict.sql),
+// whose per-role permissive policy makes them WHOLE-LOG, cross-tenant: they set NO `app.tenant_id`
+// and operate across every tenant at once. That is why none may run as `app_user` or `sync_tailer` —
+// `sync_tailer`'s SELECT is per-tenant, and no other role holds DELETE on `sync_log` at all
+// (CLAUDE.md §3 "never widen a grant"; the mechanism was proven as a genuine non-superuser member in
+// retention.gate.test.ts, since a superuser prune bypasses RLS — a false pass, CLAUDE.md §4).
 //
-// Retention is deliberately NOT enough on its own to release the log past a truly-dead subscriber:
-// pruneSyncLog holds the log at the slowest subscriber's cursor. Declaring a subscriber dead and
-// DELETEing its sync_cursor row is a separate operator action (spec §12 ops-policy), out of scope
-// here — this file provides only the bounded prune and the lag signal that informs that decision.
+// Retention alone is deliberately NOT enough to release the log past a truly-dead subscriber:
+// pruneSyncLog holds the log at the slowest subscriber's cursor, alive or down. Declaring a
+// subscriber dead and DELETEing its sync_cursor row is `evictSubscriber` below — an EXPLICIT operator
+// action, NEVER automatic (spec §3.4, an inherited owner decision): "slow" and "dead" are
+// indistinguishable from the log, so a human independently confirms the node is gone before invoking
+// it.
+//
+// This file now provides four things: the bounded prune (pruneSyncLog), the per-subscriber lag signal
+// (lagFor), the explicit eviction verb (evictSubscriber), and the scheduled loop boot runs
+// (runRetentionSweep) — which each tick prunes and alarms a subscriber past a lag threshold, but
+// NEVER evicts and NEVER filters the prune by `alive`. The alarm INFORMS a manual eviction; it never
+// triggers one.
 
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
@@ -146,4 +155,57 @@ export async function evictSubscriber(
     sql`delete from sync_cursor where subscriber_id = ${subscriberId} returning subscriber_id`,
   );
   return { deleted: deleted.rows.length };
+}
+
+export interface RetentionSweepDeps {
+  /** A LOGIN pool that is a member of sync_retention (the whole-log permissive policy). */
+  db: Database;
+  sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  signal: AbortSignal;
+  /** Idle interval between prunes (WAITRON_SYNC_RETENTION_TICK_MS). */
+  tickMs: number;
+  log: (level: "info" | "warn" | "error", code: string, params?: Record<string, unknown>) => void;
+  /** Optional: emit the retention-variant sync.stream_stalled for any subscriber whose lag exceeds
+   * this many rows — the operator signal that INFORMS a manual eviction (never triggers one). */
+  lagAlarmRows?: number;
+  /** Injectable for the loop test; default the real pruneSyncLog / lagFor. */
+  prune?: (db: Database) => Promise<PruneResult>;
+  lag?: (db: Database) => Promise<SubscriberLag[]>;
+}
+
+/**
+ * The scheduled retention sweep boot starts (spec §3.2). Each tick prunes the log to the min across
+ * every subscriber's (reported) cursor, then reports lag and alarms a stalled subscriber past the
+ * threshold. It NEVER evicts and NEVER filters the prune by `alive` — eviction is an explicit
+ * operator action (spec §3.4). Abort-checked before each prune and each sleep so close() stops it
+ * promptly. Errors are logged and swallowed so a transient DB fault does not kill the sweep.
+ */
+export async function runRetentionSweep(deps: RetentionSweepDeps): Promise<void> {
+  const prune = deps.prune ?? pruneSyncLog;
+  const lag = deps.lag ?? lagFor;
+  while (!deps.signal.aborted) {
+    try {
+      const result = await prune(deps.db);
+      deps.log("info", "sync.retention_swept", {
+        pruned: result.pruned,
+        highWater: result.highWater.toString(),
+      });
+      if (deps.lagAlarmRows !== undefined) {
+        const threshold = BigInt(deps.lagAlarmRows);
+        for (const s of await lag(deps.db)) {
+          if (s.lag > threshold) {
+            deps.log("error", "sync.stream_stalled", {
+              subscriberId: s.subscriberId,
+              originId: s.originId,
+              lag: Number(s.lag), // narrowed only at the alarm edge (retention.ts lag doc)
+            });
+          }
+        }
+      }
+    } catch {
+      deps.log("warn", "sync.retention_failed", {});
+    }
+    if (deps.signal.aborted) break;
+    await deps.sleep(deps.tickMs, deps.signal);
+  }
 }

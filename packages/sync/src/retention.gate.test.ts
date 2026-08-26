@@ -4,7 +4,7 @@ import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { recordSubscriberCursor } from "./cursor-report.js";
-import { evictSubscriber, lagFor, pruneSyncLog } from "./retention.js";
+import { evictSubscriber, lagFor, pruneSyncLog, runRetentionSweep } from "./retention.js";
 import type { SyncLane } from "./registry.js";
 
 // Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
@@ -412,6 +412,64 @@ describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)
         await postgres.admin.execute(sql.raw(`grant delete on sync_cursor to sync_retention`));
       }
       expect(await evictSubscriber(pruner, "cloud")).toEqual({ deleted: 1 }); // restored → works
+    } finally {
+      await pruner.close();
+    }
+  });
+});
+
+describe("runRetentionSweep runs the real prune + lag each tick, and NEVER evicts (spec §3.2/§3.4)", () => {
+  it("prunes to the min across ALL cursors (dead subscriber held), alarms the stalled one, and leaves its cursor in place", async () => {
+    // The scheduled loop with its REAL defaults — no injected prune/lag, exactly the wiring boot
+    // starts (boot passes neither), so this exercises pruneSyncLog/lagFor through runRetentionSweep,
+    // not the injected doubles the hermetic retention-sweep.test.ts uses. One tick: the injected
+    // `sleep` aborts the loop so it prunes exactly once.
+    //
+    // The guardrail, proven end-to-end (spec §3.4, an inherited owner decision):
+    //   - NEVER alive-filters the prune — the DOWN `cloud` (cursor 4) HOLDS the log at 4, so 5..10
+    //     survive; an alive-filtered prune would have taken the live-only min (10) and wiped the log.
+    //   - NEVER evicts — `cloud`'s cursor row is still present after the sweep; only the alarm fired.
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(10, a, b);
+    await setCursor("peerB", 10, true); // caught up, alive → lag 0, no alarm
+    await setCursor("cloud", 4, false); // down, holding the log at 4 → lag 6, past the threshold
+
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const controller = new AbortController();
+    const logged: Array<{ level: string; code: string; params: Record<string, unknown> }> = [];
+    try {
+      await runRetentionSweep({
+        db: pruner,
+        sleep: async () => controller.abort(),
+        signal: controller.signal,
+        tickMs: 10,
+        lagAlarmRows: 5,
+        log: (level, code, params) => logged.push({ level, code, params: params ?? {} }),
+      });
+
+      // Held at the min across ALL cursors (4), NOT the live-only min (10) — the never-alive-filter half.
+      expect(await remainingSeqs()).toEqual([5, 6, 7, 8, 9, 10]);
+      // The real prune's result is reported on the swept line (highWater is stringified — see the sweep).
+      expect(logged.find((l) => l.code === "sync.retention_swept")).toMatchObject({
+        level: "info",
+        params: { pruned: 4, highWater: "4" },
+      });
+      // The stalled `cloud` (lag 6 > 5) alarmed via the REAL lagFor; `peerB` (lag 0) did not. `lag` is
+      // narrowed to a JS number only at this alarm edge.
+      const stalled = logged.filter((l) => l.code === "sync.stream_stalled");
+      expect(stalled).toHaveLength(1);
+      expect(stalled[0]).toMatchObject({
+        level: "error",
+        params: { subscriberId: "cloud", originId: ORIGIN, lag: 6 },
+      });
+      // NEVER evicts: the dead subscriber's cursor row is untouched — the alarm INFORMS a manual
+      // eviction, it does not perform one.
+      const cursor = await postgres.admin.execute<{ n: string }>(
+        sql`select count(*)::int::text as n from sync_cursor where subscriber_id = 'cloud'`,
+      );
+      expect(cursor.rows[0]!.n).toBe("1");
     } finally {
       await pruner.close();
     }
