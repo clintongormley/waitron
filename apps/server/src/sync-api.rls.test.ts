@@ -253,3 +253,114 @@ describe("mountSyncApi node-token auth + handshake", () => {
     }
   });
 });
+
+describe("POST /sync-api/cursor — subscribers report their cursor to the source (spec §3.1)", () => {
+  it("POST /sync-api/cursor is node-token fail-closed and never touches the DB on 401", async () => {
+    const app = new Hono();
+    mountSyncApi(app, { ...deps, nodeTokens: ["s3cret"] }, log); // deps.db is throwingDb
+    const res = await app.request("/sync-api/cursor", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subscriberId: "peerB", lane: "ordered", lastAppliedSeq: "5" }),
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("sync.node_unauthorized");
+  });
+
+  it("POST /sync-api/cursor records the report against origin=self (ignoring a peer-supplied origin)", async () => {
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const app = new Hono();
+      mountSyncApi(
+        app,
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          nodeTokens: ["s3cret"],
+        },
+        log,
+      );
+      const res = await app.request("/sync-api/cursor", {
+        method: "POST",
+        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
+        // a hostile originId in the body must be IGNORED — the source stamps NODE_A
+        body: JSON.stringify({
+          subscriberId: "peerB",
+          originId: "deadbeef",
+          lane: "fast",
+          lastAppliedSeq: "7",
+        }),
+      });
+      expect(res.status).toBe(200);
+      const row = await postgres.admin.execute<{ origin: string; lane: string; seq: string }>(
+        sql`select origin_id::text as origin, lane, last_applied_seq::text as seq
+            from sync_cursor where subscriber_id = 'peerB'`,
+      );
+      expect(row.rows[0]).toMatchObject({ origin: NODE_A, lane: "fast", seq: "7" });
+    } finally {
+      await postgres.admin.execute(sql`delete from sync_cursor where subscriber_id = 'peerB'`);
+      await reader.close();
+    }
+  });
+
+  it("a blank/missing subscriberId or a non-JSON body is a 200 no-op that never touches the DB", async () => {
+    // The machine surface never answers 400 — a report with no usable subscriberId is silently a
+    // no-op (spec §3.1). `deps.db` is throwingDb, so a 200 here also proves the no-op path returns
+    // BEFORE recordSubscriberCursor: the write is never reached. Covers the blank-subscriberId branch
+    // and the defensive `c.req.json().catch(() => ({}))` (a body that is not JSON → {}).
+    const app = new Hono();
+    mountSyncApi(app, { ...deps, nodeTokens: ["s3cret"] }, log); // deps.db is throwingDb
+    const cases: (BodyInit | undefined)[] = [
+      JSON.stringify({ lane: "ordered", lastAppliedSeq: "5" }), // subscriberId missing
+      JSON.stringify({ subscriberId: "", lastAppliedSeq: "5" }), // subscriberId blank
+      JSON.stringify({ subscriberId: 42 }), // subscriberId not a string
+      "not json at all", // body that is not JSON → catch → {}
+      undefined, // empty body → catch → {}
+    ];
+    for (const body of cases) {
+      const res = await app.request("/sync-api/cursor", {
+        method: "POST",
+        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(res.status).toBe(200); // no-op, never a 400; throwingDb never reached
+    }
+  });
+
+  it("clamps a non-string lane to ordered and a non-string seq to 0 (same fail-safe as /log)", async () => {
+    // The defensive `typeof … === "string"` guards feed laneParam/afterSeq a value or undefined, so a
+    // numeric `lane`/`lastAppliedSeq` (a malformed peer) clamps to the safe default rather than 500ing:
+    // lane → "ordered", seq → 0. Same no-400 posture the /log route takes for its query params.
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const app = new Hono();
+      mountSyncApi(
+        app,
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          nodeTokens: ["s3cret"],
+        },
+        log,
+      );
+      const res = await app.request("/sync-api/cursor", {
+        method: "POST",
+        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
+        body: JSON.stringify({ subscriberId: "peerC", lane: 123, lastAppliedSeq: 456 }),
+      });
+      expect(res.status).toBe(200);
+      const row = await postgres.admin.execute<{ lane: string; seq: string }>(
+        sql`select lane, last_applied_seq::text as seq
+            from sync_cursor where subscriber_id = 'peerC'`,
+      );
+      expect(row.rows[0]).toMatchObject({ lane: "ordered", seq: "0" }); // both clamped to their defaults
+    } finally {
+      await postgres.admin.execute(sql`delete from sync_cursor where subscriber_id = 'peerC'`);
+      await reader.close();
+    }
+  });
+});

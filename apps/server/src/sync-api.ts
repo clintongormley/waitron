@@ -2,7 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { withTenant, type Database } from "@waitron/db";
-import { encodeBatch, readSyncLogSince, tablesForLane, type SyncLane } from "@waitron/sync";
+import {
+  encodeBatch,
+  readSyncLogSince,
+  recordSubscriberCursor,
+  tablesForLane,
+  type SyncLane,
+} from "@waitron/sync";
 import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger } from "./logger.js";
 // Loads @waitron/sync's error augmentation so this file may throw sync.node_unauthorized.
@@ -121,6 +127,34 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
         }),
       );
       return c.body(encodeBatch(rows), 200, { "content-type": "application/x-ndjson" });
+    }),
+  );
+  // A subscriber POSTs how far it has applied THIS node's log; the source records it into its own
+  // sync_cursor so retention can hold the log at the min across every subscriber (spec §3.1). The
+  // origin is stamped as deps.nodeId — a peer-supplied `originId` in the body is IGNORED, so a peer
+  // can never write a cursor for an arbitrary origin. Same machine-to-machine fail-safe posture as
+  // /sync-api/log: no 400 param-invalid convention — a blank/missing subscriberId is a 200 no-op,
+  // the lane clamps via laneParam, and the seq screens via afterSeq. The body is parsed defensively
+  // (a non-JSON body yields {}), so only the node token gates the write.
+  app.post("/sync-api/cursor", (c) =>
+    run(c, log, async () => {
+      requireNodeTokens(c, deps.nodeTokens);
+      const body = (await c.req.json().catch(() => ({}))) as {
+        subscriberId?: unknown;
+        lane?: unknown;
+        lastAppliedSeq?: unknown;
+      };
+      const subscriberId = typeof body.subscriberId === "string" ? body.subscriberId : "";
+      if (subscriberId.length === 0) return c.body(null, 200); // machine surface: no-op, never a 400
+      await recordSubscriberCursor(deps.db, {
+        subscriberId,
+        originId: deps.nodeId, // stamp OUR origin; never trust a peer-supplied one (spec §3.1)
+        lane: laneParam(typeof body.lane === "string" ? body.lane : undefined),
+        lastAppliedSeq: afterSeq(
+          typeof body.lastAppliedSeq === "string" ? body.lastAppliedSeq : undefined,
+        ),
+      });
+      return c.body(null, 200);
     }),
   );
 }
