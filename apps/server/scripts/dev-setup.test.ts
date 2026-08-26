@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useRealPostgres, useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { roleUrl, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
 import { readFileSync, rmSync } from "node:fs";
@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import {
   devSetup,
+  inspectVenues,
   parseEnvFile,
   renderEnvFile,
   type DevEnv,
@@ -173,5 +174,32 @@ describe("devSetup against real Postgres", () => {
     );
     // The load-bearing fiscal assertion: still exactly one till, no second chain.
     expect(await tillsCount()).toBe(1);
+  });
+});
+
+// The Copilot-flagged gap: `inspectVenues` decides "does this database hold a venue?" via
+// `exists(select 1 from tenants …)`, but `tenants` is FORCE ROW LEVEL SECURITY (packages/db/drizzle
+// 0001_tenancy_rls.sql), so on a non-superuser/non-BYPASSRLS connection with no tenant GUC set that
+// exists() silently reads false even when tenants exist — a false negative that would defeat the
+// refuse-to-clobber guard both dev-setup and dev-onboard rely on. Clones the shared apps/server
+// container's already-migrated `manifest` template (apps/server/src/testing/global-setup.ts) rather
+// than booting a fresh one, and authenticates as `app_login` — one of that file's cluster-wide roles,
+// `in role app_user`, which 0001_tenancy_rls.sql creates NOLOGIN and refuses to grant table access to
+// if it is ever SUPERUSER/BYPASSRLS, so `app_login` is guaranteed non-privileged by construction.
+describe("inspectVenues refuses to run on a non-privileged connection", () => {
+  const suite = useTemplateDb({ template: "manifest" });
+
+  it("throws naming the privilege requirement rather than silently reporting no venue", async () => {
+    // Seed a tenant as the superuser admin connection FIRST: if the new privilege guard were absent
+    // (or broken) and the old exists()-only behaviour ran instead, it would silently return
+    // `{ hasExpected: false, hasAny: false }` here — the exact false negative this test exists to
+    // catch, not a throw. Asserting `rejects.toThrow` against a database that provably holds a tenant
+    // is what makes this a test of the guard rather than of an empty table.
+    await suite.admin.execute(
+      sql`insert into tenants (country, tax_id, legal_name) values ('ES', '00000000T', 'Privilege Guard SL')`,
+    );
+
+    const nonPrivilegedUri = roleUrl(suite.pg.uri, "app_login", "app_pw");
+    await expect(inspectVenues(nonPrivilegedUri, null)).rejects.toThrow(/superuser or BYPASSRLS/i);
   });
 });

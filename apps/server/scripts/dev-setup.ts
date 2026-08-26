@@ -165,6 +165,15 @@ export async function waitForPostgres(uri: string, log: (line: string) => void):
  * (`hasAny` — refuse to provision a second one). `expectedTenantId` is `null` when there is no usable
  * `.env` to match, in which case `hasExpected` is trivially false.
  *
+ * REQUIRES a superuser or BYPASSRLS connection. `tenants` is under FORCE ROW LEVEL SECURITY (policy
+ * `USING (id = current_tenant_id())`), so on a non-privileged connection with no tenant GUC set, both
+ * `exists()` checks below silently return false even when tenants exist — a false negative that would
+ * defeat the refuse-to-clobber guard both `dev-setup` and `dev-onboard` rely on to avoid minting a
+ * second fiscal chain (CLAUDE.md §5). Rather than risk that silently, this asserts the connection's
+ * privilege FIRST (`pg_roles.rolsuper or rolbypassrls` for `current_user`) and throws loudly if it is
+ * neither — `pg_roles` always exists, migrated or not, so the assertion runs even against a
+ * freshly-wiped volume, before the `tenants` query that needs the table to exist.
+ *
  * A missing `tenants` table (an unmigrated database — e.g. a freshly wiped volume) is "no venue at
  * all", so `42P01 undefined_table` returns both-false and the caller provisions fresh. Any OTHER
  * failure (a permission error, a malformed id → `22P02`, a connection blip after `waitForPostgres`
@@ -179,6 +188,25 @@ export async function inspectVenues(
   const client = new pg.Client({ connectionString: uri });
   try {
     await client.connect();
+
+    // Must run BEFORE the tenants query, and unconditionally: `pg_roles` is a system catalog, always
+    // present whether or not the manifest has migrated, so this check itself never hits 42P01 — an
+    // unmigrated database still fails closed here if the connection somehow lacked privilege, rather
+    // than falling through to the (in that case, coincidentally correct) undefined_table branch below.
+    const { rows: privilegeRows } = await client.query<{ privileged: boolean }>(
+      "select rolsuper or rolbypassrls as privileged from pg_roles where rolname = current_user",
+    );
+    if (privilegeRows[0]?.privileged !== true) {
+      throw new Error(
+        "dev-setup: inspectVenues requires a superuser or BYPASSRLS connection. `tenants` is under " +
+          "FORCE ROW LEVEL SECURITY, so a non-privileged connection's exists() check silently returns " +
+          "false even when tenants exist — that would defeat the refuse-to-clobber guard `dev:setup` " +
+          "and `dev:onboard` rely on to avoid minting a second fiscal chain (CLAUDE.md §5). " +
+          "`dev:onboard`/`dev:setup` are meant to run against the local dev container as its " +
+          "`postgres` superuser — check DATABASE_URL.",
+      );
+    }
+
     const { rows } = await client.query<{ has_expected: boolean; has_any: boolean }>(
       "select exists(select 1 from tenants where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
       [expectedTenantId],
