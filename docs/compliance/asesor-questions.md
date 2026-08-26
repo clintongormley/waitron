@@ -9,7 +9,8 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-08-01**.
+Last revised **2026-08-26** — Q17 (F3 *canje*) and Q18 (*modelo 303* IVA soportado) added, Q16
+sharpened; see the 2026-08-26 banner. Prior substantive pass **2026-08-01**.
 
 > **⚠ Read before sending, 2026-08-01.** Two architecture designs and one research pass have moved
 > this list since the questions below were written. Read this before paying for any answer.
@@ -67,6 +68,24 @@ Last revised **2026-08-01**.
 >
 > Individual questions below are left as written, with dated banners, rather than rewritten in place,
 > per `CLAUDE.md` §6.
+
+> **⚠ Read before sending, 2026-08-26.** Three fiscal features have landed since the 2026-08-01 pass.
+> They add two questions and sharpen one; nothing already closed reopens.
+>
+> - **Q17 (F3 *canje*) and Q18 (*modelo 303* IVA soportado) added** — see the new *FISCAL FILINGS*
+>   section. Both features are **built**, so neither blocks anything; but each carries a point the
+>   asesor must confirm **before the first LIVE filing** (a foreign-recipient `IDType` shape and an
+>   XSD confirmation for F3; the prorrata base treatment for 303).
+> - **Q16 sharpened, not rewritten.** The distribution & client-topology design
+>   ([`../superpowers/specs/2026-08-15-distribution-and-client-topology-design.md`](../superpowers/specs/2026-08-15-distribution-and-client-topology-design.md), #86)
+>   makes cloud-hosted a first-class **planned** mode, so Q16 is no longer the hypothetical
+>   "only if a topology is offered" it was written as — it **gates a mode already on the roadmap**.
+>   Draw the line at production: the cloud **trial** on-ramp (preproduction, shared demo tenant, no
+>   real fiscal records) needs no answer; only **production-cloud-primary** does. Banner added at Q16.
+> - **Not for this list, but noted:** the *laboral* questions (the convenio overtime rule, D3 payroll,
+>   the *retención* on card-collected tips redistributed through a tronco per V3095-17) still have **no
+>   home document**. They are for a *graduado social / asesor laboral*, not the fiscal asesor — flagged
+>   so they are not lost, not because they belong here.
 
 ---
 
@@ -888,6 +907,14 @@ mechanics). The convenio side can be asked directly at `comunicacion.sepri@corre
 
 ### Q16. Where may an *active* cloud SIF run — issuing invoices from abroad? (added 2026-08-01)
 
+> **Sharpened 2026-08-26 (#86).** The distribution & client-topology design makes cloud-hosted a
+> first-class **planned** mode, not the disaster-edge this question was written against — so the
+> "only if a cloud-primary or standalone topology is offered" framing below now **understates** it:
+> the mode is on the roadmap and gated on this answer. Draw the line at production, though — the cloud
+> **trial** on-ramp (preproduction, shared demo tenant, no real invoices) needs no answer here; only
+> **production-cloud-primary**, which issues real invoices from a cloud we operate, does. Left as
+> written below per `CLAUDE.md` §6.
+
 **Why it matters.** [cloud-storage §8a](../superpowers/specs/2026-07-31-cloud-storage-model-design.md)
 constrains where the cloud may **conserve** records: records kept outside Spain trigger a
 prior-notification duty on the client (ROF art. 22.2), and outside the EU is more restricted
@@ -929,6 +956,91 @@ primary source.
 
 ---
 
+## FISCAL FILINGS — built, but confirm before the first live submission (added 2026-08-26)
+
+Both features below are implemented and tested against the committed AEAT schemas; neither blocks the
+build. What each needs is an asesor's sign-off on one interpretive point **before a real filing goes
+to AEAT** — so they belong here, not in [verifactu-findings.md](verifactu-findings.md), which records
+only what is settled on primary source.
+
+### Q17. F3 *canje* — recipient identity, series, and cross-SIF substitution (added 2026-08-26)
+
+**Why it matters.** F3 (*factura expedida en sustitución de facturas simplificadas* — the *canje*)
+is built (`recordSubstitution`, #51): when a customer asks for a full invoice for a ticket already
+issued, we emit an F3 carrying a `Destinatarios` block with the recipient's identity. The shape was
+validated against the committed AEAT schema, but four points rest on interpretation or on an
+`IDType`/XSD detail we could not confirm from the schema alone, and each should be settled before the
+first real F3 is filed:
+
+- **(a)** the foreign-recipient path (`IDOtro` rather than a Spanish `NIF`) is **refused at the
+  backend** today, because which `IDType` values AEAT expects for a non-resident, and when it demands
+  a specific one, is unconfirmed;
+- **(b)** whether an F3 must use a **dedicated series** distinct from ordinary/simplified invoices, or
+  may share one, is unsourced — we reuse the `standard` series today;
+- **(c)** whether an F3 may substitute tickets that a **different SIF** of the same taxpayer issued
+  (another server/venue) is a sound *inference*, not confirmed;
+- **(d)** a positive confirmation of the exact `Destinatarios` structure for `TipoFactura` F3 (which
+  fields are mandatory) before the first live filing.
+
+> Emitimos facturas **F3** (facturas expedidas en sustitución de facturas simplificadas — el "canje")
+> cuando un cliente solicita factura completa de un ticket ya emitido. El registro incluye el bloque
+> `Destinatarios` con la identificación del destinatario.
+>
+> **(a)** Para un destinatario extranjero sin NIF español, ¿qué valores de `IDType` (02 NIF-IVA,
+> 03 pasaporte, 04 documento oficial del país de residencia, 05 certificado de residencia, 06 otro
+> documento probatorio, 07 no censado) son admisibles en `IDOtro`, y en qué supuestos exige la AEAT
+> uno concreto?
+>
+> **(b)** ¿Debe la factura F3 emitirse obligatoriamente en una serie específica, distinta de la de las
+> facturas simplificadas y ordinarias, o puede compartir serie con las ordinarias?
+>
+> **(c)** ¿Es admisible expedir una F3 en sustitución de tickets emitidos por **otro SIF** del mismo
+> obligado tributario (por ejemplo, un servidor o local distinto), o debe emitirla el mismo SIF que
+> expidió los tickets sustituidos?
+>
+> **(d)** ¿Puede confirmarnos la estructura exacta del bloque `Destinatarios` que el esquema espera
+> para el tipo F3 (campos obligatorios y opcionales), a fin de validar nuestra implementación antes de
+> la primera remisión real?
+
+### Q18. *Modelo 303* — IVA soportado deducible: prorrata and duplicate-invoice key (added 2026-08-26)
+
+**Why it matters.** We generate the *modelo 303* from issued invoices (IVA repercutido) and captured
+received invoices (IVA soportado deducible), and emit the DR303 file for the AEAT "por fichero"
+uploader (#91/#98, [design](../superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md)).
+The output-VAT side is settled on primary source; the input-VAT side rests on two interpretive points
+plus the treatment of boxes not yet implemented. **(a) is the pre-filing blocker** — the whole
+deducible figure turns on it:
+
+- **(a) Prorrata.** For an operation with a `deducible_proportion` below 100 %, we emit the deducible
+  **base in full** and scale only the **cuota** by the proportion. Confirm AEAT expects the base
+  unscaled and only the cuota prorated (not the base prorated too).
+- **(b) Duplicate-invoice key.** We treat a received invoice as a duplicate on
+  `(supplier tax id, supplier invoice number)`, unique **forever**. Should that uniqueness be **per
+  calendar year** instead (a supplier may legitimately repeat a number across years)?
+- **(c) Boxes not yet built** — confirm the treatment for when we add them: rectificativas de facturas
+  **recibidas** (casillas 40/41), regularización de bienes de inversión (43), the prorrata-definitiva
+  rule (44), and intra-community / import operations (32–39).
+
+> Generamos el **modelo 303** a partir de las facturas emitidas (IVA repercutido) y de las facturas
+> recibidas que capturamos (IVA soportado deducible), y producimos el fichero DR303 para su remisión
+> "por fichero".
+>
+> **(a) Prorrata.** En una operación con proporción de deducción inferior al 100 %, calculamos la
+> **base deducible completa** y aplicamos la proporción **sólo a la cuota**. ¿Es correcto que la base
+> figure sin prorratear, prorrateándose únicamente la cuota, o espera la AEAT que también la base se
+> declare prorrateada?
+>
+> **(b)** Tratamos como **duplicada** una factura recibida con el mismo `(NIF del proveedor, número de
+> factura del proveedor)`, de forma permanente. ¿Debe esa unicidad entenderse **por año natural** — de
+> modo que un proveedor pueda repetir número entre ejercicios — o de forma permanente?
+>
+> **(c)** ¿Puede confirmarnos el tratamiento de las casillas que aún no implementamos, para cuando las
+> incorporemos: rectificativas de facturas **recibidas** (40/41), regularización de bienes de
+> inversión (43), regla de **prorrata definitiva** (44) y operaciones intracomunitarias e
+> importaciones (32–39)?
+
+---
+
 ## Notes for the conversation
 
 - **Nothing here blocks the build any more.** As of 2026-07-27 this document is a list of things
@@ -946,7 +1058,14 @@ primary source.
 - **Q16 is the live architecture question**, and only if a cloud-primary or standalone topology is on
   the table. It absorbs the retired **Q11/Q12** (certificate custody in a hosted deployment): under
   the default architecture (client's own local server is the SIF) that custody question does not
-  arise; it re-emerges only when the SIF runs in a cloud we operate, which is what Q16 asks.
+  arise; it re-emerges only when the SIF runs in a cloud we operate, which is what Q16 asks. **The
+  2026-08-26 banner sharpens this:** the distribution design (#86) made cloud-primary a *planned*
+  mode, so Q16 now gates the roadmap — though the preproduction cloud *trial* on-ramp does not need
+  it.
+- **Q17 and Q18 are the two fiscal-filing confirmations** (F3 *canje*; *modelo 303* IVA soportado) —
+  both built, neither blocking, but each has one point to settle **before the first live filing**: the
+  foreign-recipient `IDType` shape (Q17a) and the prorrata base treatment (Q18a). These are ordinary
+  asesor-fiscal territory, unlike the SIF-architecture questions — a filer will answer them readily.
 - **Do not open with "can I use multiple series".** It is settled, it is boring, and it
   invites a confident answer to a question we did not need to ask. The series is not the
   mechanism — the SIF is.
