@@ -1417,12 +1417,35 @@ export class DashboardApi {
    * or the manager screens. Role-blind (no `authorizeManager`), so a staff session RESOLVES here —
    * unlike the old boot probe (`listStaff`, `person.manage`-gated), which 403'd a staff session and
    * dropped it to the login screen. (A request with no session still 401s via `management_session.required`.)
+   *
+   * Per-user-language-preference (Task 5): the response also carries the signed-in person's stored UI
+   * `locale` (`null` when they have never chosen one) and the geography-derived `venueLocale` fallback —
+   * the same value `GET /management-api/locales` echoes as `venueDefault`. The shell resolves the two via
+   * `resolveActiveLocale(locale, venueLocale)` on boot/login to pick the operator-UI language.
    */
-  getMe(): Promise<{ personId: string; role: PersonRole }> {
-    return this.#request<{ personId: string; role: PersonRole }>(
-      "/management-api/session/me",
-      "GET",
-    );
+  getMe(): Promise<{
+    personId: string;
+    role: PersonRole;
+    locale: string | null;
+    venueLocale: string;
+  }> {
+    return this.#request<{
+      personId: string;
+      role: PersonRole;
+      locale: string | null;
+      venueLocale: string;
+    }>("/management-api/session/me", "GET");
+  }
+
+  /**
+   * `PUT /management-api/session/me/locale` with body `{ locale }` — persist the signed-in person's UI
+   * language preference (per-user-language-preference, Task 6). Identity is the session's person
+   * server-side, so the body carries only the chosen `code`; an unsupported `code` rejects with
+   * `{ code: "locale.unsupported" }` (the server's one validation path). The shell switches the UI
+   * only after this resolves, so a failed save leaves the language unchanged.
+   */
+  putLocale(code: string): Promise<void> {
+    return this.#request<void>("/management-api/session/me/locale", "PUT", { locale: code });
   }
 
   /** `GET /management-api/me/schedule/shifts?from=&to=` — my shifts over a half-open `[from, to)`

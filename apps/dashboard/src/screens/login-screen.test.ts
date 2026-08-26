@@ -25,6 +25,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
     passkeyAuthVerify: vi.fn().mockResolvedValue({ personId: "p9" }),
+    // The language chooser reads this only when opened; the screen just passes it through.
+    getLocales: vi
+      .fn()
+      .mockResolvedValue({ locales: [{ code: "en-GB", label: "English" }], venueDefault: "es-ES" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -164,6 +168,30 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
+  });
+
+  // Per-user-language-preference: the login screen renders the transient language chooser, and the
+  // chooser's composed `locale-selected` must ESCAPE the login screen's shadow boundary so the app shell
+  // (dashboard-app) hears it and switches the locale. The screen itself neither persists nor switches.
+  it("renders the language chooser and lets its locale-selected event bubble out", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete;
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser");
+    expect(chooser).toBeTruthy();
+
+    const heard = new Promise<{ code: string }>((resolve) =>
+      el.addEventListener("locale-selected", (e) => resolve((e as CustomEvent).detail)),
+    );
+    chooser!.dispatchEvent(
+      new CustomEvent("locale-selected", {
+        detail: { code: "en-GB" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect((await heard).code).toBe("en-GB");
   });
 
   // Passkey login: options → startAuthentication(the browser ceremony, mocked) → verify → logged-in.

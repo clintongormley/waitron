@@ -1,10 +1,14 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
+import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
-import { t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { LocaleChangeController } from "./state/locale-controller.js";
 // Side-effect imports register the screen elements this shell swaps between; it names them only as
 // tags below, so the wiring — not the screens — is what lives here.
+import "./widgets/language-chooser.js";
 import "./screens/login-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/staff-screen.js";
@@ -96,6 +100,18 @@ type Screen =
  * none — so the shell adds no competing `<h1>`: its
  * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
  * exactly one `<h1>` in the DOM at a time.
+ *
+ * DISCONNECT SAFETY (per-user-language-preference). `setLocale` mutates module-global locale, so it is
+ * the one effect that can outlive the element. It runs on FOUR post-await paths, and each carries
+ * `if (!this.isConnected) return` before the switch so a teardown during the await skips it —
+ * {@link DashboardApp.#seedLocale} (the boot venue-default seed), {@link DashboardApp.#applyMe} (invoked
+ * as `#applyMe(await getMe())`, so the probe's round trip is the await), {@link DashboardApp.#onLogout}
+ * (the venue-default revert, after the logout round trip) and {@link DashboardApp.#onLocaleSelected}'s
+ * PERSIST path (the preference write has already landed and the next login re-applies it, so only the
+ * pointless local repaint is skipped). The TRANSIENT (`screen === "login"`) branch of
+ * `#onLocaleSelected` runs its `setLocale` SYNCHRONOUSLY before any await, so it needs no guard. Each
+ * guarded site is pinned by a deletion-proven disconnect test. Every OTHER state write here is
+ * reactive-only and needs no guard — Lit never paints a detached element.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
@@ -116,6 +132,14 @@ export class DashboardApp extends LitElement {
       }
 
       .nav {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      /* The right-hand chrome group: the language chooser sits beside the logout button, so the two
+         travel together while the nav stays on the far side (space-between). */
+      .actions {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
@@ -145,8 +169,72 @@ export class DashboardApp extends LitElement {
    * this out, and it names a swap's counterparty). Empty until a probe/login resolves. */
   @state() private myPersonId = "";
 
+  /**
+   * The ACTIVE operator-UI locale, mirrored from the module-global `currentLocale()`. It is the KEY the
+   * {@link render} `keyed(this.uiLocale, …)` wraps each screen in, so a locale switch made anywhere
+   * (boot seed, login, logout of a session, the chooser) RECREATES the rendered screen subtree and it
+   * repaints in the new language — the screens carry no `LocaleChangeController` of their own. Kept in
+   * sync by the controller in the constructor below.
+   */
+  @state() private uiLocale = currentLocale();
+
+  /**
+   * The venue's DERIVED default UI locale (per-user-language-preference), read from
+   * `GET /management-api/locales` on boot ({@link #seedLocale}) — the dashboard has no venue locale until
+   * this task, so it SEEDS the login screen in the venue's language. It is also the fallback
+   * `resolveActiveLocale(personLocale, this.#venueLocale)` falls back to on login ({@link #applyMe}) when
+   * the signed-in person has no stored preference. Defaults to the deli's es-ES until boot resolves.
+   */
+  #venueLocale = "es-ES";
+
+  constructor() {
+    super();
+    // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): mirror it onto
+    // `uiLocale`, which re-keys the `keyed(...)` screen wrapper so the screen repaints in the new
+    // language. The screens read `t()` at render time, so recreating them is what applies the switch.
+    new LocaleChangeController(this, () => {
+      this.uiLocale = currentLocale();
+    });
+  }
+
   override firstUpdated(): void {
-    void this.#probeSession();
+    void this.#boot();
+  }
+
+  /**
+   * Boot: probe for a session, THEN — only when none was found (still on `login`) — seed the login
+   * screen in the venue's language. The two are serialized deliberately, not raced:
+   *  - a LOGGED-IN probe's {@link #applyMe} already sets the UI locale from the WHOAMI (`me.locale`
+   *    resolved against `me.venueLocale`) and remembers `venueLocale`, so a venue-default seed
+   *    afterwards would both fire a REDUNDANT `getLocales` and risk CLOBBERING the person's applied
+   *    locale. Gating the seed on `screen === "login"` removes both — the logged-in path makes exactly
+   *    one WHOAMI round trip;
+   *  - a NO-SESSION probe leaves `screen === "login"`, so the seed runs and localises the sign-in screen.
+   * `#probeSession` swallows its own rejection (→ `login`), so this never throws.
+   */
+  async #boot(): Promise<void> {
+    await this.#probeSession();
+    if (this.screen === "login") await this.#seedLocale();
+  }
+
+  /**
+   * Read the venue's offered languages and SEED the UI to the venue default, so the pre-auth login
+   * screen renders in the venue's language rather than the module default. Reached only from {@link #boot}
+   * on the no-session path. A failure (server unreachable, a non-2xx `{ code }`) is swallowed — the UI
+   * simply stays on the module default; this is cosmetic pre-auth polish, never a reason to block sign-in.
+   */
+  async #seedLocale(): Promise<void> {
+    try {
+      const { venueDefault } = await this.api.getLocales();
+      // Guard the post-await module-global `setLocale`: a teardown during the fetch must not repaint a
+      // live sibling's locale (the DISCONNECT SAFETY note). The `#venueLocale` write below the guard is
+      // harmless to skip on a detached element — nothing reads it after teardown.
+      if (!this.isConnected) return;
+      this.#venueLocale = venueDefault;
+      setLocale(venueDefault);
+    } catch {
+      // Stay on the module default — a failed locale read must never block sign-in.
+    }
   }
 
   /**
@@ -170,11 +258,26 @@ export class DashboardApp extends LitElement {
   /** Land a resolved whoami on the right face: a `staff` person on the self-service `my-schedule`
    * screen, every other role on the existing manager `staff` screen. Records the id + role the shell
    * and screen both read. The ONE place the role→screen branch lives, shared by the boot probe and the
-   * post-login re-probe. */
-  #applyMe(me: { personId: string; role: PersonRole }): void {
+   * post-login re-probe.
+   *
+   * Per-user-language-preference: also apply the signed-in person's UI language —
+   * `resolveActiveLocale(me.locale, me.venueLocale)`, their supported stored choice else the venue
+   * default — and remember the venue default for later. `#applyMe` is invoked as `#applyMe(await
+   * getMe())`, so the module-global `setLocale` runs POST-AWAIT: a teardown during the probe must not
+   * repaint a live sibling's locale (the DISCONNECT SAFETY note). The reactive state writes above the
+   * guard are harmless on a detached element (Lit never paints one), so only `setLocale` is guarded. */
+  #applyMe(me: {
+    personId: string;
+    role: PersonRole;
+    locale: string | null;
+    venueLocale: string;
+  }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
     this.screen = me.role === "staff" ? "my-schedule" : "staff";
+    this.#venueLocale = me.venueLocale;
+    if (!this.isConnected) return;
+    setLocale(resolveActiveLocale(me.locale, me.venueLocale));
   }
 
   /**
@@ -201,25 +304,78 @@ export class DashboardApp extends LitElement {
       // A failed logout must still drop to login; the reason it failed is not actionable here.
     }
     this.screen = "login";
+    // Revert the UI to the venue default (per-user-language-preference): the previous operator's chosen
+    // language must not linger into the login screen the next person meets — their own login re-applies
+    // their stored preference. Guard the post-await module-global `setLocale` (the DISCONNECT SAFETY
+    // note): a teardown during the logout round trip must not repaint a live sibling's locale.
+    if (!this.isConnected) return;
+    setLocale(this.#venueLocale);
+  }
+
+  /**
+   * The ONE handler for a language pick (per-user-language-preference). The chooser is presentational —
+   * it emits a composed `locale-selected` carrying only the chosen `code`; this decides what the pick
+   * MEANS, and that turns entirely on whether anyone is signed in:
+   *  - PRE-LOGIN (`screen === "login"`): a TRANSIENT switch. Switch the UI (`setLocale`) but write
+   *    NOTHING — there is no session to attach a preference to. This runs synchronously before any
+   *    await, so the element is still connected and it needs no disconnect guard.
+   *  - LOGGED IN: PERSIST the operator's preference (`putLocale`) and only THEN switch the UI, so a
+   *    failed save leaves the language unchanged (the shell has no error banner — the write simply does
+   *    not take effect and the current language stands). The post-await `setLocale` is disconnect-guarded
+   *    (the DISCONNECT SAFETY note): the durable write has already landed and the next login re-applies
+   *    it, so a teardown mid-write skips only the now-pointless local repaint.
+   */
+  async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
+    const { code } = event.detail;
+    if (this.screen === "login") {
+      setLocale(code);
+      return;
+    }
+    try {
+      await this.api.putLocale(code);
+      if (!this.isConnected) return;
+      setLocale(code);
+    } catch {
+      // Leave the language unchanged on a failed save — the switch is gated behind the durable write.
+    }
   }
 
   override render(): TemplateResult {
     if (this.screen === "login") {
-      return html`<div class="body">
-        <dashboard-login-screen
-          .api=${this.api}
-          @logged-in=${(event: Event) => this.#onLoggedIn(event)}
-        ></dashboard-login-screen>
+      // The login screen's own chooser bubbles its composed `locale-selected` up to this `<div>`, where
+      // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(uiLocale, …)` recreates
+      // the login screen on a locale change so it repaints in the new language (it holds no controller).
+      return html`<div
+        class="body"
+        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+      >
+        ${keyed(
+          this.uiLocale,
+          html`<dashboard-login-screen
+            .api=${this.api}
+            @logged-in=${(event: Event) => this.#onLoggedIn(event)}
+          ></dashboard-login-screen>`,
+        )}
       </div>`;
     }
     return html`
-      <header class="chrome">
+      <header
+        class="chrome"
+        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+      >
         ${this.sessionRole === "staff" ? nothing : this.#nav()}
-        <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
-          >${t("action.logout")}</wt-button
-        >
+        <div class="actions">
+          <dashboard-language-chooser
+            .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+          ></dashboard-language-chooser>
+          <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
+            >${t("action.logout")}</wt-button
+          >
+        </div>
       </header>
-      <div class="body">${this.#renderScreen()}</div>
+      <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the screen
+           subtree, repainting every child in the new language (the screens hold no controller). -->
+      <div class="body">${keyed(this.uiLocale, this.#renderScreen())}</div>
     `;
   }
 

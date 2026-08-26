@@ -694,14 +694,24 @@ describe("DashboardApi — planned vs actual", () => {
 });
 
 describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
-  it("getMe GETs the whoami route and returns { personId, role }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1", role: "staff" }));
+  it("getMe GETs the whoami route and returns { personId, role, locale, venueLocale }", async () => {
+    // Per-user-language-preference (Task 5): the whoami now also carries the signed-in person's stored
+    // UI `locale` (null when unset) and the geography-derived `venueLocale` fallback.
+    const body = { personId: "p1", role: "staff", locale: "en-GB", venueLocale: "es-ES" };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getMe()).toEqual({ personId: "p1", role: "staff" });
+    expect(await api.getMe()).toEqual(body);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/session/me", {
       method: "GET",
       credentials: "include",
     });
+  });
+
+  it("getMe surfaces a null stored locale for a person with no preference", async () => {
+    const body = { personId: "p1", role: "manager", locale: null, venueLocale: "es-ES" };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getMe()).toEqual(body);
   });
 
   it("listMyShifts GETs my shifts over the [from, to) window", async () => {
@@ -1621,6 +1631,28 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       method: "GET",
       credentials: "include",
     });
+  });
+
+  it("putLocale PUTs the session locale route with a { locale } body and returns nothing", async () => {
+    // The logged-in persist path (Task 10): the signed-in person's identity comes from the session
+    // server-side, so the body carries only the chosen code. An empty 204 resolves to undefined.
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.putLocale("en-GB")).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/session/me/locale", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ locale: "en-GB" }),
+    });
+  });
+
+  it("putLocale rejects with the server code when the locale is unsupported", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "locale.unsupported" } }, false, 422));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.putLocale("xx-XX")).rejects.toMatchObject({ code: "locale.unsupported" });
   });
 });
 
