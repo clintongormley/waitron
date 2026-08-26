@@ -1,0 +1,137 @@
+import { readFile } from "node:fs/promises";
+import { join, resolve, extname, sep } from "node:path";
+import type { Context, Hono } from "hono";
+import type { Logger } from "./logger.js";
+
+/**
+ * Everything the SPA-serving route needs: the absolute directory a front-end was built into and the
+ * URL prefix it is served under. No `db`, no session, no tenant — a built SPA bundle (index.html +
+ * hashed assets) is not secret, and both the `till` and the `dashboard` are fetched by a browser with
+ * plain `GET`s. Mounted so the box can serve those front-ends SAME-ORIGIN (slice 1a), which is what
+ * lets the till/dashboard reach the API without a CORS or cross-origin cookie story.
+ */
+export interface SpaDeps {
+  /** Absolute path to the built SPA directory (holds index.html + assets/). */
+  root: string;
+  /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/manage" (no trailing slash). */
+  basePath: string;
+}
+
+/** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
+ * safe to cache forever — the same reasoning `media-api.ts` caches a content-hashed image under. */
+const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+/** index.html and any non-hashed file carry a stable URL whose CONTENTS change on each deploy, so they
+ * must be revalidated — otherwise a browser pins a stale index.html and never sees the new bundle. */
+const REVALIDATE_CACHE_CONTROL = "no-cache";
+
+/** The Content-Type each served extension maps to. A built SPA only ever emits this handful; anything
+ * unknown falls back to `application/octet-stream` (see `contentTypeFor`) rather than guessing. */
+const CONTENT_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+};
+
+const contentTypeFor = (path: string): string =>
+  CONTENT_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";
+
+/**
+ * Resolve a request's relative path to an absolute file inside `root`, or `null` if it would escape
+ * `root`. THIS is the explicit path-traversal guard — the reason we serve files by a custom `fs`
+ * handler and not `@hono/node-server/serve-static` (`CLAUDE.md` §3: "the defence is explicit, never
+ * implicit"). `resolve` collapses any `..` segments; we then require the collapsed result to stay
+ * within `root`. Comparing against `root + sep` (not a bare `startsWith(root)`) is deliberate: a
+ * sibling directory like `<root>-evil` shares the `root` prefix but must NOT pass. Exported so the
+ * guard is unit-testable on its own — `spa-api.test.ts` proves it by deletion.
+ */
+export function safeResolve(root: string, relPath: string): string | null {
+  const absolute = resolve(root, "." + (relPath.startsWith("/") ? relPath : "/" + relPath));
+  if (!absolute.startsWith(root + sep)) return null;
+  return absolute;
+}
+
+/**
+ * Mount the GET routes that serve a built SPA directory at `deps.basePath`. Must be called AFTER every
+ * API route so a terminal API handler wins its own path; this catch-all only runs for paths nothing
+ * else claimed (a Hono handler that returns without `next()` ends the chain, so `/api/ping` registered
+ * earlier is never shadowed).
+ *
+ * Behaviour: the base-path root serves index.html; an existing file under it is served with its
+ * content-type and cache header; anything else 404s. There is deliberately NO history/SPA fallback —
+ * neither front-end uses client-side URL routing (screens are in-memory Lit state; the URL never
+ * changes), so a reload only ever lands on the base-path root, and the existence check is what stops a
+ * stray unmatched path (e.g. `/api/typo`) from being answered with HTML.
+ */
+export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
+  const indexFile = join(deps.root, "index.html");
+
+  const serve = (c: Context, relPath: string): Promise<Response> => {
+    // The base-path root ("/") serves index.html; there is no client-side routing to fall back on.
+    if (relPath === "/") {
+      return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
+    }
+    const abs = safeResolve(deps.root, relPath);
+    // Defence-in-depth: `safeResolve` returns null on an escaping path, and we 404 it. This TRUE
+    // branch is unreachable through Hono's routing — WHATWG URL normalisation collapses a real `/../`
+    // before the handler sees it, and a `%2f` stays encoded as one harmless segment (probed 2026-08-26
+    // on hono via `app.request`: `/assets/../../../etc/passwd` → path `/etc/passwd`;
+    // `/assets/..%2f..` → path `/assets/..%2f..`) — so the guard is exercised DIRECTLY instead, in
+    // `spa-api.test.ts`'s `safeResolve` block, and proven there by deletion. Kept in the route because
+    // removing a guard on the grounds it "can't happen" is precisely the mistake CLAUDE.md §3 forbids.
+    /* v8 ignore next */
+    if (abs === null) return Promise.resolve(c.body(null, 404));
+    // Only hashed `/assets/*` files are safe to cache immutably; everything else is revalidated.
+    const cache = relPath.includes("/assets/") ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL;
+    return sendFile(c, abs, cache, log);
+  };
+
+  if (deps.basePath === "" || deps.basePath === "/") {
+    app.get("*", (c) => serve(c, c.req.path));
+    return;
+  }
+  const base = deps.basePath;
+  app.get(base, (c) => serve(c, "/"));
+  app.get(`${base}/*`, (c) => serve(c, c.req.path.slice(base.length)));
+}
+
+/**
+ * Read a file and answer with it, or a bare 404. Any read failure is a 404 to the caller — this route
+ * never 500s and never leaks filesystem detail — but a non-ENOENT failure (a misconfigured root, a
+ * permission problem) is logged once, exactly as `media-api.ts` does for its media reads. ENOENT is
+ * the ordinary "no such file" and is left unlogged.
+ */
+async function sendFile(
+  c: Context,
+  absolutePath: string,
+  cacheControl: string,
+  log: Logger,
+): Promise<Response> {
+  try {
+    // `readFile` returns a `Buffer` (`Uint8Array<ArrayBufferLike>`); `c.body` wants the narrower
+    // `Uint8Array<ArrayBuffer>`, so `new Uint8Array(…)` copies into a plainly-backed array of that type.
+    const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(await readFile(absolutePath));
+    return c.body(bytes, 200, {
+      "Content-Type": contentTypeFor(absolutePath),
+      "Cache-Control": cacheControl,
+    });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return c.body(null, 404); // missing file → plain 404, no fallback
+    log("error", "spa.read_failed", { path: absolutePath, code });
+    return c.body(null, 404); // never 500, never leak fs detail — as media-api.ts does
+  }
+}
