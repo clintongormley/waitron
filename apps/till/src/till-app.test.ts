@@ -425,6 +425,11 @@ describe("till-app", () => {
   // lock screen's set-up affordance routes a fresh display into device mode to reach the enrol view.
   it("boots an ENROLLED device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
+      // Drive the venue default to en-GB (≠ the es-ES starting point) so the device path's venue-default
+      // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
+      // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
+      // guard must never withhold the venue default from the operator-less device path.
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
@@ -434,6 +439,8 @@ describe("till-app", () => {
     const s = station(el);
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
+    // The venue default was applied on the operator-less device path (guard passes on `operatorPersonId === ""`).
+    expect(currentLocale()).toBe("en-GB");
   });
 
   it("a normal operator till (401 device probe) stays on the lock screen with NO boot error", async () => {
@@ -2793,6 +2800,35 @@ describe("till-app", () => {
       const logout = c.shadowRoot!.querySelector(".logout")!;
       expect(logout.textContent).toContain(t("action.logout", "en-GB")); // "Log out"
       expect(logout.textContent).not.toContain(t("action.logout", "es-ES")); // not "Cerrar sesión"
+    });
+
+    it("boot does NOT clobber an operator locale applied while getTill was still in flight (slow-link race)", async () => {
+      // Slow-link race: the operator's login (the lock screen's `getStaff` + a human PIN entry) completes
+      // while boot's `getTill` is STILL in flight. `#onLoggedIn` applies the operator's stored en-GB
+      // synchronously (before its first await) and sets `operatorPersonId`; when `getTill` finally
+      // resolves, the boot continuation must NOT re-apply the venue default (es-ES) over it. The guard is
+      // `#boot`'s `if (this.operatorPersonId === "")` — deletion proof: drop it (making the venue-default
+      // `setLocale` unconditional) and this fails, the language clobbered back es-ES for the whole session.
+      let resolveTill!: (v: typeof till) => void;
+      const getTill = vi.fn(() => new Promise<typeof till>((r) => (resolveTill = r)));
+      const { el } = await mountApp({ getTill }); // fixture venue default es-ES, DIFFERENT from en-GB
+      await flush(el);
+      expect(lock(el)).not.toBeNull(); // the lock screen paints (screen defaults to "lock") though boot is pending
+
+      // The operator logs in mid-flight carrying their stored en-GB preference; `#onLoggedIn` applies it.
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Ana",
+        canConfigureTill: false,
+        locale: "en-GB",
+      });
+      await flush(el); // login settles: en-GB applied, operatorPersonId set, screen → counter
+      expect(currentLocale()).toBe("en-GB");
+
+      resolveTill(till); // getTill NOW resolves (venue default es-ES) — the boot continuation runs
+      await flush(el);
+
+      expect(currentLocale()).toBe("en-GB"); // operator locale preserved, NOT clobbered to the venue default
     });
 
     it("a null stored locale falls back to the venue default on login", async () => {

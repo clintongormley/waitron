@@ -409,7 +409,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
+   * Read the public till info once: set the OPERATOR-UI locale (`setLocale`) UNLESS an operator has
+   * already logged in mid-flight (see the guard below), remember the receipt
    * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
    * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` takes the UI-derived
    * `till.locale` (the venue default), while `invoiceLocale` takes the SEPARATE `till.invoiceLocale`
@@ -430,7 +431,18 @@ export class TillApp extends LitElement {
       // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
       // below need no such guard — Lit never paints a detached element.
       if (!this.isConnected) return;
-      setLocale(till.locale);
+      // Apply the venue default ONLY when no operator has logged in yet. On a slow link the lock screen's
+      // `getStaff` + a human PIN entry can complete a login while this `getTill` is still in flight;
+      // `#onLoggedIn` then applies the operator's preferred locale SYNCHRONOUSLY (`resolveActiveLocale`)
+      // and sets `operatorPersonId`. Re-applying the venue default here would CLOBBER that back to the
+      // venue's language for the rest of the session. Gating on "no operator" mirrors the dashboard's
+      // `screen === "login"` seed gate (`dashboard-app.ts` #boot): it still applies the venue default on
+      // the normal pre-login path AND on the device-station paths (device auto-boot and the lock screen's
+      // "set up" affordance both set NO operator, and both legitimately want the venue default). The
+      // `#venueLocale`/`invoiceLocale` writes below stay UNCONDITIONAL — they seed the login/logout
+      // fallback and the receipt, neither of which touches the live UI locale, so a login race never wants
+      // them skipped.
+      if (this.operatorPersonId === "") setLocale(till.locale);
       // Remember the venue's derived default (Task 4): the fallback the app switches back to when no
       // operator preference applies — on login (resolveActiveLocale) and on logout. This is the
       // UI-derived venue default; the receipt's `invoiceLocale` below reads a DIFFERENT server field.
