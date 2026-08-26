@@ -69,7 +69,7 @@ export class LoginScreen extends LitElement {
    * `.value` imperatively does not trigger a reactive update, so this does not loop.
    *
    * The ref is normally live (the `<select>` renders unconditionally). The one case it is NOT: when the
-   * shell re-keys this screen to repaint it in a new language (`dashboard-app`'s `keyed(uiLocale, …)`),
+   * shell re-keys this screen to repaint it in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`),
    * a pending update can flush on the OUTGOING element after Lit has cleared its refs on disconnect. So
    * GUARD the access — a reconcile with no live `<select>` is simply a no-op (the element is on its way
    * out). Without the guard that flush throws `Cannot set properties of undefined`, an unhandled

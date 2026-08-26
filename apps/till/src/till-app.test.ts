@@ -2785,7 +2785,7 @@ describe("till-app", () => {
 
     it("login switches the UI to the operator's stored locale — a DEEP counter child renders English", async () => {
       // Venue default es-ES; the operator's stored locale is en-GB. On login the app resolves en-GB and
-      // `setLocale`s it; the `keyed(uiLocale, …)` wrapper recreates the counter subtree, so a deep child
+      // `setLocale`s it; the `keyed(currentLocale(), …)` wrapper recreates the counter subtree, so a deep child
       // (the logout button, inside the counter's OWN shadow root) renders in English, not Spanish.
       const { el } = await mountApp();
       const c = await toCounterAs(el, "en-GB");

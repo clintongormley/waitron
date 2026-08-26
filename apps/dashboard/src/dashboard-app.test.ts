@@ -568,7 +568,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   it("seeds the login screen to the venue default when there is no session (deep child via keyed)", async () => {
     // No session → stays on `login`; the boot seed reads getLocales and applies its venueDefault (en-GB,
     // which differs from the es-ES module default so the switch is observable). The login screen is
-    // recreated by the `keyed(uiLocale, …)` wrapper, so a DEEP child of its own shadow renders English.
+    // recreated by the `keyed(currentLocale(), …)` wrapper, so a DEEP child of its own shadow renders English.
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
       getLocales: vi.fn().mockResolvedValue({

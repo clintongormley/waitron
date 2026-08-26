@@ -170,15 +170,6 @@ export class DashboardApp extends LitElement {
   @state() private myPersonId = "";
 
   /**
-   * The ACTIVE operator-UI locale, mirrored from the module-global `currentLocale()`. It is the KEY the
-   * {@link render} `keyed(this.uiLocale, …)` wraps each screen in, so a locale switch made anywhere
-   * (boot seed, login, logout of a session, the chooser) RECREATES the rendered screen subtree and it
-   * repaints in the new language — the screens carry no `LocaleChangeController` of their own. Kept in
-   * sync by the controller in the constructor below.
-   */
-  @state() private uiLocale = currentLocale();
-
-  /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from
    * `GET /management-api/locales` on boot ({@link #seedLocale}) — the dashboard has no venue locale until
    * this task, so it SEEDS the login screen in the venue's language. It is also the fallback
@@ -189,12 +180,10 @@ export class DashboardApp extends LitElement {
 
   constructor() {
     super();
-    // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): mirror it onto
-    // `uiLocale`, which re-keys the `keyed(...)` screen wrapper so the screen repaints in the new
-    // language. The screens read `t()` at render time, so recreating them is what applies the switch.
-    new LocaleChangeController(this, () => {
-      this.uiLocale = currentLocale();
-    });
+    // Follow a locale switch made anywhere (seed/login/the chooser's setLocale): on a locale change the
+    // controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys and the
+    // screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
+    new LocaleChangeController(this);
   }
 
   override firstUpdated(): void {
@@ -343,14 +332,14 @@ export class DashboardApp extends LitElement {
   override render(): TemplateResult {
     if (this.screen === "login") {
       // The login screen's own chooser bubbles its composed `locale-selected` up to this `<div>`, where
-      // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(uiLocale, …)` recreates
-      // the login screen on a locale change so it repaints in the new language (it holds no controller).
+      // `#onLocaleSelected` turns a pre-login pick into a transient switch. `keyed(currentLocale(), …)`
+      // recreates the login screen on a locale change so it repaints in the new language (it holds no controller).
       return html`<div
         class="body"
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${keyed(
-          this.uiLocale,
+          currentLocale(),
           html`<dashboard-login-screen
             .api=${this.api}
             @logged-in=${(event: Event) => this.#onLoggedIn(event)}
@@ -375,7 +364,7 @@ export class DashboardApp extends LitElement {
       </header>
       <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the screen
            subtree, repainting every child in the new language (the screens hold no controller). -->
-      <div class="body">${keyed(this.uiLocale, this.#renderScreen())}</div>
+      <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
     `;
   }
 

@@ -91,7 +91,7 @@ export class PersonForm extends LitElement {
    *
    * The ref is normally live (the `<select>` renders unconditionally, unlike the edit dialog's, which is
    * gated on `person?`). The one case it is NOT: when the shell re-keys the staff screen around this form
-   * to repaint it in a new language (`dashboard-app`'s `keyed(uiLocale, …)`), a pending update can flush
+   * to repaint it in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`), a pending update can flush
    * on the OUTGOING element after Lit has cleared its refs on disconnect. So GUARD the access — no live
    * `<select>` means nothing to reconcile — rather than assert it: without the guard that flush throws an
    * unhandled `Cannot set properties of undefined` the pristine-output rule forbids.

@@ -651,6 +651,7 @@ export interface TabLine {
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
+  #localesPromise?: Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>;
 
   /**
    * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches
@@ -673,10 +674,16 @@ export class TillApi {
    * what to do with a pick, so the client only surfaces the shape.
    */
   getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
-    return this.#request<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>(
-      "/api/locales",
-      "GET",
-    );
+    // The list + venue default are immutable for this client's lifetime; fetch once and share.
+    // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
+    this.#localesPromise ??= this.#request<{
+      locales: Array<{ code: string; label: string }>;
+      venueDefault: string;
+    }>("/api/locales", "GET").catch((err) => {
+      this.#localesPromise = undefined;
+      throw err;
+    });
+    return this.#localesPromise;
   }
 
   listStaff(): Promise<StaffMember[]> {

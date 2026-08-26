@@ -172,7 +172,7 @@ export class DevicesScreen extends LitElement {
   /** Reconcile the native station <select>'s live value to `selectedStation` after every render, once its
    * <option> children are in the DOM (mirrors login-screen). The select renders unconditionally, so the
    * ref is normally live — but GUARD the access anyway: when the shell re-keys this screen to repaint it
-   * in a new language (`dashboard-app`'s `keyed(uiLocale, …)`), a pending update can flush on the outgoing
+   * in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`), a pending update can flush on the outgoing
    * element after Lit has cleared its refs on disconnect, and an unguarded assert would then throw an
    * unhandled `Cannot set properties of undefined`. Setting `.value` imperatively does not loop. */
   override updated(): void {

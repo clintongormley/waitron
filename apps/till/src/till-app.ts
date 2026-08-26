@@ -165,13 +165,6 @@ export class TillApp extends LitElement {
   readonly #store = new WorkingOrderStore();
 
   /**
-   * The ACTIVE operator-UI locale, mirrored from the module-global `currentLocale()`. It is the KEY
-   * the {@link render} `keyed(this.uiLocale, …)` wraps the screen in, so a locale switch made anywhere
-   * (login, logout, the chooser) RECREATES the rendered subtree and it repaints in the new language —
-   * the screens themselves carry no `LocaleChangeController`. Kept in sync by the controller below.
-   */
-  @state() private uiLocale = currentLocale();
-  /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from `GET /api/till`
    * on boot (Task 4 makes that field the derived default). It is the fallback the app switches back to
    * when nobody's preference applies: `resolveActiveLocale(personLocale, this.#venueLocale)` on login
@@ -182,12 +175,10 @@ export class TillApp extends LitElement {
 
   constructor() {
     super();
-    // Follow a locale switch made anywhere (login/logout/the chooser's setLocale): mirror it onto
-    // `uiLocale`, which re-keys the `keyed(...)` screen wrapper so the tree repaints in the new
-    // language. The screens read `t()` at render time, so recreating them is what applies the switch.
-    new LocaleChangeController(this, () => {
-      this.uiLocale = currentLocale();
-    });
+    // Follow a locale switch made anywhere (login/logout/the chooser's setLocale): on a locale change
+    // the controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys
+    // and the screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
+    new LocaleChangeController(this);
   }
 
   @state() private screen: Screen = "lock";
@@ -496,7 +487,7 @@ export class TillApp extends LitElement {
       event as CustomEvent<LoggedInDetail>
     ).detail;
     // Apply the operator's stored UI language (per-user-language-preference): their supported choice,
-    // else the venue default. `setLocale` is module-global — the `keyed(uiLocale, …)` wrapper recreates
+    // else the venue default. `setLocale` is module-global — the `keyed(currentLocale(), …)` wrapper recreates
     // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
     // venue default, so a new operator with no choice keeps the venue's language.
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
@@ -1316,7 +1307,7 @@ export class TillApp extends LitElement {
         <!-- keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
              the whole screen subtree, repainting every child in the new language (the screens hold no
              LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it. -->
-        ${keyed(this.uiLocale, this.#renderScreen())}
+        ${keyed(currentLocale(), this.#renderScreen())}
       </div>
     `;
   }
