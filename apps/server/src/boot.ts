@@ -110,6 +110,18 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
 export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
 
 /**
+ * The default persisted store for the box's self-signed cert PEMs and generated secrets, computed
+ * exactly as `DEFAULT_MEDIA_ROOT` above: beside the bundle (`<dist>/state`) for a built artefact, or
+ * `apps/server/src/state` run from source. Later slices (3, 4) materialise the cert + secrets here on
+ * first setup boot and serve HTTPS from them; this task only threads the path. `WAITRON_STATE_DIR`
+ * overrides it (config.ts), and deployment (#9) sets a durable, protected path; this default only has
+ * to exist so a from-source dev boot has somewhere to write. The dev default is gitignored
+ * (`apps/server/src/state/`) because it holds SECRETS. Threaded into `loadConfig` as the
+ * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
+ */
+export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
+
+/**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
  * than config: it is a DoS ceiling on an unauthenticated-adjacent write path, not an operator knob.
  * The upload route (a later slice) enforces it both coarsely (a `bodyLimit` middleware) and
@@ -332,7 +344,7 @@ function makeStartedServer(
 export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
   const now = () => new Date();
   const log = createLogger((line) => process.stdout.write(line), now);
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,

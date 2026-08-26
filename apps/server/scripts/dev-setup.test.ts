@@ -130,7 +130,12 @@ describe("devSetup against real Postgres", () => {
     // loadTillConfig — a throw here would be server.config_missing / server.till_config_* (the
     // codes dev-setup's whole purpose is to make impossible). Placeholder roots: loadConfig only
     // uses them as string fallbacks, never stats them.
-    const config = loadConfig(written, "/dev/null/migrations", "/dev/null/media");
+    const config = loadConfig(
+      written,
+      "/dev/null/migrations",
+      "/dev/null/media",
+      "/dev/null/state",
+    );
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
     // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the five ids into `config.till`
