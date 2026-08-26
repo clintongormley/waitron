@@ -151,6 +151,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",
   },
+  // Printing management (apps/server/src/print-api.ts, printing subsystem). The Impresoras screen's
+  // printer create/edit rejects with `printer.invalid_config` (a transport short of its required
+  // connection fields) or `printer.not_found` (an absent/edited-away printer, also from test-print); the
+  // agent revoke and a printer's agent binding reject with `agent.not_found`.
+  "printer.invalid_config": {
+    en: "Check the printer's connection settings",
+    es: "Revisa los ajustes de conexión de la impresora",
+  },
+  "printer.not_found": {
+    en: "That printer no longer exists",
+    es: "Esa impresora ya no existe",
+  },
+  "agent.not_found": {
+    en: "That print agent no longer exists",
+    es: "Ese agente de impresión ya no existe",
+  },
   "allergen.invalid_code": {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",

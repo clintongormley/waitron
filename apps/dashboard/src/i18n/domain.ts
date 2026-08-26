@@ -149,9 +149,38 @@ const PURCHASE_VAT_KIND_NAMES: NameTable = {
   capital: { en: "Capital goods", es: "Bien de inversión" },
 };
 
+// The three printer transports (@waitron/printing PrintTransport / the `print_transport` pgEnum), shown
+// on the Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables
+// above. "USB" / "TCP" stay as-is in both columns (they are the wire/protocol names).
+const PRINT_TRANSPORT_NAMES: NameTable = {
+  usb: { en: "USB", es: "USB" },
+  network_tcp: { en: "Network (TCP)", es: "Red (TCP)" },
+  cloud_poll: { en: "Cloud poll", es: "Sondeo en la nube" },
+};
+
+// The four print-job statuses (@waitron/printing PrintJobStatus / the `print_job_status` pgEnum), shown
+// on the Impresoras screen's recent-jobs list. Raw string-keyed LOCAL copy, same bundle-decoupling
+// reason as the tables above.
+const PRINT_JOB_STATUS_NAMES: NameTable = {
+  queued: { en: "Queued", es: "En cola" },
+  printing: { en: "Printing", es: "Imprimiendo" },
+  done: { en: "Done", es: "Hecho" },
+  failed: { en: "Failed", es: "Fallido" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
+}
+
+/** A printer transport (usb / network_tcp / cloud_poll) → its display name (raw-value fallback). */
+export function transportName(value: string, locale: string = currentLocale()): string {
+  return resolve(PRINT_TRANSPORT_NAMES, value, locale);
+}
+
+/** A print-job status (queued / printing / done / failed) → its display name (raw-value fallback). */
+export function jobStatusName(value: string, locale: string = currentLocale()): string {
+  return resolve(PRINT_JOB_STATUS_NAMES, value, locale);
 }
 
 /** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */

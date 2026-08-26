@@ -720,6 +720,44 @@ describe("mountPrintApi — management: printers CRUD", () => {
   });
 });
 
+describe("mountPrintApi — management: test-print", () => {
+  it("enqueues a known test payload for the printer and returns { jobId } (202)", async () => {
+    const app = mountApp();
+    const { agentId } = await enrolAgent(app);
+    const printerId = await createPrinterVia(app, agentId);
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+    expect(jobId).toMatch(/^[0-9a-f-]{36}$/);
+    // The enqueued job is a real `queued` outbox row on THIS printer — the never-block outbox path a
+    // fire/sale uses, driven by the dashboard's diagnostic button.
+    const row = await jobRow(jobId);
+    expect(row.status).toBe("queued");
+    const jobs = (await (
+      await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie })
+    ).json()) as { id: string; printerId: string }[];
+    expect(jobs.find((j) => j.id === jobId)?.printerId).toBe(printerId);
+  });
+
+  it("test-print for an unknown printer id → 404 printer.not_found; a non-uuid id → 400", async () => {
+    const app = mountApp();
+    const unknown = randomUUID();
+    const res = await send(app, "POST", `/management-api/printers/${unknown}/test-print`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "printer.not_found" },
+    });
+    const malformed = await send(app, "POST", "/management-api/printers/not-a-uuid/test-print", {
+      cookie: managerCookie,
+    });
+    expect(malformed.status).toBe(400);
+  });
+});
+
 describe("mountPrintApi — management: recent jobs", () => {
   it("lists recent jobs newest-first without the payload", async () => {
     const app = mountApp();
@@ -747,6 +785,7 @@ describe("mountPrintApi — the printer.manage gate", () => {
     ["GET", "/management-api/printers"],
     ["PATCH", `/management-api/printers/${DUMMY}`, { name: "X" }],
     ["POST", `/management-api/printers/${DUMMY}/deactivate`],
+    ["POST", `/management-api/printers/${DUMMY}/test-print`],
     ["GET", "/management-api/print-jobs"],
   ];
 

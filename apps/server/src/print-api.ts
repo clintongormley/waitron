@@ -26,7 +26,9 @@ import {
   claimPrintJobs,
   createPrinter,
   deactivatePrinter,
+  enqueuePrintJob,
   enrolAgent,
+  esc,
   generateAgentCode,
   listPrinters,
   reportPrintJob,
@@ -78,6 +80,12 @@ const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
 /** How many recent jobs the management job list returns — a bound on the dashboard's status read, not
  * a tuning knob (the surface shows recent activity, not the whole history). */
 const RECENT_JOBS_LIMIT = 100;
+
+/** The fixed ESC/POS ticket the dashboard's test-print button enqueues (design §6) — a self-test the
+ * operator triggers to confirm a printer + its agent are wired up end to end. Built ONCE at module
+ * load (the bytes are deterministic); `enqueuePrintJob` copies them into each job's `bytea`. Kept
+ * deliberately minimal — init, two lines, a paper feed, a full cut. */
+const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(3).cut().bytes();
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to. CLIENT faults only: a
@@ -450,6 +458,23 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       await gated(sessionId, (tx) => deactivatePrinter(tx, deps.cfg, id));
       return c.body(null, 204);
+    }),
+  );
+
+  // ── Test-print a printer (printer.manage) ────────────────────────────────────────────────────────
+  app.post("/management-api/printers/:id/test-print", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      // A dashboard DIAGNOSTIC (design §6): enqueue ONE known ESC/POS payload on this printer via the
+      // same never-block outbox path a fire/sale uses — the agent runtime delivers it asynchronously, so
+      // a broken/offline printer can never make this request hang (CLAUDE.md §5). `enqueuePrintJob`'s own
+      // DB-only pre-check 404s an absent id as `printer.not_found`; no new code lives here.
+      const result = await gated(sessionId, (tx) =>
+        enqueuePrintJob(tx, deps.cfg, id, TEST_PRINT_PAYLOAD),
+      );
+      // 202 Accepted: the job is QUEUED for asynchronous delivery, not printed within the request.
+      return c.json(result, 202);
     }),
   );
 
