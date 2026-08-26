@@ -3,24 +3,33 @@ import {
   addDecimal,
   AppError,
   assertMoney,
+  assertSupportedLocale,
   compareDecimal,
+  COUNTRY_DEFAULT_LOCALE,
   decimal,
   divideDecimal,
+  FALLBACK_LOCALE,
   fiscalRecordId,
   grossOf,
   hasCode,
   isAppError,
+  isSupportedLocale,
   isZeroDecimal,
   locationId,
   MAX_MONEY_INTEGER_DIGITS,
   MONEY_SCALE,
   multiplyDecimal,
   negateDecimal,
+  PROVINCE_DEFAULT_LOCALE,
+  resolveActiveLocale,
+  resolveVenueLocale,
   saleId,
   saleLineId,
   seriesId,
   subtractDecimal,
   sumDecimals,
+  SUPPORTED_LOCALE_CODES,
+  SUPPORTED_LOCALES,
   tenantId,
   tenderId,
   tillId,
@@ -79,5 +88,17 @@ describe("package public surface (./index.js)", () => {
     expect(assertMoney(a)).toBe("1.10");
     expect(MONEY_SCALE).toBe(2);
     expect(MAX_MONEY_INTEGER_DIGITS).toBe(12);
+  });
+
+  it("re-exports every locale binding", () => {
+    expect(isSupportedLocale("es-ES")).toBe(true);
+    expect(assertSupportedLocale("en-GB")).toBe("en-GB");
+    expect(resolveVenueLocale({ country: "ES" })).toBe("es-ES");
+    expect(resolveActiveLocale("en-GB", "es-ES")).toBe("en-GB");
+    expect(SUPPORTED_LOCALES).toBeDefined();
+    expect([...SUPPORTED_LOCALE_CODES]).toEqual(["es-ES", "en-GB"]);
+    expect(FALLBACK_LOCALE).toBe("en-GB");
+    expect(COUNTRY_DEFAULT_LOCALE).toEqual({ ES: "es-ES" });
+    expect(PROVINCE_DEFAULT_LOCALE).toEqual({});
   });
 });
