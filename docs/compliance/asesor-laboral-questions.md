@@ -16,11 +16,13 @@ known. These are **confirm-before-go-live** items and one export-format dependen
 
 Created **2026-08-26**. Question IDs are `L#`, stable identifiers, not reading order.
 
-> **⚠ Re-verify before relying on the legal foundation.** The workforce spec's legal research is dated
-> **2026-07-22**. The load-bearing moving part — the *registro horario digital* Real Decreto (L1) — was
-> then still in tramitación, pending Consejo de Ministros (21/28 July 2026), **not yet in the BOE**.
-> Weeks have passed; check its current status first. The convenio figures and LISOS/SS cuantías (L2,
-> L7) are likewise time-varying.
+> **⚠ Status of the moving parts (checked 2026-08-26).** The load-bearing item — the *registro horario
+> digital* Real Decreto (L1) — is **still not approved and not in the BOE**. The 21 July 2026 push to
+> the Consejo de Ministros was missed; on 24 July the Economía and Trabajo ministries agreed to
+> **postpone approval to September 2026** to reconcile the text (press reporting, *elEconomista* — not
+> the BOE itself; confirm on [boe.es](https://www.boe.es) or with the advisor). So the binding regime
+> is still the 2019 art. 34.9 floor, which our build already exceeds. The convenio figures and
+> LISOS/SS cuantías (L2, L7) are likewise time-varying — treat all three as *of a date*, not settled.
 
 ---
 
@@ -48,6 +50,14 @@ built it toward the standalone **Real Decreto de registro horario digital** that
 staggered pymes adaptation period. As of the 2026-07-22 research that RD was **not yet published**. If
 it now is, it may prescribe specific data fields, an export/access format, or a compliance date that
 changes what we must emit.
+
+**Status — checked 2026-08-26 (press, not the BOE).** Still not approved, still not published. The
+Consejo de Estado's dictamen (23 Mar 2026) was unfavourable but **non-binding**; its core objection —
+that this belongs in a *law*, not a Real Decreto — is **unresolved**, and Trabajo intends to proceed by
+RD regardless. The 21 July Consejo de Ministros slot was missed; on 24 July the Economía and Trabajo
+ministries agreed to **defer to September 2026**. One live disagreement bears directly on (a): the
+**pymes adaptation period** — Trabajo proposes six months, Economía one year. Reconfirm at the BOE and
+with the advisor before building to any specific field or date; the text can still change.
 
 > Nuestro sistema genera el registro diario de jornada (art. 34.9 ET): hora de inicio y fin por
 > trabajador y día, conservado cuatro años, accesible al trabajador, a sus representantes y a la ITSS.
