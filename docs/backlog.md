@@ -196,7 +196,7 @@ still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
 - **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) — how
   printing survives a local-box death (the corner the subsystem deferred). Mechanism: USB/IP printers
-  driven by local agents on **boxes *and* tills**. **Build-now item — LANDED in `feat/printing-subsystem`:**
+  driven by local agents on **boxes *and* tills**. **Build-now item — LANDED (#138):**
   the **lease/reclaim for stuck `printing` jobs** (`claimed_at` column + a 60s visibility timeout folded
   into the pull predicate, `PRINT_JOB_LEASE_MS`; at-least-once by design) — the outbox no longer drops a
   job whose agent dies mid-claim; a `printing` row whose claim is older than the lease is reclaimed and
@@ -440,6 +440,11 @@ here is the cross-cutting or genuinely-decision-bearing work.
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make
   the job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed
   cause — if it recurs, per-test timeout + Playwright trace).
+- **`packages/shared` lacks `singleFork`, so the pre-push hook's whole-workspace `pnpm -r
+  test:coverage` intermittently under-reports its branch coverage** (the v8 fork-merge under-count, same
+  class as the `payments` precedent) — a spurious pre-push failure (`@waitron/shared` 80% branches)
+  that a retry clears; CI's *sharded* runs are unaffected and the package is 100% in isolation. Hit
+  during the #138 land. Add `singleFork` to `packages/shared/vitest.config.ts`.
 
 **Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
 
