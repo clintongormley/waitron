@@ -175,13 +175,29 @@ export interface SyncPeer {
   token: string;
 }
 export interface SyncTransportConfig {
-  nodeToken: string;
+  /** The accepted INBOUND node tokens — the set a peer's Bearer is validated against. From
+   * WAITRON_SYNC_NODE_TOKEN (comma-separated, ≥1 non-blank member). A set of one is the pre-rotation
+   * case; ≥2 is the overlap window that rolls the secret with no synchronized restart (spec §2). */
+  nodeTokens: string[];
   databaseUrl: string;
   peers: SyncPeer[];
   /** The fast lane's idle interval (ms) — the tighter tick the payments lane polls at, beside the
    * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
-   * the sync config because it is meaningless without sync enabled, like nodeToken/peers. */
+   * the sync config because it is meaningless without sync enabled, like nodeTokens/peers. */
   fastMinIdleMs: number;
+}
+
+/** Parses a comma-separated accepted-token SET. `required` fails closed on unset/empty (a blank
+ * secret must never mean "no auth", CLAUDE.md §3); a blank MEMBER (a stray `a,,b`) is a hard
+ * config_invalid so an empty token can never enter the accepted set. */
+function tokenSet(env: Env, variable: string): string[] {
+  const tokens = required(env, variable)
+    .split(",")
+    .map((t) => t.trim());
+  if (tokens.some((t) => t.length === 0)) {
+    throw new AppError("server.config_invalid", { variable, reason: "blank_token_in_set" });
+  }
+  return tokens;
 }
 
 /**
@@ -223,7 +239,7 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     return { nodeId: peer.nodeId, url: peer.url, token: peer.token };
   });
   return {
-    nodeToken: required(env, "WAITRON_SYNC_NODE_TOKEN"),
+    nodeTokens: tokenSet(env, "WAITRON_SYNC_NODE_TOKEN"),
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
     peers,
     fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),

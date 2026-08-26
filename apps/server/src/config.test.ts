@@ -498,11 +498,36 @@ describe("loadSyncConfig", () => {
       WAITRON_SYNC_DATABASE_URL: "postgres://sync@host/db",
     };
     expect(loadSyncConfig(env)).toEqual({
-      nodeToken: "mine",
+      nodeTokens: ["mine"],
       databaseUrl: "postgres://sync@host/db",
       peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
       fastMinIdleMs: 1000,
     });
+  });
+
+  it("reads WAITRON_SYNC_NODE_TOKEN as a comma-separated accepted-token SET", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD,NEW" })!.nodeTokens).toEqual([
+      "OLD",
+      "NEW",
+    ]);
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "solo" })!.nodeTokens).toEqual([
+      "solo",
+    ]);
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a, b " })!.nodeTokens).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a,,b" })).toThrow(
+      /config_invalid|blank_token_in_set/,
+    );
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD," })).toThrow(
+      /config_invalid|blank_token_in_set/,
+    );
+    expect(() => loadSyncConfig({ ...base })).toThrow(/config_missing|WAITRON_SYNC_NODE_TOKEN/);
   });
 
   it("reads WAITRON_SYNC_FAST_TICK_MS as the fast lane's idle interval", () => {
