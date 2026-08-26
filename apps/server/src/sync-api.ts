@@ -71,20 +71,23 @@ export interface SyncApiDeps {
   tenantId: string; // the deli tenant the source reads under
   nodeId: string; // this node's origin id (config.till.nodeId), for /hello
   environment: string; // config.environment, for /hello + the peer handshake
-  nodeToken: string; // the token peers must present (WAITRON_SYNC_NODE_TOKEN); non-blank
+  nodeTokens: string[]; // the accepted inbound token SET (rotation overlap window, spec §2)
 }
 
-/** Constant-time Bearer check. A missing/blank/wrong token throws sync.node_unauthorized (→ 401)
- * BEFORE any DB work — the same fail-closed posture as the empty-connection-string trap (CLAUDE.md §3):
- * a blank secret must never mean "no auth". */
-function requireNodeToken(c: Context, nodeToken: string): void {
+/** Constant-time Bearer check against the accepted SET. Iterates EVERY member without an
+ * early return, so request timing leaks neither which token matched nor the set size; a blank
+ * presented token or an empty set fails closed BEFORE any match can be recorded (the empty-secret
+ * trap, CLAUDE.md §3). */
+function requireNodeTokens(c: Context, nodeTokens: readonly string[]): void {
   const header = c.req.header("Authorization") ?? "";
   const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   const a = Buffer.from(presented);
-  const b = Buffer.from(nodeToken);
-  if (presented.length === 0 || a.length !== b.length || !timingSafeEqual(a, b)) {
-    throw new AppError("sync.node_unauthorized", {});
+  let matched = false;
+  for (const token of nodeTokens) {
+    const b = Buffer.from(token);
+    matched = (presented.length !== 0 && a.length === b.length && timingSafeEqual(a, b)) || matched;
   }
+  if (!matched) throw new AppError("sync.node_unauthorized", {});
 }
 
 /**
@@ -98,13 +101,13 @@ function requireNodeToken(c: Context, nodeToken: string): void {
 export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
   app.get("/sync-api/hello", (c) =>
     run(c, log, async () => {
-      requireNodeToken(c, deps.nodeToken);
+      requireNodeTokens(c, deps.nodeTokens);
       return c.json({ nodeId: deps.nodeId, environment: deps.environment });
     }),
   );
   app.get("/sync-api/log", (c) =>
     run(c, log, async () => {
-      requireNodeToken(c, deps.nodeToken);
+      requireNodeTokens(c, deps.nodeTokens);
       const originId = c.req.query("originId");
       const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));

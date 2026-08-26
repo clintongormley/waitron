@@ -95,7 +95,7 @@ function sourceHttp(environment: "production" | "preproduction"): HttpClient {
   const app = new Hono();
   mountSyncApi(
     app,
-    { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment, nodeToken: "shared" },
+    { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment, nodeTokens: ["shared"] },
     log,
   );
   return (url, init) => Promise.resolve(app.request(url, { headers: init.headers }));

@@ -32,7 +32,7 @@ const deps = {
   tenantId: "t",
   nodeId: "n",
   environment: "production",
-  nodeToken: "s3cret",
+  nodeTokens: ["s3cret"],
 };
 
 describe("mountSyncApi node-token auth + handshake", () => {
@@ -47,6 +47,24 @@ describe("mountSyncApi node-token auth + handshake", () => {
     ];
     for (const headers of cases) {
       const res = await app.request("/sync-api/log?after=0&limit=10", { headers });
+      expect(res.status).toBe(401);
+      expect((await res.json()).error.code).toBe("sync.node_unauthorized");
+    }
+  });
+
+  it("accepts ANY member of the node-token set (rotation overlap), rejects a retired token", async () => {
+    const app = new Hono();
+    mountSyncApi(app, { ...deps, nodeTokens: ["OLD", "NEW"] }, log);
+    for (const tok of ["OLD", "NEW"]) {
+      const res = await app.request("/sync-api/hello", {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      expect(res.status).toBe(200);
+    }
+    for (const bad of ["Bearer STALE", "Bearer ", ""]) {
+      const res = await app.request("/sync-api/hello", {
+        headers: bad ? { Authorization: bad } : {},
+      });
       expect(res.status).toBe(401);
       expect((await res.json()).error.code).toBe("sync.node_unauthorized");
     }
@@ -128,7 +146,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId, nodeId: NODE_A, environment: "production", nodeToken: "s3cret" },
+        { db: reader, tenantId, nodeId: NODE_A, environment: "production", nodeTokens: ["s3cret"] },
         log,
       );
       const res = await app.request("/sync-api/log?after=0&limit=10", {
