@@ -37,6 +37,16 @@ records, never-reused invoice numbers.
 One ranked list. **1–5 are the owner-chosen top tier** (2026-08-26); **6–8 are next**; smaller items
 follow.
 
+> **Elevated 2026-08-26 (owner): appliance onboarding — free tier (slices 1–4) — is the next *build*
+> job**, ahead of the numbered tier below. Rationale: it is the one deployment path that needs
+> **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
+> laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
+> sync's cloud-mirror leg (#2), and the appliance *paid* tier all wait on a "Waitron cloud" that **does
+> not exist yet** (verified 2026-08-26: no Dockerfile / deploy job / hosting / domain; `apps/server`
+> has no container or `start`). #1 (engage a fiscal advisor) is a parallel *human* task, not a
+> competing build. The appliance's firmware / OS-image / paid-tier slices (5–7) stay under #8. Spec:
+> [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md).
+
 1. **Engage a fiscal advisor.** Long lead time and it gates fiscal decisions, so start now. The task
    is not just "engage someone": first re-read the whole question list against the current
    (server-as-SIF + cloud) architecture, drop/rewrite what it invalidated, add the questions those
@@ -49,9 +59,13 @@ follow.
 4. **Printing + hardware surface** — the printing subsystem, KDS-4 kitchen printing, counter
    receipt + cash-drawer printing, cash-drawer authorization. All specced + planned (2026-08-17),
    none built. Real deli hardware need; mechanical to build; security review before build.
-5. **Cloud trial on-ramp** — the distribution design's recommended first build: cheapest, least new
-   code (today's same-origin PWA pointed at a cloud instance). A zero-hardware demo / go-to-market
-   path, buildable now in preproduction.
+5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
+   PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
+   **no cloud / deploy / hosting / domain infrastructure yet** (verified 2026-08-26 — no Dockerfile,
+   no deploy job, `apps/server` has no container or `start`), so it is gated on standing up
+   first-time Waitron-cloud infra (host + deploy + DNS + TLS + demo-tenant provisioning), plus
+   signup/billing for a self-serve version. Buildable in preproduction *once that exists*; that cloud
+   infra is shared with sync's cloud-mirror (#2) and the appliance paid tier.
 6. **Recipes → stock → procurement** (sub-projects 18→20) — the linchpin greenfield chain: nested
    sub-recipes, plate costing, stock depletion per sale, then inventory + suppliers/POs/goods-in/
    3-way reconcile/reorder.
