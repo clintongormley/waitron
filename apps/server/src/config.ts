@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
-import { loadTillConfig } from "./till-config.js";
+import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
+import { isUnset } from "./env-value.js";
 import "./errors.js";
 
 export type DeploymentEnvironment = "production" | "preproduction";
@@ -66,10 +67,17 @@ export interface ServerConfig {
    */
   tls?: { certFile: string; keyFile: string };
   /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
-   * resolved once here via `loadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
+   * resolved once here via `tryLoadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
    * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
-   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note). */
-  till: Omit<TillConfig, "orderFlow">;
+   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note).
+   *
+   * OPTIONAL (slice 1b): an unprovisioned box has no venue, so the five `WAITRON_TILL_*_ID` are
+   * absent and this is `undefined` — SETUP MODE. `tryLoadTillConfig` returns it undefined when NONE
+   * of the five are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
+   * half-configured server is a bug, never a setup box). Boot branches on `config.till === undefined`
+   * to enter setup mode, and otherwise narrows it once (an early return) before its trading-only
+   * consumers. */
+  till?: Omit<TillConfig, "orderFlow">;
   /** The WebAuthn Relying Party ID the dashboard's passkey ceremonies are bound to — the registrable
    * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
    * passkey is bound to its RP ID at registration and only offered back on that same RP ID, so this
@@ -150,20 +158,10 @@ const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
 type Env = Record<string, string | undefined>;
 
-/**
- * An env var is "unset" if it is absent OR the empty string — an operator's `VAR=` in an env file
- * (as opposed to omitting the line entirely) must fall back to the same default as no line at
- * all, not be rejected as an invalid value for whatever type that variable holds. Every fallback
- * and default below goes through this, so the rule lives in exactly one place.
- *
- * `required` uses it too, for the same rule read the other way round: a variable with no usable
- * value is missing, and `VAR=` must be reported as missing rather than accepted as the empty
- * string. Leaving that one site hand-inlined would have made this the second definition of "unset"
- * in the file rather than the only one.
- */
-function isUnset(raw: string | undefined): raw is undefined | "" {
-  return raw === undefined || raw === "";
-}
+// `isUnset` (absent OR empty string is "unset") lives in `./env-value.js` so `config.ts` and
+// `till-config.ts` share the ONE definition without an import cycle — see the note atop that module.
+// `required` below reads the same rule the other way round: a variable with no usable value is
+// missing, so `VAR=` is reported as missing rather than accepted as the empty string.
 
 function required(env: Env, variable: string): string {
   const value = env[variable];
@@ -482,7 +480,9 @@ export function loadConfig(
     // The till's own fiscal identity, resolved the same way every other caller does — see
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
     // still reports the DATABASE_URL fault first, matching this file's existing ordering.
-    till: loadTillConfig(env),
+    // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the five ids set → undefined (setup mode),
+    // ALL set → the loaded identity, a PARTIAL set → throws (a half-configured server is a bug).
+    till: tryLoadTillConfig(env),
     // The dashboard's passkey RP ID + origin: loopback defaults in preproduction/dev, but REQUIRED in
     // production so a real deployment can never silently bind passkeys to `localhost` (see
     // `requiredInProduction` and the `DEFAULT_MANAGEMENT_*` note). Same `isUnset` empty-string rule

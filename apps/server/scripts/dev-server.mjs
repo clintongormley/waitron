@@ -1,8 +1,10 @@
 // Dev launcher for apps/server (`pnpm --filter @waitron/server dev`, and via the root `pnpm dev`).
-// `pnpm dev:setup` must have run first — it brings up the dev Postgres, provisions a preproduction
-// venue, and writes the `.env` this reads. This launcher then:
+// A generated `.env` must exist first — either `pnpm dev:setup` (brings up the dev Postgres,
+// provisions a preproduction venue, and writes a TRADING `.env`) or `pnpm dev:onboard` (migrates but
+// provisions no venue, writing a venue-less SETUP-MODE `.env` so the box boots into the slice-1b
+// setup surface). This launcher only checks the file EXISTS — either shape passes — then:
 //
-//   1. refuses to start without that generated `.env` — a clearer failure than letting boot surface
+//   1. refuses to start without a generated `.env` — a clearer failure than letting boot surface
 //      a raw `server.config_missing`;
 //   2. assembles every migration set under `dist/drizzle/<set>`. boot.ts migrates at startup and,
 //      run from SOURCE (tsx), resolves its default migrations root to `apps/server/src/drizzle`,
@@ -20,8 +22,9 @@ const pkgRoot = resolve(here, "..");
 
 if (!existsSync(join(pkgRoot, ".env"))) {
   console.error(
-    "apps/server/.env is missing — run `pnpm dev:setup` from the repo root first.\n" +
-      "It brings up the dev Postgres (docker-compose.yml) and provisions a preproduction venue.",
+    "apps/server/.env is missing — run `pnpm dev:setup` (provisions a venue → trading mode) or " +
+      "`pnpm dev:onboard` (no venue → setup mode) from the repo root first.\n" +
+      "Both bring up the dev Postgres (docker-compose.yml) and write the `.env` this reads.",
   );
   process.exit(1);
 }

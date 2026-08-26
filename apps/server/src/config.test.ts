@@ -98,6 +98,20 @@ describe("loadConfig", () => {
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
+  // Setup mode (slice 1b): an unprovisioned box has no venue, so the five WAITRON_TILL_*_ID are
+  // absent — `loadConfig` then leaves `config.till` UNDEFINED and does NOT throw (boot branches on
+  // that in a later slice-1b task). A provisioned box sets all five and `config.till` carries the
+  // identity. DATABASE_URL stays required either way — its guard fires before the till is read, so a
+  // setup box with no DATABASE_URL still reports the DATABASE_URL fault (the `requires DATABASE_URL`
+  // case below covers that ordering).
+  it("leaves config.till undefined when the five WAITRON_TILL_*_ID are absent, else populates it", () => {
+    const setup = loadConfig({ DATABASE_URL: "postgres://u@h/d" }, ROOT, MEDIA_ROOT);
+    expect(setup.till).toBeUndefined();
+
+    const provisioned = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
+    expect(provisioned.till).toEqual(EXPECTED_TILL);
+  });
+
   it("surfaces config.tls when BOTH cert and key files are set", () => {
     const config = loadConfig(
       {

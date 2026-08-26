@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { loadTillConfig } from "./till-config.js";
+import { loadTillConfig, tryLoadTillConfig } from "./till-config.js";
 
 // Distinct per field so a mis-wired mapping (e.g. locationId reading the series variable) fails the
 // happy-path assertion rather than passing by coincidence — every id is the SAME shape but a
@@ -193,6 +193,69 @@ describe("loadTillConfig", () => {
       const error = captureThrow(() => loadTillConfig({ ...base, [key]: "nope" }));
       expect(codeOf(error)).toBe("server.till_config_invalid");
       expect(isAppError(error) && error.params).toEqual({ key });
+    });
+  });
+});
+
+describe("tryLoadTillConfig", () => {
+  it("returns undefined when NONE of the five till ids are set (setup mode)", () => {
+    // An unprovisioned box has no venue, so the five WAITRON_TILL_*_ID are absent — that is SETUP
+    // MODE, not a misconfiguration, so the load returns undefined rather than throwing. (Boot branches
+    // on `config.till === undefined` in a later slice-1b task.)
+    expect(tryLoadTillConfig({})).toBeUndefined();
+  });
+
+  it("treats all five present-but-empty (VAR=) as none set → undefined", () => {
+    // `isUnset` is absent-OR-empty, so an env file writing every WAITRON_TILL_*_ID= blank is still
+    // "none set" (setup mode) — the same VAR=-means-unset rule the ids' own `required` applies.
+    const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
+    expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
+  });
+
+  it("loads the full config when ALL five are set (the same shape loadTillConfig returns)", () => {
+    // Spot-checks nothing: `toEqual` the whole object, so a wrapper that dropped or reshaped a field
+    // relative to `loadTillConfig` (the delegate) would fail here, not slip through on one field.
+    expect(tryLoadTillConfig(base)).toEqual({
+      tenantId: TENANT,
+      tillId: TILL,
+      nodeId: NODE,
+      seriesId: SERIES,
+      locationId: LOCATION,
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      cardProvider: "none",
+      tipsEnabled: false,
+    });
+  });
+
+  describe.each(ID_VARS)("with only %s missing (a partial set)", (missing) => {
+    it("throws server.config_invalid { variable, reason: 'till_config_partial' }", () => {
+      // Some-but-not-all set is a HALF-CONFIGURED server — a bug, never a setup box — so it throws,
+      // naming the (first) missing variable. Only the NAME travels, never a value: the same no-leak
+      // discipline the ids' `required`/`brand` paths keep.
+      const error = captureThrow(() => tryLoadTillConfig({ ...base, [missing]: undefined }));
+      expect(codeOf(error)).toBe("server.config_invalid");
+      expect(isAppError(error) && error.params).toEqual({
+        variable: missing,
+        reason: "till_config_partial",
+      });
+    });
+  });
+
+  it("names the FIRST missing variable (in WAITRON_TILL_{TENANT,TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
+    // NODE and SERIES both absent → NODE is named (it comes first in the list), so an operator fixes
+    // them top-down rather than one error at a time from an arbitrary one.
+    const error = captureThrow(() =>
+      tryLoadTillConfig({
+        ...base,
+        WAITRON_TILL_NODE_ID: undefined,
+        WAITRON_TILL_SERIES_ID: undefined,
+      }),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TILL_NODE_ID",
+      reason: "till_config_partial",
     });
   });
 });

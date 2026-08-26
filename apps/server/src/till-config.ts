@@ -7,6 +7,7 @@ import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitr
 import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { asAppUser, locations, orderFlow, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { isUnset } from "./env-value.js";
 
 /**
  * The per-venue pay-timing / service mode (design §3), the union of the `order_flow` enum's values —
@@ -170,6 +171,53 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
     ...(stripeReaderId === undefined ? {} : { stripeReaderId }),
     tipsEnabled,
   };
+}
+
+/**
+ * The five environment variables that carry the till's fiscal identity — the ids `loadTillConfig`
+ * `required`s. `tryLoadTillConfig` reads this ONE list to decide none/all/partial, so "which five
+ * make a provisioned till" lives in exactly one place rather than being re-enumerated per call site.
+ * Order matters: a partial set names the FIRST missing var in THIS order, so an operator fixes them
+ * top-down.
+ */
+const TILL_ID_VARS = [
+  "WAITRON_TILL_TENANT_ID",
+  "WAITRON_TILL_TILL_ID",
+  "WAITRON_TILL_NODE_ID",
+  "WAITRON_TILL_SERIES_ID",
+  "WAITRON_TILL_LOCATION_ID",
+] as const;
+
+/**
+ * Setup-mode-aware wrapper over `loadTillConfig` (slice 1b). An unprovisioned box has no venue, so
+ * the five `WAITRON_TILL_*_ID` are absent — that is SETUP MODE, not a fault. Three cases, on the SAME
+ * absent-or-empty `isUnset` rule `config.ts` applies everywhere (a `VAR=` line counts as unset):
+ *
+ *  - NONE of the five set → `undefined`. Boot branches on `config.till === undefined` to run the
+ *    setup surface instead of the trading surface.
+ *  - ALL five set → the loaded identity, delegated verbatim to `loadTillConfig` (which `required`s and
+ *    brands each id, throwing `server.till_config_missing` / `server.till_config_invalid` as before —
+ *    a set of five that are present-but-malformed still fails there, not here).
+ *  - SOME but not all set → `server.config_invalid { variable, reason: "till_config_partial" }`,
+ *    naming the FIRST missing var. A half-configured server is a MISCONFIGURATION a human must fix,
+ *    never a setup box — so it fails loudly rather than silently degrading to setup mode and hiding
+ *    four supplied-but-ignored ids. Only the variable NAME travels, never a value: the same no-leak
+ *    discipline `loadTillConfig`'s own `required`/`brand` paths keep.
+ */
+export function tryLoadTillConfig(
+  env: NodeJS.ProcessEnv,
+): Omit<TillConfig, "orderFlow"> | undefined {
+  const present = TILL_ID_VARS.filter((v) => !isUnset(env[v]));
+  if (present.length === 0) return undefined;
+  if (present.length < TILL_ID_VARS.length) {
+    // Non-null: length is in (0, 5), so at least one is unset and `find` cannot miss.
+    const missing = TILL_ID_VARS.find((v) => isUnset(env[v]))!;
+    throw new AppError("server.config_invalid", {
+      variable: missing,
+      reason: "till_config_partial",
+    });
+  }
+  return loadTillConfig(env);
 }
 
 /**

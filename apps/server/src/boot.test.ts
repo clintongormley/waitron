@@ -133,10 +133,13 @@ const PROBE_ROLE = "server_boot_probe";
 const PROBE_PASSWORD = "probe";
 const RUNTIME_ROLE = "server_boot_runtime_probe";
 const RUNTIME_PASSWORD = "probe";
-// The till's fiscal identity, now REQUIRED by `loadConfig` (it resolves `config.till` via
-// `loadTillConfig`). Distinct per field, matching till-config.test.ts's convention. Folded into
-// `KEY_ENV` below so every real-host boot in this suite carries one; the two config-guard tests at
-// the bottom, which omit `KEY_ENV` on purpose to reach `credentials.key_missing`, spread it directly.
+// The till's fiscal identity. `loadConfig` resolves `config.till` OPTIONALLY via `tryLoadTillConfig`
+// (undefined when none of the five ids are set — setup mode, slice 1b); it is boot's TRADING branch
+// that REQUIRES a venue, so every provisioned-boot test in this suite must carry these. Distinct per
+// field, matching till-config.test.ts's convention. Folded into `KEY_ENV` below so every trading boot
+// in this suite carries one; the two config-guard tests at the bottom, which omit `KEY_ENV` on purpose
+// to reach `server.config_invalid` / `credentials.key_missing`, spread it directly to stay in trading
+// mode (a bare `config.till === undefined` would branch to setup mode and never reach either).
 // A minimal tenant + location for these ids IS seeded in `beforeAll` — `startServer` now reads the
 // till's pay-timing mode from its location at boot (`readOrderFlow`, Task 8), so the location must
 // exist for a successful boot. No staff are seeded, so `GET /api/staff` still returns `[]`.
@@ -457,6 +460,103 @@ describe("startServer, against a real container as the deployment role", () => {
     // The listener actually closed: a request against the same port now fails to connect rather
     // than hanging or succeeding against a server that never really stopped.
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("boots in setup mode when no venue is bound: serves /setup-api/status and a placeholder, and does not mount the trading routes", async () => {
+    // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all five
+    // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
+    // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
+    // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
+    // routes, no sync transport, no drain/reconcile workers. This is the minimal env the brief names:
+    // DATABASE_URL + migrations + port + WAITRON_ENV, and deliberately nothing else (no
+    // WAITRON_CREDENTIALS_KEY, no WAITRON_TILL_*_ID) — the proof a setup box needs neither. DATABASE_URL
+    // is PROBE_ROLE so the shared applyMigrations still runs idempotently against the template.
+    const port = await freePort();
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    });
+    try {
+      // The setup status fact sheet (Task 2's `mountSetup`), echoing the deployment environment boot
+      // resolved — proof `config.environment` threaded through the setup branch into `mountSetup`.
+      const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+      });
+
+      // The placeholder shell answers any unclaimed path (200 HTML), so a browser pointed at the box
+      // gets a "needs setup" page rather than a crash or a bare 404.
+      const root = await fetch(`http://127.0.0.1:${port}/`);
+      expect(root.status).toBe(200);
+      expect(root.headers.get("content-type")).toContain("text/html");
+      expect(await root.text()).toMatch(/set ?up/i);
+
+      // /health still answers — `createHealthState` + `healthApp` are in the shared prefix. It reports
+      // 503 (never-passed: a setup box runs no duty loop, so `lastPassAt` stays null), not a
+      // route-missing failure. The brief asserts only that it ANSWERS (status < 600), which
+      // distinguishes a live route from a crashed/absent one.
+      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(health.status).toBeLessThan(600);
+
+      // The trading routes are NOT mounted: /api/staff is answered by the setup catch-all (the HTML
+      // placeholder), NOT the trading roster route — which would return the JSON `[]` the trading-mode
+      // test below asserts. The setup catch-all (`mountSetup`'s `GET *`) claims every otherwise
+      // unmatched path, so a mounted `mountTillApi` is the only thing that could make this JSON; a 200
+      // text/html placeholder here proves the trading route never registered. (A bare 404 is
+      // impossible while the catch-all is mounted — it is the same route that serves `/` above.)
+      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      expect(staff.status).toBe(200);
+      expect(staff.headers.get("content-type")).toContain("text/html");
+      expect(await staff.text()).toMatch(/set ?up/i);
+    } finally {
+      await server.close();
+    }
+    // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
+    // close() resolves without throwing, and the listener is genuinely gone.
+    await expect(server.close()).resolves.toBeUndefined();
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
+    // The regression guard for the branch: a provisioned box (all five WAITRON_TILL_*_ID + a
+    // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the
+    // setup routes are NOT mounted (so /setup-api/status is a bare 404, never the setup fact sheet).
+    // This is the prove-by-deletion target: forcing `config.till` always-undefined takes the setup
+    // branch, so /setup-api/status returns the 200 fact sheet (failing the 404 assertion below) and
+    // /api/staff is answered by `mountSetup`'s `GET *` catch-all as a 200 text/html placeholder (a bare
+    // 404 is impossible while that catch-all is mounted — the sibling test above says so) — which fails
+    // this test at `await staff.json()`, a parse error on HTML, not at the status assertion.
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    try {
+      // The trading surface is live: the unauthenticated roster route returns this till's (empty) staff
+      // list under RLS — 200 [], not 404 — exactly as the first test in this block asserts.
+      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      expect(staff.status).toBe(200);
+      expect(await staff.json()).toEqual([]);
+
+      // The setup surface is absent in trading mode: /setup-api/status is a bare Hono 404 (no setup
+      // routes, and no till SPA catch-all here since WAITRON_TILL_APP_DIR is unset), never the
+      // { provisioned: false, ... } fact sheet a setup box serves.
+      const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
+      expect(status.status).toBe(404);
+    } finally {
+      await server.close();
+    }
   }, 60_000);
 
   it("serves the built till at / and dashboard at /manage when the app dirs are configured, without shadowing the APIs", async () => {
@@ -1116,11 +1216,14 @@ describe("startServer, against a real container as the deployment role", () => {
   });
 });
 
-// Neither test below needs the real container `beforeAll` starts for the suite above: both
-// `WAITRON_MAX_TICK_MS` values are rejected or accepted before `startServer` ever reaches
-// `loadKeyRing`, let alone `applyMigrations` — a deliberately unreachable `DATABASE_URL` proves
-// that (a real one would make a rejection ambiguous between this guard and an actual connection
-// failure that happened to also throw).
+// The REJECT test below needs no real container: an at-or-above-budget `WAITRON_MAX_TICK_MS` is
+// rejected by this guard at the very top of `startServer`, before it ever reaches the stamp probe or
+// `applyMigrations` — a deliberately unreachable `DATABASE_URL` proves that (a real one would make the
+// rejection ambiguous between this guard and an actual connection failure that happened to also
+// throw). The ACCEPT test DOES need the container `beforeAll` starts for the suite above: since slice
+// 1b `loadKeyRing` lives at the top of boot's trading branch — AFTER the stamp probe and migrations —
+// so the below-budget value's proof (reaching `credentials.key_missing` at `loadKeyRing`) only lands
+// once those have run against a reachable database.
 describe("startServer's maxTickMs-vs-drain-budget guard", () => {
   const UNREACHABLE_DATABASE_URL = "postgres://unused@unused.invalid/db";
 
@@ -1140,15 +1243,19 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
   });
 
   it("lets a maxTickMs comfortably below the budget past this guard", async () => {
-    // Proven by elimination, not by a full boot (which would need a real container and a key
-    // ring): omitting every WAITRON_CREDENTIALS_KEY* variable makes `loadKeyRing` — the very next
-    // line in `startServer` after this guard — throw `credentials.key_missing`. Reaching THAT
-    // error, rather than `server.config_invalid`/`at_or_above_drain_budget`, is what proves this
-    // guard let a valid value through rather than rejecting it for the wrong reason.
+    // The guard is at the very top of `startServer`, but `loadKeyRing` now lives at the top of boot's
+    // TRADING branch — after the shared deployment-stamp probe and `applyMigrations` — so proving a
+    // below-budget value passes the guard means reaching that later throw against a REACHABLE database.
+    // `...TILL_ENV` makes `config.till` present (trading mode) while every WAITRON_CREDENTIALS_KEY*
+    // variable is omitted, so a boot that gets past the guard, the stamp probe and migrations (against
+    // the real, unstamped container) throws `credentials.key_missing` at `loadKeyRing`. Reaching THAT
+    // error, not `server.config_invalid`/`at_or_above_drain_budget`, is what proves the guard let this
+    // value through rather than rejecting it for the wrong reason.
     const error = await captureError(() =>
       startServer({
         ...TILL_ENV,
-        DATABASE_URL: UNREACHABLE_DATABASE_URL,
+        DATABASE_URL: databaseUrl,
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY] - 1),
       }),
     );

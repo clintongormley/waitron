@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { serve } from "@hono/node-server";
+import type { Hono } from "hono";
 import { createPostgresDb, type Database } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
@@ -14,10 +15,10 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
-import { loadConfig, loadSyncConfig } from "./config.js";
+import { loadConfig, loadSyncConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { codeOf } from "./error-code.js";
-import { createLogger } from "./logger.js";
+import { createLogger, type Logger } from "./logger.js";
 import {
   createHealthState,
   healthApp,
@@ -49,6 +50,7 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
+import { mountSetup } from "./setup-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
@@ -64,6 +66,17 @@ export interface StartedServer {
   health: HealthState;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
   close(): Promise<void>;
+}
+
+/**
+ * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
+ * work and which connection pools to drain. Trading mode fills both in — abort the loop and the
+ * sync/retention workers, then close the app, sync and retention pools. Setup mode's `stopWork` is a
+ * no-op (a setup box runs neither loop nor sync) and its `closePools` drains only the app pool.
+ */
+interface BootTeardown {
+  stopWork: () => Promise<void>;
+  closePools: () => Promise<void>;
 }
 
 /**
@@ -153,6 +166,149 @@ export async function buildCardProvider(
 }
 
 /**
+ * Bind the one HTTP listener and wire its listen-failure handler — the serve step BOTH boot modes
+ * share, written once here rather than duplicated across the setup and trading branches. Called LAST
+ * in each branch, after every route that branch registered, so the mounted app is complete before it
+ * binds. Returns the `@hono/node-server` server so `makeStartedServer`'s `close()` can shut it down.
+ */
+function startListening(
+  config: ServerConfig,
+  app: Hono,
+  now: () => Date,
+  log: Logger,
+): ReturnType<typeof serve> {
+  // Set inside the `listeningListener` below, and read by the `'error'` handler right after it —
+  // see that handler's own comment on why an error arriving AFTER a successful bind must not be
+  // treated the same way as a bind failure.
+  let bound = false;
+  // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
+  // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
+  // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
+  // in `tls.ts`. A missing or unreadable certificate fails the boot loudly here (spec §8).
+  //
+  // The SECOND argument, `serve`'s own `listeningListener`, not a log call placed right after this
+  // expression: `serve()` calls `listen()` and returns immediately, but the underlying socket binds
+  // ASYNCHRONOUSLY — a log line placed here in source order would assert "listening" before that
+  // bind has actually happened. `listeningListener` is Node's own callback for "now it really is."
+  const server = serve(
+    buildServeOptions(
+      { fetch: app.fetch, port: config.httpPort, hostname: config.httpHost },
+      config.tls,
+    ),
+    (info) => {
+      bound = true;
+      log("info", "server.listening", { port: info.port, environment: config.environment });
+    },
+  );
+  // The failure counterpart: `EADDRINUSE` (a fixed default port already taken — the most common
+  // boot-time failure `WAITRON_HTTP_PORT`'s fixed default invites) or `EACCES` (a privileged port,
+  // no permission) surfaces here, on Node's own `'error'` event, strictly AFTER `startServer` has
+  // already returned its `StartedServer` — `serve()` is synchronous and this event is not, so
+  // unlike every OTHER boot failure (§8's "everything escapes" as a rejected promise) this one
+  // cannot reach `bin.ts` by throwing. Logging and exiting directly here is this path's own
+  // equivalent, not a departure from §8's posture: a host that failed to bind its one HTTP route
+  // and kept running in the background would be exactly the "boots half-configured and retries
+  // invisibly" host §8 exists to rule out.
+  //
+  // This listener is registered for the WHOLE lifetime of the process, not just until the bind
+  // settles — Node gives no way to remove it selectively once binding succeeds without risking a
+  // race against a genuinely-late bind error. `bound` is the gate that keeps it from over-firing:
+  // a healthy, already-listening host emitting a LATER, unrelated 'error' (this handler's own
+  // pre-merge review found no confirmed real-world trigger, but nothing rules one out either) would
+  // otherwise be logged as `server.listen_failed` and exited exactly like a genuine bind failure —
+  // killing a mid-pass host over something that was never about listening at all.
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    // A post-bind 'error' is not this handler's business — see the comment above. Nothing through
+    // `startServer`'s public surface can emit a synthetic 'error' event on the raw `http.Server`
+    // once it is listening (it is never exposed on `StartedServer`), so this branch is untestable
+    // the same way `error.code ?? "unknown"` below already is documented to be.
+    /* v8 ignore next */
+    if (bound) return;
+    const failure = new AppError("server.listen_failed", {
+      port: config.httpPort,
+      // `error.code` is optional on `NodeJS.ErrnoException`'s TYPE, but every real listen failure
+      // this host can hit (EADDRINUSE, EACCES, ENOTFOUND, EADDRNOTAVAIL, …) sets it — Node's socket
+      // layer always attaches one. Reaching the `?? "unknown"` fallback needs a synthetic error with
+      // no `code`, which `boot.test.ts` cannot produce through `startServer`'s public surface (the
+      // raw `http.Server` this handler is attached to is never exposed on `StartedServer`) — the
+      // same shape of unreachable-but-type-required branch `loop.ts`'s `realSleep` documents rather
+      // than forces.
+      /* v8 ignore next */
+      code: error.code ?? "unknown",
+    });
+    // NOT `log(...)` followed by a bare `process.exit(1)`: `log`'s sink is `process.stdout.write`
+    // discarding any signal of completion, and on a pipe (Docker, systemd) that write is
+    // ASYNCHRONOUS — exiting immediately after calling it races the write, which can truncate or
+    // drop entirely the one line an operator is told to grep for. Setting `process.exitCode` alone
+    // does not fix it either: the loop may still be running and keeping the event loop alive, so a
+    // merely-set exit code is never consumed on its own — this path needs an explicit `process.exit`
+    // somewhere, just not before the write it depends on has actually gone out. A one-off logger,
+    // built the identical way `log` itself is, but whose sink only calls `process.exit` from the
+    // write's own completion callback, is what makes that ordering real rather than assumed.
+    // `packages/credentials`'s `bin.ts` avoids the same hazard the other way — it never calls
+    // `process.exit` at all, setting `process.exitCode` and letting the event loop drain naturally,
+    // which works there because nothing else keeps that process alive; this host's background loop
+    // means that route isn't available here.
+    createLogger((line) => process.stdout.write(line, () => process.exit(1)), now)(
+      "error",
+      failure.code,
+      failure.params,
+    );
+  });
+  return server;
+}
+
+/**
+ * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
+ * is idempotent and always drains the connection pools, whatever the teardown does first — the
+ * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
+ * and awaits it (the loop plus the sync/retention workers in trading mode; a no-op in setup mode),
+ * then `closePools` releases the pools (app + sync + retention in trading mode; the app pool alone in
+ * setup mode).
+ */
+function makeStartedServer(
+  server: ReturnType<typeof serve>,
+  health: HealthState,
+  log: Logger,
+  teardown: BootTeardown,
+): StartedServer {
+  // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
+  // teardown (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than
+  // once". `bin.ts`'s own signal latch prevents two calls from a signal handler today, but `close()`
+  // is exported on `StartedServer` precisely so a caller outside `bin.ts` can invoke it directly — a
+  // test hook above all — with no latch of its own. Checked and set synchronously, before the first
+  // `await`: JS's run-to-completion means the loser's check always sees the winner's write, however
+  // the two calls are interleaved by their caller. A plain early return is enough — the loser does
+  // not wait for the winner's shutdown to finish, it only promises not to repeat it.
+  let closed = false;
+  return {
+    health,
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
+      // close() never leaves a worker dangling. In trading mode this aborts the main loop and the
+      // sync/retention workers and swallows a worker's settle-by-rejection so it can never skip the
+      // guaranteed teardown; in setup mode there is nothing to stop.
+      await teardown.stopWork();
+      // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
+      // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
+      // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
+      // above all — would otherwise be left holding an undrained pool on exactly the path that
+      // failed.
+      try {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      } finally {
+        await teardown.closePools();
+      }
+      log("info", "server.stopped");
+    },
+  };
+}
+
+/**
  * The one place the real implementations meet. Everything above is injected, so this function is
  * thin by construction. `tsc` pins every field mapping below against each callee's own signature;
  * `boot.test.ts` is this function's own test subject — calling it against a real container, as the
@@ -204,11 +360,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (config.tillAppDir !== undefined) {
     assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
   }
-  // The env this function was given, straight through: `loadKeyRing` owns the four
-  // WAITRON_CREDENTIALS_KEY* names and their validation, and re-declaring them here would be a
-  // second source of truth. (Not literally `process.env` — that is true only when `bin.ts` is the
-  // caller; `boot.test.ts` passes a literal object instead.)
-  const ring = loadKeyRing(env);
 
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. Its own connection, closed immediately — the long-lived pool below is not opened
@@ -233,6 +384,59 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   );
   const db = await createPostgresDb(config.databaseUrl);
 
+  // Health state + the one Hono app, shared by BOTH modes: `/health` answers in setup mode too, and
+  // whichever surface the branch below mounts (setup or trading) attaches to this same app. Created
+  // before the branch so the shared `startListening`/`makeStartedServer` helpers receive one app and
+  // one health state whichever mode boots.
+  const health = createHealthState(now());
+  const app = healthApp(health, now);
+
+  if (config.till === undefined) {
+    // SETUP MODE (slice 1b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID are
+    // set). It serves ONLY `/health` and the unauthenticated setup surface: no key ring, no
+    // reconciler/duty, no `readOrderFlow`, no trading routes, no sync transport, and no
+    // drain/reconcile workers — there is nothing to submit yet. The DB is migrated all the same (the
+    // shared prefix above ran `applyMigrations`), ready for slice 2's provisioning wizard. The
+    // till/dashboard SPAs are deliberately NOT mounted — they are useless without a venue, and the
+    // real setup wizard app arrives in slice 2; the media store is trading-only, so it is not created
+    // here either.
+    mountSetup(app, { environment: config.environment }, log);
+    const server = startListening(config, app, now, log);
+    return makeStartedServer(server, health, log, {
+      // A setup box runs no background work, so there is nothing to abort or await.
+      stopWork: () => Promise.resolve(),
+      // Only the app pool was opened — no sync/retention pools exist to tear down.
+      closePools: () => db.close(),
+    });
+  }
+
+  // TRADING MODE — a venue is bound (`config.till` is present, narrowed for the rest of the function
+  // by the early return above). Everything below is today's flow, only relocated into this branch; a
+  // setup box reaches none of it.
+  //
+  // The env this function was given, straight through: `loadKeyRing` owns the four
+  // WAITRON_CREDENTIALS_KEY* names and their validation, and re-declaring them here would be a second
+  // source of truth. (Not literally `process.env` — that is true only when `bin.ts` is the caller;
+  // `boot.test.ts` passes a literal object instead.) Loaded at the TOP of the trading branch, not in
+  // the shared prefix: it is consumed only on trading paths (the reconciler, the webhook, the card
+  // provider, the drain loop), so an unprovisioned box needs no WAITRON_CREDENTIALS_KEY.
+  //
+  // Guarded so a `loadKeyRing` throw (`credentials.key_missing`, a malformed WAITRON_CREDENTIALS_KEY)
+  // closes `db` before it propagates. `createPostgresDb` above already opened a LIVE pool (it does
+  // `await pool.connect(); probe.release()`, `packages/db/src/client.ts`), and on the throw path
+  // `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()` — the
+  // pool would leak. This mirrors the `stampProbe` try/finally in the shared prefix above; the happy
+  // path is unchanged. (The pre-existing `readOrderFlow`/`buildCardProvider` throw sites below leak the
+  // same way and are out of scope here — this only restores the no-leak `loadKeyRing` had before it
+  // moved after the pool open.)
+  let ring: ReturnType<typeof loadKeyRing>;
+  try {
+    ring = loadKeyRing(env);
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
+
   const reconciler = new StripeReconciler({
     db,
     nodeId: config.till.nodeId,
@@ -246,26 +450,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   });
   const duty = reconcilerAsDuty(reconciler);
 
-  const health = createHealthState(now());
-  // Set inside the `listeningListener` below, and read by the `'error'` handler right after it —
-  // see that handler's own comment on why an error arriving AFTER a successful bind must not be
-  // treated the same way as a bind failure.
-  let bound = false;
-  // The SECOND argument, `serve`'s own `listeningListener`, not a log call placed right after this
-  // expression: `serve()` calls `listen()` and returns immediately, but the underlying socket binds
-  // ASYNCHRONOUSLY — a log line placed here in source order would assert "listening" before that
-  // bind has actually happened. `listeningListener` is Node's own callback for "now it really is."
-  // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
-  // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
-  // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
-  // from the PATH tenant's own `payments.stripe` credential, never a platform one.
   // The product-image store must exist before mounting the routes that read and write it (the
   // upload/serve mounts land in later slices). Done ONCE here, not per request; `recursive: true`
   // makes it idempotent — a no-op once the directory is there, which is every boot after the first.
   // After migrations deliberately: a boot that fails earlier never creates a stray media directory.
+  // Trading-only — a setup box serves no media.
   mkdirSync(config.mediaDir, { recursive: true });
 
-  const app = healthApp(health, now);
+  // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
+  // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
+  // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
+  // from the PATH tenant's own `payments.stripe` credential, never a platform one.
   mountWebhook(
     app,
     {
@@ -287,7 +482,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // back. Mounting registers routes only — no database work happens here, so a till pointed at an
   // unprovisioned tenant fails per-request (via `run`), never at boot.
   // The till's pay-timing mode is a per-LOCATION column, not an env var, so `config.till` (from
-  // `loadTillConfig`) carries every fiscal id but NOT `orderFlow`. Read it here, ONCE, now that the
+  // `tryLoadTillConfig`) carries every fiscal id but NOT `orderFlow`. Read it here, ONCE, now that the
   // pool is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
@@ -539,75 +734,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     mountSpa(app, { root: config.tillAppDir, basePath: "" }, log);
   }
 
-  // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
-  // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
-  // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
-  // in `tls.ts`. A missing or unreadable certificate fails the boot loudly here (spec §8).
-  const server = serve(
-    buildServeOptions(
-      { fetch: app.fetch, port: config.httpPort, hostname: config.httpHost },
-      config.tls,
-    ),
-    (info) => {
-      bound = true;
-      log("info", "server.listening", { port: info.port, environment: config.environment });
-    },
-  );
-  // The failure counterpart: `EADDRINUSE` (a fixed default port already taken — the most common
-  // boot-time failure `WAITRON_HTTP_PORT`'s fixed default invites) or `EACCES` (a privileged port,
-  // no permission) surfaces here, on Node's own `'error'` event, strictly AFTER `startServer` has
-  // already returned its `StartedServer` — `serve()` is synchronous and this event is not, so
-  // unlike every OTHER boot failure (§8's "everything escapes" as a rejected promise) this one
-  // cannot reach `bin.ts` by throwing. Logging and exiting directly here is this path's own
-  // equivalent, not a departure from §8's posture: a host that failed to bind its one HTTP route
-  // and kept running in the background would be exactly the "boots half-configured and retries
-  // invisibly" host §8 exists to rule out.
-  //
-  // This listener is registered for the WHOLE lifetime of the process, not just until the bind
-  // settles — Node gives no way to remove it selectively once binding succeeds without risking a
-  // race against a genuinely-late bind error. `bound` is the gate that keeps it from over-firing:
-  // a healthy, already-listening host emitting a LATER, unrelated 'error' (this handler's own
-  // pre-merge review found no confirmed real-world trigger, but nothing rules one out either) would
-  // otherwise be logged as `server.listen_failed` and exited exactly like a genuine bind failure —
-  // killing a mid-pass host over something that was never about listening at all.
-  server.on("error", (error: NodeJS.ErrnoException) => {
-    // A post-bind 'error' is not this handler's business — see the comment above. Nothing through
-    // `startServer`'s public surface can emit a synthetic 'error' event on the raw `http.Server`
-    // once it is listening (it is never exposed on `StartedServer`), so this branch is untestable
-    // the same way `error.code ?? "unknown"` below already is documented to be.
-    /* v8 ignore next */
-    if (bound) return;
-    const failure = new AppError("server.listen_failed", {
-      port: config.httpPort,
-      // `error.code` is optional on `NodeJS.ErrnoException`'s TYPE, but every real listen failure
-      // this host can hit (EADDRINUSE, EACCES, ENOTFOUND, EADDRNOTAVAIL, …) sets it — Node's socket
-      // layer always attaches one. Reaching the `?? "unknown"` fallback needs a synthetic error with
-      // no `code`, which `boot.test.ts` cannot produce through `startServer`'s public surface (the
-      // raw `http.Server` this handler is attached to is never exposed on `StartedServer`) — the
-      // same shape of unreachable-but-type-required branch `loop.ts`'s `realSleep` documents rather
-      // than forces.
-      /* v8 ignore next */
-      code: error.code ?? "unknown",
-    });
-    // NOT `log(...)` followed by a bare `process.exit(1)`: `log`'s sink is `process.stdout.write`
-    // discarding any signal of completion, and on a pipe (Docker, systemd) that write is
-    // ASYNCHRONOUS — exiting immediately after calling it races the write, which can truncate or
-    // drop entirely the one line an operator is told to grep for. Setting `process.exitCode` alone
-    // does not fix it either: the loop below is still running and keeps the event loop alive, so a
-    // merely-set exit code is never consumed on its own — this path needs an explicit `process.exit`
-    // somewhere, just not before the write it depends on has actually gone out. A one-off logger,
-    // built the identical way `log` itself is, but whose sink only calls `process.exit` from the
-    // write's own completion callback, is what makes that ordering real rather than assumed.
-    // `packages/credentials`'s `bin.ts` avoids the same hazard the other way — it never calls
-    // `process.exit` at all, setting `process.exitCode` and letting the event loop drain naturally,
-    // which works there because nothing else keeps that process alive; this host's background loop
-    // means that route isn't available here.
-    createLogger((line) => process.stdout.write(line, () => process.exit(1)), now)(
-      "error",
-      failure.code,
-      failure.params,
-    );
-  });
+  // Bind the HTTP listener and wire the listen-failure handler — the serve step shared by both boot
+  // modes (see `startListening`). Mounted here, LAST, after every trading route and the optional sync
+  // block and SPA mounts above, so the app is complete before it binds.
+  const server = startListening(config, app, now, log);
 
   const controller = new AbortController();
   const loop = runLoop({
@@ -681,20 +811,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
   });
 
-  // Guards a second, LOSING concurrent `close()`: without it, both calls would reach `db.close()`
-  // (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than once".
-  // `bin.ts`'s own signal latch prevents two calls from a signal handler today, but `close()` is
-  // exported on `StartedServer` precisely so a caller outside `bin.ts` can invoke it directly — a
-  // test hook above all — with no latch of its own. Checked and set synchronously, before the
-  // first `await`: JS's run-to-completion means the loser's check always sees the winner's write,
-  // however the two calls are interleaved by their caller. A plain early return is enough — the
-  // loser does not wait for the winner's shutdown to finish, it only promises not to repeat it.
-  let closed = false;
-  return {
-    health,
-    close: async () => {
-      if (closed) return;
-      closed = true;
+  // The shared `StartedServer` + `close()` (see `makeStartedServer`), with the trading mode's own
+  // teardown supplied here: stop the main loop and the sync/retention workers, then drain the app,
+  // sync and retention pools. Byte-for-byte the sequence this branch ran inline before the setup/
+  // trading split — the ordering guarantees (abort the loop and sync together, await the loop, swallow
+  // a worker's settle-by-rejection so it can never skip the guaranteed pool teardown) are unchanged.
+  return makeStartedServer(server, health, log, {
+    stopWork: async () => {
       controller.abort();
       // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
       // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
@@ -703,31 +826,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
       // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
       // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
-      // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the
-      // try/finally below, which would leak the HTTP server and both connection pools on exactly the
-      // path that failed. close() resolves either way; the worker's own errors are logged inside
-      // runSyncPull (sync.pull_failed / sync.stream_stalled), not here.
+      // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the pool
+      // teardown, which would leak the HTTP server and both connection pools on exactly the path that
+      // failed. close() resolves either way; the worker's own errors are logged inside runSyncPull
+      // (sync.pull_failed / sync.stream_stalled), not here.
       if (syncWorker !== undefined) await syncWorker.catch(() => {});
       // The retention sweep worker, torn down the identical way: `syncController.abort()` above already
       // stopped it (it shares that signal), so this only awaits its settle, swallowing a rejection so
       // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
       // swallowed inside runRetentionSweep, not here.
       if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
-      // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
-      // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
-      // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
-      // above all — would otherwise be left holding an undrained pool on exactly the path that
-      // failed.
-      try {
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
-      } finally {
-        await db.close();
-        if (syncDb !== undefined) await syncDb.close();
-        if (retentionDb !== undefined) await retentionDb.close();
-      }
-      log("info", "server.stopped");
     },
-  };
+    closePools: async () => {
+      await db.close();
+      if (syncDb !== undefined) await syncDb.close();
+      if (retentionDb !== undefined) await retentionDb.close();
+    },
+  });
 }
