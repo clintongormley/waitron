@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { currentLocale, setLocale, subscribeLocale, t } from "./t.js";
+import { catalogues, en } from "./strings.js";
 
 afterEach(() => {
   // t.ts holds module-level locale state; reset to the shipped default so a
@@ -43,7 +44,9 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
   expect(calls).toBe(1);
 });
 
-it("resolves en-GB directly from its own catalogue entry", () => {
-  // after adding "en-GB": en, an explicit en-GB request hits the catalogue, not just the fallback
-  expect(t("action.logout", "en-GB")).toBe(t("action.logout", "en"));
+it("registers en-GB as a first-class catalogue entry", () => {
+  // Check the catalogue map directly: this fails if "en-GB": en is absent. A t()
+  // comparison cannot — en-GB's catalogue value IS the en base, identical to the
+  // ?? en[key] fallback, so t(k,"en-GB") === t(k,"en") holds either way (CLAUDE.md §1).
+  expect(catalogues["en-GB"]).toBe(en);
 });
