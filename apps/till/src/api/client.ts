@@ -651,7 +651,10 @@ export interface TabLine {
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
-  #localesPromise?: Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>;
+  #localesPromise?: Promise<{
+    locales: Array<{ code: string; label: string }>;
+    venueDefault: string;
+  }>;
 
   /**
    * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches

@@ -737,7 +737,10 @@ type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 export class DashboardApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
-  #localesPromise?: Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>;
+  #localesPromise?: Promise<{
+    locales: Array<{ code: string; label: string }>;
+    venueDefault: string;
+  }>;
 
   /**
    * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches
