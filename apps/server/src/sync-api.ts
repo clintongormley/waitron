@@ -84,13 +84,20 @@ export interface SyncApiDeps {
   nodeTokens: string[]; // the accepted inbound token SET (rotation overlap window, spec §2)
 }
 
-/** Constant-time Bearer check against the accepted SET. Iterates EVERY member without an early
- * return and OR-s the per-member `timingSafeEqual`, so a hit and a miss take the same time — there is
- * no early return and no position-dependent short-circuit — and request timing therefore cannot
- * distinguish a matching token from a non-matching one, nor reveal WHICH member matched. (It does not
- * hide the set SIZE: the loop's wall-clock is inherently ∝ the number of members, which is operator
- * config, not a secret worth constant-timing.) A blank presented token or an empty set fails closed
- * BEFORE any match can be recorded (the empty-secret trap, CLAUDE.md §3). */
+/** Bearer check against the accepted SET, constant-time for tokens OF THE SAME LENGTH. `timingSafeEqual`
+ * THROWS on unequal-length buffers, so it is guarded by `a.length === b.length` (mandatory — the guard
+ * IS the required precondition, not a leak we chose to add): for a same-length hit vs a same-length
+ * miss the `timingSafeEqual` path runs identically — no early return, no position-dependent
+ * short-circuit — so request timing cannot distinguish them, nor reveal WHICH same-length member
+ * matched. Timing DOES depend on whether the presented token's length matches a configured token's
+ * length, and that is fine here: token length is not a secret for a ~256-bit random pre-shared token —
+ * an attacker learning "my guess's length matches a configured one" gains nothing against it — which is
+ * the STANDARD accepted pattern for high-entropy tokens (hashing every candidate to a fixed length to
+ * hide the length would be over-engineering). Iterating EVERY member and OR-ing the per-member result
+ * with no early return is what keeps a same-length hit indistinguishable from a same-length miss; it
+ * does not hide the set SIZE either (the loop's wall-clock is ∝ the member count, operator config). A
+ * blank presented token or an empty set fails closed BEFORE any match can be recorded (the empty-secret
+ * trap, CLAUDE.md §3). */
 function requireNodeTokens(c: Context, nodeTokens: readonly string[]): void {
   const header = c.req.header("Authorization") ?? "";
   const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";

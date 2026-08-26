@@ -43,13 +43,13 @@ describe("the sync error codes carry their declared params", () => {
     const error = new AppError("sync.stream_stalled", {
       subscriberId: "cloud",
       originId: "00000000-0000-0000-0000-000000000000",
-      lag: 6,
+      lag: "6", // retention.ts stringifies the lag to preserve precision
     });
     expect(error.code).toBe("sync.stream_stalled");
     expect(error.params).toEqual({
       subscriberId: "cloud",
       originId: "00000000-0000-0000-0000-000000000000",
-      lag: 6,
+      lag: "6",
     });
   });
 

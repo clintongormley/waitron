@@ -473,12 +473,12 @@ describe("runRetentionSweep runs the real prune + lag each tick, and NEVER evict
         params: { pruned: 4, highWater: "4" },
       });
       // The stalled `cloud` (lag 6 > 5) alarmed via the REAL lagFor; `peerB` (lag 0) did not. `lag` is
-      // narrowed to a JS number only at this alarm edge.
+      // stringified at this alarm edge to preserve precision (consistent with `highWater` above).
       const stalled = logged.filter((l) => l.code === "sync.stream_stalled");
       expect(stalled).toHaveLength(1);
       expect(stalled[0]).toMatchObject({
         level: "error",
-        params: { subscriberId: "cloud", originId: ORIGIN, lag: 6 },
+        params: { subscriberId: "cloud", originId: ORIGIN, lag: "6" },
       });
       // NEVER evicts: the dead subscriber's cursor row is untouched — the alarm INFORMS a manual
       // eviction, it does not perform one.

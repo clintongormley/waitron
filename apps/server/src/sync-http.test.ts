@@ -32,7 +32,7 @@ describe("fetchHttpClient forwards method and body (cursor-report POST)", () => 
         lastAppliedSeq: "3",
       });
     } finally {
-      server.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });

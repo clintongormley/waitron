@@ -208,11 +208,21 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
       peer: PullPeer,
       r: { subscriberId: string; lane: SyncLane; lastAppliedSeq: string },
     ) => {
-      await deps.http(`${trimSlash(peer.url)}/sync-api/cursor`, {
+      // Observe the POST's status: /sync-api/cursor answers 200 on success (a blank subscriberId is a
+      // 200 no-op too), so a non-200 is a real failure — a 401 after a token rotation dropped this
+      // reporter's token, or a 500. The `http` adapter RESOLVES such a response rather than throwing,
+      // so ignoring `status` would treat a 401/500 as success and silently break cross-node retention
+      // visibility. Throw on non-200 so the SURROUNDING try/catch logs sync.cursor_report_failed and
+      // the failure is OBSERVABLE. Still best-effort: that catch swallows the throw, never blocking the
+      // drain or growing backoff.
+      const res = await deps.http(`${trimSlash(peer.url)}/sync-api/cursor`, {
         method: "POST",
         headers: { Authorization: `Bearer ${peer.token}`, "content-type": "application/json" },
         body: JSON.stringify(r),
       });
+      if (res.status !== 200) {
+        throw new Error(`cursor report to ${peer.nodeId} failed: HTTP ${res.status}`);
+      }
     });
   const backoff = new Map<string, number>(); // per-peer current backoff (ms); 0 = healthy
 

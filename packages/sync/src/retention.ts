@@ -197,7 +197,7 @@ export async function runRetentionSweep(deps: RetentionSweepDeps): Promise<void>
             deps.log("error", "sync.stream_stalled", {
               subscriberId: s.subscriberId,
               originId: s.originId,
-              lag: Number(s.lag), // narrowed only at the alarm edge (retention.ts lag doc)
+              lag: s.lag.toString(), // stringified to preserve precision (a far-behind lag can exceed 2^53−1) and to stay consistent with highWater above (retention.ts lag doc)
             });
           }
         }
