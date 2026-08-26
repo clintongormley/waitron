@@ -105,6 +105,10 @@ const DEFAULT_MIN_TICK_MS = 5_000;
  * against minTickMs: a fast tick not tighter than the ordered tick is a mis-tuning, not a correctness
  * failure. */
 const DEFAULT_SYNC_FAST_TICK_MS = 1000;
+/** The retention sweep's idle interval between prunes when WAITRON_SYNC_RETENTION_TICK_MS is unset
+ * (spec §3.2). A minute is a deliberately relaxed cadence: the prune is a bounded background
+ * housekeeping DELETE, not on any hot path, so it need not run tight. */
+const DEFAULT_SYNC_RETENTION_TICK_MS = 60_000;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
@@ -185,6 +189,17 @@ export interface SyncTransportConfig {
    * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
    * the sync config because it is meaningless without sync enabled, like nodeTokens/peers. */
   fastMinIdleMs: number;
+  /** The retention sweep's idle interval (ms) between prunes — from WAITRON_SYNC_RETENTION_TICK_MS,
+   * default 60000 (spec §3.2). Always present (defaulted), unlike retentionDatabaseUrl below, because
+   * the sweep needs a cadence whenever it does run. */
+  retentionTickMs: number;
+  /** OPTIONAL: the connection string for a `sync_retention` LOGIN member — the dedicated whole-log,
+   * cross-tenant role runRetentionSweep prunes `sync_log` and reports per-subscriber lag as
+   * (packages/sync/drizzle/0001_sync_retention.sql; NOT app_user/sync_tailer, which cannot DELETE it).
+   * Present ONLY when WAITRON_SYNC_RETENTION_DATABASE_URL is set; ABSENT (not present-but-undefined)
+   * leaves the scheduled sweep OFF — sync still runs, the log just grows unpruned, which boot makes
+   * loud via `sync.retention_unconfigured` (spec §3.2/§8: opt-in here, documented-required in prod). */
+  retentionDatabaseUrl?: string;
 }
 
 /** Parses a comma-separated accepted-token SET. `required` fails closed on unset/empty (a blank
@@ -243,6 +258,18 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
     peers,
     fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
+    retentionTickMs: positiveInt(
+      env,
+      "WAITRON_SYNC_RETENTION_TICK_MS",
+      DEFAULT_SYNC_RETENTION_TICK_MS,
+    ),
+    // The retention role is opt-in: an unset OR empty URL omits the field entirely (sweep off,
+    // boot warns loud) rather than a present-but-undefined key or a broken empty connection string
+    // — "an empty connection string is a valid connection string" (CLAUDE.md §3), so it must never
+    // reach `createPostgresDb` as `""`.
+    ...(isUnset(env.WAITRON_SYNC_RETENTION_DATABASE_URL)
+      ? {}
+      : { retentionDatabaseUrl: env.WAITRON_SYNC_RETENTION_DATABASE_URL }),
   };
 }
 
