@@ -276,6 +276,14 @@ new "cloud server issuing invoices operates the SIF abroad" question — *before
 (*ingreso* for Sociedades, *rendimiento del trabajo* with retención) — an accounting/payroll matter
 (tracks 13 + 16, integrate-not-build), not the factura or the huella.
 
+**The laboral advisor is a separate track**, with its own question list in
+[compliance/asesor-laboral-questions.md](compliance/asesor-laboral-questions.md) (a *graduado social /
+gestoría*, not the fiscal asesor). Nothing there blocks the build — the registro-de-jornada floor and
+scheduling are built — but two items want confirming before go-live (the digital-registro RD's current
+status; the applicable provincial convenio + figures), and the **gestoría's payroll package + import
+layout is the one build dependency**: it fixes the D3 export format, so D3 stays deferred until it is
+known.
+
 ---
 
 ## Debt and odd jobs

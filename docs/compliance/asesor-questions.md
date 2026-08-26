@@ -82,10 +82,11 @@ sharpened; see the 2026-08-26 banner. Prior substantive pass **2026-08-01**.
 >   "only if a topology is offered" it was written as — it **gates a mode already on the roadmap**.
 >   Draw the line at production: the cloud **trial** on-ramp (preproduction, shared demo tenant, no
 >   real fiscal records) needs no answer; only **production-cloud-primary** does. Banner added at Q16.
-> - **Not for this list, but noted:** the *laboral* questions (the convenio overtime rule, D3 payroll,
->   the *retención* on card-collected tips redistributed through a tronco per V3095-17) still have **no
->   home document**. They are for a *graduado social / asesor laboral*, not the fiscal asesor — flagged
->   so they are not lost, not because they belong here.
+> - **Not for this list — now homed elsewhere.** The *laboral* questions (the convenio overtime rule,
+>   D3 payroll, the *retención* on card-collected tips redistributed through a tronco per V3095-17) are
+>   for a *graduado social / asesor laboral*, not the fiscal asesor. They now live in their own
+>   [asesor-laboral-questions.md](asesor-laboral-questions.md); the tip one (L6) cross-references
+>   §11 findings because its IS/booking half is fiscal and its nómina/retención half is labour.
 
 ---
 
