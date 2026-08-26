@@ -464,7 +464,7 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token,rotated-token",
       WAITRON_SYNC_DATABASE_URL: databaseUrl,
       // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
       // are visibly different in the assertions below (spec §4d).
@@ -479,6 +479,12 @@ describe("startServer, against a real container as the deployment role", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "production",
       });
+      // A SECOND accepted token (the rotation overlap window) authenticates too — the token SET rolled
+      // through boot end-to-end, so the secret can be rotated with no synchronized restart (spec §2).
+      const rotated = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
+        headers: { Authorization: "Bearer rotated-token" },
+      });
+      expect(rotated.status).toBe(200);
       // A tokenless request is refused — the fail-closed middleware, not just the route, is live.
       const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
       expect(unauth.status).toBe(401);

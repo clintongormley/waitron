@@ -420,7 +420,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         tenantId: till.tenantId,
         nodeId: till.nodeId,
         environment: config.environment,
-        nodeToken: syncConfig.nodeToken,
+        nodeTokens: syncConfig.nodeTokens,
       },
       log,
     );
