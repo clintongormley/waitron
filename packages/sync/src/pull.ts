@@ -17,7 +17,7 @@ import "./errors.js";
 
 export type HttpClient = (
   url: string,
-  init: { headers: Record<string, string> },
+  init: { headers: Record<string, string>; method?: string; body?: string },
 ) => Promise<{ status: number; text(): Promise<string> }>;
 
 export interface PullPeer {
