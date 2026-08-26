@@ -47,10 +47,20 @@ describe("percentOf", () => {
   });
 
   it("stays exact for a value that would carry floating-point error through a JS division", () => {
-    // 0.1 + 0.2 !== 0.3 in IEEE 754; this is the money-domain analogue, computed here via BigInt
-    // throughout rather than `Number`, so the classic representation error never has anywhere to
-    // enter.
-    expect(percentOf(decimal("30.00"), decimal("10.00"))).toBe("3.00");
+    // 21% VAT on a 3.50 line base: 3.50 * 21.00 / 100 = 0.735 EXACTLY — a true half-cent midpoint
+    // between 0.73 and 0.74, so half-away-from-zero rounds it UP to 0.74. The money-domain analogue
+    // of 0.1 + 0.2 !== 0.3: floating-point representation shifts the computed value off the exact
+    // midpoint, so a naive `Number` + `.toFixed(2)` codec — `(Number("3.50") * Number("21.00") /
+    // 100).toFixed(2)` — rounds to the WRONG cent and yields "0.73". (Concretely, and deterministically
+    // per IEEE-754 + the ECMAScript `toFixed` spec — not engine-dependent: the double nearest 0.735 is
+    // 0.73499…, just below the true midpoint.) `percentOf` computes in BigInt throughout, so the
+    // representation error never has anywhere to enter and the midpoint rounds correctly.
+    //
+    // This fixture is chosen to DIVERGE under a float codec (proven by deletion against a
+    // `.toFixed(2)` shadow, which yields "0.73"). The previous fixture — 10% of 30.00 = 3.00 —
+    // used exactly float-representable inputs, so a naive `Number` implementation passed it too and
+    // it guarded nothing.
+    expect(percentOf(decimal("3.50"), decimal("21.00"))).toBe("0.74");
   });
 
   it("honours an explicit scale of zero", () => {
