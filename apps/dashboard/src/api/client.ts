@@ -754,6 +754,16 @@ export class DashboardApi {
   }
 
   /**
+   * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
+   * Task 4). PUBLIC (pre-login, like {@link getStaffRoster}): each `{ code, label }` is a
+   * `SUPPORTED_LOCALES` entry, and `venueDefault` the tenant's fallback locale. The language chooser
+   * reads the list; the app decides what to do with a pick, so the client only surfaces the shape.
+   */
+  getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
+    return this.#request("/management-api/locales", "GET");
+  }
+
+  /**
    * `POST /management-api/session` — log in with a password (and an optional TOTP second factor).
    * Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
    */

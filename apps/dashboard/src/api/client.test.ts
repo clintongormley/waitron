@@ -1603,6 +1603,25 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
+
+  // ── Per-user language preference (Task 4's PUBLIC pre-login read) ──
+
+  it("getLocales GETs the public /management-api/locales list and returns { locales, venueDefault }", async () => {
+    const body = {
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getLocales()).toEqual(body);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locales", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
 });
 
 describe("DashboardApi — printing (agents + printers + jobs)", () => {

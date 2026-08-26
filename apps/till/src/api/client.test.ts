@@ -1420,4 +1420,29 @@ describe("TillApi", () => {
       new TillApi("", fetchStub).deviceAdvance("ti-foreign", "ready"),
     ).rejects.toMatchObject({ code: "device.forbidden_station" });
   });
+
+  // --- Per-user language preference (Task 4's PUBLIC pre-login read) ---
+
+  it("getLocales GETs the public /api/locales list and returns { locales, venueDefault }", async () => {
+    const body = {
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(body));
+
+    const r = await new TillApi("", fetchStub).getLocales();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/locales",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    // A public read carries neither a request body nor a content-type header.
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+    expect(r).toEqual(body);
+  });
 });

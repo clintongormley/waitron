@@ -651,6 +651,16 @@ export class TillApi {
     return this.#request<TillInfo>("/api/till", "GET");
   }
 
+  /**
+   * `GET /api/locales` — the venue's offered languages (per-user-language-preference, Task 4). PUBLIC
+   * (pre-login, like {@link getTill}): each `{ code, label }` is a `SUPPORTED_LOCALES` entry, and
+   * `venueDefault` the tenant's fallback locale. The language chooser reads the list; the app decides
+   * what to do with a pick, so the client only surfaces the shape.
+   */
+  getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
+    return this.#request("/api/locales", "GET");
+  }
+
   listStaff(): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>("/api/staff", "GET");
   }
