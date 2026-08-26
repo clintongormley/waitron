@@ -77,7 +77,7 @@ export class TillBasket extends LitElement {
             <span class="line-total">${formatMoney(lineGross(line))}</span>
             <wt-button
               variant="ghost"
-              size="sm"
+              size="md"
               aria-label=${`${t("action.remove")} ${productName(line.product)}`}
               @click=${() => this.store.removeLine(index)}
             >
