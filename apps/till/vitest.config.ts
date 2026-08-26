@@ -28,9 +28,17 @@ export default defineConfig({
   // removes the mid-run discovery. (packages/ui gets away without this because many of its test
   // files import axe from the first file on, so the optimisation settles before any assertion.)
   // Same mid-run re-optimise flake as axe-core (below): qrcode-generator and the unsafe-html
-  // directive are first imported by the ticket view / its tests, so Vite discovers them mid-run and
-  // reloads the in-flight file ("Vite unexpectedly reloaded a test"). Pre-bundle them up front.
-  optimizeDeps: { include: ["axe-core", "qrcode-generator", "lit/directives/unsafe-html.js"] },
+  // directive are first imported by the ticket view / its tests, and `lit/directives/keyed.js` is
+  // first imported by till-app (per-user-locale), so Vite discovers them mid-run and reloads the
+  // in-flight file ("Vite unexpectedly reloaded a test"). Pre-bundle them up front.
+  optimizeDeps: {
+    include: [
+      "axe-core",
+      "qrcode-generator",
+      "lit/directives/unsafe-html.js",
+      "lit/directives/keyed.js",
+    ],
+  },
   test: {
     globals: true,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the

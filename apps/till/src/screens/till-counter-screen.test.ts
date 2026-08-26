@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { LAYOUT_A, type LayoutDef } from "../layout.js";
@@ -264,6 +264,29 @@ describe("till-counter-screen", () => {
     expect(screen!.products).toBe(products);
     expect(screen!.locale).toBe(currentLocale());
     expect(screen!.invoiceLocale).toBe("en");
+  });
+
+  // Per-user-language-preference (Task 9): the header carries the language chooser. The screen only
+  // RENDERS it — the chooser's composed `locale-selected` bubbles past to `till-app`, which persists.
+  it("renders the language chooser in the header session row", async () => {
+    const { el } = await mount();
+    const session = el.shadowRoot!.querySelector(".session")!;
+    expect(session.querySelector("till-language-chooser")).not.toBeNull();
+  });
+
+  it("lets the chooser's locale-selected bubble out composed (the screen does NOT handle it)", async () => {
+    const { el } = await mount();
+    const spy = vi.fn();
+    el.addEventListener("locale-selected", (e) => spy((e as CustomEvent).detail));
+    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    chooser.dispatchEvent(
+      new CustomEvent("locale-selected", {
+        detail: { code: "en-GB" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(spy).toHaveBeenCalledWith({ code: "en-GB" });
   });
 
   it("returns to the sale body when the allergen screen asks to close", async () => {

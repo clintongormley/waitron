@@ -1445,4 +1445,36 @@ describe("TillApi", () => {
     expect(init.headers).toBeUndefined();
     expect(r).toEqual(body);
   });
+
+  it("login response carries the operator's per-user locale (or null when unset)", async () => {
+    // Task 5 widened POST /api/session to also return the signed-in person's stored UI locale — the
+    // value the app feeds `resolveActiveLocale` on login. `null` when the person has no preference.
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ personId: "u1", canConfigureTill: false, locale: "en-GB" }),
+      );
+    const r = await new TillApi("", fetchStub).login("u1", "1234");
+    expect(r.locale).toBe("en-GB");
+  });
+
+  it("putLocale PUTs the chosen code to /api/session/locale and resolves void on the 204", async () => {
+    // The operator's own UI-language write (per-user-language-preference). The server route answers an
+    // empty 204, so `#request<void>` resolves undefined; the body carries `locale` and nothing else.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+
+    const out = await api.putLocale("en-GB");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/session/locale",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale: "en-GB" }),
+      }),
+    );
+    expect(out).toBeUndefined();
+  });
 });

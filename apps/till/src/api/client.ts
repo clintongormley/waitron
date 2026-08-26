@@ -106,6 +106,13 @@ export interface StaffMember {
 export interface SessionResult {
   personId: string;
   canConfigureTill: boolean;
+  /**
+   * The signed-in operator's stored per-user UI locale (per-user-language-preference, Task 5), or
+   * `null` when they have never set one. The app feeds it to `resolveActiveLocale(personLocale,
+   * venueDefault)` on login to pick the language to switch the UI into; a `null` falls back to the
+   * venue default. A LOCAL mirror of the server's `POST /api/session` response field.
+   */
+  locale: string | null;
 }
 
 /** One VAT band on a ticket: a rate and its taxable base + tax, as decimal strings. */
@@ -674,6 +681,17 @@ export class TillApi {
 
   async logout(): Promise<void> {
     await this.#request<{ ok: boolean }>("/api/session", "DELETE");
+  }
+
+  /**
+   * Persist the signed-in operator's OWN UI-language preference (per-user-language-preference) →
+   * `PUT /api/session/locale` with body `{ locale }`. Identity is the session's person server-side,
+   * so there is no id to pass; the route answers an empty 204, so this resolves void. An unsupported
+   * `code` rejects with `{ code: "locale.unsupported" }` (the server's one validation path). The app
+   * calls this ONLY while logged in — a pre-login pick is transient and never written.
+   */
+  async putLocale(code: string): Promise<void> {
+    await this.#request<void>("/api/session/locale", "PUT", { locale: code });
   }
 
   listProducts(): Promise<TillProduct[]> {
