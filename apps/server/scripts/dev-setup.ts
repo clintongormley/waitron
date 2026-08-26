@@ -121,7 +121,7 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
  * `docker compose up -d --wait db` (so Docker blocks on the healthcheck), but a direct
  * `pnpm --filter @waitron/server dev:setup` skips that gate, so this is the readiness net for the
  * standalone path — one immediate connect on the warm path. */
-async function waitForPostgres(uri: string, log: (line: string) => void): Promise<void> {
+export async function waitForPostgres(uri: string, log: (line: string) => void): Promise<void> {
   const attempts = 60;
   const delayMs = 1000;
   for (let i = 1; i <= attempts; i++) {
@@ -158,7 +158,7 @@ async function waitForPostgres(uri: string, log: (line: string) => void): Promis
  * chain into a spurious re-provision — a second SIF, a second hash chain (CLAUDE.md §5). Those fail
  * loud.
  */
-async function inspectVenues(
+export async function inspectVenues(
   uri: string,
   expectedTenantId: string | null,
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
