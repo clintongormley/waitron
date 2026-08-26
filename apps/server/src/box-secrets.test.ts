@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import forge from "node-forge";
@@ -52,6 +52,22 @@ describe("ensureBoxSecrets", () => {
       const mode = (await stat(join(d, f))).mode & 0o777;
       expect(mode).toBe(0o600);
     }
+  });
+
+  it("leaves no *.tmp files behind and creates the tls dir 0700", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    // Every file is written temp-then-rename; a successful run must have renamed all of them, so no
+    // orphan *.tmp may linger in the state dir or its tls subdir. A lingering one would mean a rename
+    // was skipped — i.e. a reader could see a torn file, the whole point of the atomic write.
+    for (const dir of [d, join(d, "tls")]) {
+      const names = await readdir(dir);
+      expect(names.filter((n) => n.endsWith(".tmp"))).toEqual([]);
+    }
+    // The tls dir holds the private material, so it is created owner-only. mode is masked by the
+    // test's umask (mode & ~umask), so assert it is no WIDER than 0o700 rather than exactly equal.
+    const tlsMode = (await stat(join(d, "tls"))).mode & 0o777;
+    expect(tlsMode & ~0o700).toBe(0);
   });
 
   it("is idempotent: a second call reuses the exact same bytes and regenerates nothing", async () => {

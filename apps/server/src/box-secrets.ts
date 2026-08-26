@@ -1,4 +1,4 @@
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, access, rename } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,20 @@ const exists = (p: string) =>
   );
 
 /**
+ * Write `data` to `${path}.tmp` (same directory, so the following `rename` is atomic on POSIX) and
+ * rename it onto `path`. A reader therefore only ever sees `path` absent or fully written — never a
+ * torn/truncated file mid-write. `flag: "w"` truncates any stale `.tmp` left by an earlier crash.
+ * `mode` (when given) is applied by `writeFile` on creating the temp file, and `rename` preserves it
+ * on the target. This gives atomic VISIBILITY only; it does not fsync, so it makes no durability
+ * claim across a power loss — only that the visible file is whole.
+ */
+async function writeFileAtomic(path: string, data: string, mode?: number): Promise<void> {
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, data, mode === undefined ? { flag: "w" } : { mode, flag: "w" });
+  await rename(tmp, path);
+}
+
+/**
  * The box's own non-internal IPv4 addresses, so a setup client on the LAN can dial the leaf by IP.
  * `internal` drops loopback (127.0.0.1 is added unconditionally by the caller) and the `IPv4`
  * filter drops the IPv6 entries `networkInterfaces` returns for the same interface.
@@ -67,10 +81,11 @@ const defaultListIpv4 = (): string[] =>
  * authenticates a dial by loopback or by LAN IP. This does NOT load or consume the secrets — that
  * is the next boot's job (slice 2b / trading); it only guarantees the files are present.
  *
- * Note on `{ mode: 0o600 }`: `writeFile` applies `mode` only when it CREATES the file, and the
- * effective mode is `mode & ~umask` — which is `0o600` for any sane umask (022/002/077). It is not
- * a post-hoc `chmod`, so do not "fix" it to one: on a reused file the guard means we never rewrite
- * it, and on a created one the umask cannot widen `0o600`.
+ * Note on the `0o600` mode arg: `writeFileAtomic` passes it to `writeFile`, which applies `mode`
+ * only when it CREATES the temp file, and `rename` preserves that mode on the target. The effective
+ * mode is `mode & ~umask` — `0o600` for any sane umask (022/002/077). It is not a post-hoc `chmod`,
+ * so do not "fix" it to one: on a reused file the presence guard means we never rewrite it, and on a
+ * created one the umask cannot widen `0o600`.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
@@ -79,7 +94,10 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   const listIpv4 = deps.listIpv4 ?? defaultListIpv4;
 
   const tlsDir = join(deps.stateDir, "tls");
-  await mkdir(tlsDir, { recursive: true });
+  // 0o700 so the dir holding the private material is owner-only too (defense in depth around the
+  // 0o600 files). `mode` applies only to dirs THIS call CREATES (tls and any missing parent such as
+  // stateDir) and is subject to umask — 0o700 under any sane umask — matching the file-mode note.
+  await mkdir(tlsDir, { recursive: true, mode: 0o700 });
   const files = {
     certFile: join(tlsDir, "server.crt"),
     keyFile: join(tlsDir, "server.key"),
@@ -92,13 +110,15 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   if (!(await exists(files.keyFile))) {
     const ips = Array.from(new Set(["127.0.0.1", ...listIpv4()]));
     const m = mint({ hostnames: deps.hostnames, ipAddresses: ips, now: deps.now() });
-    await writeFile(files.caCertFile, m.caCertPem);
-    await writeFile(files.caKeyFile, m.caKeyPem, { mode: 0o600 });
-    await writeFile(files.certFile, m.serverCertPem);
-    // server.key LAST, on purpose: it is the presence sentinel the guard above tests, so a crash
-    // mid-write leaves it absent and the next boot re-mints the whole quartet cleanly rather than
-    // serving a half-written set — the guard's correctness depends on this write ordering.
-    await writeFile(files.keyFile, m.serverKeyPem, { mode: 0o600 });
+    // Each file is written to a temp path and atomically renamed, so a reader never observes a
+    // partial or truncated PEM — only the whole file or its absence. server.key is renamed LAST, on
+    // purpose: it is the quartet's presence sentinel the guard above tests, so a crash BETWEEN the
+    // four renames leaves the quartet incomplete (server.key still absent) and the next boot re-mints
+    // all four cleanly. The guard's correctness depends on this ordering.
+    await writeFileAtomic(files.caCertFile, m.caCertPem);
+    await writeFileAtomic(files.caKeyFile, m.caKeyPem, 0o600);
+    await writeFileAtomic(files.certFile, m.serverCertPem);
+    await writeFileAtomic(files.keyFile, m.serverKeyPem, 0o600);
   }
 
   const secretsFile = join(deps.stateDir, "secrets.env");
@@ -109,7 +129,9 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
       `WAITRON_CREDENTIALS_KEY=${ring.key}\n` +
       `WAITRON_CREDENTIALS_KEY_VERSION=${ring.version}\n` +
       `WAITRON_SYNC_NODE_TOKEN=${token}\n`;
-    await writeFile(secretsFile, body, { mode: 0o600 });
+    // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
+    // observed torn — temp-then-rename means it is either fully present or absent, never truncated.
+    await writeFileAtomic(secretsFile, body, 0o600);
   }
 
   return { certFile: files.certFile, keyFile: files.keyFile, caCertFile: files.caCertFile };
