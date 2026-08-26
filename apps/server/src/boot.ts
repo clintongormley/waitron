@@ -48,6 +48,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
+import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
@@ -189,6 +190,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       variable: "WAITRON_MAX_TICK_MS",
       reason: "at_or_above_drain_budget",
     });
+  }
+  // Each configured built-SPA directory must actually hold an `index.html`. Checked HERE, in the
+  // same fail-fast-before-resources group as the `maxTickMs` guard above and BEFORE any pool is
+  // opened or migrations run: `assertBuiltApp` is a pure `existsSync` with no database dependency, so
+  // a wrong or never-built dir should fail the boot LOUDLY (`server.config_invalid`, naming the env
+  // var — §8's "everything escapes") before it costs a migration run or an open app-role pool, not
+  // after. Gated exactly as the mounts below are — dev leaves both unset. The MOUNTS themselves stay
+  // LAST, after every API route (`mountSpa`'s "call me after every API route" contract).
+  if (config.dashboardAppDir !== undefined) {
+    assertBuiltApp(config.dashboardAppDir, "WAITRON_DASHBOARD_APP_DIR");
+  }
+  if (config.tillAppDir !== undefined) {
+    assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
   }
   // The env this function was given, straight through: `loadKeyRing` owns the four
   // WAITRON_CREDENTIALS_KEY* names and their validation, and re-declaring them here would be a
@@ -504,6 +518,25 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // provisioned the role still boots unchanged.
       log("warn", "sync.retention_unconfigured", {});
     }
+  }
+
+  // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
+  // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
+  // `/media`, `/health` or the sync routes (`mountSpa`'s "call me after every API route" contract).
+  // Dashboard (`/manage`) FIRST so `/manage/*` wins; the till (`""` = origin root) LAST, the one
+  // catch-all, so nothing it might swallow is registered after it (`boot.spa-mount.test.ts` pins that
+  // order). Gated on each dir being configured — dev leaves them unset and uses the Vite dev servers,
+  // so an existing boot (`boot.test.ts` sets neither) mounts nothing here, exactly as the sync block
+  // gates on `syncConfig`. A dir configured but never built (no `index.html`) has ALREADY failed the
+  // boot LOUDLY via the `assertBuiltApp` fail-fast checks near the top of `startServer`
+  // (`server.config_invalid`, naming the env var), §8's "everything escapes" — so by here each
+  // configured dir is known to hold its `index.html`, never a catch-all that 404s every page load.
+  if (config.dashboardAppDir !== undefined) {
+    mountSpa(app, { root: config.dashboardAppDir, basePath: "/manage" }, log);
+  }
+  if (config.tillAppDir !== undefined) {
+    // `""` = the origin-root catch-all: MUST be the last GET mounted (see the block comment above).
+    mountSpa(app, { root: config.tillAppDir, basePath: "" }, log);
   }
 
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,

@@ -84,6 +84,26 @@ export interface ServerConfig {
    * verification fails. Threaded into `ManagementApiDeps.origin`. Defaults to the Vite dev server's
    * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`). */
   managementOrigin: string;
+  /**
+   * The built `till` SPA directory this box serves at the origin root "/", or `undefined` to not
+   * serve it (dev leaves it unset and uses the Vite dev server). When set, `boot.ts` mounts it as the
+   * root catch-all — LAST, after every API route — so it never shadows `/api`, `/management-api`,
+   * `/media`, `/health` or the sync routes. From `WAITRON_TILL_APP_DIR`; absent OR empty → undefined
+   * (the `isUnset` rule every optional variable here follows), never `""` — an empty dir would make
+   * boot's `join(dir, "index.html")` a relative path under cwd (the "empty value is a valid value"
+   * trap, CLAUDE.md §3). Stored VERBATIM in config (not `resolve`d here): boot `existsSync`-checks it
+   * and hands it to `mountSpa`, which normalises it once with `resolve` and serves every file from
+   * that canonical base — so a relative or trailing-slash dir works. Deployment (#9) sets an absolute
+   * path regardless.
+   */
+  tillAppDir?: string;
+  /**
+   * The built `dashboard` SPA directory this box serves at "/manage", or `undefined` to not serve it
+   * (dev uses the Vite dev server). Mounted BEFORE the till root catch-all so `/manage/*` wins. From
+   * `WAITRON_DASHBOARD_APP_DIR`; absent OR empty → undefined, stored verbatim — same rules as
+   * `tillAppDir` above.
+   */
+  dashboardAppDir?: string;
   scheduler: SchedulerConfig;
 }
 
@@ -479,6 +499,16 @@ export function loadConfig(
       environment,
       DEFAULT_MANAGEMENT_ORIGIN,
     ),
+    // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
+    // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
+    // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim
+    // — never `resolve("")`, which is cwd (the "empty value is a valid value" trap, CLAUDE.md §3);
+    // boot `existsSync`-checks the dir and hands it to `mountSpa`, which normalises it once via
+    // `resolve` when serving (so a relative or trailing-slash dir works).
+    tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
+    dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
+      ? undefined
+      : env.WAITRON_DASHBOARD_APP_DIR,
     scheduler: {
       horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
       maxPeriodsPerTick: positiveInt(

@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  base: "/manage/",
   server: {
     port: 5191,
     proxy: {
