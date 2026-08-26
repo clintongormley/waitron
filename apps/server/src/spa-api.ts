@@ -108,13 +108,15 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
       return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
     }
     const abs = safeResolve(deps.root, relPath);
-    // Defence-in-depth: `safeResolve` returns null on an escaping path, and we 404 it. This TRUE
-    // branch is unreachable through Hono's routing — WHATWG URL normalisation collapses a real `/../`
-    // before the handler sees it, and a `%2f` stays encoded as one harmless segment (probed 2026-08-26
-    // on hono via `app.request`: `/assets/../../../etc/passwd` → path `/etc/passwd`;
-    // `/assets/..%2f..` → path `/assets/..%2f..`) — so the guard is exercised DIRECTLY instead, in
-    // `spa-api.test.ts`'s `safeResolve` block, and proven there by deletion. Kept in the route because
-    // removing a guard on the grounds it "can't happen" is precisely the mistake CLAUDE.md §3 forbids.
+    // Defence-in-depth: `safeResolve` returns null on an escaping path, and we 404 it. In production
+    // requests reach this handler through `@hono/node-server`, which builds the `Request` from Node's
+    // raw `req.url` by running it through WHATWG `new URL(...)` — the SAME normalisation `app.request`
+    // applies in tests — so an escaping `/../` is collapsed before the handler's `c.req.path` sees it,
+    // and a `%2f` stays a single encoded segment. That is why this branch is not reached in practice.
+    // The security property does NOT depend on that unreachability: it rests on `safeResolve` being
+    // present and directly unit-tested (`spa-api.test.ts`'s `safeResolve` block, proven by deletion).
+    // This branch is kept as belt-and-braces defence — removing a guard because it "can't happen" is
+    // precisely the mistake CLAUDE.md §3 forbids.
     /* v8 ignore next */
     if (abs === null) return Promise.resolve(c.body(null, 404));
     // Only hashed `/assets/*` files are safe to cache immutably; everything else is revalidated.
