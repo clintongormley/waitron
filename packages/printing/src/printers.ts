@@ -4,41 +4,19 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printers } from "@waitron/db";
+import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /** The pg SQLSTATEs the printer writes may raise once the app-layer required-field pre-check passes,
  * so a driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
  * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
  * behind `REQUIRED_FIELDS`); `23503` is the composite `(tenant_id, agent_id) → print_agents` FK (a
- * printer bound to an agent id that names no agent in this tenant). Both are walked down the cause
- * chain because Drizzle wraps every failed query in a `DrizzleQueryError` whose own `.code` is
- * undefined — the SQLSTATE lives on `.cause.code` (node-postgres), or one level deeper under PGlite —
- * exactly as `@waitron/db`'s `isUniqueViolation` does for `23505`. */
+ * printer bound to an agent id that names no agent in this tenant). Both are matched down the cause
+ * chain by `@waitron/db`'s shared `isPgError` (Drizzle wraps every failed query in a `DrizzleQueryError`
+ * whose own `.code` is undefined — the SQLSTATE lives on `.cause.code` under node-postgres, or one
+ * level deeper under PGlite), the same walk it uses for `23505` in `isUniqueViolation`. */
 const CHECK_VIOLATION = "23514";
 const FOREIGN_KEY_VIOLATION = "23503";
-
-/** Is this (or anything it wraps) the given pg SQLSTATE? Walks the cause chain (Drizzle wraps the real
- * error; PGlite nests it one level deeper still), stopping at a fixed depth so a self-referential
- * `cause` cannot spin forever — the `isUniqueViolation` shape, generalised to one code. Exported for a
- * direct unit test (printers.error.test.ts), NOT from the package barrel: it is an internal driver-error
- * detail, not public API. */
-export function isPgError(error: unknown, sqlstate: string): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      "code" in current &&
-      (current as { code?: unknown }).code === sqlstate
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
-}
 
 /**
  * Translate a printer write's driver error into a friendly domain code, or rethrow. The composite
@@ -208,18 +186,11 @@ export async function updatePrinter(
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
-  // Build the SET from only the keys the caller supplied, so an absent field is untouched and an
-  // explicit `null` is written. An empty patch is a no-op edit (0 changes) that still 404s a missing id.
-  const set: Record<string, unknown> = {};
-  if (patch.name !== undefined) set.name = patch.name;
-  if (patch.transport !== undefined) set.transport = patch.transport;
-  if (patch.agentId !== undefined) set.agentId = patch.agentId;
-  if (patch.host !== undefined) set.host = patch.host;
-  if (patch.port !== undefined) set.port = patch.port;
-  if (patch.usbPath !== undefined) set.usbPath = patch.usbPath;
-  if (patch.pollId !== undefined) set.pollId = patch.pollId;
-  if (patch.ticketScope !== undefined) set.ticketScope = patch.ticketScope;
-  if (patch.active !== undefined) set.active = patch.active;
+  // The SET is a shallow copy of `patch`: its only caller (print-api.ts's PATCH handler) builds `patch`
+  // by guarding every field with `if (x !== undefined)`, so `patch` carries ONLY the keys the request
+  // named — no undefined-valued key to filter out. An absent field is thus untouched and an explicit
+  // `null` is written. An empty patch is a no-op edit (0 changes) that still 404s a missing id.
+  const set: Record<string, unknown> = { ...patch };
 
   // An empty patch (no field named) is a legitimate no-op — but drizzle's `.set({})` THROWS ("No
   // values to set"), so short-circuit to an existence check: a missing id is still a clean 404, a

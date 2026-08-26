@@ -1,13 +1,16 @@
-// Keeps `device.pairing_rate_limited` (errors.ts) reachable from the file that throws it — the
-// reachability convention device.ts / kitchen.ts follow. See errors.ts.
+// Keeps `device.pairing_rate_limited` (errors.ts) reachable from this file — it is the DEFAULT code
+// this limiter throws and one of the two the enrol surfaces pass (the print surface passes its own
+// `agent.pairing_rate_limited`, registered in @waitron/printing's errors.ts and reached through
+// print-api.ts's imports). The reachability convention device.ts / kitchen.ts follow. See errors.ts.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 
 /**
- * The redemption rate-limit for `POST /api/device/enrol` (device-identity-1 §8, the spec's net-new
- * control). A per-process, in-memory, GLOBAL fixed-window counter, checked at the TOP of the enrol
- * handler BEFORE the body is parsed and BEFORE the pairing-code DELETE — so a rejected attempt touches
- * no DB.
+ * The redemption rate-limit for the enrol routes (`POST /api/device/enrol`, device-identity-1 §8, and
+ * `POST /print-api/agent/enrol`, which reuses this same limiter). A per-process, in-memory, GLOBAL
+ * fixed-window counter, checked at the TOP of the enrol handler BEFORE the body is parsed and BEFORE the
+ * pairing-code DELETE — so a rejected attempt touches no DB. Only the thrown CODE differs per surface
+ * (see {@link EnrolRateLimiterOptions.code}); the window, cap and topology reasoning below are shared.
  *
  * Why a limit at all, and why THIS shape:
  *  - The primary brute-force controls already exist — the pairing code is ~40-bit Crockford entropy,
@@ -44,36 +47,47 @@ export const ENROL_RATE_MAX = 30;
 
 export interface EnrolRateLimiterOptions {
   /**
-   * Injectable clock (defaults to `Date.now`) — the ONLY knob, so a test can drive the fixed window
-   * deterministically without a real sleep (CLAUDE.md §4). The window length and cap are NOT injectable:
-   * they are the production {@link ENROL_RATE_WINDOW_MS}/{@link ENROL_RATE_MAX} constants, baked in so
-   * this limiter can never be constructed with a different policy than the one it ships.
+   * Injectable clock (defaults to `Date.now`), so a test can drive the fixed window deterministically
+   * without a real sleep (CLAUDE.md §4). The window length and cap are NOT injectable: they are the
+   * production {@link ENROL_RATE_WINDOW_MS}/{@link ENROL_RATE_MAX} constants, baked in so this limiter
+   * can never be constructed with a different rate POLICY than the one it ships — only the clock and the
+   * thrown {@link EnrolRateLimiterOptions.code} are configurable.
    */
   now?: () => number;
+  /**
+   * The `AppError` code thrown when the window is over the cap. Each enrol surface passes its OWN domain
+   * code — `device.pairing_rate_limited` for `POST /api/device/enrol`, `agent.pairing_rate_limited` for
+   * `POST /print-api/agent/enrol` — so a throttled enrol is answered in that surface's namespace (codes
+   * name the domain concept, CLAUDE.md §1/§3) and no caller has to catch-and-translate a foreign one.
+   * Defaults to `device.pairing_rate_limited`, the original device-enrol code, so a caller that omits it
+   * keeps that behaviour. Both codes take empty params.
+   */
+  code?: "device.pairing_rate_limited" | "agent.pairing_rate_limited";
 }
 
 export interface EnrolRateLimiter {
   /**
-   * Record one enrol attempt. Throws `device.pairing_rate_limited` (→ HTTP 429) when this window has
-   * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
-   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and resets the count.
+   * Record one enrol attempt. Throws the configured {@link EnrolRateLimiterOptions.code} (→ HTTP 429)
+   * when this window has already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having
+   * counted this one. The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and
+   * resets the count.
    */
   check(): void;
 }
 
 /**
  * The GLOBAL, in-memory, per-process enrol rate-limiter (spec §8). A fixed-window counter with the
- * window ({@link ENROL_RATE_WINDOW_MS}) and cap ({@link ENROL_RATE_MAX}) BAKED IN — this is not a
- * general-purpose limiter, it exists only for `POST /api/device/enrol` and throws the device-specific
- * `device.pairing_rate_limited`, so a generic `windowMs`/`max` API would misrepresent it (a name that
- * promised a reusable primitive while hardcoding a device body — CLAUDE.md §1/§3). Not per-key (no
+ * window ({@link ENROL_RATE_WINDOW_MS}) and cap ({@link ENROL_RATE_MAX}) BAKED IN — a generic
+ * `windowMs`/`max` API would misrepresent that fixed policy (CLAUDE.md §1/§3). The one thing it is
+ * parameterised on is the thrown {@link EnrolRateLimiterOptions.code}, so the device and print enrol
+ * routes share this counter yet each answers a throttle in its own namespace. Not per-key (no
  * per-IP/per-tenant bucket) by design — see the module doc: the on-prem topology makes a per-IP key
  * worthless, and one global bucket is exactly the connection-pool protection wanted. State is two
  * closure variables, so a fresh limiter is fully isolated (each test builds its own; production builds
- * exactly one at boot); only the clock is injectable, for the test window-drive.
+ * one per enrol surface at boot); only the clock and code are injectable.
  */
 export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
-  const { now = Date.now } = opts;
+  const { now = Date.now, code = "device.pairing_rate_limited" } = opts;
   let windowStart = now();
   let count = 0;
   return {
@@ -87,7 +101,7 @@ export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): Enro
       // Refuse BEFORE counting this attempt, so at most `ENROL_RATE_MAX` attempts are ever admitted per
       // window and the counter cannot run away under a sustained flood (it stays pinned at the cap).
       if (count >= ENROL_RATE_MAX) {
-        throw new AppError("device.pairing_rate_limited", {});
+        throw new AppError(code, {});
       }
       count += 1;
     },

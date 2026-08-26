@@ -186,14 +186,19 @@ describe("mountPrintApi — agent enrol", () => {
     // enrol handler, before the body parse and the pairing-code DELETE. Deleting `enrolLimiter.check()`
     // from print-api.ts's enrol route makes the (cap+1)th attempt redeem/400 instead of 429.
     let fakeNow = 1_000;
-    const limiter = createEnrolRateLimiter({ now: () => fakeNow });
+    // The injected limiter is built with THIS surface's own code (as `mountPrintApi` builds its default),
+    // so it throws `agent.pairing_rate_limited` directly — the route no longer catch-and-translates.
+    const limiter = createEnrolRateLimiter({
+      now: () => fakeNow,
+      code: "agent.pairing_rate_limited",
+    });
     const app = mountApp(limiter);
     // Pre-fill to one below the cap in-process, so the next HTTP attempt is the (cap+1)th → 429.
     for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
     const limited = await send(app, "POST", "/print-api/agent/enrol", { body: { code: "x" } });
     expect(limited.status).toBe(429);
-    // This surface answers in its OWN namespace: the shared limiter throws `device.pairing_rate_limited`
-    // and the enrol route translates it to `agent.pairing_rate_limited` (never leaking `device.*`).
+    // This surface answers in its OWN namespace: the limiter throws `agent.pairing_rate_limited`
+    // directly (never `device.*`).
     expect((await limited.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "agent.pairing_rate_limited" },
     });

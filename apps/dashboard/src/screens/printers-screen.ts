@@ -249,6 +249,20 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  /** The shared shape of every mutation: clear the error banner, run `action`, reload on success, and
+   * turn a rejection into the `errorKey` banner (never an unhandled rejection). Each mutation method
+   * supplies only its own `action`; any pre/post state a method owns (a blank-input early return, the
+   * shown-once code panel, the create-form reset) stays in that method around this call. */
+  async #mutate(action: () => Promise<unknown>): Promise<void> {
+    this.errorKey = null;
+    try {
+      await action();
+      await this.#load();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   // ── Agents ─────────────────────────────────────────────────────────────────────────────────────
 
   /** The generate-code label field's composed `wt-change`. `stopPropagation` keeps it inside this shadow. */
@@ -261,18 +275,15 @@ export class PrintersScreen extends LitElement {
    * no-op (the server requires one). On success the code goes into state (never re-fetched) and the
    * label resets; on rejection the `errorKey` banner shows and the form is left intact for a retry. */
   async #generateCode(): Promise<void> {
-    this.errorKey = null;
+    this.errorKey = null; // also dismisses a prior banner on the blank-label early return below
     const label = this.newAgentLabel.trim();
     if (label === "") return;
-    try {
+    await this.#mutate(async () => {
       const { code } = await this.api.createAgentCode(label);
       this.generatedCode = code;
       this.copied = false;
       this.newAgentLabel = "";
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    });
   }
 
   /** Copy the shown code to the clipboard, confirming with a transient "Copied" status. Never throws: if
@@ -305,13 +316,7 @@ export class PrintersScreen extends LitElement {
 
   /** Revoke the agent `id` holds, then reload. A rejection becomes the `errorKey` banner. */
   async #revokeAgent(id: string): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.api.revokeAgent(id);
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    await this.#mutate(() => this.api.revokeAgent(id));
   }
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
@@ -340,7 +345,7 @@ export class PrintersScreen extends LitElement {
    * (`printer.invalid_config`), so the screen stays a thin sender. On success the form's name +
    * connection fields reset; on rejection the `errorKey` banner shows and the form is left for a retry. */
   async #createPrinter(): Promise<void> {
-    this.errorKey = null;
+    this.errorKey = null; // also dismisses a prior banner on the blank-name early return below
     const name = this.newPrinterName.trim();
     if (name === "") return;
     const input: PrinterInput = { name, transport: this.newTransport };
@@ -349,17 +354,14 @@ export class PrintersScreen extends LitElement {
     if (this.newPort.trim() !== "") input.port = Number(this.newPort);
     if (this.newUsbPath.trim() !== "") input.usbPath = this.newUsbPath.trim();
     if (this.newPollId.trim() !== "") input.pollId = this.newPollId.trim();
-    try {
+    await this.#mutate(async () => {
       await this.api.createPrinter(input);
       this.newPrinterName = "";
       this.newHost = "";
       this.newPort = "";
       this.newUsbPath = "";
       this.newPollId = "";
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    });
   }
 
   /** Apply a partial edit to the printer row `id` holds, replacing it in state with a fresh object (so a
@@ -368,16 +370,30 @@ export class PrintersScreen extends LitElement {
     this.printers = this.printers.map((p) => (p.id === id ? { ...p, ...patch } : p));
   }
 
+  /** A factory for an edit row's text-field `@wt-change` handler — the edit-row counterpart to
+   * `#onNewField`. Returns a handler that stops the composed event at this shadow boundary and writes
+   * `field` on the row `id` holds. `field` is one of the STRING-valued editable columns (name + the four
+   * connection fields); the two switches (ticket scope, active) carry `checked` and keep inline handlers. */
+  #editHandler<K extends "name" | "host" | "port" | "usbPath" | "pollId">(
+    id: string,
+    field: K,
+  ): (event: CustomEvent<{ value: string }>) => void {
+    return (event: CustomEvent<{ value: string }>) => {
+      event.stopPropagation();
+      this.#editPrinter(id, { [field]: event.detail.value } as Pick<EditablePrinter, K>);
+    };
+  }
+
   /** Persist the CURRENT values of the printer row `id` holds, then reload. Reads the row from state at
    * click time (not a captured render closure), so an edit made just before the click is what persists.
    * An empty connection field is sent as a clearing `null`; the port string is parsed to an int. A
    * vanished row is a no-op. A rejection becomes the `errorKey` banner. */
   async #savePrinter(id: string): Promise<void> {
-    this.errorKey = null;
+    this.errorKey = null; // also dismisses a prior banner on the vanished-row early return below
     const row = this.printers.find((p) => p.id === id);
     if (row === undefined) return;
-    try {
-      await this.api.updatePrinter(id, {
+    await this.#mutate(() =>
+      this.api.updatePrinter(id, {
         name: row.name,
         host: row.host === "" ? null : row.host,
         port: row.port.trim() === "" ? null : Number(row.port),
@@ -385,36 +401,21 @@ export class PrintersScreen extends LitElement {
         pollId: row.pollId === "" ? null : row.pollId,
         ticketScope: row.ticketScope,
         active: row.active,
-      });
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+      }),
+    );
   }
 
   /** Soft-delete (deactivate) the printer `id` holds, then reload. A rejection becomes the `errorKey`
    * banner. */
   async #deactivatePrinter(id: string): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.api.deactivatePrinter(id);
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    await this.#mutate(() => this.api.deactivatePrinter(id));
   }
 
   /** Enqueue a diagnostic test print for the printer `id` holds, then reload the jobs so the newly
    * queued job appears in the status list. The enqueue never blocks on the printer; a rejection (an
    * unknown/absent printer) becomes the `errorKey` banner. */
   async #testPrint(id: string): Promise<void> {
-    this.errorKey = null;
-    try {
-      await this.api.testPrint(id);
-      await this.#load();
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    await this.#mutate(() => this.api.testPrint(id));
   }
 
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
@@ -518,47 +519,32 @@ export class PrintersScreen extends LitElement {
             label=${t("printers.name")}
             data-test="printer-name-${p.id}"
             .value=${p.name}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { name: e.detail.value });
-            }}
+            @wt-change=${this.#editHandler(p.id, "name")}
           ></wt-input>
           <wt-input
             label=${t("printers.host")}
             data-test="printer-host-${p.id}"
             .value=${p.host}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { host: e.detail.value });
-            }}
+            @wt-change=${this.#editHandler(p.id, "host")}
           ></wt-input>
           <wt-input
             type="number"
             label=${t("printers.port")}
             data-test="printer-port-${p.id}"
             .value=${p.port}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { port: e.detail.value });
-            }}
+            @wt-change=${this.#editHandler(p.id, "port")}
           ></wt-input>
           <wt-input
             label=${t("printers.usb_path")}
             data-test="printer-usb-path-${p.id}"
             .value=${p.usbPath}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { usbPath: e.detail.value });
-            }}
+            @wt-change=${this.#editHandler(p.id, "usbPath")}
           ></wt-input>
           <wt-input
             label=${t("printers.poll_id")}
             data-test="printer-poll-id-${p.id}"
             .value=${p.pollId}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { pollId: e.detail.value });
-            }}
+            @wt-change=${this.#editHandler(p.id, "pollId")}
           ></wt-input>
           <wt-switch
             label=${t("printers.ticket_scope")}

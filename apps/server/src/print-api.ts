@@ -1,11 +1,10 @@
 // Side-effect only: loads this host's errors.ts augmentation for the apps/server code THESE routes
 // throw directly — `management.request_invalid` (the body/query screens, via `request-screens.js` and
-// the local field screens). `device.pairing_rate_limited` is NOT thrown out of here: the enrol flood
-// guard (`enrol-rate-limit.js`, which carries its own errors.js) throws it at the TOP of the enrol
-// handler, and the handler immediately CATCHES it and re-throws this surface's own
-// `agent.pairing_rate_limited` (see the route), so a rate-limited enrol answers in the `agent.*`
-// namespace and `device.*` never escapes. The printing codes this surface answers —
-// `printer.*`/`agent.*`, that translated `agent.pairing_rate_limited` included — are declared in
+// the local field screens). The enrol flood guard (`enrol-rate-limit.js`, which carries its own
+// errors.js) is built HERE with this surface's own `agent.pairing_rate_limited` code, so a rate-limited
+// enrol answers in the `agent.*` namespace directly (no catch-and-translate) and `device.*` never
+// appears on this surface. The printing codes this surface answers —
+// `printer.*`/`agent.*`, `agent.pairing_rate_limited` included — are declared in
 // @waitron/printing's own errors.ts and reach here through the VALUE imports of its verbs below
 // (enrolAgent/generateAgentCode/createPrinter/updatePrinter/deactivatePrinter/claimPrintJobs/
 // reportPrintJob and, transitively, requireAgent's authenticateAgent); `shared.invalid_id` (thrown by
@@ -15,7 +14,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq } from "drizzle-orm";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   asAppUser,
   printAgents,
@@ -62,12 +61,13 @@ export interface PrintApiDeps {
   cfg: { tenantId: string; locationId: string };
   /**
    * The redemption rate-limiter for `POST /print-api/agent/enrol` — the SAME per-process, in-memory,
-   * GLOBAL fixed-window guard the device enrol route uses (`enrol-rate-limit.ts`). Optional and
-   * injected ONLY by tests (which pass a limiter over a controllable clock); production omits it and
-   * `mountPrintApi` builds the default (`ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). The shared
-   * limiter throws the device-namespaced `device.pairing_rate_limited`; the enrol route TRANSLATES that
-   * to this surface's own `agent.pairing_rate_limited` (see the route), so the print enrolment flow
-   * answers every pairing outcome in ONE namespace (`agent.*`), never leaking `device.*`.
+   * GLOBAL fixed-window guard the device enrol route uses (`enrol-rate-limit.ts`), built here with THIS
+   * surface's own throw code. Optional and injected ONLY by tests (which pass a limiter over a
+   * controllable clock, and MUST give it `code: "agent.pairing_rate_limited"` to match production);
+   * production omits it and `mountPrintApi` builds the default (`ENROL_RATE_MAX` per
+   * `ENROL_RATE_WINDOW_MS`, code `agent.pairing_rate_limited`). The limiter throws
+   * `agent.pairing_rate_limited` directly, so the print enrolment flow answers every pairing outcome in
+   * ONE namespace (`agent.*`) with no catch-and-translate, never leaking `device.*`.
    */
   enrolRateLimiter?: EnrolRateLimiter;
 }
@@ -100,8 +100,8 @@ const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(
  *  - Agent auth/enrol: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401),
  *    `agent.pairing_invalid` (an unknown/consumed/foreign code, 404 — a not-found, oracle-free) and
  *    `agent.pairing_expired` (a code that WAS ours but lapsed, 410 Gone — distinct by design),
- *    `agent.pairing_rate_limited` (the enrol flood guard, 429, thrown BEFORE any DB work — the enrol
- *    route translates the shared limiter's device-namespaced throw to this `agent.*` code).
+ *    `agent.pairing_rate_limited` (the enrol flood guard, 429, thrown BEFORE any DB work — the limiter
+ *    is built with this surface's own code, so it throws `agent.*` directly with no translation).
  *  - Printer/agent management: `printer.not_found` (an absent printer id, 404),
  *    `printer.invalid_config` (a transport short of its required fields, 422 Unprocessable — the config
  *    is well-formed JSON but semantically invalid), `agent.not_found` (an absent agent id on revoke, or
@@ -208,8 +208,10 @@ function optionalUuid(v: unknown, field: string): string | undefined {
 export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process enrol rate-limiter (design §7 / the device enrol precedent).
   // Built ONCE here so it is one bucket for the whole mounted API; a test may inject its own limiter
-  // over a controllable clock, production omits it and gets the default `createEnrolRateLimiter()`.
-  const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
+  // over a controllable clock, production omits it and gets `createEnrolRateLimiter({ code })` throwing
+  // THIS surface's own `agent.pairing_rate_limited` (429), so the enrol route needs no catch-and-translate.
+  const enrolLimiter =
+    deps.enrolRateLimiter ?? createEnrolRateLimiter({ code: "agent.pairing_rate_limited" });
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `printer.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
@@ -230,26 +232,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/print-api/agent/enrol", (c) =>
     run(c, log, async () => {
       // Rate-limit FIRST — before the body is parsed and before `enrolAgent`'s locking DELETE — so an
-      // enrol flood is refused (429) with ZERO DB work, keeping a flood on this unauthenticated route
-      // from starving the sale path (CLAUDE.md §5). The device enrol route's exact posture. The shared
-      // limiter throws the DEVICE-namespaced `device.pairing_rate_limited`; TRANSLATE it to this
-      // surface's own `agent.pairing_rate_limited` so the print enrolment flow answers every pairing
-      // outcome in ONE namespace (codes name the domain concept, CLAUDE.md §1/§3). Any other throw
-      // (there is none today) propagates unchanged.
-      try {
-        enrolLimiter.check();
-      } catch (error) {
-        // `createEnrolRateLimiter().check()` throws ONLY `device.pairing_rate_limited`
-        // (enrol-rate-limit.ts), so the guard below is defense-in-depth: it is unreachable today (the
-        // catch always sees exactly that code) but kept so a future limiter that threw something else
-        // would propagate it verbatim rather than be mislabelled. v8-ignored as documented-unreachable
-        // (the boot.ts / chain.ts shape); the reachable translation on the next line stays counted and
-        // IS exercised by the rate-limit test.
-        /* v8 ignore start */
-        if (!isAppError(error) || error.code !== "device.pairing_rate_limited") throw error;
-        /* v8 ignore stop */
-        throw new AppError("agent.pairing_rate_limited", {});
-      }
+      // enrol flood is refused (429 `agent.pairing_rate_limited`) with ZERO DB work, keeping a flood on
+      // this unauthenticated route from starving the sale path (CLAUDE.md §5). The device enrol route's
+      // exact posture; this limiter is built with THIS surface's own code (see `enrolLimiter` above), so
+      // the throttle answers in the `agent.*` namespace directly — no catch-and-translate needed.
+      enrolLimiter.check();
       const body: { code?: unknown } =
         (await c.req.json<{ code?: unknown }>().catch(() => ({}))) ?? {};
       const code = requireString(body.code, "code");

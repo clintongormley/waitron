@@ -1,17 +1,11 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, isPgError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import {
-  createPrinter,
-  deactivatePrinter,
-  isPgError,
-  listPrinters,
-  updatePrinter,
-} from "./printers.js";
+import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
 import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
@@ -331,7 +325,7 @@ describe("listPrinters", () => {
   });
 });
 
-describe("isPgError (internal SQLSTATE cause-walk)", () => {
+describe("isPgError (@waitron/db SQLSTATE cause-walk, as printers.ts uses it)", () => {
   it("recognises a bare driver error", () => {
     expect(isPgError(Object.assign(new Error("fk"), { code: "23503" }), "23503")).toBe(true);
   });

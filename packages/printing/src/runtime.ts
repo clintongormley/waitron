@@ -157,29 +157,24 @@ export async function reportPrintJob(
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
   const { agentId, jobId, outcome } = input;
-  const result =
+  // Only the SET clause differs by outcome; the WHERE — the `status = 'printing'` idempotency guard, the
+  // `printer_id`→agent-scope join and the tenant predicate — is IDENTICAL for both, so it is written
+  // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
+  // `attempts`. `${outcome.error}` binds as `$n` like every other value here, never concatenated.
+  const setClause =
     outcome.status === "done"
-      ? await tx.execute<{ id: string }>(sql`
-          update print_jobs set status = 'done', delivered_at = now()
-          from printers p
-          where print_jobs.tenant_id = p.tenant_id
-            and print_jobs.printer_id = p.id
-            and print_jobs.tenant_id = ${cfg.tenantId}
-            and print_jobs.id = ${jobId}
-            and print_jobs.status = 'printing'
-            and p.agent_id = ${agentId}
-          returning print_jobs.id`)
-      : await tx.execute<{ id: string }>(sql`
-          update print_jobs
-             set status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1
-          from printers p
-          where print_jobs.tenant_id = p.tenant_id
-            and print_jobs.printer_id = p.id
-            and print_jobs.tenant_id = ${cfg.tenantId}
-            and print_jobs.id = ${jobId}
-            and print_jobs.status = 'printing'
-            and p.agent_id = ${agentId}
-          returning print_jobs.id`);
+      ? sql`status = 'done', delivered_at = now()`
+      : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
+  const result = await tx.execute<{ id: string }>(sql`
+    update print_jobs set ${setClause}
+    from printers p
+    where print_jobs.tenant_id = p.tenant_id
+      and print_jobs.printer_id = p.id
+      and print_jobs.tenant_id = ${cfg.tenantId}
+      and print_jobs.id = ${jobId}
+      and print_jobs.status = 'printing'
+      and p.agent_id = ${agentId}
+    returning print_jobs.id`);
   return { updated: result.rows.length > 0 };
 }
 
