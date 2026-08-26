@@ -760,7 +760,10 @@ export class DashboardApi {
    * reads the list; the app decides what to do with a pick, so the client only surfaces the shape.
    */
   getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
-    return this.#request("/management-api/locales", "GET");
+    return this.#request<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>(
+      "/management-api/locales",
+      "GET",
+    );
   }
 
   /**

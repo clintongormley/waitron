@@ -658,7 +658,10 @@ export class TillApi {
    * what to do with a pick, so the client only surfaces the shape.
    */
   getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
-    return this.#request("/api/locales", "GET");
+    return this.#request<{ locales: Array<{ code: string; label: string }>; venueDefault: string }>(
+      "/api/locales",
+      "GET",
+    );
   }
 
   listStaff(): Promise<StaffMember[]> {

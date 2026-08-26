@@ -24,6 +24,13 @@ interface Locale {
  *
  * Until the list is fetched the trigger falls back to the raw active code (labels are unknown before
  * the first open); once loaded it reads the active locale's own-language label.
+ *
+ * Accessibility: the trigger (a `wt-button`) carries `aria-haspopup="menu"` + `aria-expanded`; the
+ * options are NATIVE `<button role="menuitemradio">` elements — the real focusable nodes — as DIRECT
+ * children of the `role="menu"` container, so the role + `aria-checked` state land on the element the
+ * screen reader actually reaches (a `wt-button` forwards only `disabled`/`aria-label` to its inner
+ * button, so role/state on a `wt-button` host would be lost). Keyboard nav beyond Tab (arrow keys,
+ * Escape, click-away) is a later task's concern.
  */
 @customElement("till-language-chooser")
 export class LanguageChooser extends LitElement {
@@ -38,9 +45,8 @@ export class LanguageChooser extends LitElement {
       .menu {
         position: absolute;
         z-index: 1;
-        margin: var(--wt-space-1) 0 0;
+        margin-top: var(--wt-space-1);
         padding: var(--wt-space-1);
-        list-style: none;
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
@@ -50,12 +56,27 @@ export class LanguageChooser extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      .menu li {
+      .option {
         display: block;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-4);
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        font-weight: var(--wt-font-weight-bold);
+        text-align: start;
+        cursor: pointer;
       }
 
-      .menu wt-button {
-        display: block;
+      .option:hover {
+        background: var(--wt-color-surface-raised);
+      }
+
+      .option[aria-checked="true"] {
+        border-color: var(--wt-color-border);
       }
     `,
   ];
@@ -102,28 +123,33 @@ export class LanguageChooser extends LitElement {
   override render() {
     const active = currentLocale();
     return html`
-      <wt-button variant="secondary" data-test="lang-trigger" @click=${() => void this.#toggle()}>
+      <wt-button
+        variant="secondary"
+        data-test="lang-trigger"
+        aria-haspopup="menu"
+        aria-expanded=${this.open}
+        @click=${() => void this.#toggle()}
+      >
         ${this.#label(active)}
       </wt-button>
       ${
         this.open && this.locales
-          ? html`<ul class="menu" role="menu">
+          ? html`<div class="menu" role="menu">
               ${this.locales.map(
                 (l) => html`
-                  <li>
-                    <wt-button
-                      variant="ghost"
-                      role="menuitemradio"
-                      aria-checked=${l.code === active}
-                      data-test=${`lang-${l.code}`}
-                      @click=${() => this.#pick(l.code)}
-                    >
-                      ${l.label}
-                    </wt-button>
-                  </li>
+                  <button
+                    type="button"
+                    class="option"
+                    role="menuitemradio"
+                    aria-checked=${l.code === active}
+                    data-test=${`lang-${l.code}`}
+                    @click=${() => this.#pick(l.code)}
+                  >
+                    ${l.label}
+                  </button>
                 `,
               )}
-            </ul>`
+            </div>`
           : nothing
       }
     `;
