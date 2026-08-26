@@ -38,9 +38,9 @@ One ranked list. **1–5 are the owner-chosen top tier** (2026-08-26); **6–8 a
 follow.
 
 > **Elevated 2026-08-26 (owner): appliance onboarding — free tier (in-repo, no cloud/hardware) — is
-> the current *build* focus, ahead of the numbered tier below.** Slice **1a — serve the built SPAs
-> from the box — LANDED (#137, 2026-08-26)**; **slice 1b (setup-mode boot for an unprovisioned box)
-> is next.** Rationale: it is the one deployment path that needs
+> the current *build* focus, ahead of the numbered tier below.** Slices **1a (serve the built SPAs,
+> #137) and 1b (setup-mode boot, #139) both LANDED 2026-08-26**; **slice 2 (cert-minting + persisted
+> secrets + the provisioning wizard) is next.** Rationale: it is the one deployment path that needs
 > **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
 > laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
 > sync's cloud-mirror leg (#2), and the appliance *paid* tier all wait on a "Waitron cloud" that **does
@@ -231,15 +231,21 @@ question (below).
   first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free self-signed / paid
   real-cert tier split, a demo/live fiscal fork orthogonal to it, plus backup/break-glass and an
   optional boot passphrase. Free-tier build order (all in-repo, no cloud/hardware): **1a serve the
-  built SPAs from the box — LANDED #137** (`apps/server/src/spa-api.ts` + boot wiring;
-  `WAITRON_{TILL,DASHBOARD}_APP_DIR`; till at `/`, dashboard at `/manage`); **1b setup-mode boot —
-  next** (unprovisioned box → serve the wizard; restructure boot/config so the server starts without
-  a venue; a `dev:onboard` mode); then 2 cert-minting + persisted secrets + the wizard, 3
-  mDNS/`waitron.local` + per-device trust UX, 4 backup/status/break-glass. Slices 5–7 (AP-mode
-  firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. *1a note:* it serves the SPA
-  bundles only — making them **installable** PWAs (service worker + web manifest, for
-  Add-to-Home-Screen) is a later slice. And the **reroute** itself (the till reaches any live server —
-  selling is active-active — keeping a stable local origin in front).
+  built SPAs — LANDED #137** (`spa-api.ts` + boot wiring; `WAITRON_{TILL,DASHBOARD}_APP_DIR`; till at
+  `/`, dashboard at `/manage`); **1b setup-mode boot — LANDED #139** (`config.till` optional;
+  `setup-api.ts` = `/setup-api/status` + placeholder; `startServer` branches setup vs trading with the
+  trading path byte-equivalent; `dev:onboard`); **next → slice 2: cert-minting + persisted secrets +
+  the actual provisioning wizard** (drives `instance`/`venue`; AEAT-cert-required for a production
+  venue); then 3 mDNS/`waitron.local` + per-device trust UX, 4 backup/status/break-glass. Slices 5–7
+  (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
+  constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
+  trading-healthy); a liveness/supervisor probe must gate on **`/setup-api/status`** (200), not
+  `/health`, or it restart-loops an unprovisioned box. *Notes:* SPAs are served as bundles only —
+  **installable** PWAs (service worker + manifest) are a later slice; and a pre-existing
+  `readOrderFlow`/`buildCardProvider` boot-throw pool-leak in `boot.ts` (a boot that throws after the
+  app pool opens doesn't close it; moot in prod — process exits) is a candidate cleanup. And the
+  **reroute** itself (the till reaches any live server — selling is active-active — keeping a stable
+  local origin in front).
 
 ### Recipes → stock → procurement (next #6)
 

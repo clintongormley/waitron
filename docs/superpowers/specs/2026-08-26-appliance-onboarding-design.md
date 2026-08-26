@@ -204,6 +204,16 @@ Its backend endpoints:
   **in-process** (they are pure functions, not just CLIs — no shelling out);
 - **flip** the server out of setup mode into serving the real PWAs.
 
+**Implementation note (2026-08-26, slices 1a #137 + 1b #139 landed).** Setup-mode boot is built:
+`startServer` branches on `config.till` presence (setup mode = no venue bound; `tenants` is FORCE-RLS
+so a cross-tenant "any venue?" boot query is not cheap — detection is config-binding presence, with
+the trading path DB-confirmed via `withTenant` and anti-duplicate-provisioning left to the `tenants`
+UNIQUE constraint in slice 2). **Deployment constraint for slices 5–6 (appliance image / supervisor):
+a setup box's `/health` returns 503** (it runs no fiscal duty loop, so it is correctly not
+*trading*-healthy) — a liveness/readiness probe must gate a setup box on **`/setup-api/status`**
+(HTTP 200), never `/health`, or a restart-on-503 probe would loop-kill an unprovisioned box and make
+onboarding impossible.
+
 **Prerequisite gap — serve the built frontends from the box.** Today the box serves neither
 `apps/dashboard` nor `apps/till`. The appliance cannot exist without this, so **"serve the built PWAs
 from the box"** is slice 1 (§16). Approach **[lean]**: build both Vite apps to static bundles and
