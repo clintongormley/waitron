@@ -414,6 +414,7 @@ export const es: Record<StringKey, string> = {
 // only some keys translated; t() fills the gaps from the English base.
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
   en,
+  "en-GB": en,
   es,
   "es-ES": es,
 };
