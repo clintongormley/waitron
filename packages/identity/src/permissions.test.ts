@@ -92,4 +92,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "device.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "device.manage")).toBe(false);
   });
+  it("grants printer.manage to manager and admin only (printing subsystem central management)", () => {
+    // A domain-named printer-admin permission (enrol/list/revoke print agents, CRUD printers, enqueue a
+    // test print) on the management dashboard (@waitron/printing), granted to exactly the roles that
+    // hold the other manager write gates — manager and admin — and NEVER to staff or supervisor. The
+    // agent API itself is device-authed (requireAgent), NOT gated on this permission; printer.manage
+    // gates only the central-management surface (printing design §7). Staff must never hold it (least
+    // privilege — a kitchen operator cannot enrol or revoke a print agent).
+    expect(roleHasPermission("manager", "printer.manage")).toBe(true);
+    expect(roleHasPermission("admin", "printer.manage")).toBe(true);
+    expect(roleHasPermission("staff", "printer.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "printer.manage")).toBe(false);
+  });
 });

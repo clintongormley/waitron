@@ -930,6 +930,7 @@ jobs:
           set -- "$@" --filter "!@waitron/recipes"
           set -- "$@" --filter "!@waitron/workforce-es"
           set -- "$@" --filter "!@waitron/layouts"
+          set -- "$@" --filter "!@waitron/printing"
           set -- "$@" --filter "!@waitron/verifactu"
           set -- "$@" --filter "!@waitron/bench-pglite"
 
