@@ -48,6 +48,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
+import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
@@ -504,6 +505,26 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // provisioned the role still boots unchanged.
       log("warn", "sync.retention_unconfigured", {});
     }
+  }
+
+  // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
+  // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
+  // `/media`, `/health` or the sync routes (`mountSpa`'s "call me after every API route" contract).
+  // Dashboard (`/manage`) FIRST so `/manage/*` wins; the till (`""` = origin root) LAST, the one
+  // catch-all, so nothing it might swallow is registered after it (`boot.spa-mount.test.ts` pins that
+  // order). Gated on each dir being configured — dev leaves them unset and uses the Vite dev servers,
+  // so an existing boot (`boot.test.ts` sets neither) mounts nothing here, exactly as the sync block
+  // gates on `syncConfig`. A dir configured but never built (no `index.html`) fails the boot LOUDLY
+  // via `assertBuiltApp` (`server.config_invalid`, naming the env var), §8's "everything escapes" —
+  // never a catch-all that 404s every page load.
+  if (config.dashboardAppDir !== undefined) {
+    assertBuiltApp(config.dashboardAppDir, "WAITRON_DASHBOARD_APP_DIR");
+    mountSpa(app, { root: config.dashboardAppDir, basePath: "/manage" }, log);
+  }
+  if (config.tillAppDir !== undefined) {
+    assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
+    // `""` = the origin-root catch-all: MUST be the last GET mounted (see the block comment above).
+    mountSpa(app, { root: config.tillAppDir, basePath: "" }, log);
   }
 
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,

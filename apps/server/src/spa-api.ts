@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, extname, sep } from "node:path";
+import { AppError } from "@waitron/shared";
 import type { Context, Hono } from "hono";
 import type { Logger } from "./logger.js";
+import "./errors.js";
 
 /**
  * Everything the SPA-serving route needs: the absolute directory a front-end was built into and the
@@ -62,6 +65,26 @@ export function safeResolve(root: string, relPath: string): string | null {
   const absolute = resolve(root, "." + (relPath.startsWith("/") ? relPath : "/" + relPath));
   if (!absolute.startsWith(root + sep)) return null;
   return absolute;
+}
+
+/**
+ * A configured SPA directory's ONE boot-time precondition: it must actually hold an `index.html`.
+ * `boot.ts` calls this for each configured app dir BEFORE `mountSpa`, so a dir that was set but never
+ * built (a wrong path, or the frontend build never ran) fails the boot LOUDLY here — the §8
+ * "everything escapes" posture — rather than mounting a catch-all that answers 404 for every page
+ * load, a failure an operator would only discover in the browser. `variable` is the env var that
+ * supplied the dir (`WAITRON_TILL_APP_DIR` / `WAITRON_DASHBOARD_APP_DIR`), named in the error so the
+ * operator knows which one to fix: `server.config_invalid` carries the variable NAME, never the path
+ * value (this file's no-leak discipline, the same the rest of that code's throwers follow).
+ *
+ * Exported and split out of `boot.ts` deliberately: reaching a throw inside the full-boot path needs
+ * a real container and a mis-built dir, so the guard lives here where `spa-api.test.ts` unit-tests
+ * both branches directly and proves the throw by construction (the task brief's Step 7).
+ */
+export function assertBuiltApp(dir: string, variable: string): void {
+  if (!existsSync(join(dir, "index.html"))) {
+    throw new AppError("server.config_invalid", { variable, reason: "missing_index_html" });
+  }
 }
 
 /**

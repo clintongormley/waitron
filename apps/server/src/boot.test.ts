@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -457,6 +457,61 @@ describe("startServer, against a real container as the deployment role", () => {
     // The listener actually closed: a request against the same port now fails to connect rather
     // than hanging or succeeding against a server that never really stopped.
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("serves the built till at / and dashboard at /manage when the app dirs are configured, without shadowing the APIs", async () => {
+    // The one boot that sets WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR — every other boot in
+    // this suite leaves them unset (the dev/Vite case), so this is what drives boot.ts's two SPA-mount
+    // branches and `mountSpa`'s wiring end to end. Two throwaway built-SPA dirs (index.html + a
+    // dashboard asset) stand in for Task 1's real Vite output; distinctive markers so a swapped
+    // /manage-vs-/ mapping would be caught. `boot.spa-mount.test.ts` pins the mount ORDER at the Hono
+    // level; this proves the same wiring survives a real startServer and does not shadow /health or
+    // /api/staff (the till root catch-all is registered LAST, after every API route).
+    const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-till-spa-"));
+    const dashApp = mkdtempSync(join(tmpdir(), "waitron-boot-dash-spa-"));
+    writeFileSync(join(tillApp, "index.html"), "<html>till-spa-root</html>");
+    writeFileSync(join(dashApp, "index.html"), "<html>dashboard-spa-root</html>");
+    mkdirSync(join(dashApp, "assets"));
+    writeFileSync(join(dashApp, "assets", "d-1.js"), "// dashboard-spa-asset");
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_TILL_APP_DIR: tillApp,
+      WAITRON_DASHBOARD_APP_DIR: dashApp,
+    });
+    try {
+      // The till at the origin root, the dashboard at /manage — the two SPA branches both mounted.
+      const till = await fetch(`http://127.0.0.1:${port}/`);
+      expect(till.status).toBe(200);
+      expect(till.headers.get("content-type")).toContain("text/html");
+      expect(await till.text()).toContain("till-spa-root");
+
+      const dash = await fetch(`http://127.0.0.1:${port}/manage/`);
+      expect(dash.status).toBe(200);
+      expect(await dash.text()).toContain("dashboard-spa-root");
+
+      const asset = await fetch(`http://127.0.0.1:${port}/manage/assets/d-1.js`);
+      expect(asset.status).toBe(200);
+      expect(await asset.text()).toContain("dashboard-spa-asset");
+
+      // The catch-all did NOT shadow the APIs or /health: /health still answers its JSON, and the
+      // unauthenticated roster route still returns its empty array (200, not the SPA's index.html).
+      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(health.status).toBe(200);
+      expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
+
+      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      expect(staff.status).toBe(200);
+      expect(await staff.json()).toEqual([]);
+    } finally {
+      await server.close();
+      rmSync(tillApp, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+      rmSync(dashApp, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it("mounts the node-token sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {

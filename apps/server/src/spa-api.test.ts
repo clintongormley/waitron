@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { isAppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { mountSpa, safeResolve } from "./spa-api.js";
+import { assertBuiltApp, mountSpa, safeResolve } from "./spa-api.js";
 
 const noopLog: Logger = () => {};
 
@@ -130,6 +131,40 @@ describe("mountSpa", () => {
     const res = await app.request("/assets");
     expect(res.status).toBe(404);
     expect(lines.some((l) => l.event === "spa.read_failed")).toBe(true);
+  });
+
+  // The boot-time precondition, unit-tested here because reaching a throw inside the un-unit-testable
+  // full-boot path is otherwise hard (CLAUDE.md §4 / the task brief's Step 7). `boot.ts` calls this
+  // for each configured SPA dir BEFORE `mountSpa`, so a dir that was configured but never built (no
+  // index.html) fails the boot LOUDLY with the existing `server.config_invalid` code — naming the
+  // offending env var — rather than serving 404s for every page load.
+  describe("assertBuiltApp", () => {
+    it("returns without throwing when the dir holds index.html", () => {
+      // `root` (the suite fixture) has index.html — the success branch.
+      expect(() => assertBuiltApp(root!, "WAITRON_TILL_APP_DIR")).not.toThrow();
+    });
+
+    it("throws server.config_invalid naming the variable when index.html is absent", () => {
+      const empty = mkdtempSync(join(tmpdir(), "waitron-noindex-"));
+      try {
+        let caught: unknown;
+        try {
+          assertBuiltApp(empty, "WAITRON_DASHBOARD_APP_DIR");
+        } catch (error) {
+          caught = error;
+        }
+        expect(isAppError(caught)).toBe(true);
+        expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
+        // Names the env var the operator must fix and a reason CODE, never the path itself — the
+        // no-leak, name-the-variable discipline every other `server.config_invalid` follows.
+        expect(isAppError(caught) && caught.params).toEqual({
+          variable: "WAITRON_DASHBOARD_APP_DIR",
+          reason: "missing_index_html",
+        });
+      } finally {
+        rmSync(empty, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+      }
+    });
   });
 
   // Direct unit test of the traversal guard — the route-level `..%2f…` test above may be normalised by

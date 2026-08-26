@@ -78,6 +78,11 @@ describe("loadConfig", () => {
       // No WAITRON_MANAGEMENT_* set, so the passkey Relying Party falls back to loopback dev values.
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
+      // No WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR set, so the box serves neither SPA — dev
+      // uses the Vite dev servers. Present-but-undefined, asserted explicitly the same way
+      // settlementLagMs above is, so this case pins that an unset app dir defaults to undefined.
+      tillAppDir: undefined,
+      dashboardAppDir: undefined,
       scheduler: {
         horizonDays: 30,
         maxPeriodsPerTick: 7,
@@ -462,6 +467,39 @@ describe("loadConfig", () => {
     // Prove the trap directly: the empty value did NOT resolve to cwd.
     expect(config.mediaDir).not.toBe(resolve(""));
     expect(config.mediaDir).not.toBe(process.cwd());
+  });
+
+  // The built front-end directories the box serves same-origin (slice 1a). Both OPTIONAL: dev leaves
+  // them unset and uses the Vite dev servers, so an unset value must be `undefined` (nothing mounts),
+  // not a default path. Read verbatim (no `resolve`) — boot only ever `existsSync(join(dir,
+  // "index.html"))`s and hands the string to `mountSpa`, which resolves per request; deployment (#9)
+  // sets an absolute path.
+  it("reads WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR when set, else undefined", () => {
+    const off = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
+    expect(off.tillAppDir).toBeUndefined();
+    expect(off.dashboardAppDir).toBeUndefined();
+
+    const on = loadConfig(
+      { ...MIN_ENV, WAITRON_TILL_APP_DIR: "/srv/till", WAITRON_DASHBOARD_APP_DIR: "/srv/dash" },
+      ROOT,
+      MEDIA_ROOT,
+    );
+    expect(on.tillAppDir).toBe("/srv/till");
+    expect(on.dashboardAppDir).toBe("/srv/dash");
+  });
+
+  // Empty string is unset (config.ts's own `isUnset`), the `VAR=`-means-unset rule every other
+  // optional variable in this file follows: `WAITRON_TILL_APP_DIR=` must leave the SPA unmounted
+  // (undefined), never reach boot as an empty dir whose `join("", "index.html")` would be a relative
+  // `index.html` under cwd — the "empty value is a valid value" trap (CLAUDE.md §3).
+  it("treats an empty WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR as unset (undefined, not '')", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_TILL_APP_DIR: "", WAITRON_DASHBOARD_APP_DIR: "" },
+      ROOT,
+      MEDIA_ROOT,
+    );
+    expect(config.tillAppDir).toBeUndefined();
+    expect(config.dashboardAppDir).toBeUndefined();
   });
 });
 
