@@ -122,3 +122,16 @@ it("has a sentence for each staff self-service code (my-schedule portal)", () =>
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
+
+it("has a sentence for each printing code (Impresoras screen)", () => {
+  // Every code the Impresoras surface (apps/server/src/print-api.ts) can reject with must map to real
+  // copy, never the raw wire code and never the GENERIC fallback — so the banner reads as an actionable
+  // message. `management.request_invalid` / `shared.invalid_id` (body/id screens) and
+  // `management_session.*` / `authorization.not_permitted` (the gate) are already covered above. Proven
+  // by deletion: drop any of these from CODE_MESSAGES and codeMessage returns GENERIC_ES → red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  for (const code of ["printer.invalid_config", "printer.not_found", "agent.not_found"]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+  }
+});

@@ -1604,3 +1604,178 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 });
+
+describe("DashboardApi — printing (agents + printers + jobs)", () => {
+  // The nine verbs the Impresoras screen drives (the print-api.ts management routes, printer.manage-
+  // gated). Agents: list, mint a one-time code (201), revoke (204). Printers: list, create (201),
+  // patch (204), deactivate (204). Recent jobs: list. Test-print: enqueue a known payload (202).
+  // Paths/bodies asserted against apps/server/src/print-api.ts.
+
+  const agents = [
+    {
+      id: "a1",
+      name: "Cocina agent",
+      active: true,
+      lastSeenAt: "2026-08-25T14:30:00.000Z",
+      enrolledAt: "2026-08-20T09:00:00.000Z",
+    },
+    {
+      id: "a2",
+      name: "Old agent",
+      active: false,
+      lastSeenAt: null,
+      enrolledAt: "2026-08-19T09:00:00.000Z",
+    },
+  ];
+  const printers = [
+    {
+      id: "p1",
+      name: "Cocina",
+      transport: "network_tcp",
+      agentId: "a1",
+      host: "10.0.0.9",
+      port: 9100,
+      usbPath: null,
+      pollId: null,
+      ticketScope: "station",
+      active: true,
+    },
+  ];
+  const jobs = [
+    {
+      id: "j1",
+      printerId: "p1",
+      status: "done",
+      attempts: 1,
+      lastError: null,
+      createdAt: "2026-08-25T14:00:00.000Z",
+      deliveredAt: "2026-08-25T14:00:05.000Z",
+    },
+  ];
+
+  it("listAgents GETs /management-api/print-agents with credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(agents));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listAgents()).toEqual(agents);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createAgentCode POSTs { label } and returns the one-time code (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ code: "ABCD2345" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createAgentCode("Cocina")).toEqual({ code: "ABCD2345" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents/codes", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Cocina" }),
+    });
+  });
+
+  it("revokeAgent POSTs the agent's revoke route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.revokeAgent("a1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents/a1/revoke", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("listPrinters GETs /management-api/printers with credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(printers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPrinters()).toEqual(printers);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createPrinter POSTs the input and returns the created id (201)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p9" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const input = {
+      name: "USB",
+      transport: "usb" as const,
+      agentId: "a1",
+      usbPath: "/dev/usb/lp0",
+    };
+    expect(await api.createPrinter(input)).toEqual({ id: "p9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("createPrinter rejects with { code } on a missing transport field (printer.invalid_config, 422)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "printer.invalid_config" } }, false, 422));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.createPrinter({ name: "Bad", transport: "usb", agentId: "a1" }),
+    ).rejects.toMatchObject({ code: "printer.invalid_config" });
+  });
+
+  it("updatePrinter PATCHes the printer's route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const patch = {
+      name: "Cocina 2",
+      host: "10.0.0.20",
+      ticketScope: "order" as const,
+      active: true,
+    };
+    await expect(api.updatePrinter("p1", patch)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  });
+
+  it("deactivatePrinter POSTs the printer's deactivate route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deactivatePrinter("p1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/deactivate", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("listRecentJobs GETs /management-api/print-jobs with credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(jobs));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listRecentJobs()).toEqual(jobs);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-jobs", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("testPrint POSTs the printer's test-print route and returns { jobId } (202)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j9" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.testPrint("p1")).toEqual({ jobId: "j9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/test-print", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("testPrint rejects with { code } on a non-2xx (printer not found)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "printer.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.testPrint("nope")).rejects.toMatchObject({ code: "printer.not_found" });
+  });
+});

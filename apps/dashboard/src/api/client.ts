@@ -649,6 +649,88 @@ export interface PurchaseInvoicePatch {
   lines?: PurchaseInvoiceLineInput[];
 }
 
+// ── Printing types (print agents + printers + jobs) ───────────────────────────────────────────────
+// LOCAL copies of the server's printing JSON shapes (the `print-api.ts` routes wrapping
+// `@waitron/printing`'s ops), deliberately NOT imported from `@waitron/printing`/`@waitron/db` — a
+// runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as
+// every shape above does). These are the CONTRACT the Impresoras screen builds on; if the server
+// shapes change these follow, and a mismatch surfaces as a runtime shape error a view test catches.
+
+/** How a printer is reached — the `print_transport` pgEnum (schema/printers.ts). */
+export type PrintTransport = "usb" | "network_tcp" | "cloud_poll";
+
+/** A printer's kitchen-ticket grouping — the `print_ticket_scope` pgEnum (Slice B). */
+export type PrintTicketScope = "station" | "order";
+
+/** One outbox job's lifecycle state — the `print_job_status` pgEnum (schema/print-jobs.ts). */
+export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
+
+/** One `GET /management-api/print-agents` row — the management view of an enrolled print agent, newest
+ * first (server-ordered). The `token_hash` is never projected. `lastSeenAt` is null before the agent's
+ * first authenticated call; the two timestamps are ISO-8601 strings. Mirrors print-api.ts's projection. */
+export interface PrintAgentRow {
+  id: string;
+  name: string;
+  active: boolean;
+  lastSeenAt: string | null;
+  enrolledAt: string;
+}
+
+/** One `GET /management-api/printers` row — mirrors `@waitron/printing`'s `PrinterRow`. The connection
+ * fields are transport-specific and null when unused; both active and deactivated printers are listed. */
+export interface Printer {
+  id: string;
+  name: string;
+  transport: PrintTransport;
+  agentId: string | null;
+  host: string | null;
+  port: number | null;
+  usbPath: string | null;
+  pollId: string | null;
+  ticketScope: PrintTicketScope;
+  active: boolean;
+}
+
+/** The `POST /management-api/printers` body — mirrors `@waitron/printing`'s `CreatePrinterInput`. Which
+ * connection fields a transport REQUIRES is enforced server-side (`printer.invalid_config`); the screen
+ * sends only the fields it has and lets the server be the authority. */
+export interface PrinterInput {
+  name: string;
+  transport: PrintTransport;
+  agentId?: string;
+  host?: string;
+  port?: number;
+  usbPath?: string;
+  pollId?: string;
+}
+
+/** The `PATCH /management-api/printers/:id` body — mirrors `@waitron/printing`'s `UpdatePrinterInput`.
+ * Every key is optional (a PATCH touches only what it names); the connection fields + `agentId` accept
+ * an explicit `null` to CLEAR them, which `undefined` (absent) does not. */
+export interface PrinterPatch {
+  name?: string;
+  transport?: PrintTransport;
+  agentId?: string | null;
+  host?: string | null;
+  port?: number | null;
+  usbPath?: string | null;
+  pollId?: string | null;
+  ticketScope?: PrintTicketScope;
+  active?: boolean;
+}
+
+/** One `GET /management-api/print-jobs` row — the dashboard's status read (recent activity, newest
+ * first, no payload). Mirrors print-api.ts's projection; `deliveredAt` is set only once `done`. */
+export interface PrintJobRow {
+  id: string;
+  printerId: string;
+  status: PrintJobStatus;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  deliveredAt: string | null;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -1150,6 +1232,79 @@ export class DashboardApi {
    * `{ code: "device.not_found" }`. Never a hard delete — a device is a durable identity. */
   revokeDevice(id: string): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
+  }
+
+  // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────
+  // The nine verbs the Impresoras screen drives, all printer.manage-gated server-side (the print-api.ts
+  // management routes). Agents: `listAgents` reads the enrolled agents (newest first); `createAgentCode`
+  // mints a single-use pairing code returned ONCE (201, never re-fetchable); `revokeAgent` deactivates an
+  // agent (204). Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are the
+  // config CRUD (create returns the minted id at 201; patch/deactivate answer an empty 204). `listRecentJobs`
+  // is the status read; `testPrint` enqueues a known diagnostic payload (202). Paths/bodies against
+  // apps/server/src/print-api.ts.
+
+  /** `GET /management-api/print-agents` — this tenant's enrolled print agents, newest-enrolled first
+   * (the server's order). Each carries its active flag and last-seen time; the token hash never leaves. */
+  listAgents(): Promise<PrintAgentRow[]> {
+    return this.#request<PrintAgentRow[]>("/management-api/print-agents", "GET");
+  }
+
+  /** `POST /management-api/print-agents/codes` — mint a single-use agent pairing code, returning the
+   * plaintext code ONCE (201). The code is never re-readable (like a device pairing code / passkey
+   * challenge handle). */
+  createAgentCode(label: string): Promise<{ code: string }> {
+    return this.#request<{ code: string }>("/management-api/print-agents/codes", "POST", { label });
+  }
+
+  /** `POST /management-api/print-agents/:id/revoke` — revoke a print agent (flip `active = false`,
+   * instant): a revoked agent fails `requireAgent` at once. Answers an empty 204; an unknown id rejects
+   * `{ code: "agent.not_found" }`. Never a hard delete — an agent is a durable identity. */
+  revokeAgent(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/print-agents/${id}/revoke`, "POST");
+  }
+
+  /** `GET /management-api/printers` — this tenant's printers by name (active AND deactivated, so the
+   * surface can show and reactivate them). */
+  listPrinters(): Promise<Printer[]> {
+    return this.#request<Printer[]>("/management-api/printers", "GET");
+  }
+
+  /** `POST /management-api/printers` — create a printer; returns the minted id (201). A transport short
+   * of its required connection fields rejects `{ code: "printer.invalid_config" }` (422); a binding to an
+   * unknown agent `{ code: "agent.not_found" }` (404). */
+  createPrinter(input: PrinterInput): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/printers", "POST", input);
+  }
+
+  /** `PATCH /management-api/printers/:id` — patch a printer's mutable slice (name, transport, agent,
+   * connection fields, ticket scope, active). Answers an empty 204; an unknown id rejects
+   * `{ code: "printer.not_found" }`, an edit that leaves a transport short of a required field
+   * `{ code: "printer.invalid_config" }`. */
+  updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
+    return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
+  }
+
+  /** `POST /management-api/printers/:id/deactivate` — soft-delete (deactivate) a printer, NEVER a hard
+   * delete (a job history references it). Answers an empty 204; an unknown id rejects
+   * `{ code: "printer.not_found" }`. */
+  deactivatePrinter(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/printers/${id}/deactivate`, "POST");
+  }
+
+  /** `GET /management-api/print-jobs` — the recent print jobs (newest first, bounded), the dashboard's
+   * status read: last delivered, failing printers. No payload — opaque bytes are not status. */
+  listRecentJobs(): Promise<PrintJobRow[]> {
+    return this.#request<PrintJobRow[]>("/management-api/print-jobs", "GET");
+  }
+
+  /** `POST /management-api/printers/:id/test-print` — enqueue a known diagnostic payload on the printer
+   * so the operator can confirm it (and its agent) are wired up. Returns the queued `{ jobId }` (202);
+   * an unknown id rejects `{ code: "printer.not_found" }`. Enqueue only — never blocks on the printer. */
+  testPrint(printerId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/printers/${printerId}/test-print`,
+      "POST",
+    );
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/recipe-screen.js";
 import "./screens/devices-screen.js";
+import "./screens/printers-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -27,11 +28,12 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * author the catalogue, arrange the till layout, edit the receipt trim, configure the table service
  * statuses, arrange the floor plan (zones + tables), configure the kitchen (stations + bump mode),
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
- * purchase invoices, author ingredients and product recipes, or manage enrolled devices. Exactly one
- * shows at a time. `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`,
- * `approvals`, `planned-actual`, `purchases`, `recipe` and `devices` are the thirteen MANAGER faces the
- * nav switches between; `my-schedule` is the sole face of a `staff`-role session and carries no nav. All
- * logged-in faces share the same chrome (logout, plus the nav for a non-staff session).
+ * purchase invoices, author ingredients and product recipes, manage enrolled devices, or manage
+ * printing (agents + printers + status). Exactly one shows at a time. `staff`, `catalogue`, `layout`,
+ * `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`,
+ * `recipe`, `devices` and `printers` are the fourteen MANAGER faces the nav switches between;
+ * `my-schedule` is the sole face of a `staff`-role session and carries no nav. All logged-in faces share
+ * the same chrome (logout, plus the nav for a non-staff session).
  */
 type Screen =
   | "login"
@@ -48,15 +50,16 @@ type Screen =
   | "planned-actual"
   | "purchases"
   | "recipe"
-  | "devices";
+  | "devices"
+  | "printers";
 
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
  * machine (`login` | `my-schedule` | `staff` | `catalogue` | `layout` | `receipt` | `statuses` |
- * `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` | `purchases` | `recipe`) and does
- * the event wiring the screens deliberately do not:
+ * `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` | `purchases` | `recipe` | `devices`
+ * | `printers`) and does the event wiring the screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.getMe()` (WHOAMI); a
  *    success means a live management session, so it applies the resolved role — a `staff` person
@@ -68,10 +71,10 @@ type Screen =
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `staff` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the thirteen manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`,
- *    `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe` and `devices` — a plain
- *    local state change, no server call. A `staff` session has no nav (the self-service view is its only
- *    face);
+ *    the fourteen manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`,
+ *    `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`, `devices` and `printers`
+ *    — a plain local state change, no server call. A `staff` session has no nav (the self-service view is
+ *    its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -88,7 +91,8 @@ type Screen =
  * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
  * the sole `<h1>Previsto vs real</h1>`, `dashboard-purchases-screen` the sole `<h1>Compras</h1>`,
  * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, `dashboard-devices-screen` the sole
- * `<h1>Dispositivos</h1>`, and `dashboard-login-screen`
+ * `<h1>Dispositivos</h1>`, `dashboard-printers-screen` the sole `<h1>Impresoras</h1>`, and
+ * `dashboard-login-screen`
  * none — so the shell adds no competing `<h1>`: its
  * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
  * exactly one `<h1>` in the DOM at a time.
@@ -303,6 +307,12 @@ export class DashboardApp extends LitElement {
           @click=${() => (this.screen = "devices")}
           >${t("nav.devices")}</wt-button
         >
+        <wt-button
+          variant=${this.screen === "printers" ? "primary" : "secondary"}
+          data-test="nav-printers"
+          @click=${() => (this.screen = "printers")}
+          >${t("nav.printers")}</wt-button
+        >
       </nav>
     `;
   }
@@ -348,6 +358,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-recipe-screen .api=${this.api}></dashboard-recipe-screen>`;
       case "devices":
         return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
+      case "printers":
+        return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
       default:
         return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
     }

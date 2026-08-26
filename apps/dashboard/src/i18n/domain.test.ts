@@ -5,11 +5,13 @@ import {
   allergenName,
   allergenStateName,
   breachKindName,
+  jobStatusName,
   regimeName,
   roleName,
   statusName,
   swapDirectionName,
   swapStatusName,
+  transportName,
   unitName,
   vatClassName,
   vatKindName,
@@ -140,6 +142,23 @@ it("resolves a purchase-regime token to Spanish and English, unknown value raw",
   expect(regimeName("general", "en")).toBe("General regime");
   expect(regimeName("equivalence_surcharge", "en")).toBe("Equivalence surcharge");
   expect(regimeName("simplified", "es")).toBe("simplified");
+});
+
+it("resolves a printer-transport token to Spanish and English, unknown value raw", () => {
+  expect(transportName("network_tcp", "es")).toBe("Red (TCP)");
+  expect(transportName("cloud_poll", "es")).toBe("Sondeo en la nube");
+  expect(transportName("usb", "es")).toBe("USB");
+  expect(transportName("network_tcp", "en")).toBe("Network (TCP)");
+  expect(transportName("serial", "es")).toBe("serial");
+});
+
+it("resolves a print-job-status token to Spanish and English, unknown value raw", () => {
+  expect(jobStatusName("queued", "es")).toBe("En cola");
+  expect(jobStatusName("printing", "es")).toBe("Imprimiendo");
+  expect(jobStatusName("done", "es")).toBe("Hecho");
+  expect(jobStatusName("failed", "es")).toBe("Fallido");
+  expect(jobStatusName("failed", "en")).toBe("Failed");
+  expect(jobStatusName("paused", "es")).toBe("paused");
 });
 
 it("resolves a purchase-VAT-kind token to Spanish and English, unknown value raw", () => {

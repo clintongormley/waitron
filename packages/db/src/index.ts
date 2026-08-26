@@ -22,6 +22,9 @@ export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { deviceKind, devicePairingCodes, devices } from "./schema/devices.js";
+export { printAgentPairingCodes, printAgents } from "./schema/print-agents.js";
+export { printTicketScope, printTransport, printers } from "./schema/printers.js";
+export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
 export {
@@ -53,7 +56,7 @@ export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";
-export { isUniqueViolation } from "./unique-violation.js";
+export { isPgError, isUniqueViolation } from "./unique-violation.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**

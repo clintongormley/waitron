@@ -51,6 +51,14 @@ export const PERMISSIONS = [
   // gated on this — this gates only the enrol-code/list/revoke management surface (spec §3a/§3e).
   // Codes/permissions are never renamed once shipped.
   "device.manage",
+  // Central management of the printing subsystem (enrol/list/revoke print agents, CRUD printers,
+  // enqueue a test print) from the management dashboard (@waitron/printing). A domain-named
+  // PRINTER-ADMIN permission, distinct from staff admin (person.manage) and from device enrolment
+  // (device.manage); granted to manager + admin, the same roles as the other management write gates.
+  // The agent API itself is device-authed (requireAgent), NOT gated on this — printer.manage gates
+  // only the central-management surface (printing design §7). Codes/permissions are never renamed
+  // once shipped.
+  "printer.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -75,6 +83,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "recipe.manage",
   "report.export",
   "device.manage",
+  "printer.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 

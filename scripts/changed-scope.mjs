@@ -212,6 +212,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/recipes",
   "@waitron/workforce-es",
   "@waitron/layouts",
+  "@waitron/printing",
   "@waitron/verifactu",
   "@waitron/bench-pglite",
 ];
