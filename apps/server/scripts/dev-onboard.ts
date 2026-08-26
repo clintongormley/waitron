@@ -88,7 +88,7 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
         "mode is for an UNPROVISIONED box. Refusing to touch a database that holds a fiscal chain " +
         "(a `dev:setup`/`dev:reset` box is a TRADING target). To exercise setup mode, wipe the " +
         "throwaway dev volume and re-run: " +
-        "`docker compose down -v && docker compose up -d --wait db && pnpm dev:onboard`.",
+        "`docker compose down -v && pnpm dev:onboard`.",
     );
   }
 

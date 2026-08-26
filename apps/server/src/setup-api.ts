@@ -18,10 +18,11 @@ export interface SetupDeps {
 /**
  * The minimal shell an operator sees when the box boots unprovisioned. Deliberately a short inline
  * string, NOT a built front-end: the real setup wizard is a separate app (slice 2), and mounting a
- * catch-all that answers a bare 404 for every page load would be the §8 "failure an operator only
- * discovers in the browser" that `spa-api.ts` warns against. This page always renders, so a browser
- * pointed at the box gets a clear "needs setup" message rather than a blank 404. `no-cache` (below)
- * keeps it from being pinned once the box is provisioned and the setup routes stop being mounted.
+ * catch-all that answers a bare 404 for every page load would be the §8 failure — the kind an
+ * operator would only discover in the browser — that `spa-api.ts` warns against. This page always
+ * renders, so a browser pointed at the box gets a clear "needs setup" message rather than a blank
+ * 404. `no-cache` (below) keeps it from being pinned once the box is provisioned and the setup
+ * routes stop being mounted.
  */
 const SETUP_PLACEHOLDER_HTML = `<!doctype html>
 <html lang="en">
