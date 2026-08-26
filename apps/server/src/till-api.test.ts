@@ -243,8 +243,13 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(res.status).toBe(200);
     // The response carries the server-computed `canConfigureTill` capability so the till can gate
     // manager-only affordances client-side; Ana is `staff`, who does NOT hold `till.configure`, so it is
-    // false. The on-till placement route (Task 4) still re-checks the gate server-side.
-    expect(await res.json()).toEqual({ personId: ana.id, canConfigureTill: false });
+    // false. The on-till placement route (Task 4) still re-checks the gate server-side. `locale` is the
+    // operator's own UI-language preference (`persons.locale`, via the session) — Ana has none, so null.
+    expect(await res.json()).toEqual({
+      personId: ana.id,
+      canConfigureTill: false,
+      locale: null,
+    });
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -283,10 +288,40 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: managerId, canConfigureTill: true });
+    // Marta carries no locale preference either, so `locale` is null here too — the with-preference
+    // case is proven by the dedicated test below.
+    expect(await res.json()).toEqual({
+      personId: managerId,
+      canConfigureTill: true,
+      locale: null,
+    });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
+  });
+
+  it("POST returns the operator's own locale preference when set (persons.locale)", async () => {
+    // Seed + log in a staff person carrying `locale = 'en-GB'` to prove the response surfaces the
+    // SESSION person's OWN preference, not null and not a hardcoded value — a mutant that dropped
+    // `session.locale` (returning undefined/null) fails here, while the null cases above kill a mutant
+    // that hardcoded a locale. Cleaned up so the roster tests' exact ordering assertions stay untouched.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const row = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role, locale)
+      values (${cfg.tenantId}, 'Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
+    const personId = row.rows[0]!.id;
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId, pin: "7777" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ personId, canConfigureTill: false, locale: "en-GB" });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
   });
 
   it("POST rejects a bad pin with 401 and a code", async () => {

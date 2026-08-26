@@ -385,7 +385,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // role from the session and re-checks the permission via `authorize` (e.g. the placement route
       // below), so a tampered client value grants nothing.
       const canConfigureTill = roleHasPermission(session.role, "till.configure");
-      return c.json({ personId: session.personId, canConfigureTill });
+      // `locale` is the operator's OWN UI-language preference (`persons.locale`, carried on the session
+      // by `loginWithPin` — Task 3), or null when they have set none. The till app defaults to the
+      // venue locale (`GET /api/till`'s `locale`) until login, then switches to this per-user value.
+      return c.json({ personId: session.personId, canConfigureTill, locale: session.locale });
     }),
   );
 

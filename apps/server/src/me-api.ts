@@ -101,16 +101,21 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // Whoami: who is signed into this browser, and with what role. `requireManagementSession` screens the
-  // cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live session +
-  // the person's current role and status under RLS (a suspended person 403s here). Role-blind: NO
-  // `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this is the
-  // endpoint the dashboard shell probes to decide whether to open the staff view or the manager screens.
+  // Whoami: who is signed into this browser, with what role and in which language. `requireManagementSession`
+  // screens the cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live
+  // session + the person's current role, status and `locale` under RLS (a suspended person 403s here).
+  // Role-blind: NO `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this
+  // is the endpoint the dashboard shell probes to decide whether to open the staff view or the manager
+  // screens. `locale` is the signed-in person's OWN UI-language preference (`persons.locale`, null when
+  // unset); `venueLocale` is the geography-derived boot default (`deps.venueLocale`) the dashboard falls
+  // back to when that preference is null — the same value `GET /management-api/locales` echoes as `venueDefault`.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role } = await asStaff((tx) => resolveManagementSession(tx, sessionId));
-      return c.json({ personId, role });
+      const { personId, role, locale } = await asStaff((tx) =>
+        resolveManagementSession(tx, sessionId),
+      );
+      return c.json({ personId, role, locale, venueLocale: deps.venueLocale });
     }),
   );
 

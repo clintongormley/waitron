@@ -24,6 +24,11 @@ let tenantId: string;
 let me: string;
 let colleague: string;
 let manager: string;
+// A person carrying an explicit UI-language preference (`persons.locale = 'es-ES'`), for the whoami
+// test that proves the route surfaces the SESSION person's own locale. Deliberately DISTINCT from
+// `VENUE_LOCALE` ("en-GB") so `{ locale, venueLocale }` are pinned to their two different sources —
+// person preference vs venue default — and a mutant swapping them is killed (see whoami test below).
+let localed: string;
 let locationId: string;
 
 const suite = usePgliteDb({
@@ -47,6 +52,11 @@ const suite = usePgliteDb({
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${tenantId}, 'Manager', ${hashPin("3333")}, 'manager') returning id`);
     manager = mgrRow.rows[0]!.id;
+    // A staff person with an explicit `locale` preference (es-ES), distinct from VENUE_LOCALE (en-GB).
+    const localedRow = await db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role, locale)
+      values (${tenantId}, 'Localed', ${hashPin("4444")}, 'staff', 'es-ES') returning id`);
+    localed = localedRow.rows[0]!.id;
   },
 });
 
@@ -115,14 +125,49 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
-  it("GET /management-api/session/me returns { personId, role } for a staff session (role-blind)", async () => {
+  it("GET /management-api/session/me returns { personId, role, locale, venueLocale } for a staff session (role-blind)", async () => {
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(me),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()) as { personId: string; role: string }).toEqual({
+    // `me` carries NO locale preference, so `locale` is null; `venueLocale` is the injected boot
+    // default (VENUE_LOCALE), the language the dashboard falls back to when no preference is set.
+    expect(
+      (await res.json()) as {
+        personId: string;
+        role: string;
+        locale: string | null;
+        venueLocale: string;
+      },
+    ).toEqual({
       personId: me,
       role: "staff",
+      locale: null,
+      venueLocale: VENUE_LOCALE,
+    });
+  });
+
+  it("surfaces the SESSION person's own locale preference, distinct from the venue default", async () => {
+    // `localed` carries `locale = 'es-ES'`, while `venueLocale` is en-GB — so this pins `locale` to the
+    // person's preference and `venueLocale` to the boot default, two DIFFERENT sources. A mutant that
+    // returned `deps.venueLocale` for both (or swapped the fields) fails here; the null case above
+    // alone could not catch that, since null ≠ any locale string regardless of the source.
+    const res = await send(mountApp(), "GET", "/management-api/session/me", {
+      cookie: await cookieFor(localed),
+    });
+    expect(res.status).toBe(200);
+    expect(
+      (await res.json()) as {
+        personId: string;
+        role: string;
+        locale: string | null;
+        venueLocale: string;
+      },
+    ).toEqual({
+      personId: localed,
+      role: "staff",
+      locale: "es-ES",
+      venueLocale: VENUE_LOCALE,
     });
   });
 
