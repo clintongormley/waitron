@@ -21,9 +21,12 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** No printer with this id is visible in the current tenant. `id` is the id looked up. */
     "printer.not_found": { id: string };
-    /** A supplied printer was rejected before any write: a transport whose required fields are absent
-     * (no host/port for TCP, no `usb_path` for USB), or a config that fails validation. `reason` is a
-     * stable English discriminator, never a user-facing sentence. */
+    /** A supplied printer config was rejected by `createPrinter` (printers.ts) before any write: a
+     * transport whose REQUIRED connection fields are absent — `agent_id`+`host` for `network_tcp`,
+     * `agent_id`+`usb_path` for `usb`, `poll_id` for `cloud_poll`. This mirrors the DB
+     * `printers_transport_fields_ck` CHECK, which stays the integrity backstop; the app-layer check
+     * only turns a missing field into this friendly code rather than a raw 23514. `reason` is a stable
+     * English discriminator (e.g. `network_tcp_missing_host`), never a user-facing sentence. */
     "printer.invalid_config": { reason: string };
     /** No print agent with this id is visible in the current tenant. `id` is the id looked up. */
     "agent.not_found": { id: string };

@@ -9,3 +9,6 @@ import "./errors.js";
 
 export { PAIRING_TTL_MS, authenticateAgent, enrolAgent, generateAgentCode } from "./agent.js";
 export type { PrintAgentConfig } from "./agent.js";
+export { createPrinter } from "./printers.js";
+export type { CreatePrinterInput, PrintConfig, PrintTransport } from "./printers.js";
+export { enqueuePrintJob } from "./outbox.js";
