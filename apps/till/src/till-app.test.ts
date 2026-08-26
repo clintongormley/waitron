@@ -2858,6 +2858,48 @@ describe("till-app", () => {
       expect(c.api).toBe(currentApi);
       expect(c.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
     });
+
+    it("does not revert the locale if the app disconnects mid-logout", async () => {
+      // #onLogout's `setLocale(this.#venueLocale)` runs AFTER `await api.logout()`, so a teardown during
+      // that round trip must not repaint a live sibling's module-global locale — the same guard #boot
+      // carries. Log in as an en-GB operator (UI → English), start logout with `logout()` in flight,
+      // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED. Deleting the new
+      // `if (!this.isConnected) return` makes the revert fire and this fail — the deletion proof.
+      let resolveLogout!: () => void;
+      const logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)));
+      const { el, host } = await mountApp({ logout });
+      const c = await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+
+      emit(c, "logout"); // logout() now pending
+      await el.updateComplete;
+      host.remove(); // torn down before logout resolves
+      resolveLogout();
+      await flush(el);
+
+      expect(currentLocale()).toBe("en-GB"); // the revert to es-ES was skipped on the detached app
+    });
+
+    it("does not switch the locale if the app disconnects mid-putLocale (persist path)", async () => {
+      // #onLocaleSelected's `setLocale(code)` runs AFTER `await api.putLocale(code)`. The durable server
+      // write has already landed (and the next login re-applies it), so a teardown during the write must
+      // SKIP only the now-pointless local repaint — never mutate a live sibling's locale. Deleting the
+      // new `if (!this.isConnected) return` after putLocale makes the switch fire and this fail.
+      let resolvePut!: () => void;
+      const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
+      const { el, host } = await mountApp({ putLocale });
+      const c = await toCounterAs(el, null); // venue default es-ES
+      expect(currentLocale()).toBe("es-ES");
+
+      emit(c, "locale-selected", { code: "en-GB" }); // putLocale now pending
+      await el.updateComplete;
+      host.remove(); // torn down before putLocale resolves
+      resolvePut();
+      await flush(el);
+
+      expect(putLocale).toHaveBeenCalledWith("en-GB"); // the durable write still happened
+      expect(currentLocale()).toBe("es-ES"); // but the local repaint was skipped on the detached app
+    });
   });
 
   it("does not change the global locale when the app disconnects before getTill resolves", async () => {

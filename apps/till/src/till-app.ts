@@ -126,15 +126,16 @@ function isDefaultLayout(layout: LayoutDef): boolean {
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
  * DISCONNECT SAFETY. `setLocale` mutates module-global locale, so it is the effect that can outlive the
- * element. It runs in four places, three of them safe without a guard: {@link TillApp.boot}'s runs
- * post-await and IS `isConnected`-guarded (boot races a possible teardown before first paint, and a test
- * pins it); {@link TillApp.#onLoggedIn}'s runs SYNCHRONOUSLY before its first await, so the app is
- * connected (the login event fired on its own live tree); and {@link TillApp.#onLogout}'s and
- * {@link TillApp.#onLocaleSelected}'s run post-await but fire only from a user action on THIS app's own
- * live tree (the logout control / the chooser), where — the till being a single root instance — the
- * element is connected. Every OTHER event handler writes only reactive state and dispatches nothing
- * upward, so needs no guard — Lit never paints a detached element (`till-lock-screen`'s `#loadStaff`
- * records the same reasoning).
+ * element. It runs in four places. THREE run post-await and each carries `if (!this.isConnected) return`
+ * before the switch, so a teardown during the await skips it — {@link TillApp.boot} (races a teardown
+ * before first paint), {@link TillApp.#onLogout} (the logout round trip) and
+ * {@link TillApp.#onLocaleSelected} (the preference write — the durable server write has already landed
+ * and the next login re-applies it, so only the pointless local repaint is skipped). The fourth,
+ * {@link TillApp.#onLoggedIn}, runs its `setLocale` SYNCHRONOUSLY before its first await, so the element
+ * is still connected and needs no guard. Each guarded site is pinned by a deletion-proven disconnect
+ * test. Every OTHER event handler writes only reactive state and dispatches nothing upward, so needs no
+ * guard — Lit never paints a detached element (`till-lock-screen`'s `#loadStaff` records the same
+ * reasoning).
  */
 @customElement("till-app")
 export class TillApp extends LitElement {
@@ -1202,6 +1203,11 @@ export class TillApp extends LitElement {
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
   async #onLogout(): Promise<void> {
     await this.api.logout();
+    // Guard the post-await module-global `setLocale` below against a teardown during the logout round
+    // trip — the same shape #boot uses. A detached till never legitimately wants a locale switch, and
+    // this one would repaint a live sibling's UI. Returns before the state writes too (harmless to skip
+    // on a detached element); pinned by "does not revert the locale if the app disconnects mid-logout".
+    if (!this.isConnected) return;
     this.operatorName = "";
     // Revert the UI to the venue default (per-user-language-preference): the previous operator's
     // language must not linger into the lock screen the next operator meets. Their own login re-applies
@@ -1235,6 +1241,11 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.putLocale(code);
+      // Guard the post-await module-global `setLocale` against a teardown during the write — same shape
+      // as #boot/#onLogout. The durable server write has already landed and the next login re-applies
+      // the stored preference, so a detached till skips only the now-pointless local repaint; pinned by
+      // "does not switch the locale if the app disconnects mid-putLocale".
+      if (!this.isConnected) return;
       setLocale(code);
     } catch {
       this.errorKey = "locale.save_failed";
