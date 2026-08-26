@@ -37,7 +37,9 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
  * The claim LEASE (failover-printing design §5 Gap 1, §10) — a visibility timeout. `claimPrintJobs`
  * stamps `claimed_at = now()` on every claim; a job still `printing` whose `claimed_at` is older than
  * this is treated as a DROPPED claim (the agent crashed or the box died mid-service) and re-selected by
- * the pull, exactly like a fresh job. 60s: long enough not to reclaim a slow-but-LIVE push (a real
+ * the pull, exactly like a fresh job. (A `printing` row whose `claimed_at IS NULL` — anomalous, since
+ * every real claim stamps it — is likewise not a live claim, so the pull reclaims it immediately; see the
+ * reclaim predicate in `claimPrintJobs`.) 60s: long enough not to reclaim a slow-but-LIVE push (a real
  * network/USB push is seconds), short enough that a genuine drop is caught within a service. NOTE the
  * 60s is reasoned per-push, but `claimed_at` is stamped once per CLAIM (a batch of up to
  * `PULL_BATCH_LIMIT` jobs): a large batch to a slow printer can age its unsent tail past the lease.
@@ -117,11 +119,18 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * `active = true` pre-check in outbox.ts). Proven load-bearing by deletion in runtime.active.test.ts.
  *
  * LEASE RECLAIM (failover-printing design §5 Gap 1, IMPLEMENTED here): the predicate re-picks `queued`
- * rows, under-cap `failed` rows, AND a row still `printing` whose claim has EXPIRED — `claimed_at` older
- * than PRINT_JOB_LEASE_MS. So a job an agent CLAIMED (`queued`→`printing`, committed by the claim
- * request) but never reported — because the agent crashed between the claim and `POST /result`, or the
- * box died holding the claim — is no longer stranded forever: once the lease elapses the pull reclaims
- * it and delivers it, on the SAME agent rebooted or on any surviving agent serving the printer. A
+ * rows, under-cap `failed` rows, AND a row still `printing` that is NOT a live claim — either its
+ * `claimed_at` is older than PRINT_JOB_LEASE_MS (the lease EXPIRED), or `claimed_at IS NULL`. So a job an
+ * agent CLAIMED (`queued`→`printing`, committed by the claim request) but never reported — because the
+ * agent crashed between the claim and `POST /result`, or the box died holding the claim — is no longer
+ * stranded forever: once the lease elapses the pull reclaims it and delivers it, on the SAME agent
+ * rebooted or on any surviving agent serving the printer. The `claimed_at IS NULL` alternative is
+ * defense-in-depth for the lease's OWN guarantee: today every `printing` row HAS `claimed_at` set (the
+ * claim UPDATE stamps `status='printing'` and `claimed_at=now()` atomically and is the only writer of
+ * `status='printing'`), but a `printing` row with no lease timestamp is by definition not a live claim —
+ * a real claim always stamps `claimed_at` — so it is anomalous/stuck and must be reclaimed immediately
+ * rather than stranded forever (SQL `claimed_at < …` is UNKNOWN for NULL, so the time bound alone would
+ * never re-select it). A
  * committed stuck `printing` row is UNLOCKED, so `for update … skip locked` does not skip it once the
  * lease predicate makes it eligible; the reclaim then re-stamps `claimed_at = now()` below, treating it
  * exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
@@ -143,7 +152,8 @@ export async function claimPrintJobs(
         j.status = 'queued'
         or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
-            and j.claimed_at < now() - ${PRINT_JOB_LEASE_MS}::double precision * interval '1 millisecond')
+            and (j.claimed_at is null
+                 or j.claimed_at < now() - ${PRINT_JOB_LEASE_MS}::double precision * interval '1 millisecond'))
       )
     order by j.created_at
     limit ${PULL_BATCH_LIMIT}

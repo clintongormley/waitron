@@ -113,6 +113,42 @@ describe("print-job lease reclaim (real Postgres)", () => {
     expect(afterReclaim.delivered_at).not.toBeNull();
   });
 
+  it("RECLAIMS an anomalous printing job whose claimed_at is NULL (no live lease)", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const jobId = await seedPrinterAndJob(cfg, agentId);
+
+    // Force the row into the anomalous state the lease's own guarantee must cover: `printing` with NO
+    // `claimed_at`. The claim UPDATE stamps `status='printing'` and `claimed_at=now()` atomically and is
+    // the only writer of `status='printing'`, so this cannot arise today — but a `printing` row with no
+    // lease timestamp is, by definition, not a live claim, so the pull must treat it as stuck and reclaim
+    // it immediately rather than strand it forever (`claimed_at < now() - lease` is UNKNOWN for NULL).
+    await suite.admin.execute(
+      sql`update print_jobs set status = 'printing', claimed_at = null where id = ${jobId}`,
+    );
+    const beforeReclaim = await jobRow(jobId);
+    expect(beforeReclaim.status).toBe("printing");
+    expect(beforeReclaim.claimed_at).toBeNull();
+    const { rows: prows } = await suite.admin.execute<{ printer_id: string }>(
+      sql`select printer_id from print_jobs where id = ${jobId}`,
+    );
+    const printerId = prows[0]!.printer_id;
+
+    // The pull reclaims and delivers it — the `claimed_at IS NULL` alternative in the reclaim conjunct is
+    // PROVEN load-bearing by deletion: remove it and this row is never re-selected and stays stuck in
+    // `printing`; restore it and the run reclaims and delivers it (see copilot-null-claimedat-fix-report.md).
+    const sink = new FakeSink();
+    const result = await asApp(suite.admin, cfg, (tx) =>
+      runAgentOnce({ tx, cfg, agentId, transport: sink }),
+    );
+    expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
+    expect(sink.written).toEqual([{ printerId, bytes: new Uint8Array([0x41]) }]);
+
+    const afterReclaim = await jobRow(jobId);
+    expect(afterReclaim.status).toBe("done");
+    expect(afterReclaim.delivered_at).not.toBeNull();
+  });
+
   it("does NOT steal a live claim: a freshly-claimed printing job (lease not expired) is not re-selected", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);

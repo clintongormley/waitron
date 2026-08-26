@@ -73,8 +73,11 @@ export const printJobs = pgTable(
     // pull claims the row (queued/failed/lease-expired-printing → printing); NULL until first claimed
     // and while `queued`. The pull re-selects a `printing` row whose `claimed_at` is older than
     // PRINT_JOB_LEASE_MS (runtime.ts) — a visibility timeout that reclaims a job whose claimer died
-    // mid-service instead of stranding it in `printing` forever. At-least-once by design (§5): a
-    // reclaim may reprint a job that printed but lost its `done`.
+    // mid-service instead of stranding it in `printing` forever. It ALSO reclaims a `printing` row whose
+    // `claimed_at IS NULL` (anomalous — every real claim stamps it, so such a row is by definition not a
+    // live claim): defense-in-depth so the lease's own guarantee cannot be defeated by a NULL comparison
+    // being UNKNOWN. At-least-once by design (§5): a reclaim may reprint a job that printed but lost its
+    // `done`.
     claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "string" }),
     // Set when the job reaches `done`. NULL while queued/printing/failed.
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
