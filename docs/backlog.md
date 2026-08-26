@@ -15,6 +15,8 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
   (certificates, company formation, the declaración responsable).
 - **[compliance/asesor-questions.md](compliance/asesor-questions.md)** — the fiscal-advisor question
   list (see *The advisor gap*).
+- **[compliance/asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)** — the
+  labour/payroll question list, for a *graduado social / gestoría* (see *The advisor gap*).
 - **[superpowers/specs/2026-07-18-pos-architecture-design.md](superpowers/specs/2026-07-18-pos-architecture-design.md)
   §2** — the twenty numbered sub-projects (the strategy; changes rarely).
 
