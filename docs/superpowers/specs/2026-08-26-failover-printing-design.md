@@ -41,7 +41,8 @@ The middle row — an agent on **something that outlives the box** — is the on
 survives **both** common failures, and it is the chosen default (§3). A venue with **two local boxes**
 gets that redundancy for free — but **most venues run a single box**, and their surviving host on box
 death is a **till**. That makes the till print-agent (§4c) the **primary** box-death-survival path for
-the typical venue, not an optional extra — which is why it is **high priority**, not deferred.
+the typical venue, not an optional extra. It is gated, though: the on-device agent it needs **requires a
+native app**, so it moves with the go-native decision rather than ahead of it (§4c).
 
 **The uncovered corner (accepted):** box dead **and** internet down *at the same time* → no acting node
 is reachable by anything, so nothing prints until one returns. Rare — box death and ISP death are
@@ -131,15 +132,19 @@ deferred it; corrected once the single-box majority was back in view.)
 
 This makes a **till** one of the runtime's hosts. A browser PWA cannot open a raw socket or USB, so it
 requires the till's **native on-device agent**
-([topology §3](2026-08-15-distribution-and-client-topology-design.md); **no spec yet**) — the *same*
+([topology §2](2026-08-15-distribution-and-client-topology-design.md); **no spec yet**) — the *same*
 agent the topology already wants for failover routing and the offline queue, given one more job, not a
 new native component. A USB printer plugged into that till, or an IP printer it can reach, then survives
 box death for as long as the till is up.
 
-**What the priority bump actually moves:** the till agent gates on the **on-device agent**, which has no
-spec. So prioritising the till agent **raises the priority of speccing the on-device agent** — it is the
-enabler for the majority venue's box-death printing, not just a distribution nicety. Until it lands, a
-single-box venue's only box-death options are a second box (most won't have) or `cloud_poll` (demoted).
+**What actually gates it — the native app.** The on-device agent is not a standalone spec you can just
+move up the queue: it **requires a native app** on the till (a browser PWA cannot open a raw socket or
+USB), and going native is a **per-OS strategic decision** the topology design frames on its own
+([topology §2, PWA-vs-native](2026-08-15-distribution-and-client-topology-design.md)). So the till
+print-agent is **parked behind the go-native decision** — high in *importance* (the majority venue's
+box-death path) but unable to precede the native app. Until that lands, a single-box venue's only
+box-death options are a second box (most won't have) or `cloud_poll` (demoted), so **interim single-box
+venues have no till path to box-death printing** — an honest consequence of the native-app gate.
 
 ## 5. Delivery guarantee — no job dropped silently
 
@@ -250,19 +255,20 @@ payments (`resolvePending` partitioning), and printing alike.
 - **Two-box venues** are covered by print agents on **local servers** (4a un-pin + 4b node list) — a
   second box gives box-death redundancy for free.
 - **Single-box venues are the majority**, and their box-death printing survival comes from **4c** (a
-  till hosting the agent), so 4c is **high priority** — but it gates on the **on-device agent**, which
-  has no spec. **The priority bump therefore lands on speccing the on-device agent**: it is the near-term
-  enabler, not a distant nicety.
+  till hosting the agent) — high *importance*. But 4c gates on the **on-device agent**, which **requires
+  a native app**; going native is a separate per-OS decision (topology §2). So 4c is **parked behind the
+  go-native decision**, not a near-term build — interim single-box venues rely on a second box or
+  `cloud_poll` for box-death printing, or accept the gap (§2).
 - **4a** (un-pin) lands with 4b, carrying a distinct-agents race test + a security-review of the
   location-scoped authz.
 - **4b** (agent failover list) depends on the **till-side failover list** (spec-only) and a cloud node.
 - **Gap 2 escalation + order-derived re-fire** (§5) — **Slice-B (KDS) + counter-receipt** work.
 - **`cloud_poll`** — low priority; no schema change to enable.
 
-Order in practice: the lease is the only build-now item, and it belongs in the base branch. The
-highest-priority follow-on is the **on-device-agent spec** — the enabler for 4c and thus the majority
-(single-box) venue's box-death printing — then the till failover list and Slice-B. No implementation plan
-is written for the follow-ons now.
+Order in practice: the lease is the only build-now item, and it belongs in the base branch. 4a/4b
+(agents on local servers + the shared failover list) are the next printing-specific follow-ons; the till
+path (4c) waits behind the **go-native decision** (via the on-device agent), so it advances only when
+that does. No implementation plan is written for the follow-ons now.
 
 ## 10. Open questions
 
@@ -305,9 +311,11 @@ stuck-`printing`) — `packages/db/src/schema/print-jobs.ts` (no `claimed_at`),
 [printing subsystem design](2026-08-17-printing-subsystem-design.md) §3c, §4:170-173, §3e, §6 (dashboard
 failing-printer surface); the failover list + new-chain-on-partition —
 [local-server SIF + failover design](2026-08-01-local-server-sif-and-failover-design.md) §8; the
-browser-cannot-raw-socket + on-device agent + poll-the-cloud rows + CloudPRNT `DELETE`-complete —
-[distribution/client-topology design](2026-08-15-distribution-and-client-topology-design.md) §3, §5
-(:262-289), §16; the tunnel is the path *to* the box, not a failover path —
+on-device agent + PWA-vs-native native-app cost, the browser-cannot-raw-socket + poll-the-cloud rows,
+and CloudPRNT `DELETE`-complete —
+[distribution/client-topology design](2026-08-15-distribution-and-client-topology-design.md) §2
+(agent + native), §5 (bridge / NAT, :262-289), §16; the tunnel is the path *to* the box, not a failover
+path —
 [management dashboard design](2026-08-07-management-dashboard-design.md) §5 (T1 blind tunnel, T3
 read-mirror); pre-production drop-recreate / no backfill — CLAUDE.md §3.
 
