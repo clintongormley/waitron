@@ -185,7 +185,8 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   inbound node token is now an accepted **set** (`WAITRON_SYNC_NODE_TOKEN` comma-separated, constant-time
   set-membership) so the secret rolls with no synchronized restart; the previously-unwired `pruneSyncLog`
   is now scheduled by a boot-started `runRetentionSweep` (opt-in via `WAITRON_SYNC_RETENTION_DATABASE_URL`
-  + `WAITRON_SYNC_RETENTION_TICK_MS`) that PRUNES each tick and, when a lag threshold is configured
+  + `WAITRON_SYNC_RETENTION_TICK_MS`) that PRUNES each tick (its per-origin range DELETE backed by an
+  index on `sync_log(origin_id, seq)`, migration `0004`) and, when a lag threshold is configured
   (`WAITRON_SYNC_LAG_ALARM_ROWS`, opt-in), ALARMS a stalled subscriber (`sync.stream_stalled`);
   cross-node cursor visibility via `recordSubscriberCursor` + `POST /sync-api/cursor` (stamps origin=self)
   + the puller reporting its cursor after draining; and an **explicit** `waitron-sync-evict <subscriberId>`

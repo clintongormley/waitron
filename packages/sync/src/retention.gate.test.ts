@@ -121,6 +121,22 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
     expect(r.rows[0]!.has).toBe(true);
   });
 
+  it("0004 created the sync_log_origin_seq_idx index on sync_log (origin_id, seq)", async () => {
+    // Read the index's key columns back from the catalog IN KEY ORDER — a DDL tag is not proof the
+    // index landed with the right columns (CLAUDE.md §3), same read-back the PK check above does.
+    // WHY the index exists: runRetentionSweep prunes every tick with a per-origin range DELETE
+    // (`sl.origin_id = c.origin_id AND sl.seq <= c.min_seq`, retention.ts); with only sync_log's `seq`
+    // PK and no index on origin_id that join seq-scans the whole transport log each tick — worst
+    // exactly when a subscriber stalls and the log grows.
+    const idx = await postgres.admin.execute<{ cols: string[] | null }>(sql`
+      select array_agg(a.attname order by array_position(i.indkey, a.attnum))::text[] as cols
+      from pg_index i
+      join pg_class c on c.oid = i.indexrelid
+      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+      where i.indrelid = 'sync_log'::regclass and c.relname = 'sync_log_origin_seq_idx'`);
+    expect(idx.rows[0]!.cols).toEqual(["origin_id", "seq"]);
+  });
+
   it("prunes to the min across ALL cursors — a down subscriber holds the log — then drains when it catches up", async () => {
     // Failing case (findings GATE 7): the log is pruned to the LIVE-ONLY min (=10), destroying seq
     // 5..10 that the down `cloud` subscriber has not yet applied — silent data loss. Control in the

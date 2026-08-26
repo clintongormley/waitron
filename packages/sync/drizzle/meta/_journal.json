@@ -29,6 +29,13 @@
       "when": 1786492800003,
       "tag": "0003_sync_cursor_evict",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786492800004,
+      "tag": "0004_sync_log_origin_seq_idx",
+      "breakpoints": true
     }
   ]
 }
