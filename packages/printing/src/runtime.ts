@@ -9,8 +9,9 @@ import type { PrinterTarget, Transport } from "./transport.js";
  * retries lives), so this function stays a single, testable batch with no timers of its own.
  *
  * The three steps:
- *  1. PULL — atomically CLAIM a batch of this agent's due jobs, flipping them `queued`→`printing`. The
- *     claim is the double-print guard: a locking `for update … skip locked` SELECT hands each row to
+ *  1. PULL — atomically CLAIM a batch of this agent's due jobs (queued, under-cap failed, or a
+ *     lease-expired stuck `printing` job — §5 Gap 1), stamping each `printing` with a fresh `claimed_at`.
+ *     The claim is the double-print guard: a locking `for update … skip locked` SELECT hands each row to
  *     exactly one agent instance, so two agents (the two-boxes / reimaged-agent topology) never
  *     deliver the same job twice. Proven load-bearing by deletion in runtime.race.test.ts.
  *  2. PUSH — hand each claimed job's bytes to its printer via the injected transport.
@@ -31,6 +32,27 @@ export const PULL_BATCH_LIMIT = 50;
  * time-scheduled per-job backoff would need a new column and is deliberately out of this slice.
  */
 export const MAX_DELIVERY_ATTEMPTS = 5;
+
+/**
+ * The claim LEASE (failover-printing design §5 Gap 1, §10) — a visibility timeout. `claimPrintJobs`
+ * stamps `claimed_at = now()` on every claim; a job still `printing` whose `claimed_at` is older than
+ * this is treated as a DROPPED claim (the agent crashed or the box died mid-service) and re-selected by
+ * the pull, exactly like a fresh job. 60s: long enough not to reclaim a slow-but-LIVE push (a real
+ * network/USB push is seconds), short enough that a genuine drop is caught within a service. NOTE the
+ * 60s is reasoned per-push, but `claimed_at` is stamped once per CLAIM (a batch of up to
+ * `PULL_BATCH_LIMIT` jobs): a large batch to a slow printer can age its unsent tail past the lease.
+ * Harmless in the shipped model — a printer is pinned to one `agent_id` and the agent loop is
+ * sequential, so in local mode the batch tx holds the row locks (SKIP LOCKED blocks any reclaim) and in
+ * server mode no second agent serves the same printer to reclaim the tail. The un-pin follow-on
+ * (failover-printing §4a, "any LAN agent serves") makes it reachable and must weigh it (a per-claim
+ * token, a lease heartbeat, or a batch sized against the lease) alongside its own distinct-agents race
+ * test. This is
+ * deliberately AT-LEAST-ONCE (§5): a reclaim can reprint a job that physically printed but whose `done`
+ * report was lost — for a kitchen ticket a duplicate is a nuisance, a drop is a missed order, so we
+ * accept the rare duplicate. No per-claim token exists to tighten it (see reportPrintJob's RECLAIM
+ * NUANCE), and none is added in this slice.
+ */
+export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
   /** A tenant-scoped transaction (the Task-6 route wraps this in `withTenant` + `asAppUser`). */
@@ -88,14 +110,17 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * (the retry); at the cap it is filtered out (the bound). `for update of j` locks only the
  * `print_jobs` rows, not `printers`.
  *
- * ORPHAN-ON-CRASH GAP (not auto-recovered in this slice): this predicate re-picks only `queued` and
- * under-cap `failed` rows — never a row already `printing`. A job an agent CLAIMED (`queued`→`printing`,
- * committed by the claim request) but never reported — because the agent crashed between the claim and
- * `POST /result` — is therefore stranded in `printing` forever, re-claimed by nothing. Recovering it
- * needs a stuck-`printing` reaper (a `printing` row older than N minutes → `failed`/`queued`), which
- * needs a new `claimed_at`/lease column, so it is deliberately OUT of this slice — tracked in
- * docs/backlog.md and gated as a HARD KDS-4 dependency: once KDS routes fires-to-printers, a stranded
- * job is a lost kitchen ticket, so the reaper must land with (or before) that consumer.
+ * LEASE RECLAIM (failover-printing design §5 Gap 1, IMPLEMENTED here): the predicate re-picks `queued`
+ * rows, under-cap `failed` rows, AND a row still `printing` whose claim has EXPIRED — `claimed_at` older
+ * than PRINT_JOB_LEASE_MS. So a job an agent CLAIMED (`queued`→`printing`, committed by the claim
+ * request) but never reported — because the agent crashed between the claim and `POST /result`, or the
+ * box died holding the claim — is no longer stranded forever: once the lease elapses the pull reclaims
+ * it and delivers it, on the SAME agent rebooted or on any surviving agent serving the printer. A
+ * committed stuck `printing` row is UNLOCKED, so `for update … skip locked` does not skip it once the
+ * lease predicate makes it eligible; the reclaim then re-stamps `claimed_at = now()` below, treating it
+ * exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
+ * job that printed but lost its `done` — a nuisance duplicate we accept over a dropped ticket. Proven by
+ * deletion of the reclaim branch in runtime.reclaim.test.ts (the stuck job is not reclaimed without it).
  */
 export async function claimPrintJobs(
   tx: Transaction,
@@ -107,7 +132,12 @@ export async function claimPrintJobs(
     join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
     where j.tenant_id = ${cfg.tenantId}
       and p.agent_id = ${agentId}
-      and (j.status = 'queued' or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS}))
+      and (
+        j.status = 'queued'
+        or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
+        or (j.status = 'printing'
+            and j.claimed_at < now() - ${PRINT_JOB_LEASE_MS}::double precision * interval '1 millisecond')
+      )
     order by j.created_at
     limit ${PULL_BATCH_LIMIT}
     for update of j skip locked
@@ -115,13 +145,16 @@ export async function claimPrintJobs(
   if (picked.rows.length === 0) return [];
   const ids = picked.rows.map((r) => r.id);
 
-  // Mark the locked rows `printing` and return each with its printer's connection facts (the RETURNING
-  // join), so the push step needs no second read. `id in ${ids}` uses Drizzle's array expansion —
-  // `in ($1, $2, …)` — the shape verified in packages/fiscal-verifactu/src/drain.ts (NOT `= any(…)`
-  // nor `in (${ids})`, both of which mis-expand for a uuid list). `ids` is non-empty (guarded above),
-  // so the expansion never degenerates to `in ()`.
+  // Mark the locked rows `printing` and STAMP `claimed_at = now()` (the lease anchor — a fresh claim and
+  // a lease reclaim both restart the lease), returning each with its printer's connection facts (the
+  // RETURNING join) so the push step needs no second read. Keeping the status filter OUT of this
+  // UPDATE's predicate — it keys only on the ids the locking SELECT returned — is what makes
+  // `for update … skip locked` UNAMBIGUOUSLY load-bearing (runtime.race.test.ts). `id in ${ids}` uses
+  // Drizzle's array expansion — `in ($1, $2, …)` — the shape verified in
+  // packages/fiscal-verifactu/src/drain.ts (NOT `= any(…)` nor `in (${ids})`, both of which mis-expand
+  // for a uuid list). `ids` is non-empty (guarded above), so the expansion never degenerates to `in ()`.
   const claimed = await tx.execute<ClaimedJob>(sql`
-    update print_jobs set status = 'printing'
+    update print_jobs set status = 'printing', claimed_at = now()
     from printers p
     where print_jobs.tenant_id = p.tenant_id
       and print_jobs.printer_id = p.id
@@ -153,12 +186,14 @@ export async function claimPrintJobs(
  * is not this agent's, already terminal, or unknown) rather than an oracle, so it never discloses which
  * job ids exist.
  *
- * RECLAIM NUANCE (deliberately not over-built): a `failed` job under the cap is re-claimed
- * (`failed`→`printing`) by a later batch, so a duplicate report that arrives AFTER a re-claim finds the
- * job `printing` again and legitimately bumps `attempts` — indistinguishable at this layer from the
- * genuine report for that new claim. The `status = 'printing'` guard gives true idempotency for the
- * common case (a duplicate arriving before any re-claim); the post-reclaim race would need a per-claim
- * token the outbox schema does not carry, which is out of this slice.
+ * RECLAIM NUANCE (deliberately not over-built): a job is re-claimed into `printing` by a later batch two
+ * ways — a `failed` job under the cap (`failed`→`printing`), or a lease-EXPIRED `printing` job whose
+ * claimer died (the visibility timeout, `claimPrintJobs`/PRINT_JOB_LEASE_MS, §5). Either way a duplicate
+ * report that arrives AFTER the re-claim finds the job `printing` again and legitimately applies to that
+ * NEW claim — indistinguishable at this layer from the genuine report for it. The `status = 'printing'`
+ * guard gives true idempotency for the common case (a duplicate arriving before any re-claim); the
+ * post-reclaim race would need a per-claim token the outbox schema does not carry, which is out of this
+ * slice — and for the lease path is exactly the accepted AT-LEAST-ONCE reprint (§5).
  */
 export async function reportPrintJob(
   tx: Transaction,

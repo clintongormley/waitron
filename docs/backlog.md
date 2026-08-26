@@ -196,10 +196,11 @@ still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
 - **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) — how
   printing survives a local-box death (the corner the subsystem deferred). Mechanism: USB/IP printers
-  driven by local agents on **boxes *and* tills**. **One build-now item:** a **lease/reclaim for stuck
-  `printing` jobs** — the outbox silently drops a job whose agent dies mid-claim (no `claimed_at`; the
-  pull never re-selects `printing`), a correctness gap to fix in `feat/printing-subsystem` **before
-  merge**. Follow-ons: **un-pin an IP printer from its single `agent_id`** (any LAN agent serves;
+  driven by local agents on **boxes *and* tills**. **Build-now item — LANDED in `feat/printing-subsystem`:**
+  the **lease/reclaim for stuck `printing` jobs** (`claimed_at` column + a 60s visibility timeout folded
+  into the pull predicate, `PRINT_JOB_LEASE_MS`; at-least-once by design) — the outbox no longer drops a
+  job whose agent dies mid-claim; a `printing` row whose claim is older than the lease is reclaimed and
+  delivered. Follow-ons: **un-pin an IP printer from its single `agent_id`** (any LAN agent serves;
   distinct-agents race test + location-scoped-authz review); **agents share the till's `[local → cloud]`
   failover list** (no outbox replication needed); **a till hosts a print agent** — the **majority
   (single-box) venue's box-death path (high importance), but the on-device agent it needs requires a
@@ -442,9 +443,6 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
 
-- **A crashed agent strands a claimed job in `printing` forever** — the pull flips `queued`→`printing`
-  under `for update skip locked`, but nothing re-queues a row whose agent died mid-push. Needs a reaper
-  (a `claimed_at`/lease column + a sweep design), so deliberately out of the build slice.
 - **Retry spacing is the agent's batch interval, not a per-job backoff** — `MAX_DELIVERY_ATTEMPTS` (5)
   bounds attempts, but `print_jobs` carries no next-attempt timestamp, so a flapping printer burns the
   cap at loop speed. A time-scheduled backoff needs a new column.

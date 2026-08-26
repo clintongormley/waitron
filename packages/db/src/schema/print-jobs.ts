@@ -69,6 +69,13 @@ export const printJobs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
+    // The claim LEASE anchor (failover-printing design §5, Gap 1). Stamped `now()` each time the agent
+    // pull claims the row (queued/failed/lease-expired-printing → printing); NULL until first claimed
+    // and while `queued`. The pull re-selects a `printing` row whose `claimed_at` is older than
+    // PRINT_JOB_LEASE_MS (runtime.ts) — a visibility timeout that reclaims a job whose claimer died
+    // mid-service instead of stranding it in `printing` forever. At-least-once by design (§5): a
+    // reclaim may reprint a job that printed but lost its `done`.
+    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "string" }),
     // Set when the job reaches `done`. NULL while queued/printing/failed.
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
   },
