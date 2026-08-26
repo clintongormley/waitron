@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { isAppError } from "@waitron/shared";
@@ -58,6 +58,34 @@ describe("mountSpa", () => {
     expect(res.headers.get("content-type")).toContain("text/javascript");
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(await res.text()).toBe("console.log(1)");
+  });
+
+  // Regression (finish-review Important): `safeResolve` compared the always-absolute resolved path
+  // against the UNRESOLVED `root` string, so a RELATIVE or trailing-slash `root` 404'd every asset
+  // while index.html (which bypasses safeResolve) still served. The plan's own smoke uses the
+  // relative `apps/till/dist`, so this is a realistic trigger the absolute-path fixtures all miss.
+  it("serves an asset when root is a RELATIVE path (resolve differs from the raw string)", async () => {
+    const relRoot = relative(process.cwd(), root!);
+    // Guard the premise: a genuinely relative root whose `resolve` differs from the raw string.
+    expect(isAbsolute(relRoot)).toBe(false);
+    const app = new Hono();
+    mountSpa(app, { root: relRoot, basePath: "" }, noopLog);
+    const indexRes = await app.request("/");
+    expect(indexRes.status).toBe(200);
+    expect(await indexRes.text()).toContain("id=app");
+    const assetRes = await app.request("/assets/app-abc123.js");
+    expect(assetRes.status).toBe(200);
+    expect(await assetRes.text()).toBe("console.log(1)");
+  });
+
+  it("serves an asset when root has a TRAILING SLASH", async () => {
+    const app = new Hono();
+    mountSpa(app, { root: root! + sep, basePath: "" }, noopLog);
+    const indexRes = await app.request("/");
+    expect(indexRes.status).toBe(200);
+    const assetRes = await app.request("/assets/app-abc123.js");
+    expect(assetRes.status).toBe(200);
+    expect(await assetRes.text()).toBe("console.log(1)");
   });
 
   it("serves a non-hashed root file (favicon) without the immutable cache", async () => {
@@ -183,6 +211,23 @@ describe("mountSpa", () => {
 
     it("resolves a normal path inside root (no leading slash)", () => {
       expect(safeResolve(root!, "favicon.svg")).toBe(join(root!, "favicon.svg"));
+    });
+
+    // Self-contained normalisation: any caller may hand a relative or trailing-slash root, and the
+    // containment check must compare against the RESOLVED base, not the raw string (finish-review
+    // Important). Both must resolve to the same file the absolute root does.
+    it("normalises a relative root before the containment check", () => {
+      const relRoot = relative(process.cwd(), root!);
+      expect(isAbsolute(relRoot)).toBe(false);
+      expect(safeResolve(relRoot, "/assets/app-abc123.js")).toBe(
+        join(root!, "assets", "app-abc123.js"),
+      );
+    });
+
+    it("normalises a trailing-slash root before the containment check", () => {
+      expect(safeResolve(root! + sep, "/assets/app-abc123.js")).toBe(
+        join(root!, "assets", "app-abc123.js"),
+      );
     });
   });
 });

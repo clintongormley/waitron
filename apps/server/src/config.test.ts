@@ -471,9 +471,9 @@ describe("loadConfig", () => {
 
   // The built front-end directories the box serves same-origin (slice 1a). Both OPTIONAL: dev leaves
   // them unset and uses the Vite dev servers, so an unset value must be `undefined` (nothing mounts),
-  // not a default path. Read verbatim (no `resolve`) — boot only ever `existsSync(join(dir,
-  // "index.html"))`s and hands the string to `mountSpa`, which resolves per request; deployment (#9)
-  // sets an absolute path.
+  // not a default path. Stored verbatim in config (no `resolve` here) — boot only ever
+  // `existsSync(join(dir, "index.html"))`s and hands the string to `mountSpa`, which normalises it
+  // once via `resolve` when serving; deployment (#9) sets an absolute path.
   it("reads WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR when set, else undefined", () => {
     const off = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
     expect(off.tillAppDir).toBeUndefined();

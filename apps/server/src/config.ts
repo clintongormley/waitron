@@ -91,8 +91,10 @@ export interface ServerConfig {
    * `/media`, `/health` or the sync routes. From `WAITRON_TILL_APP_DIR`; absent OR empty → undefined
    * (the `isUnset` rule every optional variable here follows), never `""` — an empty dir would make
    * boot's `join(dir, "index.html")` a relative path under cwd (the "empty value is a valid value"
-   * trap, CLAUDE.md §3). Stored verbatim, not `resolve`d: boot only `existsSync`-checks it and hands
-   * it to `mountSpa` (which resolves per request); deployment (#9) sets an absolute path.
+   * trap, CLAUDE.md §3). Stored VERBATIM in config (not `resolve`d here): boot `existsSync`-checks it
+   * and hands it to `mountSpa`, which normalises it once with `resolve` and serves every file from
+   * that canonical base — so a relative or trailing-slash dir works. Deployment (#9) sets an absolute
+   * path regardless.
    */
   tillAppDir?: string;
   /**
@@ -501,7 +503,8 @@ export function loadConfig(
     // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
     // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim
     // — never `resolve("")`, which is cwd (the "empty value is a valid value" trap, CLAUDE.md §3);
-    // boot `existsSync`-checks the dir and hands it to `mountSpa`, which resolves per request.
+    // boot `existsSync`-checks the dir and hands it to `mountSpa`, which normalises it once via
+    // `resolve` when serving (so a relative or trailing-slash dir works).
     tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
     dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
       ? undefined
