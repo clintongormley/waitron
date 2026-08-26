@@ -526,8 +526,11 @@ describe("startServer, against a real container as the deployment role", () => {
     // The regression guard for the branch: a provisioned box (all five WAITRON_TILL_*_ID + a
     // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the
     // setup routes are NOT mounted (so /setup-api/status is a bare 404, never the setup fact sheet).
-    // This is the prove-by-deletion target: forcing `config.till` always-undefined makes /api/staff 404
-    // and /setup-api/status 200, failing this test.
+    // This is the prove-by-deletion target: forcing `config.till` always-undefined takes the setup
+    // branch, so /setup-api/status returns the 200 fact sheet (failing the 404 assertion below) and
+    // /api/staff is answered by `mountSetup`'s `GET *` catch-all as a 200 text/html placeholder (a bare
+    // 404 is impossible while that catch-all is mounted — the sibling test above says so) — which fails
+    // this test at `await staff.json()`, a parse error on HTML, not at the status assertion.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,

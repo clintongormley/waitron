@@ -420,7 +420,22 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `boot.test.ts` passes a literal object instead.) Loaded at the TOP of the trading branch, not in
   // the shared prefix: it is consumed only on trading paths (the reconciler, the webhook, the card
   // provider, the drain loop), so an unprovisioned box needs no WAITRON_CREDENTIALS_KEY.
-  const ring = loadKeyRing(env);
+  //
+  // Guarded so a `loadKeyRing` throw (`credentials.key_missing`, a malformed WAITRON_CREDENTIALS_KEY)
+  // closes `db` before it propagates. `createPostgresDb` above already opened a LIVE pool (it does
+  // `await pool.connect(); probe.release()`, `packages/db/src/client.ts`), and on the throw path
+  // `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()` — the
+  // pool would leak. This mirrors the `stampProbe` try/finally in the shared prefix above; the happy
+  // path is unchanged. (The pre-existing `readOrderFlow`/`buildCardProvider` throw sites below leak the
+  // same way and are out of scope here — this only restores the no-leak `loadKeyRing` had before it
+  // moved after the pool open.)
+  let ring: ReturnType<typeof loadKeyRing>;
+  try {
+    ring = loadKeyRing(env);
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
 
   const reconciler = new StripeReconciler({
     db,
