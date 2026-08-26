@@ -92,6 +92,19 @@ describe("ensureBoxSecrets", () => {
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
   });
 
+  it("dedupes 127.0.0.1 when listIpv4 also reports it (the leaf carries it exactly once)", async () => {
+    const d = await newDir();
+    // listIpv4 overlaps the loopback address ensureBoxSecrets always prepends; its `new Set` must
+    // collapse the two so the leaf does not carry 127.0.0.1 as a duplicate SAN.
+    await ensureBoxSecrets({ ...deps(d), listIpv4: () => ["127.0.0.1"] });
+    const { X509Certificate } = await import("node:crypto");
+    const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
+    const san = cert.subjectAltName ?? "";
+    // No other injected IP overlaps this substring (the dNSNames and 192.168.* are absent here), so a
+    // plain count of the loopback address is exactly its SAN multiplicity.
+    expect(san.split("127.0.0.1").length - 1).toBe(1);
+  });
+
   // Every case above injects mint/makeKeyRing/makeToken/listIpv4, which leaves the REAL default
   // branches (mintSelfSignedServerCert, generateKeyRing, randomBytes token, defaultListIpv4)
   // unexercised. Task 4's boot test — which would drive them — does not exist yet, so this one

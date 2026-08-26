@@ -42,6 +42,16 @@ describe("mintSelfSignedServerCert", () => {
     expect(ca.verify(leaf)).toBe(true);
   });
 
+  it("sets the leaf subject CN to hostnames[0] and gives the CA and leaf distinct serials", () => {
+    const { caCertPem, serverCertPem } = mint();
+    const ca = forge.pki.certificateFromPem(caCertPem);
+    const leaf = forge.pki.certificateFromPem(serverCertPem);
+    // The CN the mint documents: the first requested hostname.
+    expect(leaf.subject.getField("CN").value).toBe("waitron.local");
+    // Distinct serials so the CA and its leaf are never conflated in a trust store.
+    expect(leaf.serialNumber).not.toBe(ca.serialNumber);
+  });
+
   it("sets a ~10-year validity window starting a day before `now`", () => {
     const now = new Date("2026-08-26T00:00:00Z");
     const { serverCertPem } = mint({ now });

@@ -113,8 +113,9 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
 /**
  * The default persisted store for the box's self-signed cert PEMs and generated secrets, computed
  * exactly as `DEFAULT_MEDIA_ROOT` above: beside the bundle (`<dist>/state`) for a built artefact, or
- * `apps/server/src/state` run from source. Later slices (3, 4) materialise the cert + secrets here on
- * first setup boot and serve HTTPS from them; this task only threads the path. `WAITRON_STATE_DIR`
+ * `apps/server/src/state` run from source. The setup branch below materialises the box's self-signed
+ * cert + secrets here on first setup boot (`ensureBoxSecrets`, `box-secrets.ts`) and serves the setup
+ * surface over HTTPS from them; leaf renewal/rotation is later work. `WAITRON_STATE_DIR`
  * overrides it (config.ts), and deployment (#9) sets a durable, protected path; this default only has
  * to exist so a from-source dev boot has somewhere to write. The dev default is gitignored
  * (`apps/server/src/state/`) because it holds SECRETS. Threaded into `loadConfig` as the

@@ -95,6 +95,9 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
     await writeFile(files.caCertFile, m.caCertPem);
     await writeFile(files.caKeyFile, m.caKeyPem, { mode: 0o600 });
     await writeFile(files.certFile, m.serverCertPem);
+    // server.key LAST, on purpose: it is the presence sentinel the guard above tests, so a crash
+    // mid-write leaves it absent and the next boot re-mints the whole quartet cleanly rather than
+    // serving a half-written set — the guard's correctness depends on this write ordering.
     await writeFile(files.keyFile, m.serverKeyPem, { mode: 0o600 });
   }
 

@@ -485,7 +485,8 @@ first:
 generation/persistence + self-signed CA/leaf minting, server-side, no UI (this branch): first setup
 boot mints a CA + `waitron.local`/IP leaf into a persisted state dir (`WAITRON_STATE_DIR`) and serves
 the setup surface over HTTPS from it, and generates+persists the vault master key + sync node token —
-idempotent across restarts; operator-supplied `WAITRON_TLS_*` overrides the mint. 2b = the
+idempotent across restarts; operator-supplied `WAITRON_TLS_*` overrides the served cert (the box still
+mints and persists its own secrets regardless). 2b = the
 `/setup-api` provisioning endpoints (`planInstance`/`planVenue` in-process, demo/live fork,
 AEAT-cert-required-for-live, persist the till ids/DB URLs, then restart into trading — decided:
 persist-config-then-restart, not hot-flip). 2c = a new `apps/setup` Vite+Lit wizard consuming 2b,
