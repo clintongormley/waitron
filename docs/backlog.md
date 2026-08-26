@@ -47,7 +47,7 @@ foundations first. **Never autonomously land anything touching the unrepairable 
 topology follow-ups*. The largest unbuilt threads: **recipes/BOM's next slices** (nested sub-recipes,
 plate costing, stock depletion — the linchpin; the recipe-authoring UI landed as #94), the **reporting** remainder
 (rectificativas, prorrata, intra-community/import boxes; quarterly/annual periods + the DR303 download route landed as #98), the **sync
-transport-2** remainder (**node-token rotation + dead-subscriber cleanup shipped as PR #TBD, 2026-08-26**;
+transport-2** remainder (**node-token rotation + dead-subscriber cleanup shipped as PR #135, 2026-08-26**;
 **cloud-mirror peer** and **multi-tenant transport** — a whole-log reader role — still need a fresh design
 pass) and the separate **fiscal-lane / hash-chain sync (H2)**, and the greenfield **inventory /
 procurement** (sub-project 20) downstream of recipes.
@@ -180,7 +180,7 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   pre-existing `23503` park (no new correctness machinery). **Dead-subscriber cleanup was TRIMMED out
   of #85 by owner decision** (it needs retention actually scheduled in boot + cross-node cursor
   visibility — a future retention-ops slice, not a capability shipped two layers ahead). **Node-token
-  rotation** and **dead-subscriber cleanup** SHIPPED as **PR #TBD** (2026-08-26,
+  rotation** and **dead-subscriber cleanup** SHIPPED as **PR #135** (2026-08-26,
   `feat/sync-rotation-retention-ops`, plan `2026-08-16-sync-token-rotation-and-retention-ops`): the
   inbound node token is now an accepted **set** (`WAITRON_SYNC_NODE_TOKEN` comma-separated, constant-time
   set-membership) so the secret rolls with no synchronized restart; the previously-unwired `pruneSyncLog`
