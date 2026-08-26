@@ -113,6 +113,13 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
     expect(pk.rows[0]!.cols).toEqual(["subscriber_id", "origin_id", "lane"]);
   });
 
+  it("0003 granted DELETE on sync_cursor to sync_retention", async () => {
+    const r = await postgres.admin.execute<{ has: boolean }>(
+      sql`select has_table_privilege('sync_retention', 'sync_cursor', 'DELETE') as has`,
+    );
+    expect(r.rows[0]!.has).toBe(true);
+  });
+
   it("prunes to the min across ALL cursors — a down subscriber holds the log — then drains when it catches up", async () => {
     // Failing case (findings GATE 7): the log is pruned to the LIVE-ONLY min (=10), destroying seq
     // 5..10 that the down `cloud` subscriber has not yet applied — silent data loss. Control in the

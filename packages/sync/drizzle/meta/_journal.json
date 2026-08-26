@@ -22,6 +22,13 @@
       "when": 1786492800002,
       "tag": "0002_sync_cursor_lane",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786492800003,
+      "tag": "0003_sync_cursor_evict",
+      "breakpoints": true
     }
   ]
 }
