@@ -6,7 +6,7 @@ import { CORE_MIGRATIONS, printJobs, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { createPrinter } from "./printers.js";
+import { createPrinter, deactivatePrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
@@ -104,5 +104,36 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     });
     expect(code).toBe("printer.not_found");
     expect(noNet).not.toHaveBeenCalled();
+  });
+
+  it("throws printer.not_found for a DEACTIVATED printer (disabled, not merely soft-hidden)", async () => {
+    // A deactivated printer (`active = false`) is unavailable to the outbox: enqueue treats it exactly
+    // like an absent printer (`printer.not_found`), never a new code. The active-printer enqueue in the
+    // same block is the control — the ONLY difference between the two calls is the `active` flag, so a
+    // pass here means the `active = true` pre-check conjunct (not some unrelated reason) is doing the
+    // work. Without that conjunct the deactivated enqueue succeeds and this test goes red.
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      const p = await createPrinter(tx, cfg, {
+        name: "Kitchen",
+        transport: "network_tcp",
+        agentId,
+        host: "10.0.0.9",
+      });
+      // Control: while ACTIVE the printer enqueues a queued job.
+      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([1]));
+      expect((await jobRow(tx, jobId)).status).toBe("queued");
+
+      // Deactivating the SAME printer makes it unavailable to the next enqueue.
+      await deactivatePrinter(tx, cfg, p.id);
+      try {
+        await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([2]));
+        return undefined;
+      } catch (error) {
+        return (error as { code?: string }).code;
+      }
+    });
+    expect(code).toBe("printer.not_found");
   });
 });

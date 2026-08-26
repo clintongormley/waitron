@@ -226,6 +226,11 @@ export async function updatePrinter(
  * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a `print_jobs`
  * history references it and `app_user` holds no DELETE on `printers`. `0` rows (unknown or RLS-hidden
  * id) → `printer.not_found`. The tenant predicate is belt-and-braces beside RLS; values bind as `$n`.
+ *
+ * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
+ * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops
+ * pulling AND lease-reclaiming its jobs (`claimPrintJobs`'s `p.active = true` conjunct), so any
+ * queued/in-flight jobs simply wait, unclaimed, until it is reactivated (via `updatePrinter`).
  */
 export async function deactivatePrinter(
   tx: Transaction,

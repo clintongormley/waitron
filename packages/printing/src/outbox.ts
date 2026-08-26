@@ -34,10 +34,22 @@ export async function enqueuePrintJob(
   // param's uuid shape upstream with `requireUuidParam` before calling in, so a malformed id never
   // reaches this SELECT, and a well-formed-but-unknown id is resolved by the pre-check below to
   // `printer.not_found`.
+  //
+  // `active = true` treats a DEACTIVATED printer (`deactivatePrinter`) as unavailable to enqueue — an
+  // inactive printer is not enqueueable, resolved to the existing `printer.not_found` rather than a new
+  // edge code. It is the enqueue half of "deactivated = disabled"; the delivery half is the matching
+  // `p.active = true` conjunct on `claimPrintJobs`'s pull (runtime.ts). Proven load-bearing by deletion
+  // in outbox.test.ts.
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, printerId)));
+    .where(
+      and(
+        eq(printers.tenantId, cfg.tenantId),
+        eq(printers.id, printerId),
+        eq(printers.active, true),
+      ),
+    );
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   // The single write: a `queued` outbox row carrying the OPAQUE payload bytes verbatim. `Buffer.from`

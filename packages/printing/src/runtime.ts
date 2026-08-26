@@ -110,6 +110,12 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * (the retry); at the cap it is filtered out (the bound). `for update of j` locks only the
  * `print_jobs` rows, not `printers`.
  *
+ * `p.active = true` makes a DEACTIVATED printer (`deactivatePrinter`) stop being served: the pull skips
+ * ALL of its jobs — a queued job, an under-cap `failed` retry, AND a lease-expired stuck `printing` row
+ * (the reclaim below is suppressed too). Its jobs are not failed or dropped, just left unclaimed until
+ * the printer is reactivated — the delivery half of "deactivated = disabled" (the enqueue half is the
+ * `active = true` pre-check in outbox.ts). Proven load-bearing by deletion in runtime.active.test.ts.
+ *
  * LEASE RECLAIM (failover-printing design §5 Gap 1, IMPLEMENTED here): the predicate re-picks `queued`
  * rows, under-cap `failed` rows, AND a row still `printing` whose claim has EXPIRED — `claimed_at` older
  * than PRINT_JOB_LEASE_MS. So a job an agent CLAIMED (`queued`→`printing`, committed by the claim
@@ -132,6 +138,7 @@ export async function claimPrintJobs(
     join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
     where j.tenant_id = ${cfg.tenantId}
       and p.agent_id = ${agentId}
+      and p.active = true
       and (
         j.status = 'queued'
         or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})

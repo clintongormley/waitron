@@ -39,8 +39,14 @@ interface EditablePrinter {
 
 /** The transport options the create form offers, in the order they render. `network_tcp` leads so the
  * form's default (the first option) is the venue's most common printer; the reconcile in {@link
- * PrintersScreen.updated} keeps the native select's live value pinned to `newTransport`. */
-const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb", "cloud_poll"];
+ * PrintersScreen.updated} keeps the native select's live value pinned to `newTransport`.
+ *
+ * `cloud_poll` is deliberately EXCLUDED here: it has no delivery path in this slice (the agent router
+ * rejects it — a documented fast-follow), so offering it would let an operator create a printer that
+ * accepts undeliverable jobs. The `PrintTransport` enum, the API schema and the row DISPLAY still
+ * forward-carry `cloud_poll` (an existing one, e.g. created via the API, renders and reads normally —
+ * see `#renderPrinter`/`transportName`); only this CREATE dropdown drops it. */
+const TRANSPORTS: readonly PrintTransport[] = ["network_tcp", "usb"];
 
 /**
  * The management dashboard's IMPRESORAS (printers) screen (printing subsystem §6): the venue's central

@@ -393,23 +393,20 @@ describe("printers-screen", () => {
     });
   });
 
-  it("creates a cloud_poll printer with a poll id and no agent", async () => {
+  it("offers only network_tcp and usb in the create-form transport selector (no cloud_poll)", async () => {
+    // cloud_poll has no delivery path in this slice (the agent router rejects it — a documented
+    // fast-follow), so the CREATE form must not offer it: a cloud_poll printer created here would accept
+    // undeliverable jobs. The enum/schema/display still forward-carry cloud_poll (see the p2 fixture
+    // render above); only the create dropdown drops it.
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    typeField(el, "[data-test=new-printer-name]", "Nube 2");
-    pickSelect(el, "[data-test=new-transport]", "cloud_poll");
-    typeField(el, "[data-test=new-poll-id]", "poll-9");
-    await el.updateComplete;
-    q(el, "[data-test=add-printer]")!.click();
-    await flush(el);
-
-    expect(api.createPrinter).toHaveBeenCalledWith({
-      name: "Nube 2",
-      transport: "cloud_poll",
-      pollId: "poll-9",
-    });
+    const options = Array.from(q(el, "[data-test=new-transport]")!.querySelectorAll("option")).map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(options).toEqual(["network_tcp", "usb"]);
+    expect(options).not.toContain("cloud_poll");
   });
 
   it("does not create a printer when the name is blank", async () => {
