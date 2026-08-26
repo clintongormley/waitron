@@ -57,6 +57,7 @@ import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
+import { readVenueLocale } from "./venue-locale.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions } from "./tls.js";
 import "./errors.js";
@@ -488,6 +489,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
   const till: TillConfig = { ...config.till, orderFlow: await readOrderFlow(db, config.till) };
+  // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
+  // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
+  // `override → province → country → English` chain, reading the tenant's country + the location's
+  // province under the app role. The override is the RAW `WAITRON_TILL_LOCALE` (`till.localeOverride`),
+  // NOT the defaulted `till.locale` (which is `es-ES` and would mask geography). Threaded as a STRING
+  // into the till + me mounts below (both surface it via `GET .../locales`), never re-read per request.
+  const venueLocale = await readVenueLocale(db, {
+    tenantId: till.tenantId,
+    locationId: till.locationId,
+    override: till.localeOverride,
+  });
   // The till's ONE integrated card provider (or none), built from its tenant's own Stripe credential
   // — `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses. A
   // missing or wrong-environment key fails the boot here (§8's "everything escapes"), never the first
@@ -510,6 +522,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cfg: till,
       secureCookies,
       cardProvider,
+      venueLocale,
     },
     log,
   );
@@ -613,7 +626,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // routes gate on the MANAGEMENT session (requireManagementSession + resolveManagementSession), never
   // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Same minimal deps
   // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
-  mountMeApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  mountMeApi(app, { db, cfg: { tenantId: till.tenantId }, venueLocale }, log);
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
   // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
   // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),

@@ -136,6 +136,7 @@ function deps(db: Database): TillApiDeps {
     clock: systemClock(),
     cfg,
     secureCookies: false,
+    venueLocale: "es-ES",
   };
 }
 
@@ -319,7 +320,14 @@ describe("GET /api/statuses", () => {
     const appB = new Hono();
     mountTillApi(
       appB,
-      { db, backend: {} as FiscalBackend, clock: systemClock(), cfg: cfgB, secureCookies: false },
+      {
+        db,
+        backend: {} as FiscalBackend,
+        clock: systemClock(),
+        cfg: cfgB,
+        secureCookies: false,
+        venueLocale: "es-ES",
+      },
       collect([]),
     );
     const sessionB = await withTenant(db, tenantB, async (tx) => {

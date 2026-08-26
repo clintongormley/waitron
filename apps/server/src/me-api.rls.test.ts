@@ -100,7 +100,7 @@ async function seedShift(
 
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  mountMeApi(app, { db: suite.admin, cfg: { tenantId }, venueLocale: "es-ES" }, noopLog);
   return app;
 }
 

@@ -121,6 +121,7 @@ function deps(db: Database): TillApiDeps {
     cfg,
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request`.
     secureCookies: false,
+    venueLocale: "es-ES",
   };
 }
 

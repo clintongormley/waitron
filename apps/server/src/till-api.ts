@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -100,6 +100,13 @@ export interface TillApiDeps {
    * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
    */
   cardProvider?: PaymentProvider;
+  /**
+   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts) from geography +
+   * the optional `WAITRON_TILL_LOCALE` override. `GET /api/till` echoes it as `locale` (the language
+   * the till app defaults to before a per-user preference is known), and `GET /api/locales` returns it
+   * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
+   */
+  venueLocale: string;
 }
 
 /**
@@ -491,7 +498,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       /* v8 ignore stop */
       return c.json({
-        locale: deps.cfg.locale,
+        // The venue's DEFAULT UI locale (`readVenueLocale`, boot.ts) — geography-derived + override,
+        // NOT the fiscal `cfg.locale`. The till app defaults its language to this until a per-user
+        // preference is loaded; `GET /api/locales` returns the same value as `venueDefault`.
+        locale: deps.venueLocale,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
@@ -520,6 +530,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         receipt: boot.receipt,
       });
     }),
+  );
+
+  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
+  // (the till app fetches it before login, beside `GET /api/till`) and free of secrets — `locales` is
+  // the static catalogue the language picker offers and `venueDefault` is the geography-derived boot
+  // value (`deps.venueLocale`). NO session gate, matching the sibling `GET /management-api/locales`.
+  app.get("/api/locales", (c) =>
+    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs FIRST, so

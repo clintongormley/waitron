@@ -11,6 +11,7 @@ import {
   absenceKind,
 } from "@waitron/workforce";
 import { resolveManagementSession } from "@waitron/identity";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import {
@@ -32,6 +33,12 @@ import type { Logger } from "./logger.js";
 export interface MeApiDeps {
   db: Database;
   cfg: { tenantId: string };
+  /**
+   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the
+   * public `GET /management-api/locales` as `venueDefault` — the language the dashboard defaults to
+   * before a signed-in person's own preference is known.
+   */
+  venueLocale: string;
 }
 
 /**
@@ -85,6 +92,14 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       await asAppUser(tx);
       return fn(tx);
     });
+
+  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
+  // (the dashboard shell fetches it before login to pick its language) and free of secrets — `locales`
+  // is the static catalogue and `venueDefault` the geography-derived boot value (`deps.venueLocale`).
+  // NO management-session gate, the browser twin of the till's `GET /api/locales`.
+  app.get("/management-api/locales", (c) =>
+    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
+  );
 
   // Whoami: who is signed into this browser, and with what role. `requireManagementSession` screens the
   // cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live session +

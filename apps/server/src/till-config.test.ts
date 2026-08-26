@@ -67,19 +67,32 @@ describe("loadTillConfig", () => {
     });
   });
 
-  it("reads WAITRON_TILL_LOCALE and reflects it in invoiceLocales", () => {
+  it("leaves localeOverride undefined when WAITRON_TILL_LOCALE is unset (while locale defaults to es-ES)", () => {
+    // The venue-default UI locale (`readVenueLocale`, boot.ts) reads the RAW env as its override, NOT
+    // the defaulted `locale` — so an unset `WAITRON_TILL_LOCALE` must leave `localeOverride` undefined,
+    // letting `resolveVenueLocale` fall through to geography, even as the FISCAL `locale` still
+    // defaults to `es-ES` beside it.
+    const config = loadTillConfig(base);
+    expect(config.localeOverride).toBeUndefined();
+    expect(config.locale).toBe("es-ES");
+  });
+
+  it("reads WAITRON_TILL_LOCALE and reflects it in invoiceLocales + localeOverride", () => {
     const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "ca-ES" });
     expect(config.locale).toBe("ca-ES");
     expect(config.invoiceLocales).toEqual(["ca-ES"]);
+    // The raw env, carried through unchanged as the venue-default override.
+    expect(config.localeOverride).toBe("ca-ES");
   });
 
-  it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES", () => {
+  it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES (and localeOverride undefined)", () => {
     // Same "absent OR empty string is unset" rule the five ids' `required` uses — an operator's
     // `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`, which
-    // downstream invoice rendering consumes.
+    // downstream invoice rendering consumes, NOR an empty override into the venue-default derivation.
     const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "" });
     expect(config.locale).toBe("es-ES");
     expect(config.invoiceLocales).toEqual(["es-ES"]);
+    expect(config.localeOverride).toBeUndefined();
   });
 
   describe("card provider + tips (WAITRON_TILL_CARD_*)", () => {

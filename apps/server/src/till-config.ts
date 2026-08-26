@@ -51,6 +51,14 @@ export interface TillConfig {
   locale: string;
   invoiceLocales: string[];
   /**
+   * The RAW `WAITRON_TILL_LOCALE` (`undefined` when unset/empty) — the explicit operator OVERRIDE for
+   * the venue's default UI locale (`readVenueLocale` → `resolveVenueLocale`, boot.ts). DISTINCT from
+   * `locale` above, which defaults to `es-ES` and feeds the FISCAL receipt/`invoiceLocales` path: the
+   * defaulted value would mask the geography derivation (province → country → English), so the venue
+   * default reads the raw env here instead. Display-side, never fiscal.
+   */
+  localeOverride?: string;
+  /**
    * Which integrated card-payment provider this till drives (`WAITRON_TILL_CARD_PROVIDER`), or
    * `none`. Unlike the fiscal ids and `orderFlow`, this is env-only (there is no per-location card
    * column), so `loadTillConfig` resolves it directly. `boot.ts` reads it to build the one
@@ -164,6 +172,10 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
     ),
     locale,
     invoiceLocales: [locale],
+    // The RAW env (NOT the defaulted `locale`), for the venue-default UI locale derivation in
+    // `boot.ts`. Same "absent OR empty is unset" rule the ids and `locale` use, but here unset stays
+    // `undefined` (no `es-ES` default) so `resolveVenueLocale` can fall through to geography.
+    localeOverride: rawLocale === undefined || rawLocale === "" ? undefined : rawLocale,
     cardProvider,
     // Omit the key entirely when absent (rather than materialising `stripeReaderId: undefined`), so
     // the optional field stays truly absent for a non-terminal provider — the shape the config tests'

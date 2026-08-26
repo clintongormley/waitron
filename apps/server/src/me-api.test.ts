@@ -6,6 +6,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
@@ -49,9 +50,14 @@ const suite = usePgliteDb({
   },
 });
 
+// A distinctive `venueLocale` (NOT the ES default) so the public `GET /management-api/locales` test
+// proves the route echoes the injected boot value rather than a hardcoded constant. In production
+// `boot.ts` derives it via `readVenueLocale`; the me routes only carry it through.
+const VENUE_LOCALE = "en-GB";
+
 function mountApp(): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountMeApi(app, { db: suite.db, cfg: { tenantId }, venueLocale: VENUE_LOCALE }, noopLog);
   return app;
 }
 
@@ -147,6 +153,17 @@ describe("mountMeApi — whoami", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },
     });
+  });
+});
+
+describe("mountMeApi — locales (public)", () => {
+  it("GET /management-api/locales returns the supported list + venue default, NO session required", async () => {
+    // Deliberately unauthenticated — the dashboard shell fetches it before login. No cookie sent.
+    const res = await send(mountApp(), "GET", "/management-api/locales", { cookie: null });
+    expect(res.status).toBe(200);
+    // The static catalogue verbatim plus the injected boot default (`en-GB` here, proving the route
+    // echoes `deps.venueLocale` rather than a constant).
+    expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: VENUE_LOCALE });
   });
 });
 

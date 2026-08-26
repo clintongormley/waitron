@@ -17,6 +17,7 @@ import {
 } from "@waitron/catalogue";
 import {
   AppError,
+  SUPPORTED_LOCALES,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -194,6 +195,11 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
+    // The venue's default UI locale (`readVenueLocale` at boot). The seeded tenant's country is 'ES',
+    // so the geography derivation yields `es-ES` — the SAME value `GET /api/till`'s `locale` asserts,
+    // now sourced from `deps.venueLocale` rather than the fiscal `cfg.locale`. `GET /api/locales`
+    // echoes it as `venueDefault`.
+    venueLocale: "es-ES",
     // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
     // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
     // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
@@ -492,6 +498,34 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+
+  it("GET /api/till's locale is the venue default (deps.venueLocale), not the fiscal cfg.locale", async () => {
+    // Drive `cfg.locale` (fiscal) and `venueLocale` (display) APART to prove the route reads the venue
+    // default: the wire `locale` must follow `venueLocale`, never `cfg.locale`. (In production both are
+    // `es-ES` for an ES venue, so a default-vs-default assertion could not tell a swapped source.)
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, locale: "ca-ES" }, venueLocale: "en-GB" },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { locale: string }).toMatchObject({ locale: "en-GB" });
+  });
+
+  it("GET /api/locales returns the supported list + the venue default, no session required", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // No cookie — the till app fetches the language catalogue before any session exists.
+    const res = await app.request("/api/locales");
+    expect(res.status).toBe(200);
+    // The static catalogue verbatim (es-ES + en-GB) plus the geography-derived default for this ES
+    // venue (`deps.venueLocale`, es-ES).
+    expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: "es-ES" });
   });
 
   it("GET /api/till echoes a non-default cardProvider and cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
