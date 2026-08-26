@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
@@ -29,6 +29,7 @@ import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 /**
  * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
@@ -462,26 +463,42 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 
-  it("boots in setup mode when no venue is bound: serves /setup-api/status and a placeholder, and does not mount the trading routes", async () => {
+  it("boots in setup mode over HTTPS from a minted self-signed cert, serves /setup-api/status, refuses plain HTTP, and does not mount the trading routes", async () => {
     // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all five
     // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
     // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
     // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
-    // routes, no sync transport, no drain/reconcile workers. This is the minimal env the brief names:
-    // DATABASE_URL + migrations + port + WAITRON_ENV, and deliberately nothing else (no
-    // WAITRON_CREDENTIALS_KEY, no WAITRON_TILL_*_ID) — the proof a setup box needs neither. DATABASE_URL
-    // is PROBE_ROLE so the shared applyMigrations still runs idempotently against the template.
+    // routes, no sync transport, no drain/reconcile workers. DATABASE_URL is PROBE_ROLE so the shared
+    // applyMigrations still runs idempotently against the template.
+    //
+    // NEW in slice 2a: the box serves this surface over HTTPS from a self-signed cert it MINTS + then
+    // reuses on later boots (`ensureBoxSecrets`), and generates its box secrets (key ring + node
+    // token) alongside. A fresh `WAITRON_STATE_DIR` (mkdtemp, cleaned up below) gives it somewhere to
+    // write; we read the minted CA back to trust the leaf, dial every route over HTTPS, then confirm a
+    // plain-HTTP dial to the same port now FAILS — proof this is HTTPS, not the plain HTTP slice 1b
+    // served. `WAITRON_STATE_DIR` is REQUIRED here, not optional: without it `ensureBoxSecrets` would
+    // write into `boot.ts`'s from-source default (`apps/server/src/state`) and pollute the checkout.
     const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-state-"));
     const server = await startServer({
       DATABASE_URL: databaseUrl,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
     });
+    // Trust the CA the box just minted, so the self-signed leaf verifies. `undici`'s `Agent` is real
+    // (this file mocks only `undici`'s `fetch`, not `Agent` — see the header comment), and Node's
+    // GLOBAL `fetch` (a separate module identity from the mocked `"undici"` specifier) honours a
+    // `dispatcher` on its init. The leaf carries `127.0.0.1` as an iPAddress SAN (ensureBoxSecrets adds
+    // it unconditionally), so a loopback dial verifies.
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const dispatcher = new Agent({ connect: { ca } });
+    const via = { dispatcher } as RequestInit & { dispatcher: Agent };
     try {
-      // The setup status fact sheet (Task 2's `mountSetup`), echoing the deployment environment boot
-      // resolved — proof `config.environment` threaded through the setup branch into `mountSetup`.
-      const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
+      // The setup status fact sheet (Task 2's `mountSetup`), over HTTPS — proof `config.environment`
+      // threaded through the setup branch into `mountSetup`, and that the minted cert actually serves.
+      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
         provisioned: false,
@@ -489,37 +506,97 @@ describe("startServer, against a real container as the deployment role", () => {
         needs: ["venue"],
       });
 
-      // The placeholder shell answers any unclaimed path (200 HTML), so a browser pointed at the box
-      // gets a "needs setup" page rather than a crash or a bare 404.
-      const root = await fetch(`http://127.0.0.1:${port}/`);
+      // The placeholder shell answers any unclaimed path (200 HTML) over HTTPS too.
+      const root = await fetch(`https://127.0.0.1:${port}/`, via);
       expect(root.status).toBe(200);
       expect(root.headers.get("content-type")).toContain("text/html");
       expect(await root.text()).toMatch(/set ?up/i);
 
       // /health still answers — `createHealthState` + `healthApp` are in the shared prefix. It reports
       // 503 (never-passed: a setup box runs no duty loop, so `lastPassAt` stays null), not a
-      // route-missing failure. The brief asserts only that it ANSWERS (status < 600), which
-      // distinguishes a live route from a crashed/absent one.
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      // route-missing failure; the assertion is only that it ANSWERS (status < 600).
+      const health = await fetch(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBeLessThan(600);
 
       // The trading routes are NOT mounted: /api/staff is answered by the setup catch-all (the HTML
       // placeholder), NOT the trading roster route — which would return the JSON `[]` the trading-mode
-      // test below asserts. The setup catch-all (`mountSetup`'s `GET *`) claims every otherwise
-      // unmatched path, so a mounted `mountTillApi` is the only thing that could make this JSON; a 200
-      // text/html placeholder here proves the trading route never registered. (A bare 404 is
-      // impossible while the catch-all is mounted — it is the same route that serves `/` above.)
-      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      // test below asserts. A 200 text/html placeholder here proves the trading route never registered.
+      const staff = await fetch(`https://127.0.0.1:${port}/api/staff`, via);
       expect(staff.status).toBe(200);
       expect(staff.headers.get("content-type")).toContain("text/html");
       expect(await staff.text()).toMatch(/set ?up/i);
+
+      // The box minted + persisted its secrets alongside the cert (`ensureBoxSecrets` writes
+      // secrets.env with the key ring + node token, 0600), ready for slice 2b to load.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+
+      // A plain-HTTP dial to the same port now FAILS: the listener speaks TLS, so an http:// request
+      // never completes a valid handshake (it is HTTPS now, not the plain HTTP slice 1b served). No
+      // dispatcher — a bare global fetch against the TLS port is torn down mid-request.
+      await expect(fetch(`http://127.0.0.1:${port}/setup-api/status`)).rejects.toThrow();
     } finally {
       await server.close();
+      await dispatcher.close();
+      await rm(stateDir, { recursive: true, force: true });
     }
     // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
-    // close() resolves without throwing, and the listener is genuinely gone.
+    // close() resolves without throwing, and the listener is genuinely gone (connection refused now,
+    // regardless of TLS, so a bare fetch suffices to observe it).
     await expect(server.close()).resolves.toBeUndefined();
-    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+    await expect(fetch(`https://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("setup mode honours an operator-supplied WAITRON_TLS_* pair over minting its own", async () => {
+    // The operator brings their own cert: `config.tls` is set from WAITRON_TLS_CERT_FILE/_KEY_FILE, so
+    // the setup branch serves THAT and never calls `ensureBoxSecrets` — so the state dir's
+    // `tls/server.crt` is never created (the mint branch is skipped entirely). This is the
+    // prove-by-deletion target: forcing the branch to ALWAYS mint (ignoring `config.tls`) creates that
+    // file despite the operator cert AND serves the wrong leaf, failing both assertions below.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-op-tls-"));
+    const certDir = await mkdtemp(join(tmpdir(), "waitron-boot-op-cert-"));
+    // A pre-minted operator cert pair, carrying 127.0.0.1 as an iPAddress SAN so a loopback dial
+    // verifies against it — `mintSelfSignedServerCert` is the same minter `ensureBoxSecrets` wraps.
+    const material = mintSelfSignedServerCert({
+      hostnames: ["localhost"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+    const certFile = join(certDir, "operator.crt");
+    const keyFile = join(certDir, "operator.key");
+    await writeFile(certFile, material.serverCertPem);
+    await writeFile(keyFile, material.serverKeyPem);
+
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_TLS_CERT_FILE: certFile,
+      WAITRON_TLS_KEY_FILE: keyFile,
+      WAITRON_ENV: "preproduction",
+    });
+    // Trust the OPERATOR CA (not any box-minted one): HTTPS serving from the operator leaf is what
+    // verifies here.
+    const dispatcher = new Agent({ connect: { ca: material.caCertPem } });
+    const via = { dispatcher } as RequestInit & { dispatcher: Agent };
+    try {
+      // HTTPS still serves — from the OPERATOR cert (dialled trusting the operator CA).
+      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toMatchObject({ provisioned: false });
+
+      // The operator cert WON: `ensureBoxSecrets` was never called, so the box minted NOTHING in the
+      // state dir — no `tls/server.crt`. (Prove-by-deletion: an always-mint branch creates this file.)
+      expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(false);
+    } finally {
+      await server.close();
+      await dispatcher.close();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(certDir, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {

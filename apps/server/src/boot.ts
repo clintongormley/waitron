@@ -52,6 +52,7 @@ import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
@@ -415,7 +416,25 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // real setup wizard app arrives in slice 2; the media store is trading-only, so it is not created
     // here either.
     mountSetup(app, { environment: config.environment }, log);
-    const server = startListening(config, app, now, log);
+    // NEW in slice 2a: the box serves this setup surface over HTTPS. An operator who supplied their
+    // own WAITRON_TLS_* pair keeps it — `config.tls` WINS; otherwise the box mints (or reuses) its own
+    // self-signed cert under the state dir and serves from that. `ensureBoxSecrets` is idempotent
+    // (presence-guarded), so a reused box keeps its already-trusted cert byte-for-byte rather than
+    // minting a fresh one every boot. Only the leaf `{ certFile, keyFile }` feeds `config.tls`; the
+    // returned `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so
+    // it is narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity
+    // window is anchored to real boot time. This mirrors the trading branch's own TLS handling, which
+    // reads `config.tls` unchanged — that path is untouched.
+    let tls = config.tls;
+    if (tls === undefined) {
+      const ensured = await ensureBoxSecrets({
+        stateDir: config.stateDir,
+        hostnames: ["waitron.local", "localhost"],
+        now,
+      });
+      tls = { certFile: ensured.certFile, keyFile: ensured.keyFile };
+    }
+    const server = startListening({ ...config, tls }, app, now, log);
     return makeStartedServer(server, health, log, {
       // A setup box runs no background work, so there is nothing to abort or await.
       stopWork: () => Promise.resolve(),
