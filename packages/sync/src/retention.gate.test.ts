@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { lagFor, pruneSyncLog } from "./retention.js";
+import { recordSubscriberCursor } from "./cursor-report.js";
+import { evictSubscriber, lagFor, pruneSyncLog, runRetentionSweep } from "./retention.js";
 import type { SyncLane } from "./registry.js";
 
 // Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
@@ -111,6 +112,29 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
       join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
       where i.indrelid = 'sync_cursor'::regclass and i.indisprimary`);
     expect(pk.rows[0]!.cols).toEqual(["subscriber_id", "origin_id", "lane"]);
+  });
+
+  it("0003 granted DELETE on sync_cursor to sync_retention", async () => {
+    const r = await postgres.admin.execute<{ has: boolean }>(
+      sql`select has_table_privilege('sync_retention', 'sync_cursor', 'DELETE') as has`,
+    );
+    expect(r.rows[0]!.has).toBe(true);
+  });
+
+  it("0004 created the sync_log_origin_seq_idx index on sync_log (origin_id, seq)", async () => {
+    // Read the index's key columns back from the catalog IN KEY ORDER — a DDL tag is not proof the
+    // index landed with the right columns (CLAUDE.md §3), same read-back the PK check above does.
+    // WHY the index exists: runRetentionSweep prunes every tick with a per-origin range DELETE
+    // (`sl.origin_id = c.origin_id AND sl.seq <= c.min_seq`, retention.ts); with only sync_log's `seq`
+    // PK and no index on origin_id that join seq-scans the whole transport log each tick — worst
+    // exactly when a subscriber stalls and the log grows.
+    const idx = await postgres.admin.execute<{ cols: string[] | null }>(sql`
+      select array_agg(a.attname order by array_position(i.indkey, a.attnum))::text[] as cols
+      from pg_index i
+      join pg_class c on c.oid = i.indexrelid
+      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+      where i.indrelid = 'sync_log'::regclass and c.relname = 'sync_log_origin_seq_idx'`);
+    expect(idx.rows[0]!.cols).toEqual(["origin_id", "seq"]);
   });
 
   it("prunes to the min across ALL cursors — a down subscriber holds the log — then drains when it catches up", async () => {
@@ -319,6 +343,149 @@ describe("fast and ordered lanes track independent cursors; retention waits for 
       const result = await pruneSyncLog(pruner);
       expect(result).toEqual({ pruned: 2, highWater: 2n }); // held at the FAST lane
       expect(await remainingSeqs()).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    } finally {
+      await pruner.close();
+    }
+  });
+});
+
+describe("recordSubscriberCursor gives the source cross-node visibility (spec §3.1)", () => {
+  it("recordSubscriberCursor makes a source-side prune advance (cross-node visibility, spec §3.1)", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    // sync_log rows are ORIGIN's own captured writes; a source pruning ITS OWN log needs an
+    // origin=ORIGIN cursor, which in the real topology only a subscriber's report creates.
+    await seedLog(6, a, b);
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
+    try {
+      // Control (the §1 gap): with NO reported cursor for origin=ORIGIN, the source prunes nothing.
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 0, highWater: 0n });
+      expect(await remainingSeqs()).toEqual([1, 2, 3, 4, 5, 6]);
+      // A subscriber reports it has applied up to seq 4 of ORIGIN → the source can now release 1..4.
+      await recordSubscriberCursor(tailer, {
+        subscriberId: "peerB",
+        originId: ORIGIN,
+        lane: "ordered",
+        lastAppliedSeq: 4n,
+      });
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 4, highWater: 4n });
+      // Monotonic: a stale lower report never regresses; heartbeat: updated_at bumps on a same-seq report.
+      const before = await postgres.admin.execute<{ ts: string }>(
+        sql`select updated_at::text as ts from sync_cursor where subscriber_id = 'peerB'`,
+      );
+      await recordSubscriberCursor(tailer, {
+        subscriberId: "peerB",
+        originId: ORIGIN,
+        lane: "ordered",
+        lastAppliedSeq: 2n, // lower → must NOT regress
+      });
+      const after = await postgres.admin.execute<{ seq: string; ts: string }>(
+        sql`select last_applied_seq::text as seq, updated_at::text as ts from sync_cursor where subscriber_id = 'peerB'`,
+      );
+      expect(after.rows[0]!.seq).toBe("4"); // held (monotonic)
+      expect(after.rows[0]!.ts).not.toBe(before.rows[0]!.ts); // updated_at bumped (heartbeat)
+    } finally {
+      await tailer.close();
+      await pruner.close();
+    }
+  });
+});
+
+describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)", () => {
+  it("evictSubscriber releases a dead subscriber's cursor so retention advances past it", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(10, a, b);
+    await setCursor("peerB", 10, true); // caught up
+    await setCursor("cloud", 4, false); // dead, holding the log at 4
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 4, highWater: 4n }); // held by `cloud`
+      const evicted = await evictSubscriber(pruner, "cloud");
+      expect(evicted).toEqual({ deleted: 1 });
+      expect(await pruneSyncLog(pruner)).toEqual({ pruned: 6, highWater: 10n }); // advances past dead `cloud`
+      expect(await remainingSeqs()).toEqual([]);
+    } finally {
+      await pruner.close();
+    }
+  });
+
+  it("the DELETE grant is load-bearing: without it evictSubscriber cannot release the cursor", async () => {
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(2, a, b);
+    await setCursor("cloud", 0, false);
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      await postgres.admin.execute(sql.raw(`revoke delete on sync_cursor from sync_retention`));
+      try {
+        await expect(evictSubscriber(pruner, "cloud")).rejects.toThrow(); // 42501 permission denied
+      } finally {
+        await postgres.admin.execute(sql.raw(`grant delete on sync_cursor to sync_retention`));
+      }
+      expect(await evictSubscriber(pruner, "cloud")).toEqual({ deleted: 1 }); // restored → works
+    } finally {
+      await pruner.close();
+    }
+  });
+});
+
+describe("runRetentionSweep runs the real prune + lag each tick, and NEVER evicts (spec §3.2/§3.4)", () => {
+  it("prunes to the min across ALL cursors (dead subscriber held), alarms the stalled one, and leaves its cursor in place", async () => {
+    // The scheduled loop with its REAL defaults — no injected prune/lag, exactly the wiring boot
+    // starts (boot passes neither), so this exercises pruneSyncLog/lagFor through runRetentionSweep,
+    // not the injected doubles the hermetic retention-sweep.test.ts uses. One tick: the injected
+    // `sleep` aborts the loop so it prunes exactly once.
+    //
+    // The guardrail, proven end-to-end (spec §3.4, an inherited owner decision):
+    //   - NEVER alive-filters the prune — the DOWN `cloud` (cursor 4) HOLDS the log at 4, so 5..10
+    //     survive; an alive-filtered prune would have taken the live-only min (10) and wiped the log.
+    //   - NEVER evicts — `cloud`'s cursor row is still present after the sweep; only the alarm fired.
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedLog(10, a, b);
+    await setCursor("peerB", 10, true); // caught up, alive → lag 0, no alarm
+    await setCursor("cloud", 4, false); // down, holding the log at 4 → lag 6, past the threshold
+
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const controller = new AbortController();
+    const logged: Array<{ level: string; code: string; params: Record<string, unknown> }> = [];
+    try {
+      await runRetentionSweep({
+        db: pruner,
+        sleep: async () => controller.abort(),
+        signal: controller.signal,
+        tickMs: 10,
+        lagAlarmRows: 5,
+        log: (level, code, params) => logged.push({ level, code, params: params ?? {} }),
+      });
+
+      // Held at the min across ALL cursors (4), NOT the live-only min (10) — the never-alive-filter half.
+      expect(await remainingSeqs()).toEqual([5, 6, 7, 8, 9, 10]);
+      // The real prune's result is reported on the swept line (highWater is stringified — see the sweep).
+      expect(logged.find((l) => l.code === "sync.retention_swept")).toMatchObject({
+        level: "info",
+        params: { pruned: 4, highWater: "4" },
+      });
+      // The stalled `cloud` (lag 6 > 5) alarmed via the REAL lagFor; `peerB` (lag 0) did not. `lag` is
+      // stringified at this alarm edge to preserve precision (consistent with `highWater` above).
+      const stalled = logged.filter((l) => l.code === "sync.stream_stalled");
+      expect(stalled).toHaveLength(1);
+      expect(stalled[0]).toMatchObject({
+        level: "error",
+        params: { subscriberId: "cloud", originId: ORIGIN, lag: "6" },
+      });
+      // NEVER evicts: the dead subscriber's cursor row is untouched — the alarm INFORMS a manual
+      // eviction, it does not perform one.
+      const cursor = await postgres.admin.execute<{ n: string }>(
+        sql`select count(*)::int::text as n from sync_cursor where subscriber_id = 'cloud'`,
+      );
+      expect(cursor.rows[0]!.n).toBe("1");
     } finally {
       await pruner.close();
     }

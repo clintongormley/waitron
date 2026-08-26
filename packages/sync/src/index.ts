@@ -37,10 +37,15 @@ export { runSyncPull, syncPullOnce } from "./pull.js";
 export type { HttpClient, PullPeer, RunSyncPullDeps, SyncPullDeps } from "./pull.js";
 
 // Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
-// log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
-// Task 6).
-export { lagFor, pruneSyncLog } from "./retention.js";
-export type { PruneResult, SubscriberLag } from "./retention.js";
+// log), per-subscriber lag reporting, the explicit eviction verb, and the scheduled retention sweep
+// boot starts (prune + lag alarm each tick; never evicts, never alive-filters — spec §3.2/§3.4).
+export { evictSubscriber, lagFor, pruneSyncLog, runRetentionSweep } from "./retention.js";
+export type { PruneResult, RetentionSweepDeps, SubscriberLag } from "./retention.js";
+
+// The source-side cursor-report writer — a subscriber's POSTed cursor recorded into the source's OWN
+// sync_cursor (origin=self), so retention holds the log at the min across every subscriber (spec §3.1).
+export { recordSubscriberCursor } from "./cursor-report.js";
+export type { RecordSubscriberCursorArgs } from "./cursor-report.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.

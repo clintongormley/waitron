@@ -498,11 +498,40 @@ describe("loadSyncConfig", () => {
       WAITRON_SYNC_DATABASE_URL: "postgres://sync@host/db",
     };
     expect(loadSyncConfig(env)).toEqual({
-      nodeToken: "mine",
+      nodeTokens: ["mine"],
       databaseUrl: "postgres://sync@host/db",
       peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
       fastMinIdleMs: 1000,
+      // Defaulted (WAITRON_SYNC_RETENTION_TICK_MS unset). retentionDatabaseUrl is NOT in this
+      // object — the field is omitted when unset (its own test below proves that directly), so
+      // `toEqual` here also pins that no present-but-undefined key leaks in.
+      retentionTickMs: 60_000,
     });
+  });
+
+  it("reads WAITRON_SYNC_NODE_TOKEN as a comma-separated accepted-token SET", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD,NEW" })!.nodeTokens).toEqual([
+      "OLD",
+      "NEW",
+    ]);
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "solo" })!.nodeTokens).toEqual([
+      "solo",
+    ]);
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a, b " })!.nodeTokens).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a,,b" })).toThrow(
+      /config_invalid|blank_token_in_set/,
+    );
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD," })).toThrow(
+      /config_invalid|blank_token_in_set/,
+    );
+    expect(() => loadSyncConfig({ ...base })).toThrow(/config_missing|WAITRON_SYNC_NODE_TOKEN/);
   });
 
   it("reads WAITRON_SYNC_FAST_TICK_MS as the fast lane's idle interval", () => {
@@ -523,6 +552,79 @@ describe("loadSyncConfig", () => {
       WAITRON_SYNC_FAST_TICK_MS: "0",
     };
     expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_FAST_TICK_MS/);
+  });
+
+  it("reads WAITRON_SYNC_RETENTION_TICK_MS as the retention sweep's idle interval, defaulting to 60000", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    // Default when unset.
+    expect(loadSyncConfig(base)!.retentionTickMs).toBe(60_000);
+    // Honoured when set.
+    expect(
+      loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_TICK_MS: "30000" })!.retentionTickMs,
+    ).toBe(30_000);
+  });
+
+  it("refuses a non-positive-integer WAITRON_SYNC_RETENTION_TICK_MS", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+      WAITRON_SYNC_RETENTION_TICK_MS: "0",
+    };
+    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_RETENTION_TICK_MS/);
+  });
+
+  it("sets retentionDatabaseUrl only when WAITRON_SYNC_RETENTION_DATABASE_URL is set (absent → field omitted)", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    // Set → field carries the URL.
+    expect(
+      loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_DATABASE_URL: "postgres://ret@host/db" })!
+        .retentionDatabaseUrl,
+    ).toBe("postgres://ret@host/db");
+    // Unset → the key is OMITTED entirely (the sweep-off signal boot reads), not present-but-undefined.
+    // `not.toHaveProperty` distinguishes the two — an `=== undefined` check would pass for both.
+    expect(loadSyncConfig(base)).not.toHaveProperty("retentionDatabaseUrl");
+    // Empty string is unset too (the "empty connection string is a valid connection string" trap,
+    // CLAUDE.md §3): `WAITRON_SYNC_RETENTION_DATABASE_URL=` must omit the field, never reach
+    // `createPostgresDb` as "".
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_DATABASE_URL: "" })).not.toHaveProperty(
+      "retentionDatabaseUrl",
+    );
+  });
+
+  it("sets lagAlarmRows only when WAITRON_SYNC_LAG_ALARM_ROWS is a positive int (absent → field omitted; non-positive → throws)", () => {
+    const base = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    // Set to a positive int → field carries the threshold.
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "1000" })!.lagAlarmRows).toBe(
+      1000,
+    );
+    // Unset → the key is OMITTED entirely (the alarm is opt-in; boot then passes lagAlarmRows
+    // undefined → runRetentionSweep stays prune-only). `not.toHaveProperty` distinguishes an omitted
+    // key from a present-but-undefined one, which an `=== undefined` check would not.
+    expect(loadSyncConfig(base)).not.toHaveProperty("lagAlarmRows");
+    // Empty string is unset too — omit the field, never a present-but-undefined key.
+    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "" })).not.toHaveProperty(
+      "lagAlarmRows",
+    );
+    // A non-positive value is refused (server.config_invalid) — the same posture positiveInt takes.
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "0" })).toThrow(
+      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
+    );
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "-5" })).toThrow(
+      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
+    );
   });
 
   it("refuses a blank node token (VAR= is unset, must fail closed, never mean 'no auth')", () => {

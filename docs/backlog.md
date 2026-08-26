@@ -47,8 +47,9 @@ foundations first. **Never autonomously land anything touching the unrepairable 
 topology follow-ups*. The largest unbuilt threads: **recipes/BOM's next slices** (nested sub-recipes,
 plate costing, stock depletion — the linchpin; the recipe-authoring UI landed as #94), the **reporting** remainder
 (rectificativas, prorrata, intra-community/import boxes; quarterly/annual periods + the DR303 download route landed as #98), the **sync
-transport-2** pieces (cloud-mirror peer, dead-subscriber cleanup, multi-tenant transport, node-token
-rotation) and the separate **fiscal-lane / hash-chain sync (H2)**, and the greenfield **inventory /
+transport-2** remainder (**node-token rotation + dead-subscriber cleanup shipped as PR #135, 2026-08-26**;
+**cloud-mirror peer** and **multi-tenant transport** — a whole-log reader role — still need a fresh design
+pass) and the separate **fiscal-lane / hash-chain sync (H2)**, and the greenfield **inventory /
 procurement** (sub-project 20) downstream of recipes.
 
 ---
@@ -178,11 +179,26 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   source read + a `?lane=` wire param, two boot cadences), with the cross-lane FK order absorbed by the
   pre-existing `23503` park (no new correctness machinery). **Dead-subscriber cleanup was TRIMMED out
   of #85 by owner decision** (it needs retention actually scheduled in boot + cross-node cursor
-  visibility — a future retention-ops slice, not a capability shipped two layers ahead). What NOW
-  remains: the **cloud-mirror** peer, **dead-subscriber** cleanup (releasing the
-  retained log), **multi-tenant** transport (a whole-log reader role), node-token **rotation**, and the
-  **fiscal-lane sync** (the `registros`/hash-chain lane, a separate owner-reviewed slice — H2,
-  deliberately excluded).
+  visibility — a future retention-ops slice, not a capability shipped two layers ahead). **Node-token
+  rotation** and **dead-subscriber cleanup** SHIPPED as **PR #135** (2026-08-26,
+  `feat/sync-rotation-retention-ops`, plan `2026-08-16-sync-token-rotation-and-retention-ops`): the
+  inbound node token is now an accepted **set** (`WAITRON_SYNC_NODE_TOKEN` comma-separated, constant-time
+  set-membership) so the secret rolls with no synchronized restart; the previously-unwired `pruneSyncLog`
+  is now scheduled by a boot-started `runRetentionSweep` (opt-in via `WAITRON_SYNC_RETENTION_DATABASE_URL`
+  + `WAITRON_SYNC_RETENTION_TICK_MS`) that PRUNES each tick (its per-origin range DELETE backed by an
+  index on `sync_log(origin_id, seq)`, migration `0004`) and, when a lag threshold is configured
+  (`WAITRON_SYNC_LAG_ALARM_ROWS`, opt-in), ALARMS a stalled subscriber (`sync.stream_stalled`);
+  cross-node cursor visibility via `recordSubscriberCursor` + `POST /sync-api/cursor` (stamps origin=self)
+  + the puller reporting its cursor after draining; and an **explicit** `waitron-sync-evict <subscriberId>`
+  operator CLI (migration `0003` `GRANT DELETE ON sync_cursor TO sync_retention`) that releases a
+  genuinely-dead subscriber's cursor. **Eviction stays EXPLICIT-never-automatic** (the sweep never evicts,
+  never `alive`-filters the prune — an inherited owner decision). What NOW remains: the **cloud-mirror**
+  peer, **multi-tenant** transport (a whole-log reader role), and the **fiscal-lane sync** (the
+  `registros`/hash-chain lane, a separate owner-reviewed slice — H2, deliberately excluded). **For the
+  cloud-mirror / multi-tenant design:** `POST /sync-api/cursor` takes `subscriberId` from the body, so
+  under the shared node token any token-holder can write (advance) any subscriber's cursor — fine for two
+  mutually-trusting nodes (the token IS the trust boundary), but a third *distrusting* subscriber (the
+  cloud-mirror) needs per-peer identity to close it; revisit in that design.
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever

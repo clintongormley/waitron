@@ -8,4 +8,4 @@ import type { HttpClient } from "@waitron/sync";
  * fake instead (as `syncPullOnce`/`runSyncPull`'s own suites do).
  */
 export const fetchHttpClient: HttpClient = (url, init) =>
-  undiciFetch(url, { headers: init.headers });
+  undiciFetch(url, { method: init.method ?? "GET", headers: init.headers, body: init.body });

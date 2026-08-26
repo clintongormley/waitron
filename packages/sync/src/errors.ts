@@ -34,13 +34,15 @@ declare module "@waitron/shared" {
      *     milliseconds — a property of the retry schedule, not of any row. `lane` names which
      *     replication lane ('ordered' | 'fast') saturated, since the two run independently and each
      *     backs off on its own — a fixed schema enum, never row content (spec §4d).
-     *   - the RETENTION signal (retention.ts `lagFor`, design §9/§12 ops-policy — the alarm/evict
-     *     path is not wired here yet): the subscriber has fallen far behind. `lag` is
-     *     `origin max(seq) − last_applied_seq`, a count of unapplied rows, never their content.
+     *   - the RETENTION signal (retention.ts `lagFor`): the subscriber has fallen far behind. `lag` is
+     *     `origin max(seq) − last_applied_seq`, a count of unapplied rows, never their content. Carried
+     *     as a decimal STRING, not a `number`: it is measured as a `bigint` and a far-behind subscriber
+     *     can push it past 2^53−1, so narrowing to a JS `number` would lose precision — retention.ts
+     *     stringifies it at the alarm edge (consistent with the swept line's `highWater`).
      * `subscriberId` and `originId` name the lagging (subscriber, origin) pair in both. */
     "sync.stream_stalled":
       | { subscriberId: string; originId: string; backoffMs: number; lane: SyncLane }
-      | { subscriberId: string; originId: string; lag: number };
+      | { subscriberId: string; originId: string; lag: string };
     /** A peer presented a missing, blank or wrong node token to this node's sync-api. NO PARAMS —
      * the response is uniform (fail-closed, no oracle), and a token must never reach a log line or a
      * test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */

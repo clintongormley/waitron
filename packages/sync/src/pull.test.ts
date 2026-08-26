@@ -245,4 +245,133 @@ describe("runSyncPull loop control", () => {
     expect(seen).toEqual([peerA.nodeId]); // peer B never pulled — abort broke the peer loop
     expect(sleeps).toEqual([]); // aborted before sleeping
   });
+
+  it("reports the cursor to a peer after draining it, and a report failure does not break the loop", async () => {
+    // Best-effort operational metadata: after draining a peer, the puller reports its
+    // (subscriber, origin=peer, lane) cursor back to that peer. A THROWING reportCursor must be
+    // swallowed by the report's OWN try/catch — the peer still counts HEALTHY and the loop keeps
+    // making rounds. The injected reportCursor throws before any real DB read matters; localDb is
+    // stubbed so the readCursor that precedes the report resolves (plan note), otherwise readCursor —
+    // not the report — would throw.
+    //
+    // The health assertions below prove the isolation by BOTH directions (CLAUDE.md §1/§4 — a guard a
+    // test still passes without is not tested): with the guard, the throw is logged as
+    // `sync.cursor_report_failed` and NEVER reaches the per-peer backoff catch, so no `sync.pull_failed`
+    // is logged and backoff is not grown. Delete the report's try/catch and the throw escapes to that
+    // catch instead: `sync.pull_failed` appears and `sync.cursor_report_failed` does not — flipping both.
+    const reports: Array<{ peer: string; lane: string }> = [];
+    const logs: { level: string; code: string }[] = [];
+    const controller = new AbortController();
+    let rounds = 0;
+    await runSyncPull({
+      ...dummyDeps,
+      localDb: { execute: async () => ({ rows: [{ seq: "0" }] }) } as unknown as Database,
+      peers: [peerA],
+      lane: "ordered",
+      signal: controller.signal,
+      minIdleMs: 10,
+      maxBackoffMs: 100,
+      log: (level, code) => {
+        logs.push({ level, code });
+      },
+      sleep: async () => {
+        rounds += 1;
+        if (rounds >= 2) controller.abort();
+      },
+      pullOnce: async () => short(0), // caught up immediately
+      reportCursor: async (peer, report) => {
+        reports.push({ peer: peer.nodeId, lane: report.lane });
+        throw new Error("report boom"); // must be swallowed
+      },
+    });
+    expect(reports.length).toBeGreaterThanOrEqual(1);
+    expect(reports[0]).toEqual({ peer: peerA.nodeId, lane: "ordered" });
+    // The throw was caught by the report's own try/catch (best-effort), logged, and NEVER reached the
+    // per-peer backoff catch — so the peer stayed healthy.
+    expect(logs.some((l) => l.code === "sync.cursor_report_failed")).toBe(true);
+    expect(logs.some((l) => l.code === "sync.pull_failed")).toBe(false);
+  });
+
+  it("defaults reportCursor to a POST /sync-api/cursor via http (Bearer + JSON body) when none is injected", async () => {
+    // The DEFAULT report (no reportCursor injected) POSTs the cursor to `${peer.url}/sync-api/cursor`
+    // with `Authorization: Bearer <peer.token>` + a JSON `{subscriberId, lane, lastAppliedSeq}` body —
+    // the shape B4's `POST /sync-api/cursor` route consumes. localDb is stubbed so readCursor resolves
+    // the seq the report stringifies; http is a spy capturing the request.
+    const controller = new AbortController();
+    const calls: Array<{
+      url: string;
+      init: { headers: Record<string, string>; method?: string; body?: string };
+    }> = [];
+    const http = (async (url, init) => {
+      calls.push({ url, init });
+      return { status: 200, text: async () => "" };
+    }) as HttpClient;
+    await runSyncPull({
+      ...dummyDeps,
+      localDb: { execute: async () => ({ rows: [{ seq: "7" }] }) } as unknown as Database,
+      http,
+      peers: [peerA],
+      lane: "ordered",
+      pullOnce: async () => short(0),
+      sleep: async () => {
+        controller.abort();
+      },
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log: noopLog,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${peerA.url}/sync-api/cursor`);
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(calls[0]!.init.headers).toMatchObject({
+      Authorization: `Bearer ${peerA.token}`,
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(calls[0]!.init.body!)).toEqual({
+      subscriberId: "node-a",
+      lane: "ordered",
+      lastAppliedSeq: "7",
+    });
+  });
+
+  it("logs sync.cursor_report_failed when the default report POST returns a non-200, without breaking the loop", async () => {
+    // The DEFAULT report (no reportCursor injected) must OBSERVE the POST's status. The `http` adapter
+    // RESOLVES a 401/500 rather than throwing — a 401 is exactly what a token rotation that dropped this
+    // reporter's token produces — so ignoring `status` would treat that failure as success and silently
+    // break cross-node retention visibility. Capturing the status and throwing on non-200 routes it into
+    // the report's OWN try/catch, which logs sync.cursor_report_failed. It stays best-effort: the throw
+    // is swallowed there, so it NEVER reaches the per-peer backoff catch (no sync.pull_failed, no backoff
+    // growth) — the peer stays HEALTHY and the loop keeps making rounds. Prove by deletion: remove the
+    // `if (res.status !== 200) throw` guard and the 401 is swallowed silently — sync.cursor_report_failed
+    // is never logged, so this assertion goes red while sync.pull_failed stays absent.
+    const logs: { level: string; code: string }[] = [];
+    const controller = new AbortController();
+    let rounds = 0;
+    const http = (async () => ({ status: 401, text: async () => "" })) as HttpClient;
+    await runSyncPull({
+      ...dummyDeps,
+      localDb: { execute: async () => ({ rows: [{ seq: "3" }] }) } as unknown as Database,
+      http,
+      peers: [peerA],
+      lane: "ordered",
+      signal: controller.signal,
+      minIdleMs: 10,
+      maxBackoffMs: 100,
+      log: (level, code) => {
+        logs.push({ level, code });
+      },
+      sleep: async () => {
+        rounds += 1;
+        if (rounds >= 2) controller.abort();
+      },
+      pullOnce: async () => short(0), // caught up immediately, so the drain itself is healthy
+    });
+    // The 401 was observed, thrown, caught by the report's own try/catch, and logged — NOT propagated to
+    // the per-peer backoff catch, so the peer stayed healthy.
+    expect(logs.some((l) => l.code === "sync.cursor_report_failed")).toBe(true);
+    expect(logs.some((l) => l.code === "sync.pull_failed")).toBe(false);
+    // The loop still made progress: it slept and came round again rather than dying on the report error.
+    expect(rounds).toBeGreaterThanOrEqual(2);
+  });
 });

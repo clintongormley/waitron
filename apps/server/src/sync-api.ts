@@ -2,7 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { withTenant, type Database } from "@waitron/db";
-import { encodeBatch, readSyncLogSince, tablesForLane, type SyncLane } from "@waitron/sync";
+import {
+  encodeBatch,
+  readSyncLogSince,
+  recordSubscriberCursor,
+  tablesForLane,
+  type SyncLane,
+} from "@waitron/sync";
 import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger } from "./logger.js";
 // Loads @waitron/sync's error augmentation so this file may throw sync.node_unauthorized.
@@ -37,14 +43,16 @@ function logLimit(raw: string | undefined): number {
  * The `?after=` cursor as a NON-NEGATIVE bigint, defaulting to `0n` (serve from the start) for anything
  * that is NOT one: a missing/empty param, a non-integer string (`abc`, `1.5` — each makes `BigInt(...)`
  * THROW a SyntaxError), or a negative value. A cursor is a monotonic non-negative `seq`, so the sibling
- * of `logLimit` above: plain `BigInt(c.req.query("after") ?? "0")` let a non-integer `after` throw
- * straight into this endpoint's boundary as an opaque `server.internal` 500 for a malformed peer
+ * of `logLimit` above: plain `BigInt(c.req.query("after") ?? "0")` let a non-integer input throw
+ * straight into the endpoint's boundary as an opaque `server.internal` 500 for a malformed peer
  * request rather than a served page. Same fail-safe posture as `logLimit`'s clamp and for the same
- * reason — this machine-to-machine surface has no 400 param-invalid convention (its boundary answers
- * only `sync.node_unauthorized` -> 401, everything else -> opaque 500) and its sole caller (`pull.ts`)
- * always sends a valid non-negative `after`, so a garbage cursor SAFELY means "from the start", never a
- * 500. `BigInt("")` is already `0n`, so empty needs no special case; the `try/catch` is for the throwing
- * (`abc`, `1.5`) forms, and `> 0n ? n : 0n` folds a negative cursor back to the start. */
+ * reason. This helper now feeds TWO node-token routes — `/sync-api/log`'s `?after=` cursor and
+ * `/sync-api/cursor`'s `lastAppliedSeq` body field — and NEITHER has a 400 param-invalid convention
+ * (both boundaries answer only `sync.node_unauthorized` -> 401, everything else -> opaque 500); both
+ * are driven by `pull.ts` (the log drain and the cursor report), which always sends a valid
+ * non-negative value, so a garbage input SAFELY folds to seq 0 ("from the start"), never a 500.
+ * `BigInt("")` is already `0n`, so empty needs no special case; the `try/catch` is for the throwing
+ * (`abc`, `1.5`) forms, and `> 0n ? n : 0n` folds a negative value back to the start. */
 function afterSeq(raw: string | undefined): bigint {
   if (raw === undefined) return 0n;
   try {
@@ -56,12 +64,14 @@ function afterSeq(raw: string | undefined): bigint {
 }
 
 /**
- * The `?lane=` query param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a
- * missing param, `ordered`, or garbage — to `ordered`. Same machine-to-machine fail-safe posture this
- * endpoint takes for `after`/`limit` (no 400 convention): the ordered tables never silently disappear,
- * and the fast tick always sends `lane=fast` explicitly (spec §4c). The lane is the WIRE dimension —
- * the route maps it to `tablesForLane(lane)` SERVER-SIDE and never accepts a client-supplied table
- * list (both nodes run the same enrolment registry). */
+ * The `lane` param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a missing
+ * param, `ordered`, or garbage — to `ordered`. Used by BOTH node-token routes: `/sync-api/log` reads
+ * it from the `?lane=` query and maps it to `tablesForLane(lane)` SERVER-SIDE (it never accepts a
+ * client-supplied table list — both nodes run the same enrolment registry), while `/sync-api/cursor`
+ * reads it from the POST body to key which lane's cursor the subscriber is reporting. Same
+ * machine-to-machine fail-safe posture both take for `after`/`limit` (no 400 convention): the ordered
+ * lane is never silently lost, and the fast tick always sends `lane=fast` explicitly (spec §4c). The
+ * lane is the WIRE dimension, mapped to server-side meaning by each route. */
 function laneParam(raw: string | undefined): SyncLane {
   return raw === "fast" ? "fast" : "ordered";
 }
@@ -71,20 +81,33 @@ export interface SyncApiDeps {
   tenantId: string; // the deli tenant the source reads under
   nodeId: string; // this node's origin id (config.till.nodeId), for /hello
   environment: string; // config.environment, for /hello + the peer handshake
-  nodeToken: string; // the token peers must present (WAITRON_SYNC_NODE_TOKEN); non-blank
+  nodeTokens: string[]; // the accepted inbound token SET (rotation overlap window, spec §2)
 }
 
-/** Constant-time Bearer check. A missing/blank/wrong token throws sync.node_unauthorized (→ 401)
- * BEFORE any DB work — the same fail-closed posture as the empty-connection-string trap (CLAUDE.md §3):
- * a blank secret must never mean "no auth". */
-function requireNodeToken(c: Context, nodeToken: string): void {
+/** Bearer check against the accepted SET, constant-time for tokens OF THE SAME LENGTH. `timingSafeEqual`
+ * THROWS on unequal-length buffers, so it is guarded by `a.length === b.length` (mandatory — the guard
+ * IS the required precondition, not a leak we chose to add): for a same-length hit vs a same-length
+ * miss the `timingSafeEqual` path runs identically — no early return, no position-dependent
+ * short-circuit — so request timing cannot distinguish them, nor reveal WHICH same-length member
+ * matched. Timing DOES depend on whether the presented token's length matches a configured token's
+ * length, and that is fine here: token length is not a secret for a ~256-bit random pre-shared token —
+ * an attacker learning "my guess's length matches a configured one" gains nothing against it — which is
+ * the STANDARD accepted pattern for high-entropy tokens (hashing every candidate to a fixed length to
+ * hide the length would be over-engineering). Iterating EVERY member and OR-ing the per-member result
+ * with no early return is what keeps a same-length hit indistinguishable from a same-length miss; it
+ * does not hide the set SIZE either (the loop's wall-clock is ∝ the member count, operator config). A
+ * blank presented token or an empty set fails closed BEFORE any match can be recorded (the empty-secret
+ * trap, CLAUDE.md §3). */
+function requireNodeTokens(c: Context, nodeTokens: readonly string[]): void {
   const header = c.req.header("Authorization") ?? "";
   const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   const a = Buffer.from(presented);
-  const b = Buffer.from(nodeToken);
-  if (presented.length === 0 || a.length !== b.length || !timingSafeEqual(a, b)) {
-    throw new AppError("sync.node_unauthorized", {});
+  let matched = false;
+  for (const token of nodeTokens) {
+    const b = Buffer.from(token);
+    matched = (presented.length !== 0 && a.length === b.length && timingSafeEqual(a, b)) || matched;
   }
+  if (!matched) throw new AppError("sync.node_unauthorized", {});
 }
 
 /**
@@ -98,13 +121,13 @@ function requireNodeToken(c: Context, nodeToken: string): void {
 export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
   app.get("/sync-api/hello", (c) =>
     run(c, log, async () => {
-      requireNodeToken(c, deps.nodeToken);
+      requireNodeTokens(c, deps.nodeTokens);
       return c.json({ nodeId: deps.nodeId, environment: deps.environment });
     }),
   );
   app.get("/sync-api/log", (c) =>
     run(c, log, async () => {
-      requireNodeToken(c, deps.nodeToken);
+      requireNodeTokens(c, deps.nodeTokens);
       const originId = c.req.query("originId");
       const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));
@@ -118,6 +141,34 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
         }),
       );
       return c.body(encodeBatch(rows), 200, { "content-type": "application/x-ndjson" });
+    }),
+  );
+  // A subscriber POSTs how far it has applied THIS node's log; the source records it into its own
+  // sync_cursor so retention can hold the log at the min across every subscriber (spec §3.1). The
+  // origin is stamped as deps.nodeId — a peer-supplied `originId` in the body is IGNORED, so a peer
+  // can never write a cursor for an arbitrary origin. Same machine-to-machine fail-safe posture as
+  // /sync-api/log: no 400 param-invalid convention — a blank/missing subscriberId is a 200 no-op,
+  // the lane clamps via laneParam, and the seq screens via afterSeq. The body is parsed defensively
+  // (a non-JSON body yields {}), so only the node token gates the write.
+  app.post("/sync-api/cursor", (c) =>
+    run(c, log, async () => {
+      requireNodeTokens(c, deps.nodeTokens);
+      const body = (await c.req.json().catch(() => ({}))) as {
+        subscriberId?: unknown;
+        lane?: unknown;
+        lastAppliedSeq?: unknown;
+      };
+      const subscriberId = typeof body.subscriberId === "string" ? body.subscriberId : "";
+      if (subscriberId.length === 0) return c.body(null, 200); // machine surface: no-op, never a 400
+      await recordSubscriberCursor(deps.db, {
+        subscriberId,
+        originId: deps.nodeId, // stamp OUR origin; never trust a peer-supplied one (spec §3.1)
+        lane: laneParam(typeof body.lane === "string" ? body.lane : undefined),
+        lastAppliedSeq: afterSeq(
+          typeof body.lastAppliedSeq === "string" ? body.lastAppliedSeq : undefined,
+        ),
+      });
+      return c.body(null, 200);
     }),
   );
 }

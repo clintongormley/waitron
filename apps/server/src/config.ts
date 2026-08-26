@@ -105,6 +105,10 @@ const DEFAULT_MIN_TICK_MS = 5_000;
  * against minTickMs: a fast tick not tighter than the ordered tick is a mis-tuning, not a correctness
  * failure. */
 const DEFAULT_SYNC_FAST_TICK_MS = 1000;
+/** The retention sweep's idle interval between prunes when WAITRON_SYNC_RETENTION_TICK_MS is unset
+ * (spec §3.2). A minute is a deliberately relaxed cadence: the prune is a bounded background
+ * housekeeping DELETE, not on any hot path, so it need not run tight. */
+const DEFAULT_SYNC_RETENTION_TICK_MS = 60_000;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
@@ -175,13 +179,49 @@ export interface SyncPeer {
   token: string;
 }
 export interface SyncTransportConfig {
-  nodeToken: string;
+  /** The accepted INBOUND node tokens — the set a peer's Bearer is validated against. From
+   * WAITRON_SYNC_NODE_TOKEN (comma-separated, ≥1 non-blank member). A set of one is the pre-rotation
+   * case; ≥2 is the overlap window that rolls the secret with no synchronized restart (spec §2). */
+  nodeTokens: string[];
   databaseUrl: string;
   peers: SyncPeer[];
   /** The fast lane's idle interval (ms) — the tighter tick the payments lane polls at, beside the
    * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
-   * the sync config because it is meaningless without sync enabled, like nodeToken/peers. */
+   * the sync config because it is meaningless without sync enabled, like nodeTokens/peers. */
   fastMinIdleMs: number;
+  /** The retention sweep's idle interval (ms) between prunes — from WAITRON_SYNC_RETENTION_TICK_MS,
+   * default 60000 (spec §3.2). Always present (defaulted), unlike retentionDatabaseUrl below, because
+   * the sweep needs a cadence whenever it does run. */
+  retentionTickMs: number;
+  /** OPTIONAL: the connection string for a `sync_retention` LOGIN member — the dedicated whole-log,
+   * cross-tenant role runRetentionSweep prunes `sync_log` and reports per-subscriber lag as
+   * (packages/sync/drizzle/0001_sync_retention.sql; NOT app_user/sync_tailer, which cannot DELETE it).
+   * Present ONLY when WAITRON_SYNC_RETENTION_DATABASE_URL is set; ABSENT (not present-but-undefined)
+   * leaves the scheduled sweep OFF — sync still runs, the log just grows unpruned, which boot makes
+   * loud via `sync.retention_unconfigured` (spec §3.2/§8: opt-in here, documented-required in prod). */
+  retentionDatabaseUrl?: string;
+  /** OPTIONAL: the lag threshold (in rows) past which the retention sweep emits the retention-variant
+   * `sync.stream_stalled` for a subscriber — the operator alarm that INFORMS a manual eviction (spec
+   * §3.2). From WAITRON_SYNC_LAG_ALARM_ROWS (a positive int). The alarm is OPT-IN, mirroring
+   * retentionDatabaseUrl above: present ONLY when the variable is set; ABSENT (not
+   * present-but-undefined) leaves the sweep prune-only — it still prunes every tick, it just never
+   * alarms. A non-positive value is refused (`server.config_invalid`) — a threshold of 0/negative
+   * rows is a misconfiguration, not "alarm on everything". Its default is a tuning target, not a
+   * settled constant (spec §8), so there is no baked-in default: unset means the alarm is off. */
+  lagAlarmRows?: number;
+}
+
+/** Parses a comma-separated accepted-token SET. `required` fails closed on unset/empty (a blank
+ * secret must never mean "no auth", CLAUDE.md §3); a blank MEMBER (a stray `a,,b`) is a hard
+ * config_invalid so an empty token can never enter the accepted set. */
+function tokenSet(env: Env, variable: string): string[] {
+  const tokens = required(env, variable)
+    .split(",")
+    .map((t) => t.trim());
+  if (tokens.some((t) => t.length === 0)) {
+    throw new AppError("server.config_invalid", { variable, reason: "blank_token_in_set" });
+  }
+  return tokens;
 }
 
 /**
@@ -222,11 +262,32 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     }
     return { nodeId: peer.nodeId, url: peer.url, token: peer.token };
   });
+  // Parsed once here so the conditional spread below reads the same value the validation throws on:
+  // undefined when unset/empty (alarm off), a positive int otherwise, throwing config_invalid for a
+  // non-positive one.
+  const lagAlarmRows = optionalPositiveInt(env, "WAITRON_SYNC_LAG_ALARM_ROWS");
   return {
-    nodeToken: required(env, "WAITRON_SYNC_NODE_TOKEN"),
+    nodeTokens: tokenSet(env, "WAITRON_SYNC_NODE_TOKEN"),
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
     peers,
     fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
+    retentionTickMs: positiveInt(
+      env,
+      "WAITRON_SYNC_RETENTION_TICK_MS",
+      DEFAULT_SYNC_RETENTION_TICK_MS,
+    ),
+    // The retention role is opt-in: an unset OR empty URL omits the field entirely (sweep off,
+    // boot warns loud) rather than a present-but-undefined key or a broken empty connection string
+    // — "an empty connection string is a valid connection string" (CLAUDE.md §3), so it must never
+    // reach `createPostgresDb` as `""`.
+    ...(isUnset(env.WAITRON_SYNC_RETENTION_DATABASE_URL)
+      ? {}
+      : { retentionDatabaseUrl: env.WAITRON_SYNC_RETENTION_DATABASE_URL }),
+    // The lag alarm is opt-in too: `optionalPositiveInt` returns undefined for an unset/empty value
+    // (field omitted → prune-only sweep) and THROWS `server.config_invalid` for a non-positive one, so
+    // a blank never silently means "alarm on everything" and a present-but-undefined key never leaks
+    // in (the same omit-when-unset shape as retentionDatabaseUrl above, CLAUDE.md §3).
+    ...(lagAlarmRows === undefined ? {} : { lagAlarmRows }),
   };
 }
 

@@ -423,6 +423,28 @@ jobs:
             exit 1
           fi
 
+      # The waitron-sync-evict operator CLI (dead-subscriber eviction, sync token-rotation+retention-ops)
+      # is a SECOND bin off this build. It is the ONLY recourse to release a genuinely-dead subscriber
+      # (eviction is explicit-never-automatic), so a bin entry pointing at an artifact the build never
+      # emitted ships the feature inert — exactly the class this job exists to catch, and it did ship
+      # that way once (the bin was declared before its esbuild step existed). With no args its contract
+      # is to print usage and exit 2 before touching any database — the cheapest DB-free failure.
+      - name: Smoke-test the sync-evict CLI bundle (no args)
+        run: |
+          set +e
+          output=$(node apps/server/dist/bin-sync-evict.js 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -ne 2 ]; then
+            echo "expected exit code 2 (usage) with no args, got $code" >&2
+            exit 1
+          fi
+          if ! grep -q "usage: waitron-sync-evict" <<< "$output"; then
+            echo "expected the usage message, got: $output" >&2
+            exit 1
+          fi
+
       # I11 (2026-07-27 pre-merge review): dist/server.js is ESM. A bare .js file's module system
       # is normally decided by Node walking up for the nearest package.json — today that walk finds
       # apps/server/package.json's own "type": "module" purely because dist/ lives two directories

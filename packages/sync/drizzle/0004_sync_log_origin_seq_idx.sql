@@ -1,0 +1,17 @@
+-- Hand-written custom migration (drizzle-kit models no indexes on sync_log — it is a raw-SQL table,
+-- not a Drizzle-modelled one, so drizzle-kit has nothing to diff and 0004_snapshot.json is a copy of
+-- 0003's) — the 0000/0001/0002/0003 idiom (0002_sync_cursor_lane.sql:1-6, 0003_sync_cursor_evict.sql).
+-- Runs LAST in migrations.manifest.json's `sync` set, after 0000..0003, so sync_log already exists.
+--
+-- WHY. sync_log carries only its `seq` GENERATED-IDENTITY PRIMARY KEY (0000_sync_outbox.sql:22) and
+-- no index on origin_id. runRetentionSweep now calls pruneSyncLog every tick (spec §3.2), whose
+-- per-origin range DELETE joins sync_log on `sl.origin_id = c.origin_id AND sl.seq <= c.min_seq`
+-- (packages/sync/src/retention.ts). Without an index on (origin_id, seq) that join seq-scans the
+-- WHOLE transport log each tick — worst exactly when a subscriber stalls and the log grows, which is
+-- when retention runs most. The composite (origin_id, seq) also serves lagFor's per-origin
+-- `max(seq)` and the `/sync-api/log` reader's `origin_id = ? AND seq > ?` page (readSyncLogSince).
+-- Column order origin_id-then-seq: origin_id is the equality key, seq the range — the leading equality
+-- column lets the planner seek to one origin's rows and range-scan seq within it. IF NOT EXISTS so a
+-- re-run is a no-op (the migrator is once-only, but the idiom stays idempotent). No RLS/policy: an
+-- index is not a grant.
+CREATE INDEX IF NOT EXISTS sync_log_origin_seq_idx ON sync_log (origin_id, seq);

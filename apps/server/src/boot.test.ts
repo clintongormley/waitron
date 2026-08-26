@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import { captureError, stampDeployment, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -18,7 +18,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { runSyncPull } from "@waitron/sync";
+import { runRetentionSweep, runSyncPull } from "@waitron/sync";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   MAX_UPLOAD_BYTES,
@@ -68,10 +68,28 @@ vi.mock("undici", async (importOriginal) => {
  * implementation, so every other test in this file (the live-worker sync test included) drives the
  * genuine loop unchanged — only the rejection test overrides it, with `mockReturnValueOnce`. Spreading
  * `...actual` keeps `encodeBatch`/`readSyncLogSince` (used by `sync-api.ts` in this same graph) real.
+ *
+ * `runRetentionSweep` is wrapped the same way, for the same reason: boot starts it directly (no
+ * injection seam), so the retention tests below observe the CALL (was it started, with what tickMs and
+ * shared signal) via this spy. It calls THROUGH to the real sweep, whose abort-aware loop settles when
+ * close() aborts `syncController`, so close()'s teardown is exercised for real.
  */
 vi.mock("@waitron/sync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/sync")>();
-  return { ...actual, runSyncPull: vi.fn(actual.runSyncPull) };
+  return {
+    ...actual,
+    runSyncPull: vi.fn(actual.runSyncPull),
+    runRetentionSweep: vi.fn(actual.runRetentionSweep),
+  };
+});
+
+// The two sync-worker spies accumulate calls across tests (one shared module mock), so clear them
+// before each so the call-count/args assertions below are order-independent — this file's own rule
+// (several tests were fixed for order-dependence). `mockClear` resets only `mock.calls`, keeping each
+// spy's `vi.fn(actual.*)` call-through implementation.
+beforeEach(() => {
+  vi.mocked(runSyncPull).mockClear();
+  vi.mocked(runRetentionSweep).mockClear();
 });
 
 /**
@@ -441,7 +459,7 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 
-  it("mounts the node-token sync API and starts the pull worker when WAITRON_SYNC_* is configured", async () => {
+  it("mounts the node-token sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {
     // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the pull
     // worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to reject in
     // this file) and the peer backs off — which is all this test needs from the worker: it exercises
@@ -450,6 +468,13 @@ describe("startServer, against a real container as the deployment role", () => {
     // fail-closed middleware is live. The sync DB URL reuses the deployment role: /hello needs no DB
     // and the worker never reaches a sync_log read (it fails at the peer handshake first). close() must
     // tear the worker + pool down alongside the main loop.
+    //
+    // WAITRON_SYNC_RETENTION_DATABASE_URL is also set (reusing the deployment role), so this same boot
+    // schedules the retention sweep (spec §3.2 — what finally wires pruneSyncLog). runRetentionSweep is
+    // mocked (call-through) in this file, so the assertions below observe the CALL — started once, with
+    // the configured tickMs and the SAME AbortSignal the pull workers share — and close() tears its
+    // pool down too. A large retention tick keeps the real call-through sweep to a single prune attempt
+    // before close() aborts it.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -464,11 +489,20 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token,rotated-token",
       WAITRON_SYNC_DATABASE_URL: databaseUrl,
       // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
       // are visibly different in the assertions below (spec §4d).
       WAITRON_SYNC_FAST_TICK_MS: "250",
+      // Enable the retention sweep, reusing the deployment role. A large, distinctive tick so the
+      // call-through sweep runs at most one prune before close() aborts it, and so the assertion below
+      // cannot pass by coincidence with any other tick value in this env.
+      WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
+      WAITRON_SYNC_RETENTION_TICK_MS: "33000",
+      // The lag alarm is opt-in (spec §3.2). A distinctive value so the pass-through assertion below
+      // cannot pass by coincidence with any other number in this env — proves config → boot wires the
+      // threshold into runRetentionSweep, which is what makes sync.stream_stalled reachable in prod.
+      WAITRON_SYNC_LAG_ALARM_ROWS: "7",
     });
     try {
       const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
@@ -479,6 +513,12 @@ describe("startServer, against a real container as the deployment role", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "production",
       });
+      // A SECOND accepted token (the rotation overlap window) authenticates too — the token SET rolled
+      // through boot end-to-end, so the secret can be rotated with no synchronized restart (spec §2).
+      const rotated = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
+        headers: { Authorization: "Bearer rotated-token" },
+      });
+      expect(rotated.status).toBe(200);
       // A tokenless request is refused — the fail-closed middleware, not just the route, is live.
       const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
       expect(unauth.status).toBe(401);
@@ -495,6 +535,18 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(ordered!.minIdleMs).toBe(5_000); // config.minTickMs default
       expect(fast!.minIdleMs).toBe(250); // WAITRON_SYNC_FAST_TICK_MS below
       expect(fast!.maxBackoffMs).toBe(ordered!.maxBackoffMs); // both share config.maxTickMs
+
+      // The retention sweep was scheduled exactly once (spec §3.2) — this boot is what finally wires
+      // pruneSyncLog into the running host. Its tickMs is WAITRON_SYNC_RETENTION_TICK_MS, and it shares
+      // the SAME AbortSignal the pull workers carry, so close()'s single syncController.abort() below
+      // stops the sweep too.
+      expect(runRetentionSweep).toHaveBeenCalledTimes(1);
+      const sweep = vi.mocked(runRetentionSweep).mock.calls[0]![0];
+      expect(sweep.tickMs).toBe(33_000);
+      expect(sweep.signal).toBe(ordered!.signal); // one controller aborts pull workers AND the sweep
+      // The configured lag threshold reached runRetentionSweep — so its sync.stream_stalled branch is
+      // now live in prod when WAITRON_SYNC_LAG_ALARM_ROWS is set (spec §3.2, the wiring B8 omitted).
+      expect(sweep.lagAlarmRows).toBe(7);
     } finally {
       await server.close();
     }
@@ -538,9 +590,65 @@ describe("startServer, against a real container as the deployment role", () => {
     });
     expect(hello.status).toBe(200);
 
+    // The UNSET-retention case (spec §3.2/§8): sync is on but WAITRON_SYNC_RETENTION_DATABASE_URL is
+    // not set here, so the sweep is NOT scheduled — an existing sync host without the retention role
+    // boots unaffected (it logs sync.retention_unconfigured instead). The beforeEach cleared this spy,
+    // so a call from the retention-configured test above cannot leak into this assertion.
+    expect(runRetentionSweep).not.toHaveBeenCalled();
+
     // close() RESOLVES despite the worker rejection (the swallow), and the guaranteed teardown ran: the
     // listener is gone — which it could only be if close() got PAST the swallowed worker await into the
     // try (server.close), whose finally then closed both the app pool and the sync pool.
+    await expect(server.close()).resolves.toBeUndefined();
+    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
+  }, 60_000);
+
+  it("close() swallows a REJECTING retention sweep worker and still tears down the listener and pools", async () => {
+    // The retention worker's own settle-by-rejection path, mirroring the pull-worker test above.
+    // runRetentionSweep swallows its per-tick faults so it never rejects in production, but boot
+    // attaches a `.catch` logging sync.worker_rejected for the pre-close() window, and close() must
+    // still tear down if it settles by rejection. Force exactly that: a pre-rejected worker returned
+    // once from the mocked runRetentionSweep, carrying its OWN benign `.catch` so it is never an
+    // unhandled rejection before boot's catch attaches. close() RESOLVES and the listener is gone.
+    const port = await freePort();
+    const workerBoom = new Error("retention sweep worker rejected");
+    const rejectedWorker = Promise.reject(workerBoom);
+    rejectedWorker.catch(() => {}); // handled here, so never an unhandled rejection pre-close()
+    vi.mocked(runRetentionSweep).mockReturnValueOnce(rejectedWorker);
+
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_SYNC_PEERS: JSON.stringify([
+        {
+          nodeId: "88888888-8888-4888-8888-888888888888",
+          url: "http://127.0.0.1:1/",
+          token: "peer-token",
+        },
+      ]),
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+      // Retention configured, so the sweep is started (and here rejected) and its pool is torn down.
+      WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
+    });
+
+    // The listener is up before close(): the sync source mounted and bound.
+    const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
+      headers: { Authorization: "Bearer boot-node-token" },
+    });
+    expect(hello.status).toBe(200);
+
+    // The alarm is opt-in: WAITRON_SYNC_LAG_ALARM_ROWS is unset here, so boot passes lagAlarmRows
+    // undefined and the sweep is prune-only (its sync.stream_stalled branch never runs). The
+    // complementary direction to the "set → 7" assertion in the retention-scheduled test above.
+    expect(vi.mocked(runRetentionSweep).mock.calls[0]![0].lagAlarmRows).toBeUndefined();
+
+    // close() RESOLVES despite the retention worker rejection (the swallow), and the guaranteed
+    // teardown ran: the listener is gone, which it could only be if close() got PAST the swallowed
+    // retention-worker await into the try, whose finally then closed the app, sync, and retention pools.
     await expect(server.close()).resolves.toBeUndefined();
     await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
