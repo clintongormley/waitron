@@ -193,9 +193,15 @@ question (below).
   must flow to a secondary read-only the way catalogue does; the *session* must **not** replicate
   (write-amplification + single-writer conflict). Re-establishment: PIN-re-prompt v1 → portable
   signed token later.
-- The **on-device agent** (own spec/spike), the **appliance image + AP-mode onboarding**, and the
-  **reroute** itself (the till reaches any live server — selling is active-active — keeping a stable
-  local origin in front).
+- The **on-device agent** (own spec/spike); the **appliance image + AP-mode onboarding** — now
+  designed, [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md): the
+  browser-based first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free
+  self-signed / paid real-cert tier split, a demo/live fiscal fork orthogonal to it, plus
+  backup/break-glass and an optional boot passphrase; **slices 1–4 are in-repo/buildable-now**
+  (serve the built PWAs + setup-mode boot, cert minting + persisted secrets + the wizard, mDNS +
+  trust UX, backup/status/break-glass), 5–7 are firmware/OS-image/paid-tier; and the **reroute**
+  itself (the till reaches any live server — selling is active-active — keeping a stable local origin
+  in front).
 
 ### Recipes → stock → procurement (next #6)
 
