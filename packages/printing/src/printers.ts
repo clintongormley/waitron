@@ -186,11 +186,15 @@ export async function updatePrinter(
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
-  // The SET is a shallow copy of `patch`: its only caller (print-api.ts's PATCH handler) builds `patch`
-  // by guarding every field with `if (x !== undefined)`, so `patch` carries ONLY the keys the request
-  // named — no undefined-valued key to filter out. An absent field is thus untouched and an explicit
-  // `null` is written. An empty patch is a no-op edit (0 changes) that still 404s a missing id.
-  const set: Record<string, unknown> = { ...patch };
+  // The SET is `patch` with every undefined-valued key dropped, so it carries ONLY the fields the edit
+  // names — an absent field is left untouched, an explicit `null` is written to clear a nullable one.
+  // Filtering here (rather than trusting the caller to omit undefined keys) keeps the empty-patch
+  // short-circuit below correct for ANY caller: a future `{ name: maybeUndef }` would otherwise spread
+  // `name: undefined` into `.set(...)` and defeat it → a drizzle "No values to set" 500 instead of the
+  // clean no-op/404.
+  const set: Record<string, unknown> = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined),
+  );
 
   // An empty patch (no field named) is a legitimate no-op — but drizzle's `.set({})` THROWS ("No
   // values to set"), so short-circuit to an existence check: a missing id is still a clean 404, a

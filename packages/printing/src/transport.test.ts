@@ -82,6 +82,30 @@ describe("NetworkTcpTransport", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects (rather than hanging) when the printer accepts the connection but never drains", async () => {
+    // The isolation receipt (runtime.ts / spec §3c): a printer that accepts the TCP connection but
+    // never reads a byte would otherwise block the agent's serial push for the OS default (~1-2 min).
+    // The server here never attaches a `data` listener, so its connection socket stays PAUSED, the
+    // kernel receive buffer fills, and TCP flow-control stalls the client's write. A payload larger
+    // than any socket buffer guarantees the flush cannot complete → the inactivity timeout fires.
+    const conns: net.Socket[] = [];
+    const server = net.createServer((socket) => conns.push(socket)); // never read → stays paused
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanups.push(async () => {
+      for (const s of conns) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no port");
+    const bigPayload = new Uint8Array(32 * 1024 * 1024); // exceeds any socket buffer → flush stalls
+    await expect(
+      new NetworkTcpTransport({ timeoutMs: 150 }).send(
+        target({ transport: "network_tcp", host: "127.0.0.1", port: address.port }),
+        bigPayload,
+      ),
+    ).rejects.toThrow(/timed out/);
+  });
+
   it("rejects a network_tcp printer with no host rather than dialling nowhere", async () => {
     await expect(
       new NetworkTcpTransport().send(
@@ -97,6 +121,9 @@ describe("NetworkTcpTransport", () => {
     let dialledPort: number | undefined;
     const fake = new EventEmitter() as unknown as net.Socket;
     (fake as unknown as { end: (data: unknown, cb: () => void) => void }).end = (_data, cb) => cb();
+    // The transport now arms an inactivity timeout on the socket; the fake needs a no-op `setTimeout`
+    // (a plain EventEmitter has none) so the clean connect+flush path never touches a real timer.
+    (fake as unknown as { setTimeout: (ms: number) => void }).setTimeout = () => {};
     const spy = vi.spyOn(net, "createConnection").mockImplementation(((
       opts: net.NetConnectOpts,
     ) => {

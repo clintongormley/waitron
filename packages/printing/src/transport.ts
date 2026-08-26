@@ -31,9 +31,32 @@ export interface Transport {
   send(printer: PrinterTarget, bytes: Uint8Array): Promise<void>;
 }
 
+/** The default per-send inactivity deadline (ms) for {@link NetworkTcpTransport}. Covers BOTH the
+ * connect phase and the write flush: a receipt printer on a LAN connects and drains a small ESC/POS
+ * payload in well under a second, so a few seconds is generous headroom while still bounding a hung
+ * send. It exists because WITHOUT a timeout a black-hole host (powered off / SYN dropped) or a printer
+ * that accepts the connection but never drains would hang for the OS default TCP timeout (~1-2 min),
+ * stalling every later job in the agent's serial push (runtime.ts) — the isolation gap this closes. */
+export const DEFAULT_TCP_TIMEOUT_MS = 5000;
+
+/** Options for {@link NetworkTcpTransport} — just the send deadline for now, overridable so a suite
+ * (or a slow-link deployment) can tighten or relax it. */
+export interface NetworkTcpOptions {
+  /** Per-send inactivity deadline in ms (default {@link DEFAULT_TCP_TIMEOUT_MS}). */
+  timeoutMs?: number;
+}
+
 /** The ESC/POS-over-TCP:9100 adapter (design §3c / the deli-hardware `ReceiptPrinter`). Opens a
- * socket to the printer's `host:port`, writes the bytes, closes. */
+ * socket to the printer's `host:port`, writes the bytes, closes. A per-send inactivity timeout
+ * (`timeoutMs`) bounds BOTH connect and flush, so a dead or non-draining printer rejects promptly
+ * rather than stalling the agent's serial push behind the OS TCP timeout. */
 export class NetworkTcpTransport implements Transport {
+  private readonly timeoutMs: number;
+
+  constructor(options: NetworkTcpOptions = {}) {
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TCP_TIMEOUT_MS;
+  }
+
   send(printer: PrinterTarget, bytes: Uint8Array): Promise<void> {
     if (printer.host === null) {
       return Promise.reject(new Error(`network_tcp printer ${printer.id} has no host`));
@@ -42,12 +65,26 @@ export class NetworkTcpTransport implements Transport {
     const port = printer.port ?? 9100; // the schema default, applied here too for a target read raw
     return new Promise<void>((resolve, reject) => {
       const socket = net.createConnection({ host, port });
-      // A single settle: an error before OR after connect rejects; a clean flush+close resolves.
+      // Inactivity deadline over the whole send: while the socket is CONNECTING (a black-hole host) or
+      // flow-controlled mid-flush (a printer that accepts but never drains), no bytes move and libuv
+      // fires `'timeout'` after `timeoutMs`. Node does NOT sever the socket on timeout — we destroy it
+      // ourselves and reject, so the promise settles instead of hanging for the OS TCP timeout.
+      socket.setTimeout(this.timeoutMs);
+      // A single settle: an error before OR after connect rejects; a timeout rejects; a clean
+      // flush+close resolves.
       socket.once("error", reject);
+      socket.once("timeout", () => {
+        socket.destroy();
+        reject(new Error(`network_tcp printer ${printer.id} timed out after ${this.timeoutMs}ms`));
+      });
       socket.once("connect", () => {
         // `end(data, cb)` writes the bytes, half-closes, and calls back once the stream has finished
-        // flushing — the point at which the printer has the payload.
-        socket.end(Buffer.from(bytes), () => resolve());
+        // flushing — the point at which the printer has the payload. Clear the inactivity timer then,
+        // so the lingering read-side half-close is not destroyed by a late `'timeout'`.
+        socket.end(Buffer.from(bytes), () => {
+          socket.setTimeout(0);
+          resolve();
+        });
       });
     });
   }

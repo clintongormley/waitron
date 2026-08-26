@@ -87,6 +87,15 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * jobs (a cross-agent pull claims nothing). A `failed` job under the attempt cap is re-claimed here
  * (the retry); at the cap it is filtered out (the bound). `for update of j` locks only the
  * `print_jobs` rows, not `printers`.
+ *
+ * ORPHAN-ON-CRASH GAP (not auto-recovered in this slice): this predicate re-picks only `queued` and
+ * under-cap `failed` rows — never a row already `printing`. A job an agent CLAIMED (`queued`→`printing`,
+ * committed by the claim request) but never reported — because the agent crashed between the claim and
+ * `POST /result` — is therefore stranded in `printing` forever, re-claimed by nothing. Recovering it
+ * needs a stuck-`printing` reaper (a `printing` row older than N minutes → `failed`/`queued`), which
+ * needs a new `claimed_at`/lease column, so it is deliberately OUT of this slice — tracked in
+ * docs/backlog.md and gated as a HARD KDS-4 dependency: once KDS routes fires-to-printers, a stranded
+ * job is a lost kitchen ticket, so the reaper must land with (or before) that consumer.
  */
 export async function claimPrintJobs(
   tx: Transaction,
@@ -187,9 +196,15 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
 
   // 2/3. PUSH each job, then REPORT its outcome. Per-job try/catch ISOLATES a down/erroring printer:
   //      its failure marks only that job `failed` and the loop moves on, so one dead printer never
-  //      blocks another printer's jobs in the same batch (design §3c). Both the claim above and each
-  //      report below run in the SAME transaction here (local mode); the server path splits them across
-  //      two HTTP requests, calling the identical `claimPrintJobs`/`reportPrintJob` pieces.
+  //      blocks another printer's jobs in the same batch (design §3c). The push is SERIAL, so that
+  //      isolation depends on each `transport.send` being BOUNDED: a black-hole printer (accepts the
+  //      TCP connection but never drains, or a dropped SYN) would otherwise hang this loop for the OS
+  //      TCP timeout (~1-2 min) and stall every later job behind it — which is why `NetworkTcpTransport`
+  //      arms a per-send timeout (transport.ts's `DEFAULT_TCP_TIMEOUT_MS`), turning a stalled printer
+  //      into a prompt `failed` bounded by that deadline rather than an unbounded stall. Both the claim
+  //      above and each report below run in the SAME transaction here (local mode); the server path
+  //      splits them across two HTTP requests, calling the identical `claimPrintJobs`/`reportPrintJob`
+  //      pieces.
   let delivered = 0;
   let failed = 0;
   for (const job of claimed) {

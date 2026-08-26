@@ -29,8 +29,11 @@ export async function enqueuePrintJob(
   // ABORT the caller's enclosing transaction (a fire/sale may enqueue mid-transaction), whereas this
   // pre-check leaves the tx clean on the not_found path. The explicit `tenant_id` predicate is
   // belt-and-braces beside RLS, the agent.ts shape; all values bind as `$n`, never concatenated.
-  // `printerId` is a trusted uuid from central config (not client input), so — unlike the agent
-  // bearer's selector in agent.ts — its shape is deliberately not screened here.
+  // `printerId` is not shape-screened here, and needs no screen of its own: its sole caller — the
+  // test-print route (apps/server/src/print-api.ts's `/test-print` handler) — validates the path
+  // param's uuid shape upstream with `requireUuidParam` before calling in, so a malformed id never
+  // reaches this SELECT, and a well-formed-but-unknown id is resolved by the pre-check below to
+  // `printer.not_found`.
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)

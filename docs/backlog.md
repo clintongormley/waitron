@@ -442,8 +442,6 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
 
-- **`NetworkTcpTransport` has no socket timeout** — a printer that accepts the TCP connection but never
-  drains blocks that agent's push until the OS default. Bound it with a per-send connect/write timeout.
 - **A crashed agent strands a claimed job in `printing` forever** — the pull flips `queued`→`printing`
   under `for update skip locked`, but nothing re-queues a row whose agent died mid-push. Needs a reaper
   (a `claimed_at`/lease column + a sweep design), so deliberately out of the build slice.
