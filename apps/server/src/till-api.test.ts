@@ -614,6 +614,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // authored no layout, so `layout`/`receipt` are the built-in defaults (Task 8).
     expect(body).toEqual({
       locale: "es-ES",
+      // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
+      // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
+      invoiceLocale: "es-ES",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
@@ -635,10 +638,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
   });
 
-  it("GET /api/till's locale is the venue default (deps.venueLocale), not the fiscal cfg.locale", async () => {
-    // Drive `cfg.locale` (fiscal) and `venueLocale` (display) APART to prove the route reads the venue
-    // default: the wire `locale` must follow `venueLocale`, never `cfg.locale`. (In production both are
-    // `es-ES` for an ES venue, so a default-vs-default assertion could not tell a swapped source.)
+  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {
+    // Drive `cfg.locale` (fiscal/receipt) and `venueLocale` (display) APART to prove the route reads
+    // each from its own source: the wire `locale` (UI) must follow `venueLocale`, and `invoiceLocale`
+    // (the printed legal receipt's language) must follow the fiscal `cfg.locale` — NEVER the venue
+    // default. This is decision 2 of the per-user-language spec: a supported fiscal `ca-ES` is dropped
+    // by the UI venue-default derivation to `es-ES`, so binding the receipt to `venueLocale` would flip
+    // a Catalan receipt to Spanish. (In production both are `es-ES` for an ES venue, so a
+    // default-vs-default assertion could not tell a swapped source.)
     const app = new Hono();
     mountTillApi(
       app,
@@ -648,7 +655,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
-    expect((await res.json()) as { locale: string }).toMatchObject({ locale: "en-GB" });
+    expect((await res.json()) as { locale: string; invoiceLocale: string }).toMatchObject({
+      locale: "en-GB",
+      invoiceLocale: "ca-ES",
+    });
   });
 
   it("GET /api/locales returns the supported list + the venue default, no session required", async () => {

@@ -42,6 +42,14 @@ export type FetchLike = typeof fetch;
  */
 export interface TillInfo {
   locale: string;
+  /**
+   * The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in. Sourced
+   * server-side from the fiscal `cfg.locale`, DELIBERATELY DISTINCT from the UI-driving {@link locale}
+   * above (the venue default derivation drops UI-unsupported codes, which must never reach the
+   * receipt — per-user-language spec, decision 2). The app threads it to `till-ticket-view.invoiceLocale`
+   * SEPARATELY from `setLocale(locale)`. A LOCAL mirror of the server's `GET /api/till` field.
+   */
+  invoiceLocale: string;
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;

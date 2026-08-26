@@ -529,6 +529,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // NOT the fiscal `cfg.locale`. The till app defaults its language to this until a per-user
         // preference is loaded; `GET /api/locales` returns the same value as `venueDefault`.
         locale: deps.venueLocale,
+        // The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in.
+        // Sourced from the fiscal `cfg.locale` (the pre-per-user-locale `locale` value), DELIBERATELY
+        // kept SEPARATE from the UI `locale` above: the venue-default UI derivation drops
+        // UI-unsupported codes (a `ca-ES` fiscal locale would surface as `es-ES` there), which must
+        // never reach the receipt. Decision 2 of the per-user-language spec: the receipt is the
+        // venue's language and is not an input to the UI derivation. The till threads THIS to
+        // `till-ticket-view.invoiceLocale`, and the UI `locale` to `setLocale` — two different things.
+        invoiceLocale: deps.cfg.locale,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,

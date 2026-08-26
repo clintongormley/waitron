@@ -109,6 +109,10 @@ const saleResult: TillSaleResult = {
 
 const till = {
   locale: "es-ES",
+  // The RECEIPT (fiscal) locale — a SEPARATE server field from the UI `locale` above (sourced from
+  // `cfg.locale` server-side). Same value here for the ES-venue default, but distinct so a test can
+  // drive them apart to prove the receipt does not follow the operator UI (decision 2).
+  invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
@@ -569,12 +573,13 @@ describe("till-app", () => {
     expect(counter(el)!.heldOrders).toEqual([]);
   });
 
-  it("threads the invoice locale from getTill through to the ticket", async () => {
-    // getTill's locale drives the RECEIPT locale (till-ticket-view.invoiceLocale), threaded from the
-    // server till config — separately from the operator-UI setLocale. Use a locale that differs from
-    // the es-ES default so the wiring is observable.
+  it("threads the RECEIPT invoiceLocale from getTill to the ticket, DECOUPLED from the UI locale", async () => {
+    // The ticket's receipt locale (till-ticket-view.invoiceLocale) is threaded from getTill's OWN
+    // `invoiceLocale` field (the fiscal cfg.locale) — NOT the UI-driving `locale`. Drive the two APART
+    // (UI en-GB, receipt ca-ES) to prove the receipt follows `invoiceLocale`, never the operator UI
+    // (per-user-language spec, decision 2 — a Catalan receipt must not be flipped to the venue default).
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en" }),
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", invoiceLocale: "ca-ES" }),
     });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
@@ -582,7 +587,9 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(ticket(el)!.invoiceLocale).toBe("en");
+    // The receipt takes the fiscal `invoiceLocale`, distinct from the operator UI (en-GB) — proving
+    // the two are read from separate fields, not aliased.
+    expect(ticket(el)!.invoiceLocale).toBe("ca-ES");
   });
 
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {

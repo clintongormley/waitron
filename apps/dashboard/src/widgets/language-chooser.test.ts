@@ -121,4 +121,45 @@ describe("dashboard-language-chooser", () => {
       el.shadowRoot!.querySelector('[data-test="lang-en-GB"]')!.getAttribute("aria-checked"),
     ).toBe("true");
   });
+
+  it("a rejected loadLocales does NOT escape as an unhandled rejection and leaves the menu closed", async () => {
+    // Opening fetches the list; if that fetch rejects (the server is unreachable when the operator taps
+    // the chooser) the widget must degrade gracefully. The click handler fires `void #toggle()`, so an
+    // un-caught rejection would escape as an UNHANDLED promise rejection (this repo requires pristine
+    // test output). Proven by deletion: strip `#toggle`'s try/catch and `rejections` is non-empty here.
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault(); // mark handled so it doesn't pollute sibling tests
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const loadLocales = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountWidget<LanguageChooser>("dashboard-language-chooser", {
+        loadLocales,
+      });
+      const trigger = el.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+
+      trigger.click();
+      await settle(el);
+      // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
+      await settle(el);
+
+      // Sane state: the fetch was attempted, the menu did NOT open, and the trigger stays usable.
+      expect(loadLocales).toHaveBeenCalledTimes(1);
+      expect(el.shadowRoot!.querySelector('[role="menu"]')).toBeNull();
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      // The rejection was handled inside #toggle, not left unhandled.
+      expect(rejections).toEqual([]);
+
+      // The list is left unset, so a LATER open retries — the mock now resolves and the menu populates.
+      loadLocales.mockResolvedValue([{ code: "en-GB", label: "English" }]);
+      trigger.click();
+      await settle(el);
+      expect(loadLocales).toHaveBeenCalledTimes(2);
+      expect(el.shadowRoot!.querySelector('[role="menu"]')).not.toBeNull();
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
 });

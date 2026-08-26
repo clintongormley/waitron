@@ -97,9 +97,20 @@ export class LanguageChooser extends LitElement {
     new LocaleChangeController(this);
   }
 
-  /** Toggle the menu, fetching the list the first time it opens (and never again). */
+  /** Toggle the menu, fetching the list the first time it opens (and never again). A failed fetch is
+   * HANDLED, never left to escape as an unhandled rejection (the click handler fires `void #toggle()`):
+   * the list stays unset and the menu stays CLOSED, so the trigger remains usable and a later open
+   * retries. A rejection therefore fails to populate the menu without throwing. */
   async #toggle(): Promise<void> {
-    if (!this.open && this.locales === undefined) this.locales = await this.loadLocales();
+    if (!this.open && this.locales === undefined) {
+      try {
+        this.locales = await this.loadLocales();
+      } catch {
+        // Degrade gracefully: leave `locales` unset (a later open re-fetches) and `open` false — the
+        // menu simply does not appear rather than crashing the surface with an unhandled rejection.
+        return;
+      }
+    }
     this.open = !this.open;
   }
 

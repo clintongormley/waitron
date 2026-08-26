@@ -341,9 +341,11 @@ export class TillApp extends LitElement {
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
   /**
-   * The receipt (invoice) locale for the ticket, from `GET /api/till` — the language the legal
-   * receipt renders in. Threaded to `till-ticket-view` SEPARATELY from the operator-UI `setLocale`,
-   * even though both read the same server `locale` (see `#boot`). Defaults to the deli's es-ES.
+   * The receipt (invoice) locale for the ticket, from `GET /api/till`'s own `invoiceLocale` field
+   * (the fiscal `cfg.locale`) — the language the legal receipt renders in. Threaded to
+   * `till-ticket-view` SEPARATELY from the operator-UI `setLocale`, which reads the DIFFERENT
+   * `locale` (venue-default) field: the two are decoupled so a UI-unsupported fiscal locale never
+   * flips the printed ticket's language (see `#boot`). Defaults to the deli's es-ES.
    */
   @state() private invoiceLocale = "es-ES";
   /**
@@ -418,10 +420,11 @@ export class TillApp extends LitElement {
   /**
    * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
    * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
-   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` and `invoiceLocale` both
-   * take the SAME server `locale`, but they drive different things and are threaded separately — the
-   * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
-   * `till-ticket-view`'s INVOICE LOCALE note).
+   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` takes the UI-derived
+   * `till.locale` (the venue default), while `invoiceLocale` takes the SEPARATE `till.invoiceLocale`
+   * (the fiscal `cfg.locale`): they drive different things, come from different server fields, and
+   * are threaded separately — the receipt uses its `invoiceLocale` PROP and must never follow the
+   * operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
    *
    * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
    * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
@@ -438,11 +441,15 @@ export class TillApp extends LitElement {
       if (!this.isConnected) return;
       setLocale(till.locale);
       // Remember the venue's derived default (Task 4): the fallback the app switches back to when no
-      // operator preference applies — on login (resolveActiveLocale) and on logout. Distinct from the
-      // receipt's `invoiceLocale` below, which happens to read the same server field but drives the
-      // legal ticket, not the operator UI.
+      // operator preference applies — on login (resolveActiveLocale) and on logout. This is the
+      // UI-derived venue default; the receipt's `invoiceLocale` below reads a DIFFERENT server field.
       this.#venueLocale = till.locale;
-      this.invoiceLocale = till.locale;
+      // The RECEIPT (fiscal document) locale — a SEPARATE server field (`invoiceLocale`, sourced from
+      // the fiscal `cfg.locale`), NOT the UI `till.locale`. The two are decoupled on purpose: the
+      // venue-default UI derivation drops UI-unsupported codes (so a `ca-ES` fiscal locale would show
+      // as `es-ES` in `till.locale`), which must never flip the printed legal ticket's language
+      // (per-user-language spec, decision 2). Threaded to `till-ticket-view.invoiceLocale`.
+      this.invoiceLocale = till.invoiceLocale;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
       this.bumpMode = till.bumpMode;
