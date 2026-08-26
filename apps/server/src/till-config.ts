@@ -7,7 +7,7 @@ import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitr
 import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { asAppUser, locations, orderFlow, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { isUnset } from "./config.js";
+import { isUnset } from "./env-value.js";
 
 /**
  * The per-venue pay-timing / service mode (design §3), the union of the `order_flow` enum's values —
@@ -194,7 +194,7 @@ const TILL_ID_VARS = [
  * absent-or-empty `isUnset` rule `config.ts` applies everywhere (a `VAR=` line counts as unset):
  *
  *  - NONE of the five set → `undefined`. Boot branches on `config.till === undefined` to run the
- *    setup surface instead of the trading surface (a later slice-1b task).
+ *    setup surface instead of the trading surface.
  *  - ALL five set → the loaded identity, delegated verbatim to `loadTillConfig` (which `required`s and
  *    brands each id, throwing `server.till_config_missing` / `server.till_config_invalid` as before —
  *    a set of five that are present-but-malformed still fails there, not here).

@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
+import { isUnset } from "./env-value.js";
 import "./errors.js";
 
 export type DeploymentEnvironment = "production" | "preproduction";
@@ -74,7 +75,8 @@ export interface ServerConfig {
    * absent and this is `undefined` — SETUP MODE. `tryLoadTillConfig` returns it undefined when NONE
    * of the five are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
    * half-configured server is a bug, never a setup box). Boot branches on `config.till === undefined`
-   * (a later slice-1b task); until then boot narrows it once before its trading-only consumers. */
+   * to enter setup mode, and otherwise narrows it once (an early return) before its trading-only
+   * consumers. */
   till?: Omit<TillConfig, "orderFlow">;
   /** The WebAuthn Relying Party ID the dashboard's passkey ceremonies are bound to — the registrable
    * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
@@ -156,25 +158,10 @@ const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
 type Env = Record<string, string | undefined>;
 
-/**
- * An env var is "unset" if it is absent OR the empty string — an operator's `VAR=` in an env file
- * (as opposed to omitting the line entirely) must fall back to the same default as no line at
- * all, not be rejected as an invalid value for whatever type that variable holds. Every fallback
- * and default below goes through this, so the rule lives in exactly one place.
- *
- * `required` uses it too, for the same rule read the other way round: a variable with no usable
- * value is missing, and `VAR=` must be reported as missing rather than accepted as the empty
- * string. Leaving that one site hand-inlined would have made this the second definition of "unset"
- * in the file rather than the only one.
- *
- * Exported so `till-config.ts`'s `tryLoadTillConfig` gates the five `WAITRON_TILL_*_ID` on the SAME
- * absent-or-empty rule — a `VAR=` line counts as unset for "which of the five are present?" exactly
- * as it does everywhere else here, rather than a second, subtly-different definition of "unset"
- * living in that file.
- */
-export function isUnset(raw: string | undefined): raw is undefined | "" {
-  return raw === undefined || raw === "";
-}
+// `isUnset` (absent OR empty string is "unset") lives in `./env-value.js` so `config.ts` and
+// `till-config.ts` share the ONE definition without an import cycle — see the note atop that module.
+// `required` below reads the same rule the other way round: a variable with no usable value is
+// missing, so `VAR=` is reported as missing rather than accepted as the empty string.
 
 function required(env: Env, variable: string): string {
   const value = env[variable];
