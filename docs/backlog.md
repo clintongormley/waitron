@@ -401,12 +401,17 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
-- **Server-wide safe-JSON-body helper.** `(await c.req.json()) ?? {}` degrades an empty/malformed
-  body to an opaque 500 (the `?? {}` only ever caught a literal JSON `null`), across
-  `recipe-api`/`catalogue-api`/`me-api`/`workforce-api`/`management-api` (device-api's three routes
-  were fixed defensively on #134). A shared `readJsonBody` that `.catch(() => ({}))`s the throw would
-  screen the whole surface to a clean 400. Same theme in **both `run` copies** (till-api +
-  management-api): an unparseable body → `server.internal` 500; decide 400 across both.
+- **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
+  `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
+  ten route files (recipe/catalogue/me/workforce/management/schedule/purchasing/device/print/till-locale)
+  to it, so those surfaces now screen an empty/malformed body to the route's own 4xx — the helper
+  coerces only a parse `SyntaxError` and a literal `null`, rethrowing other faults. **Left:** till-api's
+  ~19 **bare** `await c.req.json<T>()` sites (no `?? {}`), on the sale/pay critical path — each needs
+  per-route validation tracing before adopting the helper. The till **PIN-login** (`POST /api/session`)
+  is the twin of the management login #145 hardened (a `null`/malformed body → destructure TypeError /
+  parse `SyntaxError` → opaque 500 instead of a clean credential 401). `sync-api`
+  (`.catch(() => ({}))` without `?? {}`) and `setup-api` (`.catch(() => null)`) use different-contract
+  defensive forms and are correctly left as-is.
 - **Encrypt `totp_secret` at rest** (SP5). Stored plaintext today and `app_user` holds SELECT on
   `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it
   yet). The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the
