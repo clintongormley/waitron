@@ -1,11 +1,11 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { selectStyles } from "../select-styles.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { LocationDraft, ProvisionBody } from "../api/client.js";
 
@@ -27,7 +27,7 @@ import type { LocationDraft, ProvisionBody } from "../api/client.js";
  *
  * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping Back then forward
  * is non-destructive on all fifteen fields. Following `apps/setup/src/screens/admin-screen.ts` for the
- * field/`wt-change`/banner idiom, and `apps/dashboard`'s native-`<select>` (`select-styles.ts`) idiom
+ * field/`wt-change`/banner idiom, and `@waitron/ui`'s shared native-`<select>` (`selectStyles`) idiom
  * for the two dropdowns (there is no `wt-select` primitive).
  */
 
@@ -290,20 +290,16 @@ export class SetupVenueScreen extends LitElement {
         rectificativeSeriesCode: this.values.rectificativeSeriesCode,
       },
     };
-    this.dispatchEvent(
-      new CustomEvent("setup-patch", { detail: { patch }, bubbles: true, composed: true }),
-    );
+    dispatchSetupPatch(this, patch);
 
     // A screen-agnostic advance: the shell owns the venue→cert/review decision (it holds the merged
     // draft, so it — not this screen — knows `mode` and the location's fiscal territory). Mirrors
     // `apps/dashboard/src/dashboard-app.ts`, where the shell owns conditional routing.
-    this.dispatchEvent(new CustomEvent("setup-advance", { bubbles: true, composed: true }));
+    dispatchSetupAdvance(this);
   }
 
   #back(): void {
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "admin" }, bubbles: true, composed: true }),
-    );
+    dispatchSetupGoto(this, "admin");
   }
 
   /** Renders one text field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */

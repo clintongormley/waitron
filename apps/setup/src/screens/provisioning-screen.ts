@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
+import { dispatchProvisionRequested } from "../events.js";
 
 /**
  * The in-flight / failed provision surface. The shell drives it: on the review screen's
@@ -54,7 +55,7 @@ export class SetupProvisioningScreen extends LitElement {
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
   #retry(): void {
-    this.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
+    dispatchProvisionRequested(this);
   }
 
   override render(): TemplateResult {

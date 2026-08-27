@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles, errorStyles } from "../form-styles.js";
+import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
@@ -54,13 +55,11 @@ export class SetupReviewScreen extends LitElement {
   @property() errorMessage?: string;
 
   #provision(): void {
-    this.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
+    dispatchProvisionRequested(this);
   }
 
   #back(): void {
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "venue" }, bubbles: true, composed: true }),
-    );
+    dispatchSetupGoto(this, "venue");
   }
 
   override render(): TemplateResult {
