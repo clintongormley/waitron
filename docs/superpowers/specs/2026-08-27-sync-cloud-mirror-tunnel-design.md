@@ -342,5 +342,3 @@ snitun *pattern* is architecture, not code, and the exact undici connector form 
 build rather than asserted here. The seeding memories (`sync-cloud-mirror-connection-direction`,
 `sync-cloud-mirror-peer-identity`, `replication-is-shared-infra`) are point-in-time notes and were
 re-verified against code before use.
-</content>
-</invoke>

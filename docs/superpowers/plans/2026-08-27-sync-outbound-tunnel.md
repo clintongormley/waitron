@@ -693,4 +693,3 @@ git commit -s -m "docs(dashboard): point T1 at the @waitron/tunnel box-dials-out
 ## Execution Handoff
 
 Follow the SDD workflow: a fresh subagent per task with the two-stage review between tasks.
-</content>
