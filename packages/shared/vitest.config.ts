@@ -19,6 +19,14 @@ export default defineConfig({
     // clean across 5 consecutive runs with this set, versus failing roughly every other run
     // without it.
     fileParallelism: false,
+    // `fileParallelism: false` removes the within-package race, but under the pre-push hook's
+    // whole-workspace `pnpm -r test:coverage` this package still runs concurrently WITH the other
+    // packages under pnpm's oversubscription, and @vitest/coverage-v8's cross-fork merge under-counts
+    // this package's branches (an intermittent ~80% vs the real 100% in isolation — the same v8
+    // fork-merge under-count the `packages/payments` config documents). Pinning to a single fork
+    // removes that cross-fork merge entirely, so the gate is deterministic under `-r` load too. The
+    // suite is tiny (<300ms), so one fork costs nothing.
+    poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
