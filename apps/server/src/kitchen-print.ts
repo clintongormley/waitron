@@ -87,8 +87,50 @@ export async function enqueueKitchenTickets(
   // Nothing fired (e.g. re-firing an already-fired course matched zero rows) → nothing to print.
   if (firedItems.length === 0) return;
 
-  const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
+
+  // The station→printer mappings for the involved stations, joined to `printers` for each printer's
+  // ticket scope and FILTERED to ACTIVE printers. Read FIRST so a fire whose stations map to NO printer
+  // can return before the three detail SELECTs below — the common case for a venue not using kitchen
+  // printing (see the early return). Two things keep `enqueuePrintJob` from throwing `printer.not_found`
+  // (which would abort the fire tx — see the header):
+  //   - the `active = true` filter drops an already-deactivated printer (never enqueued);
+  //   - `FOR SHARE OF printers` row-locks the matched `printers` rows, so a concurrent
+  //     `deactivatePrinter` UPDATE (which needs a conflicting FOR NO KEY UPDATE lock) BLOCKS until this
+  //     fire tx commits — so `active` cannot flip to false between here and `enqueuePrintJob`'s own
+  //     re-check under READ COMMITTED. `of: printers` scopes the lock to `printers` only (not the
+  //     mapping rows), and FOR SHARE (not FOR KEY SHARE) is required: a `SET active = false` UPDATE
+  //     touches no key column, so only FOR SHARE conflicts with it.
+  const mappingRows = await tx
+    .select({
+      stationId: stationPrinters.stationId,
+      printerId: stationPrinters.printerId,
+      ticketScope: printers.ticketScope,
+    })
+    .from(stationPrinters)
+    .innerJoin(
+      printers,
+      and(
+        eq(stationPrinters.printerId, printers.id),
+        eq(stationPrinters.tenantId, printers.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(stationPrinters.tenantId, cfg.tenantId),
+        inArray(stationPrinters.stationId, stationIds),
+        eq(printers.active, true),
+      ),
+    )
+    .for("share", { of: printers });
+
+  // No printer maps to any involved station → nothing to enqueue. Returning HERE, before the three
+  // detail reads below, skips those reads on every no-kitchen-printer fire and takes no row lock (an empty
+  // match locks nothing). Behaviour is otherwise unchanged: those reads exist only to BUILD tickets, and
+  // with no mapping there is no ticket to build — the old order ran them and then discarded the result.
+  if (mappingRows.length === 0) return;
+
+  const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   // The fired lines' display fields — quantity + the snapshotted description map — for the qty×name
   // lines. A `RETURNING` on the fire only sees `ticket_items`, so this is the follow-up read ruling R-D
@@ -138,39 +180,6 @@ export async function enqueueKitchenTickets(
     .from(workingOrders)
     .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, orderId)));
   const order = orderRows[0]!;
-
-  // The station→printer mappings for the involved stations, joined to `printers` for each printer's
-  // ticket scope and FILTERED to ACTIVE printers. Two things keep `enqueuePrintJob` from throwing
-  // `printer.not_found` (which would abort the fire tx — see the header):
-  //   - the `active = true` filter drops an already-deactivated printer (never enqueued);
-  //   - `FOR SHARE OF printers` row-locks the matched `printers` rows, so a concurrent
-  //     `deactivatePrinter` UPDATE (which needs a conflicting FOR NO KEY UPDATE lock) BLOCKS until this
-  //     fire tx commits — so `active` cannot flip to false between here and `enqueuePrintJob`'s own
-  //     re-check under READ COMMITTED. `of: printers` scopes the lock to `printers` only (not the
-  //     mapping rows), and FOR SHARE (not FOR KEY SHARE) is required: a `SET active = false` UPDATE
-  //     touches no key column, so only FOR SHARE conflicts with it.
-  const mappingRows = await tx
-    .select({
-      stationId: stationPrinters.stationId,
-      printerId: stationPrinters.printerId,
-      ticketScope: printers.ticketScope,
-    })
-    .from(stationPrinters)
-    .innerJoin(
-      printers,
-      and(
-        eq(stationPrinters.printerId, printers.id),
-        eq(stationPrinters.tenantId, printers.tenantId),
-      ),
-    )
-    .where(
-      and(
-        eq(stationPrinters.tenantId, cfg.tenantId),
-        inArray(stationPrinters.stationId, stationIds),
-        eq(printers.active, true),
-      ),
-    )
-    .for("share", { of: printers });
 
   // This round's items grouped by station, each carrying its `line_no` for a stable within-station order
   // (the same `line_no` ordering `listStationQueue` renders). Every fired line has a `lineById` row (the
@@ -264,8 +273,13 @@ export async function enqueueKitchenTickets(
  * Reprint the current kitchen tickets for a whole order (design §3d) — the operator's "a jam ate the
  * paper, print it again" lever, surfaced on the station display + expo. Gathers EVERY currently-fired
  * ticket item of the order (`fired_at IS NOT NULL`, tenant-scoped) and re-enqueues them through the same
- * `enqueueKitchenTickets` the fire path uses, so the reprinted tickets are byte-for-byte the ones a fire
- * produces (station tickets per involved station, one consolidated ticket per group printer).
+ * `enqueueKitchenTickets` the fire path uses, so the tickets have the SAME FORMAT and STRUCTURE a fire
+ * produces (the per-station tickets and the one consolidated group-printer ticket), but with two
+ * deliberate differences from any single fire: they are AGGREGATED across every fired round rather than
+ * one round's set (see the next paragraph), and each is STAMPED WITH THE REPRINT TIME, not the original
+ * fire time — `enqueueKitchenTickets` stamps `firedAt = new Date()` and this query never reads
+ * `ticket_items.fired_at`, so a reprinted header shows when it was reprinted, not when the round fired
+ * (a known limitation tracked in the backlog).
  *
  * Re-querying ALL fired items here is CORRECT — the OPPOSITE of the fire path. Print-on-fire captures
  * only the newly-fired set from its write's `RETURNING` (ruling R-D) precisely so it does NOT reprint

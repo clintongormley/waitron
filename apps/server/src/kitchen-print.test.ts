@@ -398,6 +398,39 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(stationJobs).toHaveLength(1);
     expect(decode(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
   });
+
+  it("returns early after the single mapping read when the involved stations have NO attached printer", async () => {
+    // The no-kitchen-printer venue's common case: a station fires but nothing is mapped to it. The mapping
+    // read runs FIRST and comes back empty, so enqueueKitchenTickets RETURNS before the three
+    // line/station/order detail SELECTs — proven by counting the `tx.select` calls it issues (one mapping
+    // read, not four). It enqueues nothing and takes no printer-row lock. This distinguishes the reordered
+    // code (1 select) from the old order (4 selects); the zero-jobs assertion holds for both, so it is the
+    // select count that pins the early return (CLAUDE.md §4: a test must fail with the guard removed).
+    const { cfg, catalogueId } = await setupVenue();
+    const { selectCalls, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // A live order with a fired line routed to Cocina, but NO printer attached to the station — so the
+      // detail reads WOULD succeed (the rows exist) if they ran, isolating the count as the only signal.
+      const dish = await makeProduct(tx, cfg, catalogueId, "Tortilla", { stationId: cocina.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [line(dish)], null);
+      const [lineRow] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      // Count only the SELECTs enqueueKitchenTickets itself issues.
+      const selectSpy = vi.spyOn(tx, "select");
+      await enqueueKitchenTickets(tx, cfg, orderId, [
+        { workingOrderLineId: lineRow!.id, stationId: cocina.id },
+      ]);
+      const selectCalls = selectSpy.mock.calls.length;
+      selectSpy.mockRestore();
+      return { selectCalls, jobs: await printJobsFor(tx) };
+    });
+
+    expect(jobs).toHaveLength(0); // nothing mapped → nothing enqueued (a pure no-op)
+    expect(selectCalls).toBe(1); // ONLY the mapping read ran; the three detail SELECTs were skipped
+  });
 });
 
 describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)", () => {
