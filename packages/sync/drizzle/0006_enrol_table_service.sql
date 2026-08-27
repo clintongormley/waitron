@@ -1,7 +1,8 @@
 -- Hand-written custom migration (drizzle-kit generate --custom): drizzle-kit models no triggers and
 -- sync_capture/sync_log are not Drizzle tables, so nothing here survives a later `generate`. Runs LAST
--- in migrations.manifest.json (the `sync` set), after core/db created dining_tables, floor_zones and
--- table_service_statuses (0044/0048/0052), so each CREATE TRIGGER targets an existing table.
+-- in migrations.manifest.json (the `sync` set), after core/db created dining_tables (0043),
+-- floor_zones (0051) and table_service_statuses (0047), so each CREATE TRIGGER targets an existing
+-- table.
 --
 -- WHAT THIS BUILDS. Sub-project C1
 -- (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md): enrol the dining_tables
