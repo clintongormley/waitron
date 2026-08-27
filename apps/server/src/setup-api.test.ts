@@ -289,6 +289,32 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(calls).toEqual(["provision", "sealAeat", "persistTrading", "requestRestart"]);
   });
 
+  // Symmetric to the cert-required gate above: the AEAT signing cert is meaningful ONLY for a LIVE
+  // ES-common venue (exactly when `setup.aeat_cert_required` DEMANDS it). A demo/preproduction box
+  // files nothing to AEAT, so a demo body carrying a cert is an invalid request — refused
+  // defense-in-depth so a real AEAT signing cert can never be sealed into a preproduction tenant's
+  // vault, even though the 2c client now gates the cert on live mode and never sends it otherwise.
+  // Refused BEFORE `provision`, so NOTHING is stamped/minted/sealed. Deletion-proof: remove the
+  // `if (!certExpected && aeatCert !== undefined) invalidRequest("aeatCert")` line in setup-api.ts
+  // and this goes RED — the cert reaches `provision` and then `sealAeat` on a preproduction tenant.
+  it("refuses a demo provision carrying an AEAT cert (400 setup.request_invalid, field aeatCert), without provisioning or sealing", async () => {
+    const app = new Hono();
+    const { deps, provision, sealAeat, requestRestart } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, { ...demoBody(), aeatCert: CERT });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("setup.request_invalid");
+    expect(json.error.params.field).toBe("aeatCert");
+    // NOTHING stamped, minted or sealed — the cert was rejected before `provision` ran.
+    expect(provision).not.toHaveBeenCalled();
+    expect(sealAeat).not.toHaveBeenCalled();
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
+
   // CRITICAL fiscal guard: a malformed AEAT cert must be refused BEFORE `provision` runs. Without the
   // upfront `validateAeatCert` in `parseCert`, a live ES-common provision with `certKind:"bogus"` or a
   // non-base64 `pfxBase64` would run `provision` first — stamping production and minting the SIF/hash

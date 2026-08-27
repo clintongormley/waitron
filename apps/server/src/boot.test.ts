@@ -992,16 +992,18 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("setup mode: a demo provision carrying an AEAT test cert seals it into the tenant's fiscal.aeat vault", async () => {
-    // The `sealAeat` wiring boot now binds (`sealAeatCredential(ownerDb, ring, …)`) — recovered vault
-    // ring AND owner connection together. A demo/preproduction box CAN carry a test cert for AEAT's
-    // homologation endpoint (map §3), so `POST /setup-api/provision` with an `aeatCert` seals it after
-    // `applyVenue` mints the tenant. This proves the ring `boot.ts` read back off `secrets.env` is the
-    // one that sealed the row (a broken ring recovery would throw here), and the same FRESH-clone
-    // isolation the demo test above uses. Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported
-    // for the mTLS-transport test) rather than inventing a new PFX.
+  it("setup mode: a DEMO provision carrying an AEAT cert is REFUSED (400) — nothing provisioned or sealed", async () => {
+    // Defense-in-depth over the full boot (CLAUDE.md §5): the AEAT signing cert is meaningful ONLY for
+    // a LIVE ES-common venue, so a demo/preproduction body carrying one is an invalid request that the
+    // endpoint refuses BEFORE `provision`. This pins that the box never seals a real AEAT signing cert
+    // into a preproduction tenant's vault — the whole point of the server-side reject even though the
+    // 2c client already gates the cert on live mode. FRESH-clone isolation as the demo test above.
+    // Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported for the mTLS-transport test): a
+    // well-formed cert, so the refusal is the symmetric `aeatCert`-not-expected gate, not a malformed
+    // cert being rejected by `validateAeatCert`. (Before this fix the same body sealed the cert and
+    // returned 200 — this test was INVERTED with the behaviour change.)
     const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-seal-state-"));
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-reject-state-"));
     const handle = resolveSharedHandle(undefined);
     const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
     const check = await pg.connect();
@@ -1034,22 +1036,27 @@ describe("startServer, against a real container as the deployment role", () => {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           });
-          expect(response.status).toBe(200);
-          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
-          expect(json.provisioned).toBe(true);
+          expect(response.status).toBe(400);
+          const json = (await response.json()) as {
+            error: { code: string; params: { field?: string } };
+          };
+          expect(json.error.code).toBe("setup.request_invalid");
+          expect(json.error.params.field).toBe("aeatCert");
 
-          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned. `check`
-          // is the clone's superuser connection, so it BYPASSES the FORCE-RLS on `tenant_credentials`.
-          const sealed = await check.execute<{ n: number; tenant: string }>(
-            sql`select count(*)::int as n, max(tenant_id::text) as tenant
-                from tenant_credentials where purpose = 'fiscal.aeat'`,
+          // Nothing was minted and nothing was sealed — the request was refused before `provision`.
+          // `check` is the clone's superuser connection, so it BYPASSES the FORCE-RLS on both tables.
+          const tenants = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenants`,
           );
-          expect(sealed.rows[0]!.n).toBe(1);
-          expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
+          expect(tenants.rows[0]!.n).toBe(0);
+          const sealed = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+          );
+          expect(sealed.rows[0]!.n).toBe(0);
 
-          // The restart still fires once after the seal + persist, as for the plain demo above.
-          await poll(() => (kills.length > 0 ? kills.length : undefined));
-          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+          // A refused provision never schedules the restart (the setTimeout fires only on success).
+          await delay(50);
+          expect(kills).toEqual([]);
         } finally {
           await close();
           await server.close();
