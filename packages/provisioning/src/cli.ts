@@ -643,10 +643,14 @@ function asUnreadable(error: unknown, database: string): unknown {
  * `--database='  '`) counts as absent and falls through to the prompt.
  *
  * The flag value is trimmed, so flag and prompt behave IDENTICALLY — the prompt already trims
- * (`.trim()` below). Without this, a non-interactive `--tax-id " B12345678 "` reached
- * `obligadoTenantId` verbatim and hashed into a different, permanent, unmergeable obligado than the
- * trimmed form an interactive operator would have produced — the same operator-input footgun as the
- * country-case normalisation (`assertCountry`).
+ * (`.trim()` below). This keeps every field's flag and prompt paths in step (a stored `legalName`,
+ * `city`, etc. carries no leading/trailing spaces either way). For the fiscal identity specifically,
+ * the casing / leading-or-trailing-whitespace footgun is now closed further in — `planVenue`
+ * canonicalizes `country`/`taxId` (`.trim().toUpperCase()`) and `obligadoTenantId` self-normalizes —
+ * so a non-interactive `--tax-id " B12345678 "` can no longer derive a different, permanent,
+ * unmergeable obligado than the trimmed form an interactive operator would produce; this trim is
+ * belt-and-suspenders for it. (Only surrounding whitespace and letter case are collapsed; INTERNAL
+ * whitespace is left intact, so `--tax-id "B123 45678"` stays a distinct identity.)
  */
 async function resolveOption(
   value: string | undefined,
@@ -804,16 +808,21 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
 
 /** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check
  * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before the derived
- * tenant id (tenant-id.ts) is built from it. The regex accepts either case, but the value is
- * UPPER-CASED before it is returned, and that is load-bearing: `obligadoTenantId(country, taxId)`
- * hashes `country` verbatim and `(country, tax_id)` is a case-sensitive unique index, so `es` and
- * `ES` would otherwise derive DIFFERENT tenant ids and mint two permanent, unmergeable obligados —
- * a re-run meant to add a shop would silently start a second SIF chain instead of reusing the first.
- * Upper-casing collapses them to the one obligado (ISO-3166 alpha-2 is upper-case by convention),
- * which is what makes a D8 re-run reuse work; there is no data to preserve either way (pre-production,
- * no backfill). The returned value flows into `VenueRequest.country`, so both the derived id and the
- * `tenants` row carry the normalised code. `value` is echoed: it is operator-typed configuration,
- * never a secret. */
+ * tenant id (tenant-id.ts) is built from it. The regex accepts either case; the value is UPPER-CASED
+ * before it is returned. This upper-casing is now BELT-AND-SUSPENDERS rather than the sole defence:
+ * `planVenue` canonicalizes BOTH `country` and `taxId` (`.trim().toUpperCase()`) for BOTH paths — so
+ * the wizard, which never calls `assertCountry`, is covered, and a taxId that differs only in letter
+ * case or in leading/trailing whitespace is handled too — and `obligadoTenantId` self-normalizes as a
+ * backstop. The footgun this all defends: `es`/`ES` (or a taxId differing only in case or surrounding
+ * whitespace) for one business would otherwise derive DIFFERENT tenant ids and mint two permanent,
+ * unmergeable obligados — a re-run meant to add a shop would silently start a second SIF chain instead
+ * of reusing the first (§5). `.trim().toUpperCase()` collapses exactly case and surrounding
+ * whitespace; INTERNAL whitespace is left intact (a taxId's inner content is not ours to alter), so
+ * `"B123 45678"` stays a distinct identity. Canonicalizing collapses the case/space variants to the
+ * one obligado (ISO-3166 alpha-2 is upper-case by convention); there is no data to preserve either
+ * way (pre-production, no backfill). Keeping the shape-validation + upper-casing here is harmless and
+ * still refuses a mistyped code early. `value` is echoed: it is operator-typed configuration, never a
+ * secret. */
 const COUNTRY = /^[A-Za-z]{2}$/;
 function assertCountry(value: string): string {
   if (!COUNTRY.test(value)) {

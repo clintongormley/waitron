@@ -160,10 +160,33 @@ describe("planVenue", () => {
     }
   });
 
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two obligados (§5)", () => {
+    // The wizard emits a trimmed-but-not-uppercased country ("es") and never touches taxId casing;
+    // the CLI trims taxId but never uppercases it. Both paths go through planVenue, so canonicalizing
+    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
+    // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
+    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable obligado
+    // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
+    // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
+    // assertions below go red.
+    const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" })).find(
+      (a) => a.kind === "ensure-tenant",
+    );
+    const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " })).find(
+      (a) => a.kind === "ensure-tenant",
+    );
+    // The stored unique-index row is canonical (so applyVenue's ON CONFLICT (country, tax_id) fires)...
+    expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
+    // ...and the derived id matches the already-canonical run's id.
+    expect(messyTenant?.tenantId).toBe(canonicalTenant?.tenantId);
+    expect(messyTenant?.tenantId).toBe(obligadoTenantId("ES", "B12345678"));
+  });
+
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
     // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
-    // matches its territory prefix. This never mints two obligados (the CLI upper-cases country first),
-    // but planVenue must not refuse the coherent combination on case alone.
+    // matches its territory prefix. This never mints two obligados (planVenue canonicalizes country
+    // before deriving the id and storing the row — see the casing test above), but planVenue must not
+    // refuse the coherent combination on case alone.
     const actions = planVenue(
       request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
     );

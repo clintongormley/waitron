@@ -68,6 +68,22 @@ export type VenueAction =
  * re-run reuses the same obligado under RLS without a tax_id lookup (spec D8).
  */
 export function planVenue(request: VenueRequest): VenueAction[] {
+  // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id
+  // AND the stored `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun:
+  // both provisioning paths go through here — the wizard (setup-api → provisionVenue) emits a
+  // trimmed-but-not-uppercased country ("es") and never touches taxId casing, and the CLI trims
+  // taxId but never uppercases it (its `assertCountry` already upper-cases country, now belt-and-
+  // suspenders). Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
+  // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
+  // same business mint a second, permanent, unmergeable obligado — a re-run meant to add a shop would
+  // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
+  // differences; INTERNAL whitespace is deliberately left alone (a taxId's inner content is not ours
+  // to alter), so `"B123 45678"` stays a distinct identity. Canonicalizing makes the id AND the
+  // unique-index row match across case/surrounding-space variants, so applyVenue's `on conflict
+  // (country, tax_id) do nothing` reuses the one obligado. No data to preserve (pre-production, no
+  // backfill); ISO-3166 alpha-2 is upper-case by convention.
+  const country = request.country.trim().toUpperCase();
+  const taxId = request.taxId.trim().toUpperCase();
   const locales = request.location.invoiceLocales;
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
@@ -86,15 +102,13 @@ export function planVenue(request: VenueRequest): VenueAction[] {
   // AFTER resolveFiscalModules so an unimplemented territory fails first with the more specific
   // `fiscal.regime_not_implemented`; refused here, in the pure planner, so no admin connection is
   // spent (spec D4). Case-insensitive on the prefix, so `es`/`ES` both match `ES-common`.
-  if (
-    !request.location.fiscalTerritory.toUpperCase().startsWith(`${request.country.toUpperCase()}-`)
-  ) {
+  if (!request.location.fiscalTerritory.toUpperCase().startsWith(`${country}-`)) {
     throw new AppError("provisioning.territory_country_mismatch", {
-      country: request.country,
+      country,
       fiscalTerritory: request.location.fiscalTerritory,
     });
   }
-  const tenantId = obligadoTenantId(request.country, request.taxId);
+  const tenantId = obligadoTenantId(country, taxId);
 
   // Defence-in-depth on an unrecoverable fiscal field. WAITRON_ID_SISTEMA is carried by the
   // register-sif action below and reaches `registro_sif.id_sistema_informatico` via applyVenue →
@@ -108,8 +122,8 @@ export function planVenue(request: VenueRequest): VenueAction[] {
     {
       kind: "ensure-tenant",
       tenantId,
-      country: request.country,
-      taxId: request.taxId,
+      country,
+      taxId,
       legalName: request.legalName,
     },
     // A person needs only the tenant scope, so the admin is seeded immediately after ensure-tenant,

@@ -32,7 +32,23 @@ function uuidV5(name: string, namespace: string): string {
  * (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
  * id, so every location insert would fail the FK. `venue` is the only such path today; `seedTenant`
  * and the fixtures use `defaultRandom()` ids but are test-only.
+ *
+ * CASING / LEADING-TRAILING-WHITESPACE INVARIANT: the id is invariant to letter case and to leading
+ * or trailing whitespace ONLY. Both arguments are `.trim().toUpperCase()`d before the hash, so `es`/
+ * `ES` and stray surrounding spaces derive the SAME id —
+ * `obligadoTenantId(" es ", " b12345678 ") === obligadoTenantId("ES", "B12345678")`. INTERNAL
+ * whitespace is NOT normalized (and must not be — a taxId's inner content is not ours to alter):
+ * `"B123 45678"` and `"B12345678"` remain DISTINCT obligados. Any caller gets the canonical id. This
+ * is a no-op for the primary caller (`planVenue`, which canonicalizes country/taxId itself before it
+ * builds the tenant row), and load-bearing for the secondary one: `provisionVenue`'s double-provision
+ * guard (apps/server) recomputes the id from the RAW request to look the obligado up under RLS, and
+ * normalizing here keeps that lookup aligned with the id `planVenue`/`applyVenue` stored. Without it,
+ * `es`/`ES` for one business would derive two ids and mint two permanent, unmergeable obligados — a
+ * re-run meant to add a shop would silently start a second SIF/hash chain (§5). ISO-3166 alpha-2 is
+ * upper-case by convention; there is no data to preserve either way (pre-production, no backfill).
  */
 export function obligadoTenantId(country: string, taxId: string): string {
-  return uuidV5(`${country}\n${taxId}`, OBLIGADO_NAMESPACE);
+  const canonicalCountry = country.trim().toUpperCase();
+  const canonicalTaxId = taxId.trim().toUpperCase();
+  return uuidV5(`${canonicalCountry}\n${canonicalTaxId}`, OBLIGADO_NAMESPACE);
 }
