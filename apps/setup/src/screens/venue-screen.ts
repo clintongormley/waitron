@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { selectStyles } from "../select-styles.js";
+import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { LocationDraft, ProvisionBody } from "../api/client.js";
 
@@ -79,6 +80,9 @@ export class SetupVenueScreen extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
+    fieldStyles,
+    errorStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
@@ -87,11 +91,6 @@ export class SetupVenueScreen extends LitElement {
       h2 {
         margin: var(--wt-space-4) 0 var(--wt-space-2);
         font-size: var(--wt-font-size-lg);
-      }
-
-      .field {
-        display: block;
-        margin-bottom: var(--wt-space-4);
       }
 
       .field.select > span {
@@ -124,17 +123,6 @@ export class SetupVenueScreen extends LitElement {
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-2);
         color: var(--wt-color-text);
-      }
-
-      .error {
-        color: var(--wt-color-danger);
-        margin-top: var(--wt-space-3);
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
       }
     `,
   ];

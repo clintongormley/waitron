@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import { actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 
 /**
  * The in-flight / failed provision surface. The shell drives it: on the review screen's
@@ -21,25 +22,12 @@ import "@waitron/ui/src/components/wt-card.js";
 export class SetupProvisioningScreen extends LitElement {
   static override styles = [
     baseStyles,
+    statusStyles,
+    errorStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
-      }
-
-      .status {
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-text-muted);
-      }
-
-      .error {
-        color: var(--wt-color-danger);
-        margin: var(--wt-space-3) 0 0;
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
       }
     `,
   ];

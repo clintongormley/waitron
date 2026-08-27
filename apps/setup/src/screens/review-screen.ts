@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import { actionsStyles, errorStyles } from "../form-styles.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
@@ -20,6 +21,8 @@ import type { ProvisionBody } from "../api/client.js";
 export class SetupReviewScreen extends LitElement {
   static override styles = [
     baseStyles,
+    errorStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
@@ -39,17 +42,6 @@ export class SetupReviewScreen extends LitElement {
       dd {
         margin: 0;
         color: var(--wt-color-text);
-      }
-
-      .error {
-        color: var(--wt-color-danger);
-        margin: var(--wt-space-3) 0 0;
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
       }
     `,
   ];

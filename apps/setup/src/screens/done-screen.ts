@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import { actionsStyles, statusStyles } from "../form-styles.js";
 import type { SetupApi } from "../api/client.js";
 
 /**
@@ -27,20 +28,11 @@ import type { SetupApi } from "../api/client.js";
 export class SetupDoneScreen extends LitElement {
   static override styles = [
     baseStyles,
+    statusStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
-      }
-
-      .status {
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-text-muted);
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
       }
     `,
   ];

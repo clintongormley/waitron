@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 
 /**
  * The wizard's second step: the first operator's credentials — a display name, a login password, and
@@ -16,54 +17,38 @@ import "@waitron/ui/src/components/wt-input.js";
  * bubbling pair the shell listens for. Following `apps/dashboard/src/screens/login-screen.ts` for the
  * field/`wt-change`/error idiom.
  */
+
+/** The three credential fields, each a `wt-input`. */
+type AdminField = "displayName" | "password" | "pin";
+
 @customElement("setup-admin-screen")
 export class SetupAdminScreen extends LitElement {
   static override styles = [
     baseStyles,
+    fieldStyles,
+    errorStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
       }
-
-      .field {
-        display: block;
-        margin-bottom: var(--wt-space-4);
-      }
-
-      .error {
-        color: var(--wt-color-danger);
-        margin-top: var(--wt-space-3);
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
-      }
     `,
   ];
 
-  @state() private displayName = "";
-  @state() private password = "";
-  @state() private pin = "";
-  @state() private invalid = new Set<"displayName" | "password" | "pin">();
+  /** The editable credential fields. */
+  @state() private values: Record<AdminField, string> = {
+    displayName: "",
+    password: "",
+    pin: "",
+  };
+  @state() private invalid = new Set<AdminField>();
 
   /** True once a `Next` with a blank field has been rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
-  #onDisplayName(event: CustomEvent<{ value: string }>): void {
+  #onField(key: AdminField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.displayName = event.detail.value;
-  }
-
-  #onPassword(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.password = event.detail.value;
-  }
-
-  #onPin(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.pin = event.detail.value;
+    this.values = { ...this.values, [key]: event.detail.value };
   }
 
   /**
@@ -72,10 +57,10 @@ export class SetupAdminScreen extends LitElement {
    * "blank fields do not advance" test flips red).
    */
   #next(): void {
-    const invalid = new Set<"displayName" | "password" | "pin">();
-    if (this.displayName.trim() === "") invalid.add("displayName");
-    if (this.password.trim() === "") invalid.add("password");
-    if (this.pin.trim() === "") invalid.add("pin");
+    const invalid = new Set<AdminField>();
+    if (this.values.displayName.trim() === "") invalid.add("displayName");
+    if (this.values.password.trim() === "") invalid.add("password");
+    if (this.values.pin.trim() === "") invalid.add("pin");
     this.invalid = invalid;
     if (invalid.size > 0) {
       this.showError = true;
@@ -88,9 +73,9 @@ export class SetupAdminScreen extends LitElement {
           patch: {
             venue: {
               admin: {
-                displayName: this.displayName,
-                pin: this.pin,
-                password: this.password,
+                displayName: this.values.displayName,
+                pin: this.values.pin,
+                password: this.values.password,
               },
             },
           },
@@ -110,37 +95,26 @@ export class SetupAdminScreen extends LitElement {
     );
   }
 
+  /** Renders one credential field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
+  #field(label: string, key: AdminField, type = "text"): TemplateResult {
+    return html`<wt-input
+      class="field"
+      label=${label}
+      data-test=${key}
+      type=${type}
+      ?invalid=${this.invalid.has(key)}
+      .value=${this.values[key]}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
+    ></wt-input>`;
+  }
+
   override render(): TemplateResult {
     return html`
       <wt-card>
         <h1>The first operator</h1>
         <p>Create the account that manages this box. You can add more people later.</p>
-        <wt-input
-          class="field"
-          label="Display name"
-          data-test="displayName"
-          ?invalid=${this.invalid.has("displayName")}
-          .value=${this.displayName}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDisplayName(e)}
-        ></wt-input>
-        <wt-input
-          class="field"
-          label="Password"
-          type="password"
-          data-test="password"
-          ?invalid=${this.invalid.has("password")}
-          .value=${this.password}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassword(e)}
-        ></wt-input>
-        <wt-input
-          class="field"
-          label="PIN"
-          type="password"
-          data-test="pin"
-          ?invalid=${this.invalid.has("pin")}
-          .value=${this.pin}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPin(e)}
-        ></wt-input>
+        ${this.#field("Display name", "displayName")}
+        ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
         ${
           this.showError
             ? html`<p class="error" role="alert" data-test="error">

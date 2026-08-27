@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import { actionsStyles } from "../form-styles.js";
 
 /**
  * The wizard's first step: welcome the operator, warn that the browser's certificate warning is
@@ -24,6 +25,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 export class SetupModeScreen extends LitElement {
   static override styles = [
     baseStyles,
+    actionsStyles,
     css`
       :host {
         display: block;
@@ -80,12 +82,6 @@ export class SetupModeScreen extends LitElement {
       .understand {
         display: block;
         margin: var(--wt-space-3) 0;
-      }
-
-      .actions {
-        display: flex;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-3);
       }
     `,
   ];
