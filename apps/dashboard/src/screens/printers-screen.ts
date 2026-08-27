@@ -665,7 +665,7 @@ export class PrintersScreen extends LitElement {
                 </p>`
               : html`<div class="stations-list">
                   ${this.stations.map((s) => {
-                    const attached = this.printerStations[p.id].includes(s.id);
+                    const attached = (this.printerStations[p.id] ?? []).includes(s.id);
                     return html`<wt-switch
                       label=${s.name}
                       data-test="station-toggle-${p.id}-${s.id}"
