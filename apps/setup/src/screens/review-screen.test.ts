@@ -99,6 +99,21 @@ describe("setup-review-screen", () => {
     expect(await requested).toBe(true);
   });
 
+  it("shows no error banner by default, and the routed-back server error when errorMessage is set", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    expect(q(el, "[data-test=error]")).toBeNull();
+
+    const withError = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+      errorMessage: "The box rejected the details (field: taxId). Check your entries.",
+    });
+    const banner = withError.el.shadowRoot!.querySelector<HTMLElement>("[data-test=error]")!;
+    expect(banner.getAttribute("role")).toBe("alert");
+    expect(banner.textContent).toContain("taxId");
+  });
+
   it("steps back via setup-goto", async () => {
     const { el, host } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
       draft: fullDraft(),

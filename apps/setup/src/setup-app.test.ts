@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
-import { SetupApp } from "./setup-app.js";
+import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
 
@@ -82,6 +82,19 @@ function patch(el: SetupApp, p: DeepPartial<ProvisionBody>): void {
   );
 }
 
+/** Fires the composed `provision-requested` the review + provisioning screens emit, into the shell. */
+function provisionRequest(el: SetupApp): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("provision-requested", { bubbles: true, composed: true }),
+  );
+}
+
+/** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
+async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
+  const host = await screenHost(el, screen);
+  return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
+}
+
 describe("setup-app", () => {
   it("renders the mode screen with the setup heading on boot", async () => {
     const el = await mountSetupApp();
@@ -123,7 +136,7 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
   });
 
-  it("renders a stub for every screen the machine can reach", async () => {
+  it("renders a screen for every state the machine can reach", async () => {
     const el = await mountSetupApp();
     const screens: Screen[] = ["admin", "venue", "cert", "review", "provisioning", "done", "mode"];
     for (const screen of screens) {
@@ -167,5 +180,160 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     patch(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
     expect(readDraft(el).venue?.location?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
+  });
+
+  it("provisions on provision-requested and, on the 200, advances to done", async () => {
+    const provision = vi.fn().mockResolvedValue({
+      provisioned: true,
+      tenantId: "t-1",
+      restarting: true,
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(provision).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("shows the in-flight state with a DISABLED provision control while the POST is pending", async () => {
+    let resolveProvision!: (value: unknown) => void;
+    const provision = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProvision = resolve;
+        }),
+    );
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await el.updateComplete;
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=status]")).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=provision]")!.hasAttribute("disabled")).toBe(
+      true,
+    );
+    resolveProvision({ provisioned: true, tenantId: "t-1", restarting: true });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("maps setup.request_invalid back to review with a banner naming the field", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "taxId" } });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("taxId");
+  });
+
+  it("maps a fieldless setup.request_invalid to a generic review banner", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.request_invalid", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("rejected the details");
+  });
+
+  it("routes setup.aeat_cert_required back to the cert screen", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.aeat_cert_required", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
+  });
+
+  it("maps setup.already_provisioning to an in-progress message with no retry", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioning", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+      "already in progress",
+    );
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+  });
+
+  it.each(["setup.already_provisioned", "deployment.already_stamped"])(
+    "maps the fiscal 409 %s to 'already set up' with NO retry (re-POST is unrecoverable)",
+    async (code) => {
+      const provision = vi.fn().mockRejectedValue({ code, params: {} });
+      const el = await mountSetupApp(stubApi({ provision }));
+      provisionRequest(el);
+      await flush(el);
+      expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
+      const host = await screenHost(el, "provisioning");
+      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    },
+  );
+
+  it("maps setup.not_ready to a not-ready message that CAN be retried", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.not_ready", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("isn't ready");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+  });
+
+  it("maps setup.provision_failed (and any unforeseen code) to a retryable generic failure", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.provision_failed", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+      "Provisioning failed",
+    );
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+  });
+
+  it("maps an unmapped code through the default branch to the retryable generic failure", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+      "Provisioning failed",
+    );
+  });
+
+  it("retries the POST when the provisioning screen's retry re-emits provision-requested", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "setup.provision_failed", params: {} })
+      .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await flush(el);
+    expect(provision).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+});
+
+describe("assembleBody", () => {
+  it("omits the aeatCert key entirely for a demo draft (never null/empty)", () => {
+    const body = assembleBody({ mode: "demo", venue: { taxId: "B1" } });
+    expect("aeatCert" in body).toBe(false);
+  });
+
+  it("keeps a present certificate for a live draft", () => {
+    const aeatCert = { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" as const };
+    const body = assembleBody({ mode: "live", venue: { taxId: "B1" }, aeatCert });
+    expect(body.aeatCert).toEqual(aeatCert);
+  });
+
+  it("drops an aeatCert whose pfxBase64 is empty", () => {
+    const body = assembleBody({
+      mode: "live",
+      aeatCert: { pfxBase64: "", passphrase: "", certKind: "sello" },
+    });
+    expect("aeatCert" in body).toBe(false);
   });
 });

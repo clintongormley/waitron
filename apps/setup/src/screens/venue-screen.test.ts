@@ -197,6 +197,27 @@ describe("setup-venue-screen", () => {
     expect((q(el, "[data-test=addressLine2]") as unknown as { value: string }).value).toBe("");
   });
 
+  // The seed-once (`#seeded`) guard. A local edit must survive a later `draft` reassignment — the
+  // shell reassigns `draft` (a fresh reference) on every merge, so without the guard each such update
+  // would re-seed the fields and clobber whatever the operator typed. Prove-by-deletion: drop the
+  // `if (this.#seeded) return; this.#seeded = true;` guard in `willUpdate` and this flips red — the
+  // reassignment re-seeds `taxId` back to "B-RESEEDED", losing the "B-EDITED" edit.
+  it("seeds from the draft only once, so a later draft reassignment keeps local edits", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { venue: { taxId: "B-INITIAL" } },
+    });
+    const val = () => (q(el, "[data-test=taxId]") as unknown as { value: string }).value;
+    expect(val()).toBe("B-INITIAL");
+
+    await type(el, "taxId", "B-EDITED");
+    expect(val()).toBe("B-EDITED");
+
+    // A fresh draft object carrying a DIFFERENT taxId — the guard must stop willUpdate re-seeding.
+    el.draft = { venue: { taxId: "B-RESEEDED" } };
+    await el.updateComplete;
+    expect(val()).toBe("B-EDITED");
+  });
+
   // The seriesCode-equality guard. Prove-by-deletion: drop the equality check (so it never adds to the
   // invalid set) and this flips red — a same-series-code Next would then emit and advance.
   it("blocks Next when seriesCode equals rectificativeSeriesCode, marking both invalid", async () => {

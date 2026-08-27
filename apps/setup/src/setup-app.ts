@@ -5,16 +5,19 @@ import { baseStyles } from "@waitron/ui";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
+import "./screens/cert-screen.js";
 import "./screens/review-screen.js";
-import type { ProvisionBody, SetupApi } from "./api/client.js";
+import "./screens/provisioning-screen.js";
+import "./screens/done-screen.js";
+import type { ApiError, ProvisionBody, SetupApi } from "./api/client.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
  * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs): `mode` (demo/live) → `admin`
  * (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). `mode`, `admin`,
- * `venue` and `review` are the real screens today; `cert`, `provisioning` and `done` arrive in later
- * tasks of slice 2c and are stubs here.
+ * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). All seven are real
+ * screens; the venue step routes to `cert` only for a live ES-common venue, otherwise straight to
+ * `review`.
  */
 export type Screen = "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
 
@@ -50,6 +53,28 @@ function deepMerge(base: unknown, patch: unknown): unknown {
     out[key] = deepMerge(out[key], value);
   }
   return out;
+}
+
+/**
+ * Turn the accumulated {@link SetupApp.draft} into the full `POST /setup-api/provision` body. Every
+ * collecting screen has already client-validated its own fields before contributing them, so by the
+ * `review` step the draft is complete and this only NARROWS the `DeepPartial` to a `ProvisionBody`.
+ *
+ * The one thing it does actively is the `aeatCert` OMISSION: the server distinguishes "no certificate
+ * supplied" from a malformed one by the key's ABSENCE — `body.aeatCert === undefined ? undefined :
+ * parseCert(...)` (`apps/server/src/setup-api.ts`) — and answers a live ES-common venue with no cert
+ * `setup.aeat_cert_required` (which the shell routes back to `cert`), rather than provisioning it. So
+ * the key is DROPPED entirely unless a PFX was actually read in; it is never sent as `null` or as an
+ * empty certificate (a demo or non-ES-common venue never reaches the `cert` screen, so its draft
+ * carries no `aeatCert` at all, and this leaves it absent).
+ */
+export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
+  const body = { ...draft } as ProvisionBody & { aeatCert?: ProvisionBody["aeatCert"] };
+  const cert = draft.aeatCert;
+  if (cert === undefined || cert.pfxBase64 === undefined || cert.pfxBase64 === "") {
+    delete body.aeatCert;
+  }
+  return body as ProvisionBody;
 }
 
 /**
@@ -114,6 +139,23 @@ export class SetupApp extends LitElement {
     },
   };
 
+  /**
+   * A `setup.request_invalid` the server threw at provision time, routed back to the `review` screen
+   * as a banner naming the offending field. `undefined` normally; cleared before every new POST.
+   */
+  @state() private reviewError?: string;
+
+  /**
+   * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
+   * two fiscal 409s, `already_provisioning`, `not_ready`, `provision_failed`). `undefined` while a
+   * POST is in flight (the screen then shows the in-flight state) or before one is attempted.
+   */
+  @state() private provisionMessage?: string;
+
+  /** Whether {@link SetupApp.provisionMessage} may be retried — never for the fiscal double-provision
+   * refusals (re-POSTing an already-set-up box is meaningless and unrecoverable, CLAUDE.md §5). */
+  @state() private provisionCanRetry = false;
+
   override firstUpdated(): void {
     void this.#boot();
   }
@@ -154,28 +196,104 @@ export class SetupApp extends LitElement {
     this.screen = event.detail.screen;
   }
 
+  /**
+   * Fire the provision — the review screen's `Provision`, and the provisioning screen's `Try again`,
+   * both reach here through the shared composed `provision-requested`. Client validation already ran
+   * on every collecting screen, so this assembles the body and POSTs it. Success takes the box down
+   * for its restart, so `done` (not this screen) is where reconnection happens; a failure is mapped by
+   * {@link SetupApp.#mapProvisionError} onto a message here or a route back to the owning step.
+   *
+   * The `isConnected` guards stop a teardown mid-request writing state onto a detached element, the
+   * same discipline as {@link SetupApp.#boot}.
+   */
+  async #onProvisionRequested(event: CustomEvent): Promise<void> {
+    event.stopPropagation();
+    this.reviewError = undefined;
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.screen = "provisioning";
+    try {
+      await this.api.provision(assembleBody(this.draft));
+      if (!this.isConnected) return;
+      this.screen = "done";
+    } catch (error) {
+      if (!this.isConnected) return;
+      this.#mapProvisionError(error as ApiError);
+    }
+  }
+
+  /**
+   * Map a rejected provision to the wizard's next state. Every code the provision route can throw
+   * (map §4b, verified against `apps/server/src/setup-api.ts`) is handled explicitly:
+   *
+   * - `setup.request_invalid` → back to `review` with a banner naming `params.field` (the field's own
+   *   screen already validates the same rule, so this is a belt-and-suspenders path).
+   * - `setup.aeat_cert_required` → back to `cert` to add the certificate.
+   * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is running).
+   * - `setup.already_provisioned` / `deployment.already_stamped` → "already set up", NO retry: these
+   *   are the fiscal double-provision refusals and re-POSTing is unrecoverable (CLAUDE.md §5).
+   * - `setup.not_ready` → not-ready notice, retryable.
+   * - `setup.provision_failed` (and any unforeseen code) → a generic failure, retryable.
+   */
+  #mapProvisionError(error: ApiError): void {
+    switch (error.code) {
+      case "setup.request_invalid": {
+        const field = typeof error.params?.field === "string" ? error.params.field : undefined;
+        this.reviewError =
+          field === undefined
+            ? "The box rejected the details. Check your entries, then provision again."
+            : `The box rejected the details (field: ${field}). Check your entries, then provision again.`;
+        this.screen = "review";
+        return;
+      }
+      case "setup.aeat_cert_required":
+        this.screen = "cert";
+        return;
+      case "setup.already_provisioning":
+        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionCanRetry = false;
+        return;
+      case "setup.already_provisioned":
+      case "deployment.already_stamped":
+        this.provisionMessage = "This box is already set up.";
+        this.provisionCanRetry = false;
+        return;
+      case "setup.not_ready":
+        this.provisionMessage = "The box isn't ready yet. Wait a moment, then try again.";
+        this.provisionCanRetry = true;
+        return;
+      default:
+        this.provisionMessage = "Provisioning failed. You can try again.";
+        this.provisionCanRetry = true;
+        return;
+    }
+  }
+
   override render(): TemplateResult {
-    // The screens (later tasks) emit these two composed events UP to the shell; wiring them on the
-    // container now means a screen dropped in later needs no shell change to talk back.
+    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the
+    // draft), `setup-goto` (flip the visible screen), and `provision-requested` (review's Provision
+    // and the provisioning screen's retry both fire it). Wiring them on the container means each screen
+    // talks back without the shell knowing which one is mounted.
     return html`<div
       class="wizard"
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
+      @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
     >
       ${this.#renderScreen()}
     </div>`;
   }
 
   /**
-   * The mounted screen for the current {@link SetupApp.screen}. `mode`, `admin`, `venue` and `review`
-   * are the real screens today; `cert`, `provisioning` and `done` arrive in later tasks of slice 2c
-   * and render a labelled stub for now, so the machine and its nav are exercisable end to end. The
-   * real screens carry the `data-test="screen-*"` hook on their own host so the shell's
-   * screen-switching tests stay uniform across stub and real.
+   * The mounted screen for the current {@link SetupApp.screen} — all seven are real screens, each
+   * carrying the `data-test="screen-*"` hook on its own host so the shell's screen-switching tests
+   * stay uniform.
    *
-   * `mode` reads `environment` (to warn on a production box); `venue` and `review` read the accumulated
-   * `draft` (to seed their fields / summarise it). All are passed as properties, since neither an api
-   * nor a draft object can travel as an attribute.
+   * `mode` reads `environment` (to warn on a production box); `venue`, `cert` and `review` read the
+   * accumulated `draft` (to seed their fields / summarise it); `review` also takes the routed-back
+   * `reviewError`; `provisioning` takes the mapped message + retry flag; `done` takes the `api` to
+   * poll during the restart. All are passed as properties, since neither an api nor a draft object can
+   * travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
@@ -187,16 +305,27 @@ export class SetupApp extends LitElement {
           .draft=${this.draft}
         ></setup-venue-screen>`;
       case "cert":
-        return html`<p data-test="screen-cert">cert</p>`;
+        return html`<setup-cert-screen
+          data-test="screen-cert"
+          .draft=${this.draft}
+        ></setup-cert-screen>`;
       case "review":
         return html`<setup-review-screen
           data-test="screen-review"
           .draft=${this.draft}
+          .errorMessage=${this.reviewError}
         ></setup-review-screen>`;
       case "provisioning":
-        return html`<p data-test="screen-provisioning">provisioning</p>`;
+        return html`<setup-provisioning-screen
+          data-test="screen-provisioning"
+          .message=${this.provisionMessage}
+          .canRetry=${this.provisionCanRetry}
+        ></setup-provisioning-screen>`;
       case "done":
-        return html`<p data-test="screen-done">done</p>`;
+        return html`<setup-done-screen
+          data-test="screen-done"
+          .api=${this.api}
+        ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen
           data-test="screen-mode"

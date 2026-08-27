@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -41,6 +41,11 @@ export class SetupReviewScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      .error {
+        color: var(--wt-color-danger);
+        margin: var(--wt-space-3) 0 0;
+      }
+
       .actions {
         display: flex;
         gap: var(--wt-space-3);
@@ -51,6 +56,10 @@ export class SetupReviewScreen extends LitElement {
 
   /** The accumulated draft, passed down from the shell. Rendered read-only; secrets are never shown. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+
+  /** A mapped server error routed back here — set by the shell when the POST was rejected with
+   * `setup.request_invalid`, so the operator sees why before re-provisioning. `undefined` normally. */
+  @property() errorMessage?: string;
 
   #provision(): void {
     this.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
@@ -93,6 +102,11 @@ export class SetupReviewScreen extends LitElement {
           <dt>AEAT certificate</dt>
           <dd data-test="summary-cert">${certAttached ? "attached" : "not attached"}</dd>
         </dl>
+        ${
+          this.errorMessage === undefined
+            ? nothing
+            : html`<p class="error" role="alert" data-test="error">${this.errorMessage}</p>`
+        }
       </wt-card>
       <div class="actions">
         <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
