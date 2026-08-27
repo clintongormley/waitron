@@ -26,6 +26,10 @@ export interface MdnsSocket {
     event: "query",
     handler: (query: { questions: { name: string; type: string }[] }) => void,
   ): void;
+  /** A bind/membership failure (EADDRINUSE/EACCES) arrives here — see `startMdnsResponder`. The real
+   *  instance emits `'error'` on the same EventEmitter, so an unhandled one would throw and kill the
+   *  process; the responder registers a handler that logs and swallows it. */
+  on(event: "error", handler: (err: Error) => void): void;
   respond(response: { answers: MdnsAnswer[] }): void;
   destroy(cb?: () => void): void;
 }
@@ -71,6 +75,16 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     const answers = buildMdnsAnswers(hostname, getAddresses());
     if (answers.length === 0) return;
     socket.respond({ answers });
+  });
+
+  // mDNS advertisement is NON-load-bearing — a device still reaches the box by its LAN IP whether or
+  // not `waitron.local` resolves — so a socket failure must never crash boot. The real
+  // `multicast-dns` instance emits `'error'` on a bind/membership failure (EADDRINUSE/EACCES on a
+  // host with no multicast route, seen in some CI/containers), and an unhandled `'error'` on an
+  // EventEmitter is rethrown by Node and takes the process down. Log it and swallow it: the box keeps
+  // trading, just without name-based discovery on that host.
+  socket.on("error", (err) => {
+    log("warn", "mdns.socket_error", { message: err.message });
   });
 
   log("info", "mdns.responding", { hostname });
