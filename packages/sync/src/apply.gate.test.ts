@@ -180,17 +180,69 @@ function paymentImage(b: Base, workingOrderId: string, over: Image = {}): Image 
   };
 }
 
-function workingOrderImage(b: Base, id: string, over: Image = {}): Image {
+// The C1 table-service floor closure that working_orders.delivery_table_id depends on. Each helper
+// lists EVERY column of its table (to_jsonb captures all; jsonb_populate_record fills an absent key
+// with NULL, so an omitted NOT NULL column would fail the apply). Columns verified against the live
+// Drizzle schema (floor-zones.ts, table-service-statuses.ts, dining-tables.ts).
+function floorZoneImage(b: Base, over: Image = {}): Image {
   return {
-    id,
+    id: uuid(),
+    tenant_id: b.tenantId,
+    location_id: b.locationId,
+    name: "Comedor",
+    display_order: 0,
+    active: true,
+    created_at: "2026-08-27T10:00:00+00:00",
+    ...over,
+  };
+}
+function statusImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    label: "Needs cleaning",
+    color: "#ef4444",
+    display_order: 0,
+    active: true,
+    created_at: "2026-08-27T10:00:00+00:00",
+    ...over,
+  };
+}
+function diningTableImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    location_id: b.locationId,
+    label: "T1",
+    zone_id: null,
+    capacity: null,
+    active: true,
+    created_at: "2026-08-27T10:00:00+00:00",
+    tab_id: null,
+    status_id: null,
+    pos_x: null,
+    pos_y: null,
+    shape: null,
+    rotation: null,
+    ...over,
+  };
+}
+function workingOrderImage(b: Base, orderNumber: number, over: Image = {}): Image {
+  // status 'open' ⇒ settled_at must be NULL (the working_orders_settled_at_ck CHECK). INSERT of an
+  // open order is not a status transition, so working_orders_enforce_transition (BEFORE UPDATE) does
+  // not fire here.
+  return {
+    id: uuid(),
     tenant_id: b.tenantId,
     till_id: b.tillId,
     node_id: null,
-    order_number: 1,
+    order_number: orderNumber,
     label: null,
     status: "open",
-    opened_at: "2026-08-11T10:00:00+00:00",
+    opened_at: "2026-08-27T10:00:00+00:00",
     settled_at: null,
+    delivery_table_id: null,
+    collected_at: null,
     ...over,
   };
 }
@@ -349,7 +401,7 @@ describe("the commercial-lane apply loop", () => {
                 table: "working_orders",
                 op: "insert",
                 tenantId: b.tenantId,
-                rowImage: wire(workingOrderImage(b, woId, { status: "open" })),
+                rowImage: wire(workingOrderImage(b, 1, { id: woId, status: "open" })),
               },
             ],
             opts,
@@ -367,7 +419,7 @@ describe("the commercial-lane apply loop", () => {
                 table: "working_orders",
                 op: "update",
                 tenantId: b.tenantId,
-                rowImage: wire(workingOrderImage(b, woId, { status: "placed" })),
+                rowImage: wire(workingOrderImage(b, 1, { id: woId, status: "placed" })),
               },
             ],
             opts,
@@ -389,7 +441,7 @@ describe("the commercial-lane apply loop", () => {
             table: "working_orders",
             op: "update",
             tenantId: b.tenantId,
-            rowImage: wire(workingOrderImage(b, woId, { status: "open" })),
+            rowImage: wire(workingOrderImage(b, 1, { id: woId, status: "open" })),
           },
         ],
         opts,
@@ -951,6 +1003,103 @@ describe("the fast and ordered lanes advance independent cursors (spec §4e)", (
         sql`select count(*)::int::text as v from payments where id = ${pay.id as string}`,
       );
       expect(present.rows[0]!.v).toBe("1"); // landed once the parent arrived
+    } finally {
+      await applier.close();
+    }
+  });
+});
+
+describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard gate)", () => {
+  it("a counter-delivery working_order applies with no park once its dining_tables closure is enrolled", async () => {
+    // Failing case (proven by deletion): comment out the dining_tables entry in ENROLLED and re-run —
+    // applyBatch throws sync.table_not_enrolled on the dining_tables row (DISPATCH has no entry), so the
+    // whole batch fails. Restore → this passes. That is the C1 gate made a test.
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const zone = floorZoneImage(b);
+      const status = statusImage(b);
+      const table = diningTableImage(b, { zone_id: zone.id, status_id: status.id });
+      const order = workingOrderImage(b, 1, { delivery_table_id: table.id });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "floor_zones",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(zone),
+        },
+        {
+          seq: 2n,
+          originId,
+          table: "table_service_statuses",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(status),
+        },
+        {
+          seq: 3n,
+          originId,
+          table: "dining_tables",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(table),
+        },
+        {
+          seq: 4n,
+          originId,
+          table: "working_orders",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(order),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 4, deferred: 0 }); // all four landed, nothing parked
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(4n); // cursor advanced past them
+      // The delivery order is present AND still points at the mirrored table.
+      const back = await scalar(
+        sql`select delivery_table_id::text as v from working_orders where id = ${order.id as string}`,
+      );
+      expect(back).toBe(table.id);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("negative control: without the dining_tables parent, the delivery working_order parks on 23503 and holds the cursor", async () => {
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const missingTableId = uuid(); // a dining_table that is NEVER applied (models "not enrolled")
+      const order = workingOrderImage(b, 2, { delivery_table_id: missingTableId });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "working_orders",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(order),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent FK parent
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from working_orders where id = ${order.id as string}`,
+        ),
+      ).toBe("0"); // never inserted
     } finally {
       await applier.close();
     }
