@@ -41,6 +41,7 @@ import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { enqueueKitchenTickets } from "./kitchen-print.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -696,8 +697,16 @@ export async function fireLines(
       state: "queued" as const,
     };
   });
+  let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
-    await tx.insert(ticketItems).values(values);
+    // `.returning()` captures the newly-written ticket items so print-on-fire (KDS-4) can enqueue their
+    // kitchen tickets WITHOUT re-querying `ticket_items` — a re-query would sweep up EARLIER rounds'
+    // already-fired items (an order fires round by round) and reprint them (controller ruling R-D).
+    inserted = await tx.insert(ticketItems).values(values).returning({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      firedAt: ticketItems.firedAt,
+    });
   } catch (error) {
     // A line already fired collides on `ticket_items`' per-line `(tenant_id, working_order_line_id)`
     // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
@@ -709,6 +718,15 @@ export async function fireLines(
     }
     throw error;
   }
+
+  // Print-on-fire (KDS-4 §3c): enqueue a kitchen ticket at each printer attached to a firing station,
+  // for the lines that FIRED now — held items (`fired_at` null, a later course) print only when
+  // `fireCourse` releases them. Same-tx outbox INSERTs, so the enqueue rolls back with the fire and
+  // never blocks it (no hardware I/O).
+  const firedItems = inserted
+    .filter((row) => row.firedAt !== null)
+    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
+  await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
 }
 
 /**
@@ -741,7 +759,7 @@ export async function fireCourse(
   courseId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
-  await tx
+  const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: sql`now()` })
     .where(
@@ -750,7 +768,16 @@ export async function fireCourse(
         eq(ticketItems.courseId, courseId),
         isNull(ticketItems.firedAt),
       ),
-    );
+    )
+    .returning({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+    });
+  // Print-on-fire (KDS-4 §3c): the `fired_at IS NULL` predicate matched EXACTLY the items that fired now
+  // (a held course being released), so `RETURNING` is precisely this round's newly-fired set — no earlier
+  // round is re-selected, and a re-fire of an already-fired course matches zero rows and enqueues
+  // nothing. Same-tx outbox INSERTs, so the enqueue rolls back with the fire and never blocks it.
+  await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
 }
 
 /**
