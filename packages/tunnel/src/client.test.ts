@@ -18,9 +18,9 @@ afterEach(async () => {
 
 // A scriptable stand-in relay: for each incoming box connection it invokes `script(box, index)`, so a
 // test drives the handshake bytes directly — to coalesce `go` with its leftover, send a garbage line,
-// reset the socket, or answer a ping. The real relay stand-in is well-behaved, so these edge paths
-// need a relay the test controls. `count()` reports how many box connections have been accepted (a
-// replacement dial shows up as a new one).
+// reset the socket, or reject a registration. The real relay stand-in is well-behaved, so these edge
+// paths need a relay the test controls. `count()` reports how many box connections have been accepted
+// (a replacement dial shows up as a new one).
 interface ScriptRelay {
   port: number;
   count: () => number;
@@ -70,20 +70,9 @@ function onceRegister(box: Socket): Promise<Frame> {
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-const noopSleep = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((res, rej) => {
-    const t = setTimeout(res, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(t);
-        rej(new Error("aborted"));
-      },
-      { once: true },
-    );
-  });
-
-const realSleep = (ms: number, signal: AbortSignal) =>
+// The injected `deps.sleep`: a real abort-aware setTimeout that rejects on abort. Task 3 does not call
+// it (no backoff yet), but the signature must be honoured; Task 4 starts driving it.
+const realSleep = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise<void>((res, rej) => {
     const t = setTimeout(res, ms);
     signal.addEventListener(
@@ -166,7 +155,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       localHost: "127.0.0.1",
       localPort,
       poolSize: 1,
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: () => {},
     });
@@ -193,7 +182,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: () => {},
     });
@@ -201,22 +190,11 @@ describe("runTunnelClient handshake + splice edge cases", () => {
     expect(scripted.count()).toBe(2);
   });
 
-  it("pongs an idle-heartbeat ping and keeps a default-size pool", async () => {
-    let ponged: (f: Frame) => void = () => {};
-    const pong = new Promise<Frame>((res) => (ponged = res));
-    scripted = await scriptRelay((box, index) => {
-      void onceRegister(box).then(() => {
-        box.write(encodeFrame({ t: "ack" }));
-        if (index === 0) {
-          box.write(encodeFrame({ t: "ping" }));
-          let buf = Buffer.alloc(0);
-          box.on("data", (d) => {
-            buf = Buffer.concat([buf, d]);
-            const r = decodeFrame(buf);
-            if (r !== null) ponged(r.frame);
-          });
-        }
-      });
+  it("keeps a default-size pool of four connections", async () => {
+    // poolSize omitted → default 4: the client should open (and keep) four registered idle
+    // connections. Every box connection is simply acked and left idle.
+    scripted = await scriptRelay((box) => {
+      void onceRegister(box).then(() => box.write(encodeFrame({ t: "ack" })));
     });
     ac = new AbortController();
     void runTunnelClient({
@@ -225,12 +203,10 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       boxId: "b",
       token: "t",
       localPort: 1,
-      // poolSize omitted → default 4; assert the client opens four connections.
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: () => {},
     });
-    expect((await pong).t).toBe("pong");
     await wait(20);
     expect(scripted.count()).toBe(4);
   });
@@ -257,7 +233,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: (level, code) => logs.push({ level, code }),
     });
@@ -285,7 +261,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: () => {},
     });
@@ -306,7 +282,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 2,
-      sleep: noopSleep,
+      sleep: realSleep,
       signal: ac.signal,
       log: () => {},
     });

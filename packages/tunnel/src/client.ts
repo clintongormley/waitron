@@ -123,10 +123,6 @@ export async function runTunnelClient(deps: TunnelClientDeps): Promise<void> {
           deps.log("info", "tunnel.connection_registered", { boxId: deps.boxId });
           continue;
         }
-        if (frame.t === "ping") {
-          relayConn.write(encodeFrame({ t: "pong" }));
-          continue;
-        }
         if (frame.t === "go") {
           startSplice(buf);
           return;
@@ -136,8 +132,10 @@ export async function runTunnelClient(deps: TunnelClientDeps): Promise<void> {
           relayConn.destroy();
           return;
         }
-        // Any other frame (a box-side or duplicate handshake frame the relay never sends) is ignored;
-        // keep reading.
+        // Any other frame is ignored; keep reading. Heartbeat is box-INITIATED — the box SENDS `ping`
+        // and the relay replies `pong` (testing/relay.ts) — so the only frame that ever arrives here at
+        // rest is `pong`. Task 4 adds the ping sender and reads that pong for liveness; Task 3 builds no
+        // heartbeat (YAGNI), so there is deliberately no inbound-ping handling here.
       }
     };
 
