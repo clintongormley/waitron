@@ -16,6 +16,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
+import { parseEnvFile } from "./env-file.js";
 import { loadConfig, loadSyncConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { codeOf } from "./error-code.js";
@@ -135,26 +136,6 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
  * agree on one value rather than two literals that could drift.
  */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-
-/**
- * Parse the `KEY=value` lines of a box `secrets.env` back into a record, splitting on the FIRST `=`
- * so a base64 value's own `=` padding survives (`WAITRON_CREDENTIALS_KEY` is base64). Blank and `#`
- * comment lines are skipped. Mirrors `scripts/dev-setup.ts`'s `parseEnvFile` shape, kept local
- * because that module is dev tooling and not on boot's import graph. Used ONLY in the setup branch
- * below, to recover the vault key ring `ensureBoxSecrets` (slice 2a) wrote to disk but never loaded
- * into this process's env.
- */
-function parseEnvFile(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (line === "" || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    out[line.slice(0, eq)] = line.slice(eq + 1);
-  }
-  return out;
-}
 
 /**
  * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when

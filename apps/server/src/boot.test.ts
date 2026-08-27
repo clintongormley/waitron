@@ -422,7 +422,7 @@ function provisionVenueBody(taxId: string) {
 
 /** Parse a `KEY=value\n` env file's lines (split on the FIRST `=`, so a value's own `=` — a base64
  * pad or a URI query — survives), for reading `trading.env` back. Mirrors `writeTradingEnv`'s writer
- * and boot's own `parseEnvFile`. */
+ * and the shared `env-file.ts` `parseEnvFile`. */
 function parseEnvLines(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of text.split("\n")) {

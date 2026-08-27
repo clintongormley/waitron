@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
+import { formatEnvFile } from "./env-file.js";
 
 /**
  * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
@@ -127,10 +128,11 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   if (!(await exists(secretsFile))) {
     const ring = makeKeyRing();
     const token = makeToken();
-    const body =
-      `WAITRON_CREDENTIALS_KEY=${ring.key}\n` +
-      `WAITRON_CREDENTIALS_KEY_VERSION=${ring.version}\n` +
-      `WAITRON_SYNC_NODE_TOKEN=${token}\n`;
+    const body = formatEnvFile({
+      WAITRON_CREDENTIALS_KEY: ring.key,
+      WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
+      WAITRON_SYNC_NODE_TOKEN: token,
+    });
     // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
     // observed torn — temp-then-rename means it is either fully present or absent, never truncated.
     await writeFileAtomic(secretsFile, body, 0o600);

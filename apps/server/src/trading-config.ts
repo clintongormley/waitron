@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { writeFileAtomic } from "./fs-atomic.js";
+import { formatEnvFile } from "./env-file.js";
 
 /**
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
@@ -26,15 +27,16 @@ export interface TradingConfig {
  */
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
   const path = join(stateDir, "trading.env");
-  const body =
-    `WAITRON_TILL_TENANT_ID=${cfg.tenantId}\n` +
-    `WAITRON_TILL_TILL_ID=${cfg.tillId}\n` +
-    `WAITRON_TILL_NODE_ID=${cfg.nodeId}\n` +
-    `WAITRON_TILL_SERIES_ID=${cfg.seriesId}\n` +
-    `WAITRON_TILL_LOCATION_ID=${cfg.locationId}\n` +
-    `DATABASE_URL=${cfg.databaseUrl}\n` +
-    `WAITRON_MIGRATIONS_DATABASE_URL=${cfg.migrationsDatabaseUrl}\n` +
-    `WAITRON_ENV=${cfg.environment}\n`;
+  const body = formatEnvFile({
+    WAITRON_TILL_TENANT_ID: cfg.tenantId,
+    WAITRON_TILL_TILL_ID: cfg.tillId,
+    WAITRON_TILL_NODE_ID: cfg.nodeId,
+    WAITRON_TILL_SERIES_ID: cfg.seriesId,
+    WAITRON_TILL_LOCATION_ID: cfg.locationId,
+    DATABASE_URL: cfg.databaseUrl,
+    WAITRON_MIGRATIONS_DATABASE_URL: cfg.migrationsDatabaseUrl,
+    WAITRON_ENV: cfg.environment,
+  });
   await writeFileAtomic(path, body, 0o600);
   return path;
 }
