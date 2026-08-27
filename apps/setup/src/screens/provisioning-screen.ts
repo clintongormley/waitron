@@ -13,10 +13,14 @@ import { actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
  *
  * - While the POST is IN FLIGHT (`message` is `undefined`): a plain, non-spinner "Provisioning…"
  *   status and a DISABLED provision control, so a second submit is impossible while one is running.
- * - On a FAILURE that stays here (`message` set): a `role="alert"` banner with the mapped message,
- *   plus — only when `canRetry` — a "Try again" control that re-emits `provision-requested` for the
- *   shell to retry. The fiscal double-provision refusals set `canRetry=false`: re-POSTing a box that
- *   is already set up is meaningless AND unrecoverable (CLAUDE.md §5), so no retry is offered.
+ * - On a RETRYABLE failure (`message` set, `canRetry`): a `role="alert"` banner with the mapped
+ *   message, plus a "Try again" control that re-emits `provision-requested` for the shell to retry.
+ * - On a TERMINAL failure (`message` set, `canRetry=false`, `reloadLabel` set): the same banner, but
+ *   its action is a RELOAD ({@link SetupProvisioningScreen.reload}, the real `location.reload`), not a
+ *   retry — re-POSTing a box that is already set up is meaningless AND unrecoverable (CLAUDE.md §5), so
+ *   the operator is pointed onward (into the till, or to re-read status) rather than left on a dead-end
+ *   alert. The shell picks the label per code (`apps/setup/src/setup-app.ts`): "Reload to open the
+ *   till" for the already-provisioned box, "Reload" for a provision already in progress.
  */
 @customElement("setup-provisioning-screen")
 export class SetupProvisioningScreen extends LitElement {
@@ -35,8 +39,19 @@ export class SetupProvisioningScreen extends LitElement {
   /** The mapped failure message. `undefined` means the POST is in flight (no failure yet). */
   @property() message?: string;
 
-  /** Whether a failed provision may be retried. Never true for the two fiscal 409 refusals. */
+  /** Whether a failed provision may be retried. Never true for the terminal 409 refusals. */
   @property({ type: Boolean }) canRetry = false;
+
+  /**
+   * The label for a TERMINAL failure's reload action ("Reload to open the till" / "Reload"), set by the
+   * shell for the double-provision 409s. `undefined` for the in-flight and retryable states — its
+   * presence is what renders the reload control, and it never coexists with `canRetry`.
+   */
+  @property() reloadLabel?: string;
+
+  /** How to reload the page — the real `location.reload` by default, injectable so a test can spy it
+   * without navigating the runner (mirrors `done-screen.ts`). A bound native, not authored code. */
+  @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
   #retry(): void {
     this.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
@@ -55,7 +70,13 @@ export class SetupProvisioningScreen extends LitElement {
                     >Try again</wt-button
                   >
                 </div>`
-              : nothing
+              : this.reloadLabel === undefined
+                ? nothing
+                : html`<div class="actions">
+                    <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+                      >${this.reloadLabel}</wt-button
+                    >
+                  </div>`
           }
         </wt-card>
       `;

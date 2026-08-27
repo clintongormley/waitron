@@ -5,9 +5,11 @@ import type { SetupVenueScreen } from "./venue-screen.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
-type Emitted = { kind: "patch" | "goto"; detail: unknown };
+type Emitted = { kind: "patch" | "goto" | "advance"; detail: unknown };
 
-/** Collects the two composed events the screen emits UP; both bubble+compose, so the host hears them. */
+/** Collects the composed events the screen emits UP; all bubble+compose, so the host hears them.
+ * `setup-goto` is still used by `Back`; `setup-advance` is the screen-agnostic forward step from `Next`
+ * (the shell decides where it lands). */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("setup-patch", (e) =>
@@ -15,6 +17,9 @@ function collect(host: HTMLElement): Emitted[] {
   );
   host.addEventListener("setup-goto", (e) =>
     events.push({ kind: "goto", detail: (e as CustomEvent).detail }),
+  );
+  host.addEventListener("setup-advance", (e) =>
+    events.push({ kind: "advance", detail: (e as CustomEvent).detail }),
   );
   return events;
 }
@@ -100,15 +105,16 @@ const EXPECTED_VENUE = {
 afterEach(cleanupWidgets);
 
 describe("setup-venue-screen", () => {
-  it("collects every field and emits the nested venue patch, then advances to review", async () => {
+  it("collects every field and emits the nested venue patch, then a screen-agnostic advance", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
     await fillValid(el);
     q(el, "[data-test=next]")!.click();
     // The whole patch is pinned by field NAME — a mis-named field (this repo's dominant defect) fails here.
+    // The forward step is a screen-agnostic `setup-advance` (no target screen): the shell routes it.
     expect(events).toEqual([
       { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
-      { kind: "goto", detail: { screen: "review" } },
+      { kind: "advance", detail: null },
     ]);
   });
 
@@ -130,24 +136,31 @@ describe("setup-venue-screen", () => {
     expect(patch.venue?.location?.addressLine2).toBe("Piso 2");
   });
 
-  it("routes a live ES-common venue to the cert step", async () => {
+  // Fix (m): the venue→cert/review decision moved to the shell, so this screen must NOT route by mode
+  // itself. With a live draft it still emits only the screen-agnostic `setup-advance` — no `setup-goto`
+  // to `cert` — proving the mode read was removed. The cert-vs-review branch is asserted in the shell
+  // (setup-app.test.ts). Prove-by-restore: put the old `mode === "live" ? "cert" ...` goto back and this
+  // flips red (a `setup-goto{cert}` would appear).
+  it("emits a screen-agnostic advance even for a live draft (no in-screen cert routing)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "live" },
     });
     const events = collect(host);
     await fillValid(el);
     q(el, "[data-test=next]")!.click();
-    expect(events.at(-1)).toEqual({ kind: "goto", detail: { screen: "cert" } });
+    expect(events.at(-1)).toEqual({ kind: "advance", detail: null });
+    expect(events.some((e) => e.kind === "goto")).toBe(false);
   });
 
-  it("routes a demo venue straight to review (no cert step)", async () => {
+  it("emits the same screen-agnostic advance for a demo draft (no in-screen routing)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
     });
     const events = collect(host);
     await fillValid(el);
     q(el, "[data-test=next]")!.click();
-    expect(events.at(-1)).toEqual({ kind: "goto", detail: { screen: "review" } });
+    expect(events.at(-1)).toEqual({ kind: "advance", detail: null });
+    expect(events.some((e) => e.kind === "goto")).toBe(false);
   });
 
   it("seeds the editable fields from the draft so Back-then-forward is non-destructive", async () => {
@@ -265,7 +278,7 @@ describe("setup-venue-screen", () => {
     await fillValid(el, { country: "  es  " });
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(events.some((e) => e.kind === "goto")).toBe(true);
+    expect(events.some((e) => e.kind === "advance")).toBe(true);
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
     expect(patch.venue?.country).toBe("es"); // trimmed, so the space-sensitive server check accepts it
   });
@@ -278,6 +291,24 @@ describe("setup-venue-screen", () => {
     expect(banner.getAttribute("role")).toBe("alert");
     expect(banner.textContent).toContain("country must match");
     expect(q(el, "[data-test=error]")).toBeNull();
+  });
+
+  // Fix (j): two simultaneous `role="alert"` regions double-announce to a screen reader. When BOTH a
+  // routed server error AND a client-validation failure are present, exactly ONE alert must render, and
+  // the CLIENT message wins (it names a problem in what the operator just typed; the server message is
+  // now stale). Prove-by-deletion: collapse the render back to two separate banners and the count is 2.
+  it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      errorMessage: "The country must match the fiscal territory.",
+    });
+    q(el, "[data-test=next]")!.click(); // empty form → client validation fails → showError
+    await el.updateComplete;
+    const alerts = el.shadowRoot!.querySelectorAll("[role=alert]");
+    expect(alerts.length).toBe(1);
+    // The single region is the client banner; the stale server banner is suppressed.
+    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(q(el, "[data-test=server-error]")).toBeNull();
+    expect(alerts[0]!.textContent).toContain("Check the highlighted fields");
   });
 
   it("blocks Next when no invoice locale is selected", async () => {
@@ -326,7 +357,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(q(el, "[data-test=error]")).toBeNull();
-    expect(events.some((e) => e.kind === "goto")).toBe(true);
+    expect(events.some((e) => e.kind === "advance")).toBe(true);
   });
 
   it("steps back to admin without emitting a patch", async () => {

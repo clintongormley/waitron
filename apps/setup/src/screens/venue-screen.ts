@@ -17,11 +17,13 @@ import type { LocationDraft, ProvisionBody } from "../api/client.js";
  * patch slots straight into `venue` / `venue.location`.
  *
  * On `Next` it client-validates (every field except `addressLine2` non-empty; `seriesCode` differs
- * from `rectificativeSeriesCode`; one or two invoice languages) — a failure shows a `role="alert"`
- * banner and marks the offending fields `invalid`, and nothing is emitted. On success it emits the
- * `venue` slice as a `setup-patch`, then computes its OWN next target: a live ES-common venue still
- * needs the AEAT certificate (`cert`), everything else goes straight to `review`. `Back` returns to
- * `admin`. Both nav events are the composed/bubbling pair the shell listens for.
+ * from `rectificativeSeriesCode`; one or two invoice languages) — a failure shows a SINGLE
+ * `role="alert"` banner and marks the offending fields `invalid`, and nothing is emitted. On success it
+ * emits the `venue` slice as a `setup-patch`, then a screen-agnostic `setup-advance` for the SHELL to
+ * route: the venue→`cert`/`review` decision (live ES-common needs the AEAT cert, everything else goes
+ * straight to `review`) lives in `apps/setup/src/setup-app.ts`, which owns the merged draft — this
+ * screen no longer reads `mode` for routing. `Back` returns to `admin` (a fixed `setup-goto`). All nav
+ * events are composed/bubbling, the pair the shell listens for.
  *
  * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping Back then forward
  * is non-destructive on all fifteen fields. Following `apps/setup/src/screens/admin-screen.ts` for the
@@ -292,12 +294,10 @@ export class SetupVenueScreen extends LitElement {
       new CustomEvent("setup-patch", { detail: { patch }, bubbles: true, composed: true }),
     );
 
-    // Compute this screen's own next target: a live ES-common venue still needs the AEAT certificate.
-    const screen =
-      this.draft.mode === "live" && this.fiscalTerritory === "ES-common" ? "cert" : "review";
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen }, bubbles: true, composed: true }),
-    );
+    // A screen-agnostic advance: the shell owns the venue→cert/review decision (it holds the merged
+    // draft, so it — not this screen — knows `mode` and the location's fiscal territory). Mirrors
+    // `apps/dashboard/src/dashboard-app.ts`, where the shell owns conditional routing.
+    this.dispatchEvent(new CustomEvent("setup-advance", { bubbles: true, composed: true }));
   }
 
   #back(): void {
@@ -373,18 +373,21 @@ export class SetupVenueScreen extends LitElement {
         ${this.#field("Till name", "tillName")} ${this.#field("Invoice series code", "seriesCode")}
         ${this.#field("Rectificative series code", "rectificativeSeriesCode")}
         ${
-          this.errorMessage === undefined
-            ? nothing
-            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
-        }
-        ${
+          // A SINGLE live alert region — two simultaneous `role="alert"` nodes double-announce to a
+          // screen reader (a11y fix). The client-validation banner takes precedence: it names a
+          // problem in what the operator just typed, so a stale server-routed message must not sit
+          // beside it. The routed-back server banner shows only when there is NO client error.
           this.showError
             ? html`<p class="error" role="alert" data-test="error">
                 Check the highlighted fields: fill every required field, use ES as the country for
                 the Spanish common territory, pick one or two invoice languages, and use a different
                 code for the rectificative series.
               </p>`
-            : nothing
+            : this.errorMessage === undefined
+              ? nothing
+              : html`<p class="error" role="alert" data-test="server-error">
+                  ${this.errorMessage}
+                </p>`
         }
         <div class="actions">
           <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
