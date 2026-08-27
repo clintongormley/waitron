@@ -92,6 +92,14 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
  * (the box already holds this tenant) and `deployment.already_stamped` (a preproduction box cannot
  * become production), both raised by `provisionVenue`. `setup.not_ready`/`setup.already_provisioning`
  * are NOT here — they are returned directly, before or outside the boundary, never thrown into it.
+ *
+ * An UNEXPECTED fault (anything thrown inside the boundary that is NOT an `AppError`) is not in this
+ * map and is NOT re-emitted: `createErrorBoundary` (error-boundary.ts) answers it with an opaque
+ * `server.internal` 500 that carries no params, and logs it at `error` under the `tag` it was built
+ * with. That tag — `setup.provision_failed`, the second argument to `createErrorBoundary` below — is a
+ * LOG LABEL ONLY; it is never put on the wire, so on a crash the client sees `server.internal`, never
+ * `setup.provision_failed`. Every code in THIS map, by contrast, is an `AppError` re-emitted verbatim
+ * as `{ error: { code, params } }` at the status assigned here (or 400 when the map omits it).
  */
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
@@ -100,6 +108,8 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "deployment.already_stamped": 409,
 };
 
+// The `"setup.provision_failed"` here is the LOG TAG for the unexpected-crash branch, not a wire code
+// (see the map's doc comment above and error-boundary.ts): a non-`AppError` is answered `server.internal`.
 const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
@@ -282,20 +292,37 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (mode !== "demo" && mode !== "live") invalidRequest("mode");
 
         const venue = parseVenue(body.venue);
-        const aeatCert = body.aeatCert === undefined ? undefined : parseCert(body.aeatCert);
 
         // Demo/live fork: live stamps production, demo stamps preproduction (provisionVenue writes it).
         const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
 
-        // Cert-required gate (spec §10): a LIVE ES-common venue files to the real AEAT and must ship a
-        // certificate. Checked BEFORE provision, so nothing is stamped or minted when it is missing.
-        if (
-          mode === "live" &&
-          venue.location.fiscalTerritory === "ES-common" &&
-          aeatCert === undefined
-        ) {
+        // The AEAT signing cert is meaningful IFF a LIVE ES-common venue files to the real AEAT — that
+        // is exactly the condition the required-gate below (spec §10) demands it. Make the rule
+        // SYMMETRIC, gating on PRESENCE (not the parsed value) BEFORE `parseCert`, both arms checked
+        // BEFORE `provision` so nothing is stamped/minted/sealed on a bad request:
+        //   - cert expected but MISSING → `setup.aeat_cert_required` (a live ES-common box must ship one);
+        //   - cert NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c client
+        //     already gates the cert on live mode and never sends it otherwise, so this is
+        //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
+        //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
+        //     MALFORMED cert on a non-expected request rejects cleanly with `{ field: "aeatCert" }` and
+        //     no wasted `parseCert` validation — instead of `parseCert` naming a sub-field
+        //     (`pfxBase64`/`passphrase`/`certKind`, or `aeatCert` for a non-object), which would leak
+        //     which part of a cert we were never going to accept.
+        const certExpected = mode === "live" && venue.location.fiscalTerritory === "ES-common";
+        const certPresent = body.aeatCert !== undefined;
+        if (certExpected && !certPresent) {
           throw new AppError("setup.aeat_cert_required", {});
         }
+        if (!certExpected && certPresent) {
+          invalidRequest("aeatCert");
+        }
+        // `certExpected` implies `certPresent` here (we threw otherwise), so `parseCert` — and its
+        // value validation — runs ONLY on the expected path, where a malformed cert must still fail
+        // with `parseCert`'s field detail: the offending sub-field (`pfxBase64`/`passphrase`/
+        // `certKind`), or `aeatCert` when the whole value is not an object. Non-expected requests
+        // never reach it.
+        const aeatCert = certExpected ? parseCert(body.aeatCert) : undefined;
 
         const result = await provision({ environment, venue });
 

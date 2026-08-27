@@ -992,16 +992,18 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("setup mode: a demo provision carrying an AEAT test cert seals it into the tenant's fiscal.aeat vault", async () => {
-    // The `sealAeat` wiring boot now binds (`sealAeatCredential(ownerDb, ring, …)`) — recovered vault
-    // ring AND owner connection together. A demo/preproduction box CAN carry a test cert for AEAT's
-    // homologation endpoint (map §3), so `POST /setup-api/provision` with an `aeatCert` seals it after
-    // `applyVenue` mints the tenant. This proves the ring `boot.ts` read back off `secrets.env` is the
-    // one that sealed the row (a broken ring recovery would throw here), and the same FRESH-clone
-    // isolation the demo test above uses. Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported
-    // for the mTLS-transport test) rather than inventing a new PFX.
+  it("setup mode: a DEMO provision carrying an AEAT cert is REFUSED (400) — nothing provisioned or sealed", async () => {
+    // Defense-in-depth over the full boot (CLAUDE.md §5): the AEAT signing cert is meaningful ONLY for
+    // a LIVE ES-common venue, so a demo/preproduction body carrying one is an invalid request that the
+    // endpoint refuses BEFORE `provision`. This pins that the box never seals a real AEAT signing cert
+    // into a preproduction tenant's vault — the whole point of the server-side reject even though the
+    // 2c client already gates the cert on live mode. FRESH-clone isolation as the demo test above.
+    // Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported for the mTLS-transport test): a
+    // well-formed cert, so the refusal is the symmetric `aeatCert`-not-expected gate, not a malformed
+    // cert being rejected by `validateAeatCert`. (Before this fix the same body sealed the cert and
+    // returned 200 — this test was INVERTED with the behaviour change.)
     const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-seal-state-"));
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-reject-state-"));
     const handle = resolveSharedHandle(undefined);
     const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
     const check = await pg.connect();
@@ -1034,12 +1036,103 @@ describe("startServer, against a real container as the deployment role", () => {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           });
+          expect(response.status).toBe(400);
+          const json = (await response.json()) as {
+            error: { code: string; params: { field?: string } };
+          };
+          expect(json.error.code).toBe("setup.request_invalid");
+          expect(json.error.params.field).toBe("aeatCert");
+
+          // Nothing was minted and nothing was sealed — the request was refused before `provision`.
+          // `check` is the clone's superuser connection, so it BYPASSES the FORCE-RLS on both tables.
+          const tenants = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenants`,
+          );
+          expect(tenants.rows[0]!.n).toBe(0);
+          const sealed = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+          );
+          expect(sealed.rows[0]!.n).toBe(0);
+
+          // A refused provision never schedules the restart (the setTimeout fires only on success).
+          await delay(50);
+          expect(kills).toEqual([]);
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await check.close();
+      await pg.stop();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("setup mode: a LIVE ES-common provision WITH an AEAT cert seals it into the tenant's fiscal.aeat vault, stamps production, restarts", async () => {
+    // The legitimate seal path end-to-end — the assertion the (now-inverted) demo+cert test used to
+    // make, moved onto the CORRECT path. A LIVE ES-common venue files to the real AEAT, so its cert
+    // IS expected (`certExpected` in setup-api.ts): the endpoint accepts it and `sealAeat` seals it via
+    // boot.ts's real `sealAeatCredential(ownerDb, ring, …)` wiring — the ONLY full-boot exercise of
+    // that binding, and of the ring `boot.ts` reads back off `secrets.env` (a broken recovery would
+    // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
+    //
+    // No real AEAT call is made and none can be: a FRESH provision seeds NO `envios`, and a box in
+    // SETUP mode never starts the drain worker (it enters trading mode only after the restart, which is
+    // mocked here) — so `resolveClient`/`mtlsFetch` are never reached even though a usable `fiscal.aeat`
+    // credential now exists (the transport-seam obstacle in this file's header is about the drain, not
+    // the SEAL). The module-mocked `undici` fetch is the belt-and-braces backstop.
+    //
+    // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
+    // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
+    // mode-derived value (live → production, provision.ts:76) — NOT `config.environment`, which
+    // `boot.ts` (line 528) never threads into `provisionVenue`. So this isolates the SEAL without
+    // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
+    // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-live-seal-state-"));
+    const handle = resolveSharedHandle(undefined);
+    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
+    const check = await pg.connect();
+    const material = mintMtlsMaterial();
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          DATABASE_URL: pg.uri,
+          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        });
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        try {
+          const body = {
+            mode: "live",
+            venue: provisionVenueBody("60000013K"),
+            aeatCert: {
+              pfxBase64: material.clientPfx.toString("base64"),
+              passphrase: material.clientPassphrase,
+              certKind: "representante",
+            },
+          };
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
           expect(response.status).toBe(200);
           const json = (await response.json()) as { provisioned: boolean; tenantId: string };
           expect(json.provisioned).toBe(true);
 
-          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned. `check`
-          // is the clone's superuser connection, so it BYPASSES the FORCE-RLS on `tenant_credentials`.
+          // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot env).
+          // `check` is the clone's superuser connection, so it BYPASSES RLS on both reads.
+          expect(await readDeploymentEnvironment(check)).toBe("production");
+
+          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
+          // `sealAeatCredential` wiring (boot.ts:529) ran end-to-end.
           const sealed = await check.execute<{ n: number; tenant: string }>(
             sql`select count(*)::int as n, max(tenant_id::text) as tenant
                 from tenant_credentials where purpose = 'fiscal.aeat'`,
@@ -1047,7 +1140,7 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(sealed.rows[0]!.n).toBe(1);
           expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
 
-          // The restart still fires once after the seal + persist, as for the plain demo above.
+          // The restart fires once after the seal + persist, as for the plain demo above.
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
         } finally {
