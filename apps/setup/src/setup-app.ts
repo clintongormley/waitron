@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
+import "./screens/venue-screen.js";
 import "./screens/review-screen.js";
 import type { ProvisionBody, SetupApi } from "./api/client.js";
 
@@ -11,8 +12,9 @@ import type { ProvisionBody, SetupApi } from "./api/client.js";
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
  * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs): `mode` (demo/live) → `admin`
  * (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). Only `mode` renders
- * richly in this task; the collecting screens arrive in later tasks of slice 2c and are stubs here.
+ * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). `mode`, `admin`,
+ * `venue` and `review` are the real screens today; `cert`, `provisioning` and `done` arrive in later
+ * tasks of slice 2c and are stubs here.
  */
 export type Screen = "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
 
@@ -165,21 +167,25 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * The mounted screen for the current {@link SetupApp.screen}. `mode`, `admin` and `review` are the
-   * real screens (this task); the remaining collecting screens (`venue`/`cert`) and the terminal
-   * `provisioning`/`done` arrive in later tasks of slice 2c and render a labelled stub for now, so the
-   * machine and its nav are exercisable end to end. The real screens carry the `data-test="screen-*"`
-   * hook on their own host so the shell's screen-switching tests stay uniform across stub and real.
+   * The mounted screen for the current {@link SetupApp.screen}. `mode`, `admin`, `venue` and `review`
+   * are the real screens today; `cert`, `provisioning` and `done` arrive in later tasks of slice 2c
+   * and render a labelled stub for now, so the machine and its nav are exercisable end to end. The
+   * real screens carry the `data-test="screen-*"` hook on their own host so the shell's
+   * screen-switching tests stay uniform across stub and real.
    *
-   * `mode` reads `environment` (to warn on a production box) and `review` reads the accumulated
-   * `draft` (to summarise it); both are passed as properties, since neither can travel as an attribute.
+   * `mode` reads `environment` (to warn on a production box); `venue` and `review` read the accumulated
+   * `draft` (to seed their fields / summarise it). All are passed as properties, since neither an api
+   * nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "admin":
         return html`<setup-admin-screen data-test="screen-admin"></setup-admin-screen>`;
       case "venue":
-        return html`<p data-test="screen-venue">venue</p>`;
+        return html`<setup-venue-screen
+          data-test="screen-venue"
+          .draft=${this.draft}
+        ></setup-venue-screen>`;
       case "cert":
         return html`<p data-test="screen-cert">cert</p>`;
       case "review":
