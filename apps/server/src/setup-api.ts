@@ -306,7 +306,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
         //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
         //     MALFORMED cert on a non-expected request rejects cleanly with `{ field: "aeatCert" }` and
-        //     no wasted `parseCert` validation, rather than `parseCert`'s nested `aeatCert.*` detail.
+        //     no wasted `parseCert` validation — instead of `parseCert` naming a sub-field
+        //     (`pfxBase64`/`passphrase`/`certKind`, or `aeatCert` for a non-object), which would leak
+        //     which part of a cert we were never going to accept.
         const certExpected = mode === "live" && venue.location.fiscalTerritory === "ES-common";
         const certPresent = body.aeatCert !== undefined;
         if (certExpected && !certPresent) {
@@ -317,7 +319,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         }
         // `certExpected` implies `certPresent` here (we threw otherwise), so `parseCert` — and its
         // value validation — runs ONLY on the expected path, where a malformed cert must still fail
-        // with `parseCert`'s nested field detail. Non-expected requests never reach it.
+        // with `parseCert`'s field detail: the offending sub-field (`pfxBase64`/`passphrase`/
+        // `certKind`), or `aeatCert` when the whole value is not an object. Non-expected requests
+        // never reach it.
         const aeatCert = certExpected ? parseCert(body.aeatCert) : undefined;
 
         const result = await provision({ environment, venue });
