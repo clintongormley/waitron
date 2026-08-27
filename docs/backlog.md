@@ -501,23 +501,23 @@ here is the cross-cutting or genuinely-decision-bearing work.
   (not least-priv `app_user`) until that retrofit.
 - **Onboarding slice-2c follow-ups** (deferred from #146, none blocking; the fiscal surface was verified
   solid by two heavyweight whole-branch reviews + deletion-proofs — cert single-chokepoint, 409s
-  no-retry, trading path untouched, secrets never leak): **(h) FISCAL, pre-existing (#57):**
+  no-retry, trading path untouched, secrets never leak). **Landed: (h) #147, (i)+(l) #148. Open: (j) (k) (m) (n) (o).** **(h) ✅ LANDED #147 — FISCAL, pre-existing (#57):**
   `tenant-id.ts` derives `obligadoTenantId` as a UUIDv5 over `country` + a newline + `taxId`, **not
   case/whitespace normalized**, so `es` vs `ES` (or a `taxId` casing/spacing difference) for the same business derives a
   **different** tenant id → could defeat `provisionVenue`'s double-provision guard across two separate
   wizard sessions (§5 unrecoverable chain duplication). Fix at the **derivation choke point** (normalize
   both `country` and `taxId`), covering the wizard **and** the `instance` CLI — a wizard-only patch was
   deliberately NOT taken (false confidence); 2c's client already trims + ES-guards `country`, which
-  narrows but does not close it. **(i) server defence-in-depth:** the provision endpoint calls `sealAeat`
+  narrows but does not close it. (Landed as normalization at the `planVenue` choke point + an `obligadoTenantId` self-normalizing backstop — covering the wizard, the `instance` CLI, and `provision.ts`'s raw-request double-provision guard — with a casing-flip regression test.) **(i) ✅ LANDED #148 — server defence-in-depth:** the provision endpoint calls `sealAeat`
   whenever `aeatCert` is present **without checking `mode`** (a `boot.test.ts` pins that a demo provision
   carrying a cert seals it) — the box should refuse/ignore an AEAT cert when `mode !== "live"`. 2c's
   client gates the cert on live mode (the Critical fix), closing the *reachable* path; this is the
-  server-side belt. **(j)** a11y: the venue-screen server-routed banner + the client-validation banner can
+  server-side belt. (Landed as a symmetric gate — a cert is accepted iff `live + ES-common`, else refused `setup.request_invalid`/`aeatCert` before parse; + a live+cert full-boot seal test.) **(j)** a11y: the venue-screen server-routed banner + the client-validation banner can
   co-render (two `role="alert"`); Fix 3 clears the routed error on manual Back, a fuller dedupe is
   deferred. **(k)** terminal failure states (`already_provisioning`/`already_provisioned`/
   `deployment.already_stamped`) render a bare alert with no next-step (reload / go-to-till) guidance.
-  **(l)** `setup-api.ts`'s provision-error doc comment implies the client sees `setup.provision_failed`;
-  that's only the boundary's log *tag* — a crash sends `server.internal` (correct the comment). **(m)**
+  **(l) ✅ LANDED #148 —** `setup-api.ts`'s provision-error doc comment implied the client sees `setup.provision_failed`;
+  that's only the boundary's log *tag* — a crash sends `server.internal` (comment corrected). **(m)**
   altitude: the venue→`cert`/`review` conditional is computed in `venue-screen` (reads `draft.mode`);
   `dashboard-app.ts` centralizes conditional routing in the shell (`#applyMe`) — centralize if onboarding
   grows a second conditional. **(n)** `select-styles.ts` is now the **3rd** verbatim copy
