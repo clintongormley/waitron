@@ -100,7 +100,7 @@ async function seedShift(
 
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  mountMeApi(app, { db: suite.admin, cfg: { tenantId }, venueLocale: "es-ES" }, noopLog);
   return app;
 }
 
@@ -180,13 +180,23 @@ describe("Me API over real Postgres (RLS + the identity property)", () => {
     const app = mountApp(venue.tenantId);
     const cookieP = await cookieFor(venue.tenantId, p);
 
-    // whoami echoes the session's own person + role, never runs authorizeManager (a staff person holds
-    // an empty permission set), so P's staff session resolves to `{ personId: P, role: "staff" }`.
+    // whoami echoes the session's own person + role + locale, never runs authorizeManager (a staff person
+    // holds an empty permission set), so P's staff session resolves to `{ personId: P, role: "staff" }`.
+    // P has no locale preference, so `locale` is null; `venueLocale` is this app's injected boot default.
     const who = await send(app, "GET", "/management-api/session/me", cookieP);
     expect(who.status).toBe(200);
-    expect((await who.json()) as { personId: string; role: string }).toEqual({
+    expect(
+      (await who.json()) as {
+        personId: string;
+        role: string;
+        locale: string | null;
+        venueLocale: string;
+      },
+    ).toEqual({
       personId: p,
       role: "staff",
+      locale: null,
+      venueLocale: "es-ES",
     });
 
     const res = await send(

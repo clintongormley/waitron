@@ -48,6 +48,11 @@ export const persons = pgTable(
      * decrypting on the box before `verifyTotp` — which keeps the "lives on the box /
      * offline-verifiable" property. */
     totpSecret: text("totp_secret"),
+    /** The person's preferred UI language (a SUPPORTED_LOCALES code). Null = no
+     * preference; the app falls back to the venue default. Validated at the
+     * write boundary (setPersonLocale), not by a DB enum, so a new locale is a
+     * catalogue + constant change with no migration. */
+    locale: text("locale"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -71,5 +76,6 @@ export const persons = pgTable(
       sql`${t.passwordHash} is null or length(${t.passwordHash}) > 0`,
     ),
     check("persons_totp_secret_ck", sql`${t.totpSecret} is null or length(${t.totpSecret}) > 0`),
+    check("persons_locale_ck", sql`${t.locale} is null or length(${t.locale}) > 0`),
   ],
 ).enableRLS();

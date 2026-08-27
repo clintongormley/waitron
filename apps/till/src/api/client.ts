@@ -42,6 +42,14 @@ export type FetchLike = typeof fetch;
  */
 export interface TillInfo {
   locale: string;
+  /**
+   * The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in. Sourced
+   * server-side from the fiscal `cfg.locale`, DELIBERATELY DISTINCT from the UI-driving {@link locale}
+   * above (the venue default derivation drops UI-unsupported codes, which must never reach the
+   * receipt — per-user-language spec, decision 2). The app threads it to `till-ticket-view.invoiceLocale`
+   * SEPARATELY from `setLocale(locale)`. A LOCAL mirror of the server's `GET /api/till` field.
+   */
+  invoiceLocale: string;
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
@@ -106,6 +114,13 @@ export interface StaffMember {
 export interface SessionResult {
   personId: string;
   canConfigureTill: boolean;
+  /**
+   * The signed-in operator's stored per-user UI locale (per-user-language-preference, Task 5), or
+   * `null` when they have never set one. The app feeds it to `resolveActiveLocale(personLocale,
+   * venueDefault)` on login to pick the language to switch the UI into; a `null` falls back to the
+   * venue default. A LOCAL mirror of the server's `POST /api/session` response field.
+   */
+  locale: string | null;
 }
 
 /** One VAT band on a ticket: a rate and its taxable base + tax, as decimal strings. */
@@ -636,6 +651,10 @@ export interface TabLine {
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
+  #localesPromise?: Promise<{
+    locales: Array<{ code: string; label: string }>;
+    venueDefault: string;
+  }>;
 
   /**
    * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches
@@ -651,6 +670,25 @@ export class TillApi {
     return this.#request<TillInfo>("/api/till", "GET");
   }
 
+  /**
+   * `GET /api/locales` — the venue's offered languages (per-user-language-preference, Task 4). PUBLIC
+   * (pre-login, like {@link getTill}): each `{ code, label }` is a `SUPPORTED_LOCALES` entry, and
+   * `venueDefault` the tenant's fallback locale. The language chooser reads the list; the app decides
+   * what to do with a pick, so the client only surfaces the shape.
+   */
+  getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
+    // The list + venue default are immutable for this client's lifetime; fetch once and share.
+    // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
+    this.#localesPromise ??= this.#request<{
+      locales: Array<{ code: string; label: string }>;
+      venueDefault: string;
+    }>("/api/locales", "GET").catch((err) => {
+      this.#localesPromise = undefined;
+      throw err;
+    });
+    return this.#localesPromise;
+  }
+
   listStaff(): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>("/api/staff", "GET");
   }
@@ -661,6 +699,17 @@ export class TillApi {
 
   async logout(): Promise<void> {
     await this.#request<{ ok: boolean }>("/api/session", "DELETE");
+  }
+
+  /**
+   * Persist the signed-in operator's OWN UI-language preference (per-user-language-preference) →
+   * `PUT /api/session/locale` with body `{ locale }`. Identity is the session's person server-side,
+   * so there is no id to pass; the route answers an empty 204, so this resolves void. An unsupported
+   * `code` rejects with `{ code: "locale.unsupported" }` (the server's one validation path). The app
+   * calls this ONLY while logged in — a pre-login pick is transient and never written.
+   */
+  async putLocale(code: string): Promise<void> {
+    await this.#request<void>("/api/session/locale", "PUT", { locale: code });
   }
 
   listProducts(): Promise<TillProduct[]> {

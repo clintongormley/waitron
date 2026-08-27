@@ -87,13 +87,17 @@ export class PersonForm extends LitElement {
    * exist, so a preset that is not the first option would fall back to the first (the latent picker
    * bug #73 fixed in the edit dialog). Today `selectedRole` starts at "staff" — the first option — so
    * a template binding renders right only by luck; setting `.value` here keeps the picker correct for
-   * any preset. The <select> is rendered unconditionally (unlike the edit dialog's, which is gated on
-   * `person?`), so the ref is always populated by the time `updated()` runs — assert it, as
-   * `recipe-editor.ts` does with `this.product!.id`. Setting `.value` imperatively does not trigger a
-   * reactive update, so this does not loop.
+   * any preset. Setting `.value` imperatively does not trigger a reactive update, so this does not loop.
+   *
+   * The ref is normally live (the `<select>` renders unconditionally, unlike the edit dialog's, which is
+   * gated on `person?`). The one case it is NOT: when the shell re-keys the staff screen around this form
+   * to repaint it in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`), a pending update can flush
+   * on the OUTGOING element after Lit has cleared its refs on disconnect. So GUARD the access — no live
+   * `<select>` means nothing to reconcile — rather than assert it: without the guard that flush throws an
+   * unhandled `Cannot set properties of undefined` the pristine-output rule forbids.
    */
   override updated(): void {
-    this.#roleSelect.value!.value = this.selectedRole;
+    if (this.#roleSelect.value) this.#roleSelect.value.value = this.selectedRole;
   }
 
   /**

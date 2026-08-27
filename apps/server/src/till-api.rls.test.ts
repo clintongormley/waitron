@@ -202,7 +202,9 @@ async function setupVenue(): Promise<{
 function apiDeps(cfg: TillConfig): TillApiDeps {
   // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
   // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
-  return { db: suite.admin, backend, clock, cfg, secureCookies: false };
+  // `venueLocale` is the display default `GET /api/till`/`GET /api/locales` echo; mirror the cfg's
+  // locale so it is internally consistent (these RLS suites assert no locale field).
+  return { db: suite.admin, backend, clock, cfg, secureCookies: false, venueLocale: cfg.locale };
 }
 
 /**
@@ -232,6 +234,7 @@ function apiDepsWithCardProvider(
     clock,
     cfg,
     secureCookies: false,
+    venueLocale: cfg.locale,
     cardProvider,
   };
 }

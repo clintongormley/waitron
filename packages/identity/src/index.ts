@@ -34,6 +34,7 @@ export {
   reactivatePerson,
   resetPin,
   setPassword,
+  setPersonLocale,
   setRole,
   suspendPerson,
 } from "./staff.js";

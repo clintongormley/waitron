@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
+import "../widgets/language-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 
 /**
@@ -18,6 +19,13 @@ export interface LoggedInDetail {
   personId: string;
   displayName: string;
   canConfigureTill: boolean;
+  /**
+   * The operator's stored per-user UI locale from the `POST /api/session` response (or `null` when
+   * they have never set one), forwarded verbatim so `till-app` can `resolveActiveLocale` it against
+   * the venue default and switch the UI on login. The lock screen only carries it — it never calls
+   * `setLocale` or the preference-write endpoint itself.
+   */
+  locale: string | null;
 }
 
 /**
@@ -188,11 +196,14 @@ export class TillLockScreen extends LitElement {
     const person = this.selected;
     if (person === undefined || this.pin === "") return;
     try {
-      const { personId, canConfigureTill } = await this.api.login(person.personId, this.pin);
+      const { personId, canConfigureTill, locale } = await this.api.login(
+        person.personId,
+        this.pin,
+      );
       if (!this.isConnected) return;
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
-          detail: { personId, displayName: person.displayName, canConfigureTill },
+          detail: { personId, displayName: person.displayName, canConfigureTill, locale },
           bubbles: true,
           composed: true,
         }),
@@ -221,6 +232,12 @@ export class TillLockScreen extends LitElement {
         >
           ${t("device.setup")}
         </wt-button>
+        <!-- Pre-login language chooser (per-user-language-preference). It only EMITS a bubbling,
+             composed locale-selected event; till-app turns a pre-login pick into a transient setLocale
+             (never a preference write). The lock screen neither handles the event nor switches locale. -->
+        <till-language-chooser
+          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+        ></till-language-chooser>
       </div>
     `;
   }

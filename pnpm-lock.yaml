@@ -50,6 +50,9 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^13.0.0
         version: 13.3.0
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@waitron/ui':
         specifier: workspace:*
         version: link:../../packages/ui

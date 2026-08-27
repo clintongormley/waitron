@@ -17,6 +17,7 @@ import {
 } from "@waitron/catalogue";
 import {
   AppError,
+  SUPPORTED_LOCALES,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -194,6 +195,11 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
+    // The venue's default UI locale (`readVenueLocale` at boot). The seeded tenant's country is 'ES',
+    // so the geography derivation yields `es-ES` — the SAME value `GET /api/till`'s `locale` asserts,
+    // now sourced from `deps.venueLocale` rather than the fiscal `cfg.locale`. `GET /api/locales`
+    // echoes it as `venueDefault`.
+    venueLocale: "es-ES",
     // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
     // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
     // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
@@ -237,8 +243,13 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(res.status).toBe(200);
     // The response carries the server-computed `canConfigureTill` capability so the till can gate
     // manager-only affordances client-side; Ana is `staff`, who does NOT hold `till.configure`, so it is
-    // false. The on-till placement route (Task 4) still re-checks the gate server-side.
-    expect(await res.json()).toEqual({ personId: ana.id, canConfigureTill: false });
+    // false. The on-till placement route (Task 4) still re-checks the gate server-side. `locale` is the
+    // operator's own UI-language preference (`persons.locale`, via the session) — Ana has none, so null.
+    expect(await res.json()).toEqual({
+      personId: ana.id,
+      canConfigureTill: false,
+      locale: null,
+    });
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -277,10 +288,40 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: managerId, canConfigureTill: true });
+    // Marta carries no locale preference either, so `locale` is null here too — the with-preference
+    // case is proven by the dedicated test below.
+    expect(await res.json()).toEqual({
+      personId: managerId,
+      canConfigureTill: true,
+      locale: null,
+    });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
+  });
+
+  it("POST returns the operator's own locale preference when set (persons.locale)", async () => {
+    // Seed + log in a staff person carrying `locale = 'en-GB'` to prove the response surfaces the
+    // SESSION person's OWN preference, not null and not a hardcoded value — a mutant that dropped
+    // `session.locale` (returning undefined/null) fails here, while the null cases above kill a mutant
+    // that hardcoded a locale. Cleaned up so the roster tests' exact ordering assertions stay untouched.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const row = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role, locale)
+      values (${cfg.tenantId}, 'Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
+    const personId = row.rows[0]!.id;
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId, pin: "7777" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ personId, canConfigureTill: false, locale: "en-GB" });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
   });
 
   it("POST rejects a bad pin with 401 and a code", async () => {
@@ -440,6 +481,143 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 });
 
+describe("PUT /api/session/locale (set your OWN UI locale)", () => {
+  // Log in a FRESH staff person rather than the shared `ana`, so the row this route MUTATES is
+  // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Ana)
+  // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
+  async function loginFresh(pin: string): Promise<{ personId: string; sessionId: string }> {
+    const row = await suite.db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${cfg.tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
+    const personId = row.rows[0]!.id;
+    const session = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginWithPin(tx, { tenantId: cfg.tenantId, tillId: cfg.tillId, personId, pin });
+    });
+    return { personId, sessionId: session.id };
+  }
+  async function cleanup(personId: string): Promise<void> {
+    await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
+  }
+
+  it("204s and writes the session person's persons.locale for a supported value", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6001");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify({ locale: "en-GB" }),
+      });
+      expect(res.status).toBe(204);
+      // The operator's OWN row now carries the chosen locale (the write ran under the session's identity).
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBe("en-GB");
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("400s (locale.unsupported) an unsupported value, leaving the row unchanged", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6002");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify({ locale: "ca-ES" }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+      // `setPersonLocale` validates BEFORE it writes, so an unsupported value never reaches the row.
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("400s (locale.unsupported) a missing/null body — coerced to '' → the ONE rejection path", async () => {
+    // A `null` JSON body → `?? {}` → an absent `locale` → the `typeof … ? … : ""` coercion → "", which
+    // `assertSupportedLocale` rejects as `locale.unsupported` exactly like any other unsupported value.
+    // There is no separate request-invalid branch — a missing/non-string locale is the same 400.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6003");
+    try {
+      const res = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: JSON.stringify(null),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("400s (locale.unsupported) an EMPTY or MALFORMED body, never a 500", async () => {
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
+    // could run — so without a defensive `.catch` the throw reaches `run` as a NON-AppError and becomes
+    // an opaque `server.internal` 500 (the `?? {}` alone only ever caught a literal JSON `null`, proven
+    // by the sibling test above). The guarded parse coerces a parse failure to `{}` too, so the body
+    // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { personId, sessionId } = await loginFresh("6004");
+    try {
+      // An EMPTY body under a JSON content-type.
+      const empty = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: "",
+      });
+      expect(empty.status).toBe(400);
+      expect(await empty.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+
+      // A MALFORMED body — not valid JSON at all.
+      const malformed = await app.request("/api/session/locale", {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        body: "not json",
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({ error: { code: "locale.unsupported" } });
+
+      const rows = await suite.db.execute<{ locale: string | null }>(
+        sql`select locale from persons where id = ${personId}`,
+      );
+      expect(rows.rows[0]!.locale).toBeNull();
+    } finally {
+      await cleanup(personId);
+    }
+  });
+
+  it("401s (session.required) when no session cookie is sent", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/session/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ locale: "en-GB" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
     const app = new Hono();
@@ -473,6 +651,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // authored no layout, so `layout`/`receipt` are the built-in defaults (Task 8).
     expect(body).toEqual({
       locale: "es-ES",
+      // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
+      // for this ES venue, but sourced from different fields — the decoupling test below drives them apart).
+      invoiceLocale: "es-ES",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
@@ -492,6 +673,41 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+
+  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {
+    // Drive `cfg.locale` (fiscal/receipt) and `venueLocale` (display) APART to prove the route reads
+    // each from its own source: the wire `locale` (UI) must follow `venueLocale`, and `invoiceLocale`
+    // (the printed legal receipt's language) must follow the fiscal `cfg.locale` — NEVER the venue
+    // default. This is decision 2 of the per-user-language spec: a supported fiscal `ca-ES` is dropped
+    // by the UI venue-default derivation to `es-ES`, so binding the receipt to `venueLocale` would flip
+    // a Catalan receipt to Spanish. (In production both are `es-ES` for an ES venue, so a
+    // default-vs-default assertion could not tell a swapped source.)
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, locale: "ca-ES" }, venueLocale: "en-GB" },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { locale: string; invoiceLocale: string }).toMatchObject({
+      locale: "en-GB",
+      invoiceLocale: "ca-ES",
+    });
+  });
+
+  it("GET /api/locales returns the supported list + the venue default, no session required", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // No cookie — the till app fetches the language catalogue before any session exists.
+    const res = await app.request("/api/locales");
+    expect(res.status).toBe(200);
+    // The static catalogue verbatim (es-ES + en-GB) plus the geography-derived default for this ES
+    // venue (`deps.venueLocale`, es-ES).
+    expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: "es-ES" });
   });
 
   it("GET /api/till echoes a non-default cardProvider and cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {

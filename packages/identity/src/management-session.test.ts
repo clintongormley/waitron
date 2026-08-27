@@ -29,11 +29,22 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
   withTenant(suite.db, tenantId, fn);
 
 describe("management session lifecycle", () => {
-  it("starts and resolves a session, returning the person's role", async () => {
+  it("starts and resolves a session, returning the person's role and locale", async () => {
     const personId = await seedPerson(suite.db, tenantId, "manager");
     const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.id));
-    expect(resolved).toEqual({ personId, role: "manager" });
+    // toEqual pins every field: `locale` is null for a seedPerson with no preference set.
+    expect(resolved).toEqual({ personId, role: "manager", locale: null });
+  });
+
+  it("returns the person's set locale, not just the null default", async () => {
+    // Proves `locale` is the LOOKED-UP persons.locale from the join, not a hardcoded null — a mutant
+    // dropping the field (or returning null) fails here.
+    const personId = await seedPerson(suite.db, tenantId, "manager");
+    await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
+    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const resolved = await run((tx) => resolveManagementSession(tx, session.id));
+    expect(resolved.locale).toBe("es-ES");
   });
 
   it("throws management_session.required for an unknown id", async () => {

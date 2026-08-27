@@ -143,6 +143,7 @@ function deps(db: Database): TillApiDeps {
     clock: systemClock(),
     cfg,
     secureCookies: false,
+    venueLocale: "es-ES",
   };
 }
 

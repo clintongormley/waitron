@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -10,6 +10,7 @@ import {
   listActiveStaff,
   loginWithPin,
   roleHasPermission,
+  setPersonLocale,
 } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { getLayout } from "@waitron/layouts";
@@ -100,6 +101,13 @@ export interface TillApiDeps {
    * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
    */
   cardProvider?: PaymentProvider;
+  /**
+   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts) from geography +
+   * the optional `WAITRON_TILL_LOCALE` override. `GET /api/till` echoes it as `locale` (the language
+   * the till app defaults to before a per-user preference is known), and `GET /api/locales` returns it
+   * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
+   */
+  venueLocale: string;
 }
 
 /**
@@ -131,6 +139,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "session.not_open": 401,
   "session.required": 401,
+  // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
+  // fault, so 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity), BEFORE any write.
+  "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
   "sale.unsupported_tender": 400,
@@ -378,7 +389,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // role from the session and re-checks the permission via `authorize` (e.g. the placement route
       // below), so a tampered client value grants nothing.
       const canConfigureTill = roleHasPermission(session.role, "till.configure");
-      return c.json({ personId: session.personId, canConfigureTill });
+      // `locale` is the operator's OWN UI-language preference (`persons.locale`, carried on the session
+      // by `loginWithPin` — Task 3), or null when they have set none. The till app defaults to the
+      // venue locale (`GET /api/till`'s `locale`) until login, then switches to this per-user value.
+      return c.json({ personId: session.personId, canConfigureTill, locale: session.locale });
     }),
   );
 
@@ -398,6 +412,32 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       clearSessionCookie(c);
       return c.json({ ok: true });
+    }),
+  );
+
+  // Set the LOGGED-IN operator's OWN UI-language preference (`persons.locale`). SESSION-GUARDED, and
+  // the guard — not the body — supplies the identity: the write targets `session.personId`, so an
+  // operator can only ever set THEIR OWN locale (the body carries `locale` and nothing else). Parsed
+  // DEFENSIVELY, guarding BOTH failure modes of `c.req.json()` (the pattern `device-api.ts` uses): it
+  // THROWS a `SyntaxError` on an empty or malformed body — `.catch(() => ({}))` turns that into `{}` —
+  // and it returns `null` (no throw) for a literal JSON `null` body, which the trailing `?? {}` also
+  // turns into `{}`. Either degenerate body then flows through the same `locale` coercion below, so a
+  // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
+  // `assertSupportedLocale` rejects as `locale.unsupported` (400) exactly as any other unsupported
+  // value — the ONE rejection path, so there is no separate request-invalid branch and never an opaque
+  // `server.internal` 500. Runs under `withTenant` + `asAppUser` (RLS scopes the UPDATE to this till's
+  // tenant), and returns 204 on success (no body).
+  app.put("/api/session/locale", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const body: { locale?: unknown } =
+        (await c.req.json<{ locale?: unknown }>().catch(() => ({}))) ?? {};
+      const locale = typeof body.locale === "string" ? body.locale : "";
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
+      return c.body(null, 204);
     }),
   );
 
@@ -491,7 +531,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       /* v8 ignore stop */
       return c.json({
-        locale: deps.cfg.locale,
+        // The venue's DEFAULT UI locale (`readVenueLocale`, boot.ts) — geography-derived + override,
+        // NOT the fiscal `cfg.locale`. The till app defaults its language to this until a per-user
+        // preference is loaded; `GET /api/locales` returns the same value as `venueDefault`.
+        locale: deps.venueLocale,
+        // The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in.
+        // Sourced from the fiscal `cfg.locale` (the pre-per-user-locale `locale` value), DELIBERATELY
+        // kept SEPARATE from the UI `locale` above: the venue-default UI derivation drops
+        // UI-unsupported codes (a `ca-ES` fiscal locale would surface as `es-ES` there), which must
+        // never reach the receipt. Decision 2 of the per-user-language spec: the receipt is the
+        // venue's language and is not an input to the UI derivation. The till threads THIS to
+        // `till-ticket-view.invoiceLocale`, and the UI `locale` to `setLocale` — two different things.
+        invoiceLocale: deps.cfg.locale,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
@@ -520,6 +571,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         receipt: boot.receipt,
       });
     }),
+  );
+
+  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
+  // (the till app fetches it before login, beside `GET /api/till`) and free of secrets — `locales` is
+  // the static catalogue the language picker offers and `venueDefault` is the geography-derived boot
+  // value (`deps.venueLocale`). NO session gate, matching the sibling `GET /management-api/locales`.
+  app.get("/api/locales", (c) =>
+    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs FIRST, so

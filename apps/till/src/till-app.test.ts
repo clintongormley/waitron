@@ -109,6 +109,10 @@ const saleResult: TillSaleResult = {
 
 const till = {
   locale: "es-ES",
+  // The RECEIPT (fiscal) locale — a SEPARATE server field from the UI `locale` above (sourced from
+  // `cfg.locale` server-side). Same value here for the ES-venue default, but distinct so a test can
+  // drive them apart to prove the receipt does not follow the operator UI (decision 2).
+  invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
@@ -178,7 +182,17 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
-    login: vi.fn().mockResolvedValue({ personId: "p1" }),
+    login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" }),
+    // Per-user-language-preference (Task 9): the pre-login chooser reads `getLocales` (only when
+    // opened) and the logged-in persist path writes `putLocale` (a spy a test asserts on).
+    getLocales: vi.fn().mockResolvedValue({
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+    }),
+    putLocale: vi.fn().mockResolvedValue(undefined),
     listProducts: vi.fn().mockResolvedValue([cafe]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
@@ -411,6 +425,11 @@ describe("till-app", () => {
   // lock screen's set-up affordance routes a fresh display into device mode to reach the enrol view.
   it("boots an ENROLLED device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
+      // Drive the venue default to en-GB (≠ the es-ES starting point) so the device path's venue-default
+      // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
+      // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
+      // guard must never withhold the venue default from the operator-less device path.
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
@@ -420,6 +439,8 @@ describe("till-app", () => {
     const s = station(el);
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
+    // The venue default was applied on the operator-less device path (guard passes on `operatorPersonId === ""`).
+    expect(currentLocale()).toBe("en-GB");
   });
 
   it("a normal operator till (401 device probe) stays on the lock screen with NO boot error", async () => {
@@ -559,12 +580,13 @@ describe("till-app", () => {
     expect(counter(el)!.heldOrders).toEqual([]);
   });
 
-  it("threads the invoice locale from getTill through to the ticket", async () => {
-    // getTill's locale drives the RECEIPT locale (till-ticket-view.invoiceLocale), threaded from the
-    // server till config — separately from the operator-UI setLocale. Use a locale that differs from
-    // the es-ES default so the wiring is observable.
+  it("threads the RECEIPT invoiceLocale from getTill to the ticket, DECOUPLED from the UI locale", async () => {
+    // The ticket's receipt locale (till-ticket-view.invoiceLocale) is threaded from getTill's OWN
+    // `invoiceLocale` field (the fiscal cfg.locale) — NOT the UI-driving `locale`. Drive the two APART
+    // (UI en-GB, receipt ca-ES) to prove the receipt follows `invoiceLocale`, never the operator UI
+    // (per-user-language spec, decision 2 — a Catalan receipt must not be flipped to the venue default).
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en" }),
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", invoiceLocale: "ca-ES" }),
     });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
@@ -572,7 +594,9 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(ticket(el)!.invoiceLocale).toBe("en");
+    // The receipt takes the fiscal `invoiceLocale`, distinct from the operator UI (en-GB) — proving
+    // the two are read from separate fields, not aliased.
+    expect(ticket(el)!.invoiceLocale).toBe("ca-ES");
   });
 
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
@@ -2737,6 +2761,187 @@ describe("till-app", () => {
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(ticket(el)!.receipt).toEqual({});
+    });
+  });
+
+  describe("per-user locale (Task 9)", () => {
+    /** Boots, then logs a person in carrying `locale` in the `logged-in` detail — leaving the app on
+     * the counter with the UI switched per `resolveActiveLocale(locale, venueDefault)`. */
+    async function toCounterAs(el: TillApp, locale: string | null): Promise<TillCounterScreen> {
+      await flush(el);
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Ana",
+        canConfigureTill: false,
+        locale,
+      });
+      await flush(el);
+      return counter(el)!;
+    }
+
+    it("after boot the UI is the venue default (getTill.locale), before any login", async () => {
+      // The venue default differs from the es-ES starting point so the switch is observable. #boot
+      // both `setLocale`s it and remembers it as the venue default for the login/logout lifecycle.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
+      });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      expect(lock(el)).not.toBeNull(); // still pre-login
+    });
+
+    it("login switches the UI to the operator's stored locale — a DEEP counter child renders English", async () => {
+      // Venue default es-ES; the operator's stored locale is en-GB. On login the app resolves en-GB and
+      // `setLocale`s it; the `keyed(currentLocale(), …)` wrapper recreates the counter subtree, so a deep child
+      // (the logout button, inside the counter's OWN shadow root) renders in English, not Spanish.
+      const { el } = await mountApp();
+      const c = await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+      const logout = c.shadowRoot!.querySelector(".logout")!;
+      expect(logout.textContent).toContain(t("action.logout", "en-GB")); // "Log out"
+      expect(logout.textContent).not.toContain(t("action.logout", "es-ES")); // not "Cerrar sesión"
+    });
+
+    it("boot does NOT clobber an operator locale applied while getTill was still in flight (slow-link race)", async () => {
+      // Slow-link race: the operator's login (the lock screen's `getStaff` + a human PIN entry) completes
+      // while boot's `getTill` is STILL in flight. `#onLoggedIn` applies the operator's stored en-GB
+      // synchronously (before its first await) and sets `operatorPersonId`; when `getTill` finally
+      // resolves, the boot continuation must NOT re-apply the venue default (es-ES) over it. The guard is
+      // `#boot`'s `if (this.operatorPersonId === "")` — deletion proof: drop it (making the venue-default
+      // `setLocale` unconditional) and this fails, the language clobbered back es-ES for the whole session.
+      let resolveTill!: (v: typeof till) => void;
+      const getTill = vi.fn(() => new Promise<typeof till>((r) => (resolveTill = r)));
+      const { el } = await mountApp({ getTill }); // fixture venue default es-ES, DIFFERENT from en-GB
+      await flush(el);
+      expect(lock(el)).not.toBeNull(); // the lock screen paints (screen defaults to "lock") though boot is pending
+
+      // The operator logs in mid-flight carrying their stored en-GB preference; `#onLoggedIn` applies it.
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Ana",
+        canConfigureTill: false,
+        locale: "en-GB",
+      });
+      await flush(el); // login settles: en-GB applied, operatorPersonId set, screen → counter
+      expect(currentLocale()).toBe("en-GB");
+
+      resolveTill(till); // getTill NOW resolves (venue default es-ES) — the boot continuation runs
+      await flush(el);
+
+      expect(currentLocale()).toBe("en-GB"); // operator locale preserved, NOT clobbered to the venue default
+    });
+
+    it("a null stored locale falls back to the venue default on login", async () => {
+      // resolveActiveLocale(null, "es-ES") === "es-ES": an operator with no preference gets the venue UI.
+      const { el } = await mountApp();
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("logout reverts the UI to the venue default", async () => {
+      // Login as an en-GB operator (UI → English), then log out: the UI must return to the venue default
+      // (es-ES) so the next operator starts from the venue language, not the previous operator's choice.
+      const { el } = await mountApp();
+      const c = await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+      emit(c, "logout");
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("locale-selected while on the LOCK screen switches transiently — setLocale, NOT putLocale", async () => {
+      // A pre-login pick is transient: the app switches the UI but writes NOTHING (there is no session to
+      // write to). Proven-by-deletion target: dropping the `screen === "lock"` guard makes this fail
+      // (putLocale would fire). Emitted from the lock screen exactly as the chooser's composed event does.
+      const { el } = await mountApp();
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      emit(lock(el)!, "locale-selected", { code: "en-GB" });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB"); // switched
+      expect(currentApi.putLocale).not.toHaveBeenCalled(); // but NOT persisted
+    });
+
+    it("locale-selected while LOGGED IN persists (putLocale) then switches (setLocale)", async () => {
+      const putLocale = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountApp({ putLocale });
+      const c = await toCounterAs(el, null); // venue default es-ES
+      expect(currentLocale()).toBe("es-ES");
+
+      emit(c, "locale-selected", { code: "en-GB" });
+      await flush(el);
+
+      expect(putLocale).toHaveBeenCalledWith("en-GB");
+      expect(currentLocale()).toBe("en-GB"); // the switch happened AFTER the persist resolved
+    });
+
+    it("a rejected putLocale leaves the language unchanged and surfaces the save-failed error", async () => {
+      // The persist failed, so the UI must NOT switch (setLocale is gated behind the successful write) and
+      // a non-fatal banner appears — never the raw code. Deleting the try/catch's `errorKey` set drops the
+      // banner; moving `setLocale` before/outside the try would wrongly switch on a failed save.
+      const putLocale = vi.fn().mockRejectedValue({ code: "locale.unsupported" });
+      const { el } = await mountApp({ putLocale });
+      const c = await toCounterAs(el, null); // venue default es-ES
+      expect(currentLocale()).toBe("es-ES");
+
+      emit(c, "locale-selected", { code: "en-GB" });
+      await flush(el);
+
+      expect(putLocale).toHaveBeenCalledWith("en-GB");
+      expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("locale.save_failed"));
+      expect(el.shadowRoot!.textContent).not.toContain("locale.unsupported"); // never leaks the code
+    });
+
+    it("threads the api down to the counter so its chooser can load the offered locales", async () => {
+      const { el } = await mountApp();
+      const c = await toCounterAs(el, null);
+      // The counter renders the chooser and is handed the app's api (its `loadLocales` reads getLocales).
+      expect(c.api).toBe(currentApi);
+      expect(c.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+    });
+
+    it("does not revert the locale if the app disconnects mid-logout", async () => {
+      // #onLogout's `setLocale(this.#venueLocale)` runs AFTER `await api.logout()`, so a teardown during
+      // that round trip must not repaint a live sibling's module-global locale — the same guard #boot
+      // carries. Log in as an en-GB operator (UI → English), start logout with `logout()` in flight,
+      // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED. Deleting the new
+      // `if (!this.isConnected) return` makes the revert fire and this fail — the deletion proof.
+      let resolveLogout!: () => void;
+      const logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)));
+      const { el, host } = await mountApp({ logout });
+      const c = await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+
+      emit(c, "logout"); // logout() now pending
+      await el.updateComplete;
+      host.remove(); // torn down before logout resolves
+      resolveLogout();
+      await flush(el);
+
+      expect(currentLocale()).toBe("en-GB"); // the revert to es-ES was skipped on the detached app
+    });
+
+    it("does not switch the locale if the app disconnects mid-putLocale (persist path)", async () => {
+      // #onLocaleSelected's `setLocale(code)` runs AFTER `await api.putLocale(code)`. The durable server
+      // write has already landed (and the next login re-applies it), so a teardown during the write must
+      // SKIP only the now-pointless local repaint — never mutate a live sibling's locale. Deleting the
+      // new `if (!this.isConnected) return` after putLocale makes the switch fire and this fail.
+      let resolvePut!: () => void;
+      const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
+      const { el, host } = await mountApp({ putLocale });
+      const c = await toCounterAs(el, null); // venue default es-ES
+      expect(currentLocale()).toBe("es-ES");
+
+      emit(c, "locale-selected", { code: "en-GB" }); // putLocale now pending
+      await el.updateComplete;
+      host.remove(); // torn down before putLocale resolves
+      resolvePut();
+      await flush(el);
+
+      expect(putLocale).toHaveBeenCalledWith("en-GB"); // the durable write still happened
+      expect(currentLocale()).toBe("es-ES"); // but the local repaint was skipped on the detached app
     });
   });
 

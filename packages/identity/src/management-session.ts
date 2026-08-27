@@ -38,18 +38,20 @@ export async function startManagementSession(
 /**
  * Resolve a live session to its person + role, or throw. Missing/ended → `management_session.required`;
  * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`.
- * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role.
+ * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus
+ * their stored UI `locale` (`persons.locale`, `null` when they have set no preference).
  */
 export async function resolveManagementSession(
   tx: Transaction,
   sessionId: string,
-): Promise<{ personId: string; role: PersonRoleValue }> {
+): Promise<{ personId: string; role: PersonRoleValue; locale: string | null }> {
   const [row] = await tx
     .select({
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
       status: persons.status,
+      locale: persons.locale,
     })
     .from(managementSessions)
     .innerJoin(persons, eq(persons.id, managementSessions.personId))
@@ -65,7 +67,7 @@ export async function resolveManagementSession(
     .update(managementSessions)
     .set({ lastSeenAt: sql`now()` })
     .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
-  return { personId: row.personId, role: row.role as PersonRoleValue };
+  return { personId: row.personId, role: row.role as PersonRoleValue, locale: row.locale };
 }
 
 /** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */

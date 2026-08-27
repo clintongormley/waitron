@@ -227,6 +227,9 @@ export const en = {
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
   "station.advance_error": "Could not update the ticket, try again",
+  // A failed per-user language write (PUT /api/session/locale) is non-fatal — the UI stays in the
+  // current language and the operator can retry (per-user-language-preference, Task 9).
+  "locale.save_failed": "Could not save your language, try again",
   // A failed Mode-P handover (markCollected) is non-fatal — the operator retries; the queue reload reconciles.
   "station.collect_error": "Could not mark the order collected, try again",
   // Table-ordering (FP-1): a failed round/serve/status write is non-fatal — the operator retries.
@@ -401,6 +404,7 @@ export const es: Record<StringKey, string> = {
   "held.stale": "Ese pedido ya no está disponible",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
+  "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
@@ -414,6 +418,7 @@ export const es: Record<StringKey, string> = {
 // only some keys translated; t() fills the gaps from the English base.
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
   en,
+  "en-GB": en,
   es,
   "es-ES": es,
 };

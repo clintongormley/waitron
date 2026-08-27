@@ -10,7 +10,8 @@ import {
   requestSwap,
   absenceKind,
 } from "@waitron/workforce";
-import { resolveManagementSession } from "@waitron/identity";
+import { resolveManagementSession, setPersonLocale } from "@waitron/identity";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import {
@@ -32,6 +33,12 @@ import type { Logger } from "./logger.js";
 export interface MeApiDeps {
   db: Database;
   cfg: { tenantId: string };
+  /**
+   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the
+   * public `GET /management-api/locales` as `venueDefault` — the language the dashboard defaults to
+   * before a signed-in person's own preference is known.
+   */
+  venueLocale: string;
 }
 
 /**
@@ -52,6 +59,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
+  // The signed-in person picked an unsupported UI language on `PUT /management-api/session/me/locale`
+  // — a request-shape fault, 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity).
+  "locale.unsupported": 400,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "absence.invalid": 400,
@@ -86,16 +96,55 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return fn(tx);
     });
 
-  // Whoami: who is signed into this browser, and with what role. `requireManagementSession` screens the
-  // cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live session +
-  // the person's current role and status under RLS (a suspended person 403s here). Role-blind: NO
-  // `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this is the
-  // endpoint the dashboard shell probes to decide whether to open the staff view or the manager screens.
+  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
+  // (the dashboard shell fetches it before login to pick its language) and free of secrets — `locales`
+  // is the static catalogue and `venueDefault` the geography-derived boot value (`deps.venueLocale`).
+  // NO management-session gate, the browser twin of the till's `GET /api/locales`.
+  app.get("/management-api/locales", (c) =>
+    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
+  );
+
+  // Whoami: who is signed into this browser, with what role and in which language. `requireManagementSession`
+  // screens the cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live
+  // session + the person's current role, status and `locale` under RLS (a suspended person 403s here).
+  // Role-blind: NO `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this
+  // is the endpoint the dashboard shell probes to decide whether to open the staff view or the manager
+  // screens. `locale` is the signed-in person's OWN UI-language preference (`persons.locale`, null when
+  // unset); `venueLocale` is the geography-derived boot default (`deps.venueLocale`) the dashboard falls
+  // back to when that preference is null — the same value `GET /management-api/locales` echoes as `venueDefault`.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role } = await asStaff((tx) => resolveManagementSession(tx, sessionId));
-      return c.json({ personId, role });
+      const { personId, role, locale } = await asStaff((tx) =>
+        resolveManagementSession(tx, sessionId),
+      );
+      return c.json({ personId, role, locale, venueLocale: deps.venueLocale });
+    }),
+  );
+
+  // Set the SIGNED-IN person's OWN UI-language preference (`persons.locale`) — the dashboard twin of the
+  // till's `PUT /api/session/locale`. Identity is the SESSION's person (`resolveManagementSession`'s
+  // `personId`, resolved INSIDE `asStaff`), NEVER a body field: the body carries `locale` and nothing
+  // else, so a hostile `personId` in it is ignored and a person can only set their own locale. Parsed
+  // DEFENSIVELY, guarding BOTH failure modes of `c.req.json()` (the pattern `device-api.ts` uses): it
+  // THROWS a `SyntaxError` on an empty or malformed body — `.catch(() => ({}))` turns that into `{}` —
+  // and it returns `null` (no throw) for a literal JSON `null` body, which the trailing `?? {}` also
+  // turns into `{}`. Either degenerate body then flows through the same `locale` coercion below, so a
+  // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
+  // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no separate
+  // request-invalid branch and never an opaque `server.internal` 500. Returns 204 (no body), matching
+  // the accept/other 204 verbs on this surface.
+  app.put("/management-api/session/me/locale", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body: { locale?: unknown } =
+        (await c.req.json<{ locale?: unknown }>().catch(() => ({}))) ?? {};
+      const locale = typeof body.locale === "string" ? body.locale : "";
+      await asStaff(async (tx) => {
+        const { personId } = await resolveManagementSession(tx, sessionId);
+        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
+      return c.body(null, 204);
     }),
   );
 

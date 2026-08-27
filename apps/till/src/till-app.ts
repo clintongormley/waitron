@@ -1,7 +1,10 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
-import { setLocale, t } from "./i18n/t.js";
+import { resolveActiveLocale } from "@waitron/shared";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi } from "./api/client.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { LAYOUT_A } from "./layout.js";
@@ -122,10 +125,17 @@ function isDefaultLayout(layout: LayoutDef): boolean {
  *  - `new-sale` → clear the basket, reset the `"order"`/`"collect"` stage, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
- * DISCONNECT SAFETY. Only one post-await step here has an effect that outlives the element: `setLocale`
- * in {@link TillApp.boot} mutates module-global locale, so it is guarded by `isConnected`. The event
- * handlers only write reactive state and dispatch nothing upward, so they need no guard — Lit never
- * paints a detached element (the same reasoning `till-lock-screen`'s `#loadStaff` records).
+ * DISCONNECT SAFETY. `setLocale` mutates module-global locale, so it is the effect that can outlive the
+ * element. It runs in four places. THREE run post-await and each carries `if (!this.isConnected) return`
+ * before the switch, so a teardown during the await skips it — {@link TillApp.boot} (races a teardown
+ * before first paint), {@link TillApp.#onLogout} (the logout round trip) and
+ * {@link TillApp.#onLocaleSelected} (the preference write — the durable server write has already landed
+ * and the next login re-applies it, so only the pointless local repaint is skipped). The fourth,
+ * {@link TillApp.#onLoggedIn}, runs its `setLocale` SYNCHRONOUSLY before its first await, so the element
+ * is still connected and needs no guard. Each guarded site is pinned by a deletion-proven disconnect
+ * test. Every OTHER event handler writes only reactive state and dispatches nothing upward, so needs no
+ * guard — Lit never paints a detached element (`till-lock-screen`'s `#loadStaff` records the same
+ * reasoning).
  */
 @customElement("till-app")
 export class TillApp extends LitElement {
@@ -153,6 +163,23 @@ export class TillApp extends LitElement {
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();
+
+  /**
+   * The venue's DERIVED default UI locale (per-user-language-preference), read from `GET /api/till`
+   * on boot (Task 4 makes that field the derived default). It is the fallback the app switches back to
+   * when nobody's preference applies: `resolveActiveLocale(personLocale, this.#venueLocale)` on login
+   * ({@link #onLoggedIn}) and the language restored on logout ({@link #onLogout}). Defaults to the
+   * deli's es-ES until boot resolves.
+   */
+  #venueLocale = "es-ES";
+
+  constructor() {
+    super();
+    // Follow a locale switch made anywhere (login/logout/the chooser's setLocale): on a locale change
+    // the controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys
+    // and the screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
+    new LocaleChangeController(this);
+  }
 
   @state() private screen: Screen = "lock";
   /**
@@ -305,9 +332,11 @@ export class TillApp extends LitElement {
    * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
   /**
-   * The receipt (invoice) locale for the ticket, from `GET /api/till` — the language the legal
-   * receipt renders in. Threaded to `till-ticket-view` SEPARATELY from the operator-UI `setLocale`,
-   * even though both read the same server `locale` (see `#boot`). Defaults to the deli's es-ES.
+   * The receipt (invoice) locale for the ticket, from `GET /api/till`'s own `invoiceLocale` field
+   * (the fiscal `cfg.locale`) — the language the legal receipt renders in. Threaded to
+   * `till-ticket-view` SEPARATELY from the operator-UI `setLocale`, which reads the DIFFERENT
+   * `locale` (venue-default) field: the two are decoupled so a UI-unsupported fiscal locale never
+   * flips the printed ticket's language (see `#boot`). Defaults to the deli's es-ES.
    */
   @state() private invoiceLocale = "es-ES";
   /**
@@ -380,12 +409,14 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
+   * Read the public till info once: set the OPERATOR-UI locale (`setLocale`) UNLESS an operator has
+   * already logged in mid-flight (see the guard below), remember the receipt
    * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
-   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` and `invoiceLocale` both
-   * take the SAME server `locale`, but they drive different things and are threaded separately — the
-   * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
-   * `till-ticket-view`'s INVOICE LOCALE note).
+   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` takes the UI-derived
+   * `till.locale` (the venue default), while `invoiceLocale` takes the SEPARATE `till.invoiceLocale`
+   * (the fiscal `cfg.locale`): they drive different things, come from different server fields, and
+   * are threaded separately — the receipt uses its `invoiceLocale` PROP and must never follow the
+   * operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
    *
    * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
    * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
@@ -400,8 +431,28 @@ export class TillApp extends LitElement {
       // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
       // below need no such guard — Lit never paints a detached element.
       if (!this.isConnected) return;
-      setLocale(till.locale);
-      this.invoiceLocale = till.locale;
+      // Apply the venue default ONLY when no operator has logged in yet. On a slow link the lock screen's
+      // `getStaff` + a human PIN entry can complete a login while this `getTill` is still in flight;
+      // `#onLoggedIn` then applies the operator's preferred locale SYNCHRONOUSLY (`resolveActiveLocale`)
+      // and sets `operatorPersonId`. Re-applying the venue default here would CLOBBER that back to the
+      // venue's language for the rest of the session. Gating on "no operator" mirrors the dashboard's
+      // `screen === "login"` seed gate (`dashboard-app.ts` #boot): it still applies the venue default on
+      // the normal pre-login path AND on the device-station paths (device auto-boot and the lock screen's
+      // "set up" affordance both set NO operator, and both legitimately want the venue default). The
+      // `#venueLocale`/`invoiceLocale` writes below stay UNCONDITIONAL — they seed the login/logout
+      // fallback and the receipt, neither of which touches the live UI locale, so a login race never wants
+      // them skipped.
+      if (this.operatorPersonId === "") setLocale(till.locale);
+      // Remember the venue's derived default (Task 4): the fallback the app switches back to when no
+      // operator preference applies — on login (resolveActiveLocale) and on logout. This is the
+      // UI-derived venue default; the receipt's `invoiceLocale` below reads a DIFFERENT server field.
+      this.#venueLocale = till.locale;
+      // The RECEIPT (fiscal document) locale — a SEPARATE server field (`invoiceLocale`, sourced from
+      // the fiscal `cfg.locale`), NOT the UI `till.locale`. The two are decoupled on purpose: the
+      // venue-default UI derivation drops UI-unsupported codes (so a `ca-ES` fiscal locale would show
+      // as `es-ES` in `till.locale`), which must never flip the printed legal ticket's language
+      // (per-user-language spec, decision 2). Threaded to `till-ticket-view.invoiceLocale`.
+      this.invoiceLocale = till.invoiceLocale;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
       this.bumpMode = till.bumpMode;
@@ -444,8 +495,14 @@ export class TillApp extends LitElement {
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
    * and (Modes I/T) the prep queue, then load the colleague roster for the schedule screen. */
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, canConfigureTill } = (event as CustomEvent<LoggedInDetail>)
-      .detail;
+    const { personId, displayName, canConfigureTill, locale } = (
+      event as CustomEvent<LoggedInDetail>
+    ).detail;
+    // Apply the operator's stored UI language (per-user-language-preference): their supported choice,
+    // else the venue default. `setLocale` is module-global — the `keyed(currentLocale(), …)` wrapper recreates
+    // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
+    // venue default, so a new operator with no choice keeps the venue's language.
+    setLocale(resolveActiveLocale(locale, this.#venueLocale));
     const products = await this.api.listProducts();
     this.products = products;
     this.operatorName = displayName;
@@ -1156,12 +1213,53 @@ export class TillApp extends LitElement {
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
   async #onLogout(): Promise<void> {
     await this.api.logout();
+    // Guard the post-await module-global `setLocale` below against a teardown during the logout round
+    // trip — the same shape #boot uses. A detached till never legitimately wants a locale switch, and
+    // this one would repaint a live sibling's UI. Returns before the state writes too (harmless to skip
+    // on a detached element); pinned by "does not revert the locale if the app disconnects mid-logout".
+    if (!this.isConnected) return;
     this.operatorName = "";
+    // Revert the UI to the venue default (per-user-language-preference): the previous operator's
+    // language must not linger into the lock screen the next operator meets. Their own login re-applies
+    // their preference, exactly as `canEdit` is dropped and re-supplied below.
+    setLocale(this.#venueLocale);
     // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
     // recomputes it (FP-2).
     this.canEdit = false;
     this.errorKey = undefined;
     this.screen = "lock";
+  }
+
+  /**
+   * The ONE handler for a language pick (per-user-language-preference). The chooser is presentational —
+   * it emits a composed `locale-selected` and nothing more; this decides what the pick MEANS, and that
+   * turns entirely on whether anyone is logged in:
+   *  - PRE-LOGIN (`screen === "lock"`): a TRANSIENT switch. Switch the UI (`setLocale`) but write
+   *    nothing — there is no session to attach a preference to. Dropping this guard would `putLocale`
+   *    with no session (401) and is what the "transient while on lock" test proves by deletion.
+   *  - LOGGED IN: PERSIST the operator's preference (`putLocale`) and only THEN switch the UI. The
+   *    switch is gated behind the successful write, so a failed save leaves the UI in the current
+   *    language and surfaces a non-fatal `locale.save_failed` — never the raw code, and never a UI
+   *    that claims a preference the server did not store.
+   */
+  async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
+    const { code } = event.detail;
+    if (this.screen === "lock") {
+      setLocale(code);
+      return;
+    }
+    this.errorKey = undefined;
+    try {
+      await this.api.putLocale(code);
+      // Guard the post-await module-global `setLocale` against a teardown during the write — same shape
+      // as #boot/#onLogout. The durable server write has already landed and the next login re-applies
+      // the stored preference, so a detached till skips only the now-pointless local repaint; pinned by
+      // "does not switch the locale if the app disconnects mid-putLocale".
+      if (!this.isConnected) return;
+      setLocale(code);
+    } catch {
+      this.errorKey = "locale.save_failed";
+    }
   }
 
   /**
@@ -1215,9 +1313,13 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => void this.#onShowFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
         @logout=${() => void this.#onLogout()}
+        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
-        ${this.#renderScreen()}
+        <!-- keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
+             the whole screen subtree, repainting every child in the new language (the screens hold no
+             LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it. -->
+        ${keyed(currentLocale(), this.#renderScreen())}
       </div>
     `;
   }
@@ -1228,6 +1330,7 @@ export class TillApp extends LitElement {
         return html`<till-lock-screen .api=${this.api}></till-lock-screen>`;
       case "counter":
         return html`<till-counter-screen
+          .api=${this.api}
           .store=${this.#store}
           .products=${this.products}
           .heldOrders=${this.heldOrders}

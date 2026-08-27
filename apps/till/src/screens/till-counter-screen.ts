@@ -14,7 +14,16 @@ import "../widgets/station-queue.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
 import "./till-allergen-screen.js";
-import type { HeldOrderSummary, OrderFlow, StationQueueGroup, TillProduct } from "../api/client.js";
+// The post-login language chooser in the header (per-user-language-preference). It only EMITS a
+// composed `locale-selected`; `till-app` persists the pick and switches the locale.
+import "../widgets/language-chooser.js";
+import type {
+  HeldOrderSummary,
+  OrderFlow,
+  StationQueueGroup,
+  TillApi,
+  TillProduct,
+} from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
@@ -103,6 +112,9 @@ export class TillCounterScreen extends LitElement {
     `,
   ];
 
+  /** The HTTP face of the till, threaded from the app. The header's language chooser reads it
+   * (`getLocales`) to offer the venue's languages; the app owns persisting a pick. */
+  @property({ attribute: false }) api!: TillApi;
   /** The shared working order every widget reads and mutates. Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The sellable products, handed to the product grid (the only widget that needs them). */
@@ -277,6 +289,9 @@ export class TillCounterScreen extends LitElement {
               ${t("schedule.open")}
             </wt-button>
             <span class="operator">${this.operatorName}</span>
+            <till-language-chooser
+              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+            ></till-language-chooser>
             <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
               ${t("action.logout")}
             </wt-button>

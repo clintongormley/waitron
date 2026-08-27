@@ -10,6 +10,9 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, RosterEntry } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
+// The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
+// `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
+import "../widgets/language-chooser.js";
 
 /**
  * The dashboard's pre-session login screen: a roster picker (native `<select>` — there is no
@@ -62,12 +65,18 @@ export class LoginScreen extends LitElement {
    * exist, so a selection that is not the first roster entry would fall back to the first (the latent
    * picker bug #73 fixed in the edit dialog; the create form mirrors it). Today `#loadRoster` always
    * selects roster[0] — the first option — so a template binding renders right only by luck; setting
-   * `.value` here keeps the picker correct even if the initial-selection policy ever changes. The
-   * <select> is rendered unconditionally, so the ref is always populated by the time `updated()` runs.
-   * Setting `.value` imperatively does not trigger a reactive update, so this does not loop.
+   * `.value` here keeps the picker correct even if the initial-selection policy ever changes. Setting
+   * `.value` imperatively does not trigger a reactive update, so this does not loop.
+   *
+   * The ref is normally live (the `<select>` renders unconditionally). The one case it is NOT: when the
+   * shell re-keys this screen to repaint it in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`),
+   * a pending update can flush on the OUTGOING element after Lit has cleared its refs on disconnect. So
+   * GUARD the access — a reconcile with no live `<select>` is simply a no-op (the element is on its way
+   * out). Without the guard that flush throws `Cannot set properties of undefined`, an unhandled
+   * rejection the pristine-output rule forbids.
    */
   override updated(): void {
-    this.#rosterSelect.value!.value = this.selected;
+    if (this.#rosterSelect.value) this.#rosterSelect.value.value = this.selected;
   }
 
   /**
@@ -168,6 +177,9 @@ export class LoginScreen extends LitElement {
 
   override render() {
     return html`
+      <dashboard-language-chooser
+        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      ></dashboard-language-chooser>
       <label class="field"
         >${t("login.roster")}
         <select ${ref(this.#rosterSelect)} @change=${(e: Event) => this.#onRosterChange(e)}>
