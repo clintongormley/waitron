@@ -156,13 +156,27 @@ to be proven against a local stand-in cloud. Spec + plan:
   and the shared `WAITRON_SYNC_NODE_TOKEN` is fully retired. `waitron-sync-peer` CLI for enrol/revoke/list.
   Deferred minor: `enrolPeer` doesn't validate non-empty `subscriberId`/`name` at the core (only the
   CLI guards; no reachable gap today).
-- **B — outbound tunnel** (deferred; builds on A). Invert the transport so the box always dials out and
-  the cloud's pull rides back down the box-initiated tunnel. Gated on standing up Waitron-cloud infra;
-  provable first against a local relay stand-in.
-- **C — cloud read-mirror** (deferred; builds on A+B). A "mirror mode" of `apps/server` that pulls +
-  applies into its own Postgres and serves the dashboard read-only. **Owns the `dining_tables`
-  FK-closure enrolment (the `fkRank` hard-gate)** — the first slice to activate a real ordered-lane
-  subscriber. Provable against a second local Postgres + a reader on another port.
+- **B — outbound tunnel. LANDED (#150).** Inverts the transport: the NAT'd box dials out to a relay
+  that blindly splices the cloud's TLS connection to a pooled box-initiated connection, and the box
+  proxies to its own HTTPS sync-api — TLS end-to-end, so the relay sees only ciphertext. New
+  `@waitron/tunnel` package (`runTunnelClient` + a local relay stand-in), a cloud-side `tunnelHttpClient`
+  (dials the relay, validates the box cert via SNI+CA), `loadTunnelConfig` (`WAITRON_TUNNEL_*`,
+  fail-closed), guarded boot wiring, and a real-PG e2e proving the cloud pulls through the tunnel while
+  the relay stays blind. `runSyncPull` + A's per-peer token unchanged. Spec + plan:
+  [cloud-mirror-tunnel](superpowers/specs/2026-08-27-sync-cloud-mirror-tunnel-design.md). Proven against
+  a **local relay stand-in** (no cloud hosting/DNS/TLS yet).
+  **Deferred to the real T1 relay/client (spec §11), all within B's semi-trusted-relay threat model and
+  each self-healing or fail-closed today:** the symmetric box→relay control-frame splice race (a pre-`go`
+  `ping` can leak into the cloud's TLS handshake — rare, self-heals via sync retry, no data loss, no
+  secret leaked); a max pre-`go` frame-length guard (a newline-less stream grows the client buffer
+  unbounded); ignore-`go`-before-`ack`; a registration/handshake timeout (a relay that accepts but never
+  `ack`/`reject`/closes parks a pool slot until abort); and a `tunnelHttpClient` disposal seam for C's
+  long-running subscriber. SNI-based multi-box routing is also T1's (the stand-in serves one box).
+- **C — cloud read-mirror** (deferred; builds on A+B — **next**). A "mirror mode" of `apps/server` that
+  pulls + applies into its own Postgres and serves the dashboard read-only, pointing `runSyncPull` at
+  B's `tunnelHttpClient`. **Owns the `dining_tables` FK-closure enrolment (the `fkRank` hard-gate)** —
+  the first slice to activate a real ordered-lane subscriber. Provable against a second local Postgres +
+  a reader on another port.
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
