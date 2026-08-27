@@ -880,5 +880,25 @@ declare module "@waitron/shared" {
      * Never renamed once shipped.
      */
     "setup.cert_hostnames_empty": Record<string, never>;
+    /**
+     * A setup-mode provision was asked to run on a box that ALREADY holds this tenant — a second
+     * `provisionVenue` for the same obligado (country + NIF, which derives a deterministic tenant id).
+     * `applyVenue`'s location/till/node/SIF carry no business key, so a re-run would ADD a shop and
+     * mint a FRESH SIF/hash chain rather than resume the existing venue (venue-apply.ts's own header),
+     * and a stray fiscal chain is unrecoverable (CLAUDE.md §5). So `provisionVenue` refuses here,
+     * BEFORE stamping or minting anything — the double-POST guard the boot-mode flip only protects
+     * across a restart, not within one setup session.
+     *
+     * `tenantId` is the DERIVED obligado id (a deterministic uuid, not a secret) and is echoed because
+     * it is what makes the refusal actionable — it names exactly which tenant the box is already bound
+     * to; the same non-leaking, id-echoing discipline `tenant.not_found` follows.
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
+     * `setup.cert_hostnames_empty` and `setup-api.ts` name), never the throwing file — `server.*` is
+     * reserved for facts about the process itself, and "this box is already provisioned" is a fact
+     * about the setup, not the process (the rule `tenant.not_found`'s note above gives). Never renamed
+     * once shipped.
+     */
+    "setup.already_provisioned": { tenantId: string };
   }
 }
