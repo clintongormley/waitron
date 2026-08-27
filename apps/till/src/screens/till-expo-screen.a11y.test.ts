@@ -107,6 +107,8 @@ function stubApi(): TillApi {
     fireCourse: vi.fn().mockResolvedValue(undefined),
     bumpCourseReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
+    // The per-order Reprint wt-button (KDS-4) renders on every populated card — swept in both themes below.
+    reprintOrder: vi.fn().mockResolvedValue(undefined),
   } as unknown as TillApi;
 }
 

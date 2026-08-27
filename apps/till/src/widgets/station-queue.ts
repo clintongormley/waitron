@@ -267,6 +267,15 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
       }
+
+      /* The per-order REPRINT action (KDS-4 §3d) — a full-width SECONDARY wt-button at the card foot,
+         under the primary collect handover. wt-button hosts as inline-block; display:block lets it span
+         the card width like the collect/fire buttons above. Secondary (not primary) because reprint is a
+         recover-from-a-jam utility, not a workflow step — its own a11y-correct colour pairing lives inside
+         wt-button, so no chrome is hardcoded here. */
+      wt-button.reprint {
+        display: block;
+      }
     `,
   ];
 
@@ -289,6 +298,17 @@ export class TillStationQueue extends LitElement {
    * (it owns a session and both verbs). Advancing itself, and the held-line greying, are unaffected.
    */
   @property({ type: Boolean }) advanceOnly = false;
+  /**
+   * Whether to offer the per-order REPRINT action (KDS-4 §3d) on each rail card. Default `false` — the
+   * counter's default-station widget (`till-app`) and the counter screen embed this widget WITHOUT a
+   * reprint affordance, so it must be opt-in and off for them. Only the station-display screen turns it on,
+   * and only in OPERATOR mode (`!deviceMode`): the reprint route is session-guarded, so an enrolled device
+   * display holds no session for it (there is no device reprint route — the R-K ruling). A per-order
+   * `reprint-order { orderId }` event the container turns into a `reprintOrder` call, the same
+   * event → container → server shape a bump/collect/fire uses. Rail-only, like collect: kanban columns cut
+   * across orders, so a per-order action has no home there.
+   */
+  @property({ type: Boolean }) showReprint = false;
   /** Injectable clock for age colouring; defaults to the wall clock. Set in tests for deterministic buckets. */
   @property({ attribute: false }) now?: number;
 
@@ -340,6 +360,20 @@ export class TillStationQueue extends LitElement {
     this.dispatchEvent(
       new CustomEvent("fire-course", {
         detail: { orderId: group.orderId, courseId: course.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Reprint an order's current kitchen tickets (KDS-4 §3d) — the "a jam ate the paper, print it again"
+   * tap on a rail card. Emits a composed, bubbling `reprint-order { orderId }` the container (the station
+   * screen) turns into a `reprintOrder` call, the same event → container → server shape a bump/collect/fire
+   * uses. Order-level (the route is `/api/orders/:id/reprint`), so only the order id rides. */
+  #reprint(group: StationQueueGroup): void {
+    this.dispatchEvent(
+      new CustomEvent("reprint-order", {
+        detail: { orderId: group.orderId },
         bubbles: true,
         composed: true,
       }),
@@ -400,7 +434,7 @@ export class TillStationQueue extends LitElement {
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
           ${this.#courseSections(group).map((section) => this.#courseSection(group, section))}
-          ${this.#collectAction(group)}
+          ${this.#collectAction(group)} ${this.#reprintAction(group)}
         </article>`;
       })}
     </div>`;
@@ -454,6 +488,24 @@ export class TillStationQueue extends LitElement {
     >
       ${t("station.collect")}
     </button>`;
+  }
+
+  /** The per-order reprint button (KDS-4 §3d), shown only when {@link showReprint} is on (the station
+   * display's OPERATOR mode — the R-K guard). A full-width secondary `wt-button` at the card foot, under
+   * the collect handover. Its accessible name is the slotted "Reprint" text (like every other wt-button in
+   * the till): `aria-label` on a `wt-button` host is a11y-prohibited (the host carries no role — the inner
+   * `<button>` does), so the card heading (#N) supplies the order context, not the button name. Emits
+   * `reprint-order` (via {@link #reprint}). */
+  #reprintAction(group: StationQueueGroup): TemplateResult | typeof nothing {
+    if (!this.showReprint) return nothing;
+    return html`<wt-button
+      class="reprint"
+      data-reprint=${group.orderId}
+      variant="secondary"
+      @click=${() => this.#reprint(group)}
+    >
+      ${t("station.reprint")}
+    </wt-button>`;
   }
 
   /** KANBAN — three state columns, each holding every order's lines in that state, oldest order first. */

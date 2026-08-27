@@ -66,6 +66,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     advanceTicket: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
+    reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -289,6 +290,68 @@ describe("till-station-screen", () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
+  // --- Reprint (KDS-4 §3d, R-K) — operator mode shows it; device mode hides it (that test is below) ---
+
+  it("operator mode shows the per-order Reprint button in the rail (deviceMode === false, R-K)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    // The reprint action is a rail-card control, so switch to the rail lens first.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(queueWidget(el)!.shadowRoot!.querySelector('[data-reprint="wo-1"]')).not.toBeNull();
+  });
+
+  it("clicking Reprint calls reprintOrder(orderId) and does not escape the screen", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    // Stopped at the screen (it owns the reprint), so the app never double-handles it.
+    const escaped = vi.fn();
+    host.addEventListener("reprint-order", escaped);
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    expect(api.reprintOrder).toHaveBeenCalledWith("wo-1");
+    expect(escaped).not.toHaveBeenCalled();
+    // Reprint changes no state, so it never re-reads the queue (only the connect read ran).
+    expect(api.getStationQueue).toHaveBeenCalledOnce();
+  });
+
+  it("a rejected Reprint surfaces the localised banner, never the raw code", async () => {
+    // A mapped code → its SPECIFIC localised sentence, proving the banner never shows the wire code.
+    const api = stubApi({
+      reprintOrder: vi.fn().mockRejectedValue({ code: "session.required" }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("session.required", "es-ES"));
+    expect(alert!.textContent).not.toContain("session.required");
+  });
+
+  it("a codeless Reprint rejection (a fetch network throw) falls back to the generic banner", async () => {
+    // A rejection with no `code` degrades to `server.internal` — the generic sentence — not an empty banner.
+    const api = stubApi({
+      reprintOrder: vi.fn().mockRejectedValue(new Error("network down")),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("server.internal", "es-ES"));
+  });
+
   it("shows the no-stations message when the venue has none configured", async () => {
     const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -359,6 +422,8 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
+      // The session reprint verb — present so a stray call in device mode is OBSERVABLE, not silently absent.
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as TillApi;
   }
@@ -558,10 +623,25 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
 
-  it("device mode ignores a stray mark-collected / fire-course (belt-and-braces: no session verb, no reload)", async () => {
-    // The advance-only widget never renders these buttons, so the events cannot fire from the UI; the
-    // handlers guard anyway, so a stray composed event never reaches the session verbs (which a device
-    // has no cookie for) nor triggers a reload.
+  it("device mode hides the Reprint button (session-guarded route, no device session — R-K)", async () => {
+    // The reprint route is session-guarded and a device holds no session, so the R-K ruling hides the
+    // per-order reprint in device mode (`showReprint` is off). Switch to the rail lens (where reprint would
+    // live) and assert it is absent from the widget's shadow — the ABSENT half of the R-K guard.
+    const api = deviceApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(queueWidget(el)!.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+  });
+
+  it("device mode ignores a stray mark-collected / fire-course / reprint-order (belt-and-braces: no session verb, no reload)", async () => {
+    // The advance-only widget never renders these buttons (and reprint is off via showReprint), so the
+    // events cannot fire from the UI; the handlers guard anyway, so a stray composed event never reaches
+    // the session verbs (which a device has no cookie for) nor triggers a reload.
     const api = deviceApi({ markCollected: vi.fn(), fireCourse: vi.fn() });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -582,6 +662,13 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         composed: true,
       }),
     );
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("reprint-order", {
+        detail: { orderId: "wo-1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await flush(el);
     expect(
       (api as unknown as { markCollected: ReturnType<typeof vi.fn> }).markCollected,
@@ -589,6 +676,8 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(
       (api as unknown as { fireCourse: ReturnType<typeof vi.fn> }).fireCourse,
     ).not.toHaveBeenCalled();
+    // The R-K guard: a stray reprint-order in device mode never reaches the session reprint verb.
+    expect(api.reprintOrder).not.toHaveBeenCalled();
     // Only the initial probe ran — a guarded stray event triggers no reload.
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
   });

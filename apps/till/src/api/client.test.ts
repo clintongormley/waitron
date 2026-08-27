@@ -619,6 +619,34 @@ describe("TillApi", () => {
     });
   });
 
+  it("reprintOrder POSTs an empty object to the order's /reprint route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).reprintOrder("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/orders/wo1/reprint",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("reprintOrder surfaces { code } when the order id is unknown/malformed", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).reprintOrder("wo1")).rejects.toMatchObject({
+      code: "working_order.not_found",
+    });
+  });
+
   it("fireCourse POSTs an empty object to the order+course fire route — the kitchen-fire release (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

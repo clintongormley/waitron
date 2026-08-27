@@ -925,6 +925,24 @@ export class TillApi {
   }
 
   /**
+   * Reprint an order's CURRENT kitchen tickets (KDS-4 §3d) → `POST /api/orders/:id/reprint` with an empty
+   * body — the "a jam ate the paper, print it again" lever on the station display + expo. A SESSION verb,
+   * NOT a device verb: the reprint route is `requireSession`-gated (`apps/server/src/till-api.ts`), so it
+   * rides the operator session cookie like {@link markCollected}/{@link fireCourse}, never the httpOnly
+   * device cookie — an enrolled KDS display (device mode) has no session and would 401, so the callers
+   * hide it there (there is no device reprint route). NON-FISCAL and STATE-LESS: the server re-queries the
+   * order's currently-fired `ticket_items` and re-enqueues the whole current ticket through the SAME
+   * never-block outbox a fire uses — it touches no sale/registro/tender and changes no order state, so
+   * there is nothing to re-read. IDEMPOTENT — an order with no fired items enqueues nothing and is a 200
+   * no-op (no new error code). A malformed/unknown id rejects `{ code: "working_order.not_found" }`. The
+   * server answers an empty 200 (`c.body(null, 200)`), so this resolves void. The empty `{}` body mirrors
+   * the sibling order-level KDS verbs ({@link markCollected}/{@link fireCourse}); the route parses none.
+   */
+  async reprintOrder(orderId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});
+  }
+
+  /**
    * FIRE a HELD course of an order (KDS-2 §3c/§5a) → `POST /api/orders/:id/courses/:courseId/fire` with
    * an empty body — the operator's "release this course" action. NON-FISCAL: the server stamps
    * `fired_at = now()` on every held item of this order + course, so they stop being greyed on the
