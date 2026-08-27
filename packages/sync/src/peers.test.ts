@@ -132,13 +132,23 @@ describe("revokePeer + listPeers + rotation", () => {
     }
   });
 
-  it("listPeers reports summaries without the hash", async () => {
+  it("listPeers reports summaries (timestamps as strings, oldest first) without the hash", async () => {
     const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
     try {
-      const { peerId } = await enrolPeer(pruner, { subscriberId: "cloud", name: "DR" });
+      const a = await enrolPeer(pruner, { subscriberId: "cloud", name: "DR-a" });
+      const b = await enrolPeer(pruner, { subscriberId: "cloud", name: "DR-b" });
       const peers = await listPeers(pruner);
-      const found = peers.find((p) => p.peerId === peerId);
-      expect(found).toMatchObject({ subscriberId: "cloud", name: "DR", active: true });
+      const found = peers.find((p) => p.peerId === a.peerId);
+      expect(found).toMatchObject({ subscriberId: "cloud", name: "DR-a", active: true });
+      // Timestamps must be TEXT, not node-postgres Date objects, so the declared PeerSummary types are
+      // accurate and the CLI prints a real timestamp rather than a JS Date.toString(). A never-authed
+      // peer's lastSeenAt is null.
+      expect(typeof found!.enrolledAt).toBe("string");
+      expect(found!.lastSeenAt).toBeNull();
+      // Ordered by enrolled_at ascending: a (enrolled first) precedes b.
+      const ia = peers.findIndex((p) => p.peerId === a.peerId);
+      const ib = peers.findIndex((p) => p.peerId === b.peerId);
+      expect(ia).toBeLessThan(ib);
       expect(JSON.stringify(peers)).not.toMatch(/token_hash|tokenHash/);
     } finally {
       await pruner.close();
