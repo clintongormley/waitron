@@ -7,12 +7,23 @@
 // NEVER-BLOCK (CLAUDE.md §5): enqueue is a pure outbox INSERT (`enqueuePrintJob`) — it opens no socket
 // and waits on no hardware — so a slow, broken, or absent printer can never delay a fire. The ONE way
 // `enqueuePrintJob` could abort the enclosing fire tx is its `printer.not_found` throw for a
-// missing/inactive printer; the mapping query below pre-filters to `printers.active = true`, so every id
-// handed to it names a live printer visible in this same tx and it therefore never throws. That is why
-// the enqueue stays INSIDE the tx (atomic with the fire) rather than being wrapped in a swallow.
+// missing/inactive printer, and TWO guards together make that unreachable so the enqueue can stay INSIDE
+// the fire tx (atomic with the fire) without a swallow:
+//   1. The mapping query below pre-filters to `printers.active = true`, so a printer already deactivated
+//      when the read runs is filtered out — not enqueued, so its id never reaches `enqueuePrintJob`.
+//   2. That same read takes a `FOR SHARE` row lock on the mapped `printers` rows, so a printer active AT
+//      the read cannot be deactivated until this fire tx commits: a concurrent `deactivatePrinter` UPDATE
+//      needs a conflicting row lock and BLOCKS until commit. Without this lock the fire runs at READ
+//      COMMITTED and `enqueuePrintJob`'s OWN `active = true` re-check reads a FRESH snapshot, so a
+//      deactivation committing between the two reads would flip `active` to false and throw
+//      `printer.not_found`, aborting the fire (a §5 never-block violation). Proven by the two-connection
+//      real-Postgres test in `kitchen-print.concurrency.test.ts`.
+// So for any single-actor / serial input `enqueuePrintJob` never throws (pre-filter alone), and the
+// FOR SHARE lock extends that to the concurrent-deactivation race — the admin config change waits
+// briefly; the sale never fails.
 //
 // This file THROWS no domain code of its own (the only throw on the path, `enqueuePrintJob`'s
-// `printer.not_found`, is made unreachable by that filter), so it needs no `import "./errors.js"`.
+// `printer.not_found`, is made unreachable by those two guards), so it needs no `import "./errors.js"`.
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   kitchenStations,
@@ -128,8 +139,15 @@ export async function enqueueKitchenTickets(
   const order = orderRows[0]!;
 
   // The station→printer mappings for the involved stations, joined to `printers` for each printer's
-  // ticket scope and FILTERED to ACTIVE printers. That filter is the never-block guarantee: it keeps
-  // every id below out of `enqueuePrintJob`'s `printer.not_found` throw (which would abort the fire tx).
+  // ticket scope and FILTERED to ACTIVE printers. Two things keep `enqueuePrintJob` from throwing
+  // `printer.not_found` (which would abort the fire tx — see the header):
+  //   - the `active = true` filter drops an already-deactivated printer (never enqueued);
+  //   - `FOR SHARE OF printers` row-locks the matched `printers` rows, so a concurrent
+  //     `deactivatePrinter` UPDATE (which needs a conflicting FOR NO KEY UPDATE lock) BLOCKS until this
+  //     fire tx commits — so `active` cannot flip to false between here and `enqueuePrintJob`'s own
+  //     re-check under READ COMMITTED. `of: printers` scopes the lock to `printers` only (not the
+  //     mapping rows), and FOR SHARE (not FOR KEY SHARE) is required: a `SET active = false` UPDATE
+  //     touches no key column, so only FOR SHARE conflicts with it.
   const mappingRows = await tx
     .select({
       stationId: stationPrinters.stationId,
@@ -150,7 +168,8 @@ export async function enqueueKitchenTickets(
         inArray(stationPrinters.stationId, stationIds),
         eq(printers.active, true),
       ),
-    );
+    )
+    .for("share", { of: printers });
 
   // This round's items grouped by station, each carrying its `line_no` for a stable within-station order
   // (the same `line_no` ordering `listStationQueue` renders). Every fired line has a `lineById` row (the

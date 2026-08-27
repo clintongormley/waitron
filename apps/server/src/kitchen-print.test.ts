@@ -19,6 +19,7 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines, openTab } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
+import { enqueueKitchenTickets } from "./kitchen-print.js";
 import "./errors.js";
 
 // PGlite is the correct target: print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx —
@@ -360,5 +361,41 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     // A fresh transaction sees no print jobs.
     const jobs = await asApp(cfg, (tx) => printJobsFor(tx));
     expect(jobs).toHaveLength(0);
+  });
+
+  it("resolves the table label via the counter-delivery delivery_table_id direction", async () => {
+    // The table-label subquery covers BOTH `dt.tab_id = order.id` (a seated tab, tested above) and
+    // `order.delivery_table_id = dt.id` (a counter delivery — a walk-up order routed to a table). This
+    // pins the second direction. enqueueKitchenTickets is called directly on an order whose
+    // `delivery_table_id` points at the table (no tab_id back-pointer).
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", { stationId: cocina.id });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [line(drink)], null);
+      // A counter-delivery table the order delivers to — the order points AT it (no tab back-pointer).
+      const table = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (tenant_id, location_id, label)
+        values (${cfg.tenantId}, ${cfg.locationId}, 'Barra 3') returning id`);
+      await tx.execute(sql`
+        update working_orders set delivery_table_id = ${table.rows[0]!.id} where id = ${orderId}`);
+      const [lineRow] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      // Enqueue directly with the fired line routed to Cocina — the tableLabel must resolve to the
+      // delivery table via the `delivery_table_id = dt.id` arm of the subquery.
+      await enqueueKitchenTickets(tx, cfg, orderId, [
+        { workingOrderLineId: lineRow!.id, stationId: cocina.id },
+      ]);
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const stationJobs = jobs.filter((j) => j.printerId === printerId);
+    expect(stationJobs).toHaveLength(1);
+    expect(decode(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
   });
 });
