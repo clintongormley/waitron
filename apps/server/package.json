@@ -55,6 +55,7 @@
     "@waitron/workforce-es": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.0",
+    "multicast-dns": "^7.2.5",
     "node-forge": "^1.3.1",
     "pg": "^8.13.0",
     "stripe": "^22.3.2",
@@ -63,6 +64,7 @@
   "devDependencies": {
     "@simplewebauthn/server": "^13.0.0",
     "@testcontainers/postgresql": "^12.0.4",
+    "@types/multicast-dns": "^7.2.4",
     "@types/node": "^24.0.0",
     "@types/node-forge": "^1.3.0",
     "@types/pg": "^8.11.0",
