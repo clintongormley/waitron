@@ -128,6 +128,26 @@ describe("applyVenue", () => {
     expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado, not two
   });
 
+  it("collapses country/taxId casing variants to ONE obligado on re-run (no duplicate, no PK error, §5)", async () => {
+    // The fiscal footgun: es/ES (or a taxId casing/spacing difference) for the SAME business must
+    // never mint two permanent, unmergeable obligados (§5). planVenue canonicalizes, so both runs
+    // carry the SAME derived id AND the SAME (country, tax_id) unique-index row → the second run's
+    // `on conflict (country, tax_id) do nothing` fires. Proven by DELETION: strip planVenue's
+    // normalization and the second run inserts a distinct row (different id AND different unique-index
+    // key) → the equality reads false and the count reads 2.
+    const first = await applyVenue(planVenue(request("B88888888")), { db: suite.db });
+    const second = await applyVenue(planVenue({ ...request("b88888888"), country: "es" }), {
+      db: suite.db,
+    });
+    expect(second.tenantId).toBe(first.tenantId); // same canonical obligado, reused
+    expect(first.tenantId).toBe(obligadoTenantId("ES", "B88888888"));
+
+    const tenants = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from tenants
+      where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
+    expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado across both casings, not two
+  });
+
   it("seeds the admin only once across re-runs — the D8 second-shop path adds no duplicate", async () => {
     // create-location/create-till/create-node deliberately ADD a shop on a re-run (a tenant has many
     // shops), but the admin belongs to the TENANT, not a shop. A plain `insert into persons` would

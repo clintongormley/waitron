@@ -18,4 +18,23 @@ describe("obligadoTenantId", () => {
     // The "\n" separator: ("ES","X") and ("E","SX") must not collide.
     expect(obligadoTenantId("ES", "X")).not.toBe(obligadoTenantId("E", "SX"));
   });
+
+  it("is casing- and whitespace-invariant — es/ES and stray spacing collapse to ONE id (§5)", () => {
+    // The fiscal footgun this backstops: `es`/`ES` (or a taxId casing/spacing difference) for the
+    // same business must derive the SAME obligado, or a differently-cased re-run mints a second,
+    // permanent, unmergeable obligado. The functional fix is in planVenue; this makes the primitive
+    // self-normalize so ANY caller (e.g. provisionVenue's double-provision guard, which recomputes
+    // the id from the raw request) gets the canonical id.
+    const canonical = obligadoTenantId("ES", "B12345678");
+    expect(obligadoTenantId("es", "b12345678")).toBe(canonical);
+    expect(obligadoTenantId(" ES ", " B12345678 ")).toBe(canonical);
+    expect(obligadoTenantId("Es", "b12345678")).toBe(canonical); // mixed field casings too
+  });
+
+  it("leaves an ALREADY-canonical derivation UNCHANGED — normalization must not shift existing ids", () => {
+    // Pinned literal, computed from the derivation for the canonical input by replicating the exact
+    // uuidV5 algorithm. Normalizing a value that is already canonical must be a no-op, or every
+    // obligado already derived under the old function would move to a new id.
+    expect(obligadoTenantId("ES", "B12345678")).toBe("87ea1575-e289-5f61-8177-c288eb755b84");
+  });
 });
