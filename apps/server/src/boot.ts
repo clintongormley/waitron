@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import { createPostgresDb, type Database } from "@waitron/db";
@@ -15,6 +16,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
+import { parseEnvFile } from "./env-file.js";
 import { loadConfig, loadSyncConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { codeOf } from "./error-code.js";
@@ -52,6 +54,9 @@ import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
+import { provisionVenue } from "./provision.js";
+import { sealAeatCredential } from "./aeat-credential.js";
+import { writeTradingEnv } from "./trading-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
@@ -408,49 +413,112 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const app = healthApp(health, now);
 
   if (config.till === undefined) {
-    // SETUP MODE (slice 1b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID are
-    // set). It serves ONLY `/health` and the unauthenticated setup surface: no key ring, no
-    // reconciler/duty, no `readOrderFlow`, no trading routes, no sync transport, and no
-    // drain/reconcile workers — there is nothing to submit yet. The DB is migrated all the same (the
-    // shared prefix above ran `applyMigrations`), ready for slice 2's provisioning wizard. The
-    // till/dashboard SPAs are deliberately NOT mounted — they are useless without a venue, and the
-    // real setup wizard app arrives in slice 2; the media store is trading-only, so it is not created
-    // here either.
-    mountSetup(app, { environment: config.environment }, log);
-    // NEW in slice 2a: the box serves this setup surface over HTTPS. `ensureBoxSecrets` runs on EVERY
-    // setup boot, unconditionally — its two halves are independently presence-gated inside (mint the
-    // self-signed cert quartet only when absent; generate `secrets.env`'s vault key + node token only
-    // when absent), so it is cheap and idempotent, and a reused box keeps both byte-for-byte. It runs
-    // regardless of `config.tls` because the box's OWN secrets (the vault key above all — slice 2b
-    // loads it to seal the first provisioned credential) must exist whichever front-door cert is
-    // served; gating the whole call on `config.tls === undefined` would strand an operator-TLS box with
-    // no vault key. THEN the served cert is chosen: an operator who supplied their own WAITRON_TLS_*
-    // pair keeps it — `config.tls` WINS — otherwise the box serves its own freshly-ensured self-signed
-    // leaf as the fallback. Only the leaf `{ certFile, keyFile }` feeds `config.tls`; the returned
-    // `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so it is
-    // narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity window
-    // is anchored to real boot time. The trading `else` branch reads `config.tls` unchanged — untouched.
+    // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
+    // are set). It serves ONLY `/health` and the unauthenticated setup surface: no reconciler/duty, no
+    // `readOrderFlow`, no trading routes, no sync transport, and no drain/reconcile workers — there is
+    // nothing to submit yet. The DB is migrated all the same (the shared prefix above ran
+    // `applyMigrations`), ready for the provisioning wizard. The till/dashboard SPAs are deliberately
+    // NOT mounted — they are useless without a venue, and the real setup wizard app arrives in slice
+    // 2c; the media store is trading-only, so it is not created here either.
+    //
+    // Slice 2b wires the provisioning surface: `ensureBoxSecrets` (2a) runs first (below), then this
+    // branch recovers the vault key ring and opens an OWNER connection, and passes both — plus the
+    // config-persist and restart callbacks — into `mountSetup` so `POST /setup-api/provision` can
+    // stamp, mint the venue, seal the first `fiscal.aeat` credential, persist `trading.env` and
+    // restart the box into trading mode.
+    //
+    // `ensureBoxSecrets` runs on EVERY setup boot, unconditionally — its two halves are independently
+    // presence-gated inside (mint the self-signed cert quartet only when absent; generate
+    // `secrets.env`'s vault key + node token only when absent), so it is cheap and idempotent, and a
+    // reused box keeps both byte-for-byte. It runs regardless of `config.tls` because the box's OWN
+    // secrets (the vault key above all — this branch loads it below to seal the first provisioned
+    // credential) must exist whichever front-door cert is served; gating the whole call on
+    // `config.tls === undefined` would strand an operator-TLS box with no vault key. THEN the served
+    // cert is chosen: an operator who supplied their own WAITRON_TLS_* pair keeps it — `config.tls`
+    // WINS — otherwise the box serves its own freshly-ensured self-signed leaf as the fallback. Only
+    // the leaf `{ certFile, keyFile }` feeds `config.tls`; the returned `caCertFile` is the CA a setup
+    // CLIENT trusts to accept the leaf, not a server input, so it is narrowed off here. `now` is
+    // `startServer`'s own `() => new Date()`, so the cert's validity window is anchored to real boot
+    // time. The trading `else` branch reads `config.tls` unchanged — untouched.
     //
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
-    // dir, or `startListening` -> `buildServeOptions` -> `readFileSync` on a missing/unreadable
-    // operator TLS file) closes `db` before it propagates — mirroring the trading branch's own
-    // `loadKeyRing` guard below. `createPostgresDb` above already opened a LIVE pool, and on a throw
-    // path `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()`
-    // — the pool would leak. The happy path is unchanged.
+    // dir, a missing/unreadable `secrets.env`, or `startListening` -> `buildServeOptions` ->
+    // `readFileSync` on a missing/unreadable operator TLS file) closes `db` before it propagates —
+    // mirroring the trading branch's own `loadKeyRing` guard below. `createPostgresDb` above already
+    // opened a LIVE pool, and on a throw path `startServer` never returns a `StartedServer`, so
+    // nothing else would ever call `db.close()` — the pool would leak. The happy path is unchanged.
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
         hostnames: ["waitron.local", "localhost"],
         now,
       });
-      const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
-      const server = startListening({ ...config, tls }, app, now, log);
-      return makeStartedServer(server, health, log, {
-        // A setup box runs no background work, so there is nothing to abort or await.
-        stopWork: () => Promise.resolve(),
-        // Only the app pool was opened — no sync/retention pools exist to tear down.
-        closePools: () => db.close(),
-      });
+      // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
+      // `WAITRON_CREDENTIALS_KEY`(+`_VERSION`) into `<stateDir>/secrets.env` but never loaded it into
+      // this process's env — so, unlike the trading branch (which reads the ring from `env`), the
+      // setup process has no key material in `process.env`. Read the file 2a just wrote back off disk
+      // and build the ring from it, so the provision route can seal the first tenant's `fiscal.aeat`
+      // credential. A missing/unreadable `secrets.env` is a LOUD boot failure (`readFileSync` throws,
+      // caught by the guard above) — correct, since the write above guarantees it on the happy path.
+      const ring = loadKeyRing(
+        parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
+      );
+      // The OWNER connection provisioning needs. `applyVenue` INSERTs into `tenants` (which `app_user`
+      // deliberately cannot — CLAUDE.md §3) and `stampDeployment` writes the `deployment` singleton, so
+      // both need a role that OWNS the tables, NOT the app pool's `config.databaseUrl`. In dev
+      // `config.migrationsDatabaseUrl` is the container superuser (owns everything), so it works here.
+      // NOTE (do not read this as "the migrator owns the tables"): the true owner is the role that ran
+      // `waitron-provision instance` — it ran CREATE DATABASE + the migrations over the ADMIN string
+      // (`packages/provisioning/src/instance-apply.ts`), NOT `waitron_migrator`, which is an `app_user`
+      // member with no INSERT on `tenants`. On a role-split appliance the setup-mode owner connection
+      // must be that admin, not `migrationsDatabaseUrl`; wiring it is deferred with the instance
+      // role-split (R1). Closed in the setup teardown
+      // (`closePools`) beside `db`, and on any throw below (the inner catch) so a later failure — from
+      // `mountSetup` or `startListening` — never leaks it.
+      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      try {
+        // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
+        // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
+        // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
+        // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
+        // connection strings for the next boot. The `*` catch-all inside `mountSetup` stays terminal
+        // and last, so the new POST route (registered before it) is not shadowed.
+        mountSetup(
+          app,
+          {
+            environment: config.environment,
+            provision: (req) => provisionVenue({ ownerDb }, req),
+            sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
+            // `writeTradingEnv` returns the path it wrote; the surface only needs `Promise<void>`, so
+            // discard it explicitly rather than widen the dep's type.
+            persistTrading: async (cfg) => {
+              await writeTradingEnv(config.stateDir, cfg);
+            },
+            databaseUrl: config.databaseUrl,
+            migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+            requestRestart: () => process.kill(process.pid, "SIGTERM"),
+          },
+          log,
+        );
+        const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
+        const server = startListening({ ...config, tls }, app, now, log);
+        return makeStartedServer(server, health, log, {
+          // A setup box runs no background work, so there is nothing to abort or await.
+          stopWork: () => Promise.resolve(),
+          // The app pool AND the provisioning owner pool — no sync/retention pools exist here.
+          // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
+          // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
+          // path (which `close()` runs even after a `server.close()` rejection).
+          closePools: async () => {
+            await Promise.allSettled([db.close(), ownerDb.close()]);
+          },
+        });
+      } catch (error) {
+        // A throw AFTER `ownerDb` opened (`mountSetup` / `startListening` / `buildServeOptions`) must
+        // close it before propagating to the outer catch that closes `db` — neither pool may leak.
+        await ownerDb.close();
+        throw error;
+      }
     } catch (error) {
       await db.close();
       throw error;

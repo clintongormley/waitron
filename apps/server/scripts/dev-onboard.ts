@@ -104,6 +104,12 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   log("dev-onboard: migrating…");
   await applyMigrations(databaseUrl, migrationOptionsFor(manifestSets(), null));
 
+  // `databaseUrl` also becomes the OWNER connection `POST /setup-api/provision` runs `applyVenue`
+  // over once the box boots (`.env.example`'s ONBOARDING/OWNER CONNECTION notes) — `applyVenue`
+  // INSERTs into `tenants`, a privilege `app_user` deliberately lacks but the table owner holds
+  // implicitly. `DEV_DATABASE_URL` is the container `postgres` superuser (owner-capable), so no
+  // separate admin connection is needed on the laptop; `WAITRON_MIGRATIONS_DATABASE_URL` is left
+  // unset here, which `config.ts` defaults to this same `DATABASE_URL`.
   const env: SetupEnv = {
     DATABASE_URL: databaseUrl,
     WAITRON_ENV: "preproduction",

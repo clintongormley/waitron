@@ -19,7 +19,10 @@ const CERT_KINDS = ["sello", "representante"] as const;
 /** Which FNMT certificate a tenant submits with. It selects the AEAT HOST, not merely a header. */
 export type CertKind = (typeof CERT_KINDS)[number];
 
-function isCertKind(value: string): value is CertKind {
+/** The single runtime membership check for `CertKind`, derived from the same `CERT_KINDS` array the
+ * type is — exported so `aeat-credential.ts`'s cert validation checks membership against THIS list
+ * rather than redeclaring its own. */
+export function isCertKind(value: string): value is CertKind {
   // Cast to a plain string array: `readonly ["sello", "representante"]` only accepts a `CertKind`
   // as `.includes`'s argument, but `value` here is exactly the un-narrowed caller input this
   // function exists to check.
