@@ -20,15 +20,20 @@ export interface AeatCert {
 
 const CERT_KINDS: readonly CertKind[] = ["sello", "representante"];
 
-// A non-empty base64 string: one or more base64-alphabet characters, then at most two `=` padding.
-// The leading `+` (not `*`) is what rejects the empty string. `Buffer.from(x, "base64")` cannot
-// stand in for this — it is deliberately lax, silently dropping any non-alphabet byte, so it would
-// accept `""` and `"not base64!"` alike. Validating the SHAPE explicitly is what lets the empty and
-// garbage cases fail with OUR code here rather than sealing a blob the drain later cannot decode.
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+// Canonical base64: whole 4-char groups of the base64 alphabet, then an OPTIONAL padded tail of
+// exactly `xx==` or `xxx=`. Valid base64 of any byte string always has length % 4 with correct
+// padding, so this rejects not just non-alphabet garbage (`"not base64!"`) but also malformed-length
+// strings (`"QQ"`, `"QQQ"`) that a looser `[A-Za-z0-9+/]+={0,2}` would wave through. `Buffer.from(x,
+// "base64")` cannot stand in for this — it is deliberately lax, silently dropping any non-alphabet
+// byte — so validating the SHAPE here is what stops a bogus blob sealing cleanly and only failing
+// far downstream at drain/AEAT-submit time.
+//
+// The pattern also matches the EMPTY string (the `*` with zero groups, tail absent), so the caller
+// keeps an explicit non-empty check alongside it — `value.length > 0 && …`.
+const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 function isBase64(value: string): boolean {
-  return BASE64_RE.test(value);
+  return value.length > 0 && BASE64_RE.test(value);
 }
 
 /**

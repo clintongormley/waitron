@@ -158,11 +158,23 @@ describe("sealAeatCredential", () => {
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
 
-  it("refuses an empty pfxBase64 and seals nothing", async () => {
+  // Every unusable pfxBase64 SHAPE is refused BEFORE the seal, with the field named and no row
+  // written. `""` exercises the non-empty check; `"not valid base64!!!"` the alphabet; `"QQ"` the
+  // length/padding (valid characters, but not a whole 4-char group — exactly the shape a looser
+  // `[A-Za-z0-9+/]+={0,2}` would have waved through). `putCredential`'s own `validatePayload`
+  // accepts any non-empty string, so only this module's `BASE64_RE` guard stands between a bogus
+  // blob and a clean seal that fails far downstream at drain/AEAT-submit — the deletion-proof for
+  // that guard: replace the regex with a length-only `pfxBase64 === ""` check and the
+  // non-base64 / malformed-length cases below go RED while the empty case stays GREEN.
+  it.each([
+    { label: "empty", pfxBase64: "" },
+    { label: "non-base64 characters", pfxBase64: "not valid base64!!!" },
+    { label: "a malformed base64 length", pfxBase64: "QQ" },
+  ])("refuses a pfxBase64 that is $label and seals nothing", async ({ pfxBase64 }) => {
     const target = ownerDb();
     const ring = testRing();
     const tenant = await provisionTenant(target);
-    const cert = aeatCert({ pfxBase64: "" });
+    const cert = aeatCert({ pfxBase64 });
 
     const error = await sealAeatCredential(target, ring, tenant, cert).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -174,5 +186,22 @@ describe("sealAeatCredential", () => {
       getCredential(tx, ring, { tenantId: brandTenantId(tenant), purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
+  });
+
+  it("accepts a short, canonically-padded base64 pfxBase64 (the tightened regex does not over-reject)", async () => {
+    const target = ownerDb();
+    const ring = testRing();
+    const tenant = await provisionTenant(target);
+    // "aGVsbG8=" is `Buffer.from("hello").toString("base64")` — a real 5-byte payload whose base64
+    // carries a 3-char padded tail (`bG8=`), the branch a length-only check would never reach. The
+    // seal must accept it, proving the length/padding-enforcing regex rejects no genuine encoding.
+    const cert = aeatCert({ pfxBase64: "aGVsbG8=" });
+
+    await sealAeatCredential(target, ring, tenant, cert);
+
+    const readBack = await withTenant(target, tenant, (tx) =>
+      getCredential(tx, ring, { tenantId: brandTenantId(tenant), purpose: "fiscal.aeat" }),
+    );
+    expect(readBack.pfxBase64).toBe("aGVsbG8=");
   });
 });
