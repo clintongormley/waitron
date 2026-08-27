@@ -249,14 +249,18 @@ describe("fkRank is a topological order — every parent ranks strictly before i
   //   working_orders → sales (sales.working_order_id set-on-park, sales.ts:194-198),
   //   sales → sale_lines/tenders/sale_settlements/sale_substitutions/sale_voids,
   //   payments → payment_refunds (payment-refunds.ts payment_fk),
-  //   catalogues → categories → products.
+  //   catalogues → categories → products;
+  //   products → working_order_lines (working_order_lines.product_id NOT NULL, orders.ts:153,208-210).
   // Plus the C1 table-service closure (spec 2026-08-27-sync-cloud-mirror-c1-enrolment-design.md §2):
   //   floor_zones → dining_tables (dining_tables.zone_id, nullable, dining-tables.ts:55-57),
   //   table_service_statuses → dining_tables (dining_tables.status_id, nullable, dining-tables.ts:72),
   //   dining_tables → working_orders (working_orders.delivery_table_id, the C1 gate edge, orders.ts:95).
-  // The reverse dining_tables.tab_id → working_orders back-edge (dining-tables.ts:67) is a nullable
-  // pointer set by a LATER update, so it is deliberately NOT ranked — a static rank cannot encode the
-  // dining_tables ↔ working_orders cycle; runtime correctness rests on seq-ascending apply (spec §5).
+  // Two nullable back-edges set by a LATER update (not create-time deps) are deliberately NOT ranked:
+  // dining_tables.tab_id → working_orders (dining-tables.ts:67) — a static rank cannot encode the
+  // dining_tables ↔ working_orders cycle — and payments.sale_id → sales (payments.ts:106-110, MATCH
+  // SIMPLE, set post-capture), whose parent and child both sit at rank 3, so ranking it would make the
+  // guard unsatisfiable. Runtime correctness rests on seq-ascending apply (spec §5); fkRank is a hint
+  // apply.ts never reads.
   // Apply runs seq-ascending (spec §6), so fkRank is a static topological hint, not the apply order;
   // this asserts it never contradicts the FK graph.
   const PARENT_CHILD: [string, string][] = [
@@ -271,6 +275,7 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     ["payments", "payment_refunds"],
     ["catalogues", "categories"],
     ["categories", "products"],
+    ["products", "working_order_lines"],
     ["floor_zones", "dining_tables"],
     ["table_service_statuses", "dining_tables"],
     ["dining_tables", "working_orders"],

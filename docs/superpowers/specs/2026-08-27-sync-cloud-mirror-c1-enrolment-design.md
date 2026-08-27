@@ -120,9 +120,9 @@ construction. **The capture triggers are the entire DB change.**
 ## 4. The `fkRank` cascade and breaking the cycle
 
 `fkRank` is documented as "a STATIC topological rank … a hint that never contradicts the FK graph,
-**not** the apply order" ([registry.ts:30-33](../../../packages/sync/src/registry.ts)) — the apply
+**not** the apply order" ([registry.ts:34-36](../../../packages/sync/src/registry.ts)) — the apply
 loop runs strictly seq-ascending and never reads `fkRank`. Its only consumer is the guard in
-[registry.test.ts:209-242](../../../packages/sync/src/registry.test.ts), a hand-maintained edge list
+[registry.test.ts:245-288](../../../packages/sync/src/registry.test.ts), a hand-maintained edge list
 asserting `parent.fkRank < child.fkRank` for each FK.
 
 **Breaking the cycle.** C1 adds three edges to that guard: `floor_zones → dining_tables`,

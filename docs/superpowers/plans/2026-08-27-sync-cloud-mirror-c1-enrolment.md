@@ -363,7 +363,7 @@ Create `packages/sync/drizzle/0006_enrol_table_service.sql`:
 -- Hand-written custom migration (drizzle-kit generate --custom): drizzle-kit models no triggers and
 -- sync_capture/sync_log are not Drizzle tables, so nothing here survives a later `generate`. Runs LAST
 -- in migrations.manifest.json (the `sync` set), after core/db created dining_tables, floor_zones and
--- table_service_statuses (0044/0048/0052), so each CREATE TRIGGER targets an existing table.
+-- table_service_statuses (0043/0051/0047), so each CREATE TRIGGER targets an existing table.
 --
 -- WHAT THIS BUILDS. Sub-project C1
 -- (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md): enrol the dining_tables
@@ -526,7 +526,7 @@ function diningTableImage(b: Base, over: Image = {}): Image {
   };
 }
 function workingOrderImage(b: Base, orderNumber: number, over: Image = {}): Image {
-  // status 'open' ⇒ settled_at must be NULL (the working_orders_status_settled_at CHECK). INSERT of an
+  // status 'open' ⇒ settled_at must be NULL (the working_orders_settled_at_ck CHECK). INSERT of an
   // open order is not a status transition, so working_orders_enforce_transition (BEFORE UPDATE) does
   // not fire here.
   return {

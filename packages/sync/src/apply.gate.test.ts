@@ -1108,6 +1108,44 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
     }
   });
 
+  it("negative control: a dining_table carrying an un-applied zone parks — floor_zones enrolment is forced (spec §2)", async () => {
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // A floor_zone that is NEVER applied: the dining_table's (tenant_id, zone_id) → floor_zones FK
+      // (both columns non-null, so MATCH SIMPLE checks it) finds no parent → 23503 park. This is why
+      // enrolling dining_tables FORCES enrolling floor_zones (spec §2's forced closure): a zoned table
+      // would stall the ordered lane without its zone parent, the same way an un-enrolled dining_tables
+      // stalls the working_order above. The spec §6 second deletion control, as a park test.
+      const missingZoneId = uuid();
+      const table = diningTableImage(b, { zone_id: missingZoneId });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "dining_tables",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(table),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent floor_zones parent
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from dining_tables where id = ${table.id as string}`,
+        ),
+      ).toBe("0"); // never inserted
+    } finally {
+      await applier.close();
+    }
+  });
+
   it("replicates a settle's status clear: the working_orders→dining_tables cascade (0050) applies and echo-suppresses", async () => {
     // Models the REAL source→mirror flow for a tab settling on a laid-out floor. On the SOURCE a single
     // settle UPDATE of the working_order fires working_orders_clear_table_status
@@ -1190,9 +1228,13 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       const before = await syncLogCount();
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 2, deferred: 0 }); // both landed, nothing parked
+      expect(result).toEqual({ applied: 2, deferred: 0 }); // both landed, nothing parked (wedge-free)
       expect(await woStatus(woId)).toBe("settled"); // the settle applied verbatim (transition gated off)
-      expect(await tableStatusId()).toBeNull(); // the 0050 cascade cleared the status on the mirror
+      // Converged to cleared: the local 0050 cascade (firing on the seq-1 settle apply) and the captured
+      // seq-2 dining_tables UPDATE are the same idempotent status clear — this asserts convergence, not
+      // which of the two cleared it; the load-bearing claims are the wedge-freedom (applied:2/deferred:0)
+      // and no-recapture (syncLogCount) checks around it.
+      expect(await tableStatusId()).toBeNull();
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n); // cursor advanced past both
       expect(await syncLogCount()).toBe(before); // echo suppressed — apply captured no new sync_log row
     } finally {
