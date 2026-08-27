@@ -43,7 +43,9 @@ follow.
 > 2a (self-signed CA/leaf + persisted box secrets) LANDED #141 and 2b (the `/setup-api/provision`
 > endpoint — stamp demo/live + `applyVenue` in-process, seal the AEAT cert for live, persist
 > `trading.env`, restart into trading) LANDED #142, both 2026-08-27; **slice 2c (the `apps/setup`
-> Vite+Lit wizard driving 2b's endpoint) is next**. NB 2b is **venue-only** (deviation R1): it stamps +
+> Vite+Lit wizard driving 2b's endpoint) LANDED #146** and **slice 3 (discovery + CA-serving) LANDED
+> #143** — the free-tier onboarding path (slices 1–3) is now complete; **next → slice 4** (backup /
+> status / break-glass). NB 2b is **venue-only** (deviation R1): it stamps +
 > `applyVenue`s into the already-migrated setup DB and does NOT run the full `instance` role-splitting —
 > deferred to the appliance-image slice (the DB/roles pre-exist; dev works on the superuser). Rationale:
 > it is the one deployment path that needs
@@ -270,8 +272,14 @@ question (below).
   **before** the mint + sealed into `fiscal.aeat` for a live ES-common venue, admin PIN/password hashed
   at the boundary, `trading.env` persisted (`writeTradingEnv`, 0600 atomic) then a `requestRestart`
   (SIGTERM → supervisor → trading mode); dev launcher sources `secrets.env`/`trading.env`. **Venue-only
-  (R1)** — full `instance` role-split deferred (see Debt). **next → slice 2c**: the `apps/setup` Vite+Lit
-  wizard consuming 2b's endpoint. **Slice 3 discovery + CA-serving — LANDED #143** (built independent of
+  (R1)** — full `instance` role-split deferred (see Debt). **slice 2c — the `apps/setup` Vite+Lit
+  wizard — LANDED #146**: a 6-screen in-memory wizard (mode → admin → venue → cert [live+ES-common
+  only] → review → provisioning/done) driving 2b's `POST /setup-api/provision`; served in setup mode
+  via a new `WAITRON_SETUP_APP_DIR` (`mountSetup` serves the built bundle at `/`, else the inline
+  placeholder; trading path untouched); own-shard `test-setup` CI browser lane. The AEAT PFX rides the
+  provision body **only for a live provision** (client-gated on `mode === "live"` — a **Critical** review
+  catch: never seal a cert onto a demo/preproduction tenant). **next → slice 4** (backup/status/break-glass).
+  **Slice 3 discovery + CA-serving — LANDED #143** (built independent of
   2c, on top of 2a's cert): in-process `multicast-dns` advertises `waitron.local` in **both** modes
   (crash-safe — a no-multicast-route box still boots; the responder is acquired LAST in each boot branch
   so no failure path leaks the UDP socket); a new `discovery-api.ts` serves `GET /setup-api/ca.crt` (the
@@ -491,6 +499,31 @@ here is the cross-cutting or genuinely-decision-bearing work.
   `tenants`) — wire it with the deferred appliance instance role-split. And a wizard-only box persists
   that owner connection as `trading.env`'s `DATABASE_URL`, so it runs its trading life on the owner role
   (not least-priv `app_user`) until that retrofit.
+- **Onboarding slice-2c follow-ups** (deferred from #146, none blocking; the fiscal surface was verified
+  solid by two heavyweight whole-branch reviews + deletion-proofs — cert single-chokepoint, 409s
+  no-retry, trading path untouched, secrets never leak): **(h) FISCAL, pre-existing (#57):**
+  `tenant-id.ts` derives `obligadoTenantId` as a UUIDv5 over `country` + a newline + `taxId`, **not
+  case/whitespace normalized**, so `es` vs `ES` (or a `taxId` casing/spacing difference) for the same business derives a
+  **different** tenant id → could defeat `provisionVenue`'s double-provision guard across two separate
+  wizard sessions (§5 unrecoverable chain duplication). Fix at the **derivation choke point** (normalize
+  both `country` and `taxId`), covering the wizard **and** the `instance` CLI — a wizard-only patch was
+  deliberately NOT taken (false confidence); 2c's client already trims + ES-guards `country`, which
+  narrows but does not close it. **(i) server defence-in-depth:** the provision endpoint calls `sealAeat`
+  whenever `aeatCert` is present **without checking `mode`** (a `boot.test.ts` pins that a demo provision
+  carrying a cert seals it) — the box should refuse/ignore an AEAT cert when `mode !== "live"`. 2c's
+  client gates the cert on live mode (the Critical fix), closing the *reachable* path; this is the
+  server-side belt. **(j)** a11y: the venue-screen server-routed banner + the client-validation banner can
+  co-render (two `role="alert"`); Fix 3 clears the routed error on manual Back, a fuller dedupe is
+  deferred. **(k)** terminal failure states (`already_provisioning`/`already_provisioned`/
+  `deployment.already_stamped`) render a bare alert with no next-step (reload / go-to-till) guidance.
+  **(l)** `setup-api.ts`'s provision-error doc comment implies the client sees `setup.provision_failed`;
+  that's only the boundary's log *tag* — a crash sends `server.internal` (correct the comment). **(m)**
+  altitude: the venue→`cert`/`review` conditional is computed in `venue-screen` (reads `draft.mode`);
+  `dashboard-app.ts` centralizes conditional routing in the shell (`#applyMe`) — centralize if onboarding
+  grows a second conditional. **(n)** `select-styles.ts` is now the **3rd** verbatim copy
+  (till/dashboard/setup) → hoist to `packages/ui`. **(o)** the 14 raw `new CustomEvent(...)` dispatch
+  sites have no typed helper (a typo'd screen name compiles + silently misroutes) — matches house
+  convention, so a cross-app typed-dispatch follow-up.
 
 **Payments:**
 
