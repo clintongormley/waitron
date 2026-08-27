@@ -316,6 +316,94 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
   };
 }
 
+export interface TunnelConfig {
+  relayHost: string;
+  relayPort: number;
+  boxId: string;
+  token: string;
+  poolSize: number;
+}
+
+/** Standing outbound connections the box pre-dials to the relay when WAITRON_TUNNEL_POOL_SIZE is
+ * unset. */
+const DEFAULT_TUNNEL_POOL_SIZE = 4;
+
+/**
+ * The outbound cloud-mirror tunnel (sub-project B) is enabled iff `WAITRON_TUNNEL_RELAY_URL` is set
+ * to a parseable url naming the relay's host and port. Then the box id and per-box token are
+ * required, and a blank one fails closed (the same posture `loadSyncConfig` takes for a blank peer
+ * field, CLAUDE.md §3): a blank token must never mean "no auth", and a blank box id names no box to
+ * the relay. Absent OR empty relay url → `undefined` → no tunnel is dialed, exactly like
+ * `loadSyncConfig`'s empty `WAITRON_SYNC_PEERS` off-switch, so a host that sets no tunnel env (every
+ * existing boot) is unaffected. A PRESENT-but-unparseable relay url THROWS rather than silently
+ * disabling the tunnel: "an empty connection string is a valid connection string" (CLAUDE.md §3) —
+ * the empty value is off by returning `undefined` (never reaching a dialer as `""`), but a malformed
+ * ADDRESS an operator actually supplied is a boot-time refusal, never a degenerate value handed on.
+ */
+export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
+  const rawUrl = env.WAITRON_TUNNEL_RELAY_URL;
+  // Absent OR empty → tunnel off (undefined), via `isUnset` — the same off-switch `loadSyncConfig`
+  // uses for an empty `WAITRON_SYNC_PEERS`. Returning undefined is how the empty value never reaches
+  // a dialer as `""` (CLAUDE.md §3); a present-but-malformed url is failed closed just below.
+  if (isUnset(rawUrl)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "not_a_url",
+    });
+  }
+  // A url can parse yet name no host — `relay.example:9000` (no scheme) is read as scheme
+  // `relay.example` + opaque path, so `.hostname` is `""`. A blank relayHost is exactly the `""` a
+  // dialer must never see, so it fails closed as `not_a_url` too rather than being handed on.
+  if (url.hostname === "") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "not_a_url",
+    });
+  }
+  // A well-formed url can still fail to name a USABLE port, two ways, both yielding `relayPort: 0` —
+  // the degenerate value the dialer must never see (you cannot connect to port 0): it OMITS the port
+  // (`tcp://relay.example` → `.port` is `""`, `Number("")` is `0`) or it names port ZERO explicitly
+  // (`tcp://relay.example:0` → `.port` is `"0"`). `Number(url.port) === 0` catches BOTH (a parsed
+  // `url.port` is only ever `""` or a valid `"0".."65535"`, since `new URL` rejects an out-of-range or
+  // non-numeric port), so both fail closed HERE at boot — the mirror image of the hostname guard above.
+  // A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the usable port we
+  // require, so "not a url" would mislead the operator (CLAUDE.md §1). Use a NON-SPECIAL scheme
+  // (`tcp://`, which the mechanism expects): WHATWG `URL` strips a port equal to a SPECIAL scheme's
+  // default, so `https://relay:443` parses to `.port === ""` and would be refused here — `tcp://relay:443`
+  // keeps its port.
+  if (Number(url.port) === 0) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "no_port",
+    });
+  }
+  const boxId = env.WAITRON_TUNNEL_BOX_ID;
+  if (isUnset(boxId)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_BOX_ID",
+      reason: "field_blank",
+    });
+  }
+  const token = env.WAITRON_TUNNEL_TOKEN;
+  if (isUnset(token)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_TOKEN",
+      reason: "field_blank",
+    });
+  }
+  return {
+    relayHost: url.hostname,
+    relayPort: Number(url.port),
+    boxId,
+    token,
+    poolSize: positiveInt(env, "WAITRON_TUNNEL_POOL_SIZE", DEFAULT_TUNNEL_POOL_SIZE),
+  };
+}
+
 /**
  * The shared parse+validate step behind both `positiveInt` and `optionalPositiveInt` below:
  * `undefined` when the variable is unset, the parsed value otherwise, throwing

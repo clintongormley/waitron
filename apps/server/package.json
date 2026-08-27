@@ -51,6 +51,7 @@
     "@waitron/scheduler": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync": "workspace:*",
+    "@waitron/tunnel": "workspace:*",
     "@waitron/verifactu": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
