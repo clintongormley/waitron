@@ -74,9 +74,13 @@ export async function authenticatePeer(
   // ~1/s), so the second round-trip is SKIPPED entirely, not just no-op'd server-side, unless a minute
   // has passed since the last sighting. Reading `sighting_due` above moves the gate to JS, turning
   // ~one UPDATE per request into ~one per peer per minute. Only last_seen_at is written — the one
-  // column the auth-path role (sync_tailer) holds UPDATE on.
+  // column the auth-path role (sync_tailer) holds UPDATE on. `and active = true` re-checks revocation:
+  // if the peer is revoked in the window between the SELECT and this UPDATE, the sighting is skipped
+  // rather than stamping a "last seen" onto a now-revoked row (harmless, but keeps the semantics crisp).
   if (row.sighting_due) {
-    await db.execute(sql`update sync_peers set last_seen_at = now() where id = ${peerId}::uuid`);
+    await db.execute(
+      sql`update sync_peers set last_seen_at = now() where id = ${peerId}::uuid and active = true`,
+    );
   }
   return { subscriberId: row.subscriber_id };
 }
