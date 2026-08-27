@@ -58,9 +58,21 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
   const caPath = join(deps.stateDir, "tls", "ca.crt");
   const renderQrSvg = deps.renderQrSvg ?? defaultRenderQrSvg;
 
-  // Does the box have its own CA to serve? `access` collapses ENOENT (operator-cert box) and any
-  // other read failure alike to `false`, so the discovery document and the trust page agree with the
-  // download route's own catch-all below: "cannot read the CA" is always reported as "no box CA".
+  // The reach info is the same lookup for both read routes — one options object, built here once so
+  // the two callers cannot drift apart. Cheap and synchronous (it just enumerates interfaces via the
+  // injected `listIpv4`), so it is recomputed per request rather than cached across the app's life.
+  const getReach = (): ReachInfo =>
+    buildReachInfo({
+      hostname: deps.hostname,
+      port: deps.port,
+      secure: deps.secure,
+      listIpv4: deps.listIpv4,
+    });
+
+  // Does the box have its own CA to serve? These read-on-every-page-view routes (`/discovery`,
+  // `/trust`) collapse ENOENT (operator-cert box) and any other read failure alike to `false`: a
+  // page view is not a deliberate download, so it just shows "no box CA" rather than logging. The
+  // download route below is the deliberate action, so it distinguishes the two error classes.
   const caExists = (): Promise<boolean> =>
     access(caPath).then(
       () => true,
@@ -71,10 +83,20 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
     let pem: string;
     try {
       pem = await readFile(caPath, "utf8");
-    } catch {
-      // The ordinary case is ENOENT — this box uses an operator-supplied certificate, so there is no
-      // box CA to hand out. Any other read failure of this box-owned path is not a realistic operator
-      // scenario, and is reported the same way `caExists` reports it: as no box CA, never a 500.
+    } catch (error) {
+      // ENOENT is the ordinary case — this box uses an operator-supplied certificate, so there is no
+      // box CA to hand out; unlogged, like a missing image in `media-api.ts`. Any OTHER read failure
+      // (EACCES, EISDIR, …) of this box-owned path is a misconfiguration worth one line, but STILL the
+      // same `no_box_ca` 404 to the LAN caller: this route never 500s and never leaks fs detail on a
+      // download. Same ENOENT-vs-other split, and same "log but don't leak", as `media-api.ts`.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        // `code` is optional on the ERROR TYPE, but every fs read failure this route can hit (EISDIR,
+        // EACCES, ENOTDIR, …) sets it, so the `?? "unknown"` fallback is type-required but unreachable
+        // — the same shape `media-api.ts`'s `code ?? "unknown"` documents and v8-ignores.
+        /* v8 ignore next */
+        log("error", "setup.ca_read_failed", { code: code ?? "unknown" });
+      }
       return c.json(
         {
           error: "no_box_ca",
@@ -91,12 +113,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
   });
 
   app.get("/setup-api/discovery", async (c) => {
-    const reach = buildReachInfo({
-      hostname: deps.hostname,
-      port: deps.port,
-      secure: deps.secure,
-      listIpv4: deps.listIpv4,
-    });
+    const reach = getReach();
     return c.json({
       ...reach,
       caDownloadAvailable: await caExists(),
@@ -105,12 +122,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
   });
 
   app.get("/setup/trust", async (c) => {
-    const reach = buildReachInfo({
-      hostname: deps.hostname,
-      port: deps.port,
-      secure: deps.secure,
-      listIpv4: deps.listIpv4,
-    });
+    const reach = getReach();
     const qr = reach.qrTarget ? await renderQrSvg(reach.qrTarget) : null;
     const html = renderTrustPage(reach, await caExists(), qr);
     return c.html(html, 200, { "Cache-Control": "no-cache" });

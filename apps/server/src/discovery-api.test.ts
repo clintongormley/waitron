@@ -110,3 +110,30 @@ it("trust page shows a no-QR note (and skips the renderer) when there is no LAN 
   expect(html).not.toContain("data-qr=");
   expect(html).toMatch(/no QR code|No local network address/i);
 });
+
+// A non-ENOENT ca.crt read failure (misconfiguration) must still answer 404 no_box_ca to the LAN
+// caller — no fs detail leaked — but log one line, unlike the ordinary ENOENT. Mirrors
+// media-api.test.ts's non-ENOENT case: a `ca.crt` that is a DIRECTORY makes `readFile` throw EISDIR.
+it("logs a non-ENOENT ca.crt read failure and still answers 404 no_box_ca", async () => {
+  const d = await mkdtemp(join(tmpdir(), "disc-eisdir-"));
+  dirs.push(d);
+  await mkdir(join(d, "tls", "ca.crt"), { recursive: true });
+  const events: { level: string; event: string }[] = [];
+  const app = new Hono();
+  mountDiscovery(
+    app,
+    {
+      stateDir: d,
+      hostname: "waitron.local",
+      port: 8080,
+      secure: true,
+      listIpv4: () => ["192.168.1.5"],
+      renderQrSvg: async (t) => `<svg data-qr="${t}"></svg>`,
+    },
+    (level, event) => events.push({ level, event }),
+  );
+  const res = await app.request("/setup-api/ca.crt");
+  expect(res.status).toBe(404);
+  expect(await res.json()).toMatchObject({ error: "no_box_ca" });
+  expect(events.some((e) => e.level === "error" && e.event === "setup.ca_read_failed")).toBe(true);
+});
