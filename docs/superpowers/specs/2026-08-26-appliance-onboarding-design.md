@@ -482,7 +482,7 @@ first:
    already-designed relay). (§3, §8)
 
 **Implementation note (2026-08-26): slice 2 is built as 2a → 2b → 2c.** 2a = secret
-generation/persistence + self-signed CA/leaf minting, server-side, no UI (this branch): first setup
+generation/persistence + self-signed CA/leaf minting, server-side, no UI (slice 2a): first setup
 boot mints a CA + `waitron.local`/IP leaf into a persisted state dir (`WAITRON_STATE_DIR`) and serves
 the setup surface over HTTPS from it, and generates+persists the vault master key + sync node token —
 idempotent across restarts; operator-supplied `WAITRON_TLS_*` overrides the served cert (the box still

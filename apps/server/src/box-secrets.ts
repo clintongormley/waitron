@@ -78,8 +78,10 @@ const defaultListIpv4 = (): string[] =>
  * the tell a POS depends on, since a fresh cert on every boot would break every already-trusting
  * setup client and a fresh key ring would strand every sealed credential.
  *
- * Layout written/read — all four PEMs plus secrets.env are 0600 (owner-only), inside the 0700
- * state dir:
+ * Layout written/read — the four PEMs and secrets.env are each written 0600 (owner-only), which is
+ * the guarantee that matters; the `tls/` subdir (and `<stateDir>` itself, when this call creates it)
+ * is made 0700, but a PRE-EXISTING `<stateDir>` keeps whatever mode it already had — we do not chmod
+ * a directory the operator supplied:
  *
  *     <stateDir>/tls/ca.crt          <stateDir>/tls/ca.key    (0600)
  *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
