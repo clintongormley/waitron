@@ -236,7 +236,11 @@ still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans
   most likely to hit a paper jam is exactly a device-mode display. **Mirrored station-side read** —
   spec §5's read-only "printers serving this station" view on the station-config screen isn't built; the
   backing route `GET /management-api/stations/:sid/printers` already exists, only a
-  `DashboardApi.listStationPrinters(stationId)` + a read-only UI line are missing.
+  `DashboardApi.listStationPrinters(stationId)` + a read-only UI line are missing. **Reprint
+  timestamp** — reprint stamps the reprint wall-clock time (`enqueueKitchenTickets` sets
+  `firedAt = new Date()`), not the original `ticket_items.fired_at`, so a paper-jam reprint's header
+  reads a fresh time and any kitchen waiting-time gauge reads short; threading `fired_at` through the
+  reprint query (per station/round) would make it true — a small product decision for the owner.
 - **Counter receipt + cash-drawer** (`counter-receipt-drawer-printing*`) — per-till
   `receipt_printer_id`, per-location `receipt_print_mode`, an ESC/POS `qr()`, a faithful
   `formatReceipt` (re-renders every art. 7.1 / arts. 20–21 element of the *filed* record — fiscal
