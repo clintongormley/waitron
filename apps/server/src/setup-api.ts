@@ -292,27 +292,33 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (mode !== "demo" && mode !== "live") invalidRequest("mode");
 
         const venue = parseVenue(body.venue);
-        const aeatCert = body.aeatCert === undefined ? undefined : parseCert(body.aeatCert);
 
         // Demo/live fork: live stamps production, demo stamps preproduction (provisionVenue writes it).
         const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
 
         // The AEAT signing cert is meaningful IFF a LIVE ES-common venue files to the real AEAT — that
         // is exactly the condition the required-gate below (spec §10) demands it. Make the rule
-        // SYMMETRIC, both arms checked BEFORE `provision` so nothing is stamped/minted/sealed on a bad
-        // request:
+        // SYMMETRIC, gating on PRESENCE (not the parsed value) BEFORE `parseCert`, both arms checked
+        // BEFORE `provision` so nothing is stamped/minted/sealed on a bad request:
         //   - cert expected but MISSING → `setup.aeat_cert_required` (a live ES-common box must ship one);
         //   - cert NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c client
         //     already gates the cert on live mode and never sends it otherwise, so this is
         //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
-        //     preproduction tenant's vault by a hand-crafted demo body.
+        //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
+        //     MALFORMED cert on a non-expected request rejects cleanly with `{ field: "aeatCert" }` and
+        //     no wasted `parseCert` validation, rather than `parseCert`'s nested `aeatCert.*` detail.
         const certExpected = mode === "live" && venue.location.fiscalTerritory === "ES-common";
-        if (certExpected && aeatCert === undefined) {
+        const certPresent = body.aeatCert !== undefined;
+        if (certExpected && !certPresent) {
           throw new AppError("setup.aeat_cert_required", {});
         }
-        if (!certExpected && aeatCert !== undefined) {
+        if (!certExpected && certPresent) {
           invalidRequest("aeatCert");
         }
+        // `certExpected` implies `certPresent` here (we threw otherwise), so `parseCert` — and its
+        // value validation — runs ONLY on the expected path, where a malformed cert must still fail
+        // with `parseCert`'s nested field detail. Non-expected requests never reach it.
+        const aeatCert = certExpected ? parseCert(body.aeatCert) : undefined;
 
         const result = await provision({ environment, venue });
 

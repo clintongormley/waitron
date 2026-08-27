@@ -315,6 +315,39 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
+  // The presence gate (Copilot, backlog i): a non-expected request carrying a MALFORMED cert must
+  // reject with the CLEAN "cert not expected" fault naming `aeatCert`, and must NOT run
+  // `parseCert`/`validateAeatCert` at all — no wasted validation on a cert that is refused regardless.
+  // The cert below has a non-base64 `pfxBase64`: were `parseCert` reached first (the pre-Copilot
+  // order), `validateAeatCert` would throw naming `pfxBase64` (see its own direct tests below). The
+  // field being EXACTLY `aeatCert` is the proof the PRESENCE gate fired before any parse. Deletion-
+  // proof: move the `const aeatCert = … parseCert(…)` line in setup-api.ts back above the gate and
+  // this test flips to field `pfxBase64` (RED).
+  it("refuses a demo provision carrying a MALFORMED aeatCert with field EXACTLY 'aeatCert' (not parseCert's nested detail), without parsing/provisioning/sealing", async () => {
+    const app = new Hono();
+    const { deps, provision, sealAeat, requestRestart } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const malformedCert = {
+      pfxBase64: "not base64!!!",
+      passphrase: "cert-secret",
+      certKind: "sello",
+    };
+    const res = await postProvision(app, { ...demoBody(), aeatCert: malformedCert });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("setup.request_invalid");
+    // EXACTLY "aeatCert" — not "pfxBase64", which parseCert/validateAeatCert would have named had the
+    // reject fired only AFTER parsing. That distinguishes the presence gate from a value-level reject.
+    expect(json.error.params.field).toBe("aeatCert");
+    expect(json.error.params.field).not.toBe("pfxBase64");
+    expect(provision).not.toHaveBeenCalled();
+    expect(sealAeat).not.toHaveBeenCalled();
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
+
   // CRITICAL fiscal guard: a malformed AEAT cert must be refused BEFORE `provision` runs. Without the
   // upfront `validateAeatCert` in `parseCert`, a live ES-common provision with `certKind:"bogus"` or a
   // non-base64 `pfxBase64` would run `provision` first — stamping production and minting the SIF/hash
