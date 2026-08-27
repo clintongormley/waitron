@@ -159,6 +159,22 @@ waits for the cloud's first byte, so a round-trip separates them and the leftove
 code must not depend on that. `protocol.ts`'s decoder returns `{ frame, rest: Buffer }` so this is a
 value the splice consumes, tested directly (§12), not an implicit assumption.
 
+**The symmetric case — a control frame in flight box→relay at pairing (a known, self-healing race).**
+The trap above is the relay→box direction; the box→relay direction has the mirror-image gap, and it is
+*not* fully closed by this slice. The box writes control frames (`ping`) on an idle connection, and the
+relay chooses *which* idle connection to splice. If the relay pops a connection for pairing while a
+`ping` the box already put on the wire is still in flight box→relay — arriving after the relay has
+detached its idle frame reader — the relay forwards those `ping` bytes raw to the cloud, ahead of the
+box's TLS ServerHello, corrupting that one handshake. The window is ≈ one RTT per heartbeat interval
+(default 15 s) and must coincide with a pairing, so it is rare; sync is a retry/outbox model with a
+cursor-idempotent apply, so the failed pull simply retries and the next attempt does not coincide — **no
+data loss, and a `ping` carries no secret.** The box cannot prevent it (it has no signal that pairing is
+imminent until `go` arrives, by which point the ping is already sent), so closing it is a
+**protocol-level barrier the real T1 relay must add** — drain any pending pre-`go` control frame before
+splicing, or invert the heartbeat to relay→box so an idle box writes nothing on the wire. Deliberately
+out of scope for this single-box stand-in (recorded as a T1 follow-up, §11); the stand-in's tests never
+hit it because loopback pairing is either immediate (no ping yet) or after a clean pong.
+
 ## 7. Cloud-side HTTP client — a tunnel-aware dispatcher
 
 The only cloud-side code is a **sibling of [`fetchHttpClient`](../../../apps/server/src/sync-http.ts)**:
@@ -222,6 +238,20 @@ never rejects (it backs off every error), matching how boot treats `runSyncPull`
 - **Multi-tenant whole-log reader** and the **fiscal hash-chain lane** — later slices.
 - **Relay-side token persistence / an enrolment CLI for box↔relay tokens** — the stand-in takes an
   injected verifier; real storage is T1's.
+- **Protocol/robustness hardening the real T1 relay + client want** (all within B's accepted
+  semi-trusted-relay threat model, so out of scope for this stand-in, and each self-heals or fails
+  closed today):
+  - the **box→relay control-frame splice race** (§6) — a pre-`go` `ping` can leak into the spliced TLS
+    stream; the T1 relay must drain pending control frames before splicing, or the heartbeat inverts to
+    relay→box;
+  - a **max pre-`go` frame-length guard** — a malformed/hostile relay that streams bytes with no newline
+    grows the client's frame buffer unbounded (OOM); cap it and drop the connection;
+  - **ignore `go` while not yet registered** — a relay that sends `go` before `ack` should not drive the
+    box to dial its local port (no disclosure — the per-peer Bearer token still gates the sync-api);
+  - a **registration/handshake timeout** — a relay that TCP-accepts but never sends `ack`/`reject`/close
+    parks a pool slot until abort;
+  - a **disposal seam on `tunnelHttpClient`** so C's long-running subscriber can release its undici
+    `Agent` keep-alive pool (§7).
 
 ## 12. Testing
 

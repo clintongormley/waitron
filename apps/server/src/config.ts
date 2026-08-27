@@ -369,6 +369,9 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
   // never see, so a portless relay url fails closed HERE at boot, the mirror image of the hostname
   // guard above. A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the
   // port we require, so labelling it "not a url" would mislead the operator (CLAUDE.md §1).
+  // Use a NON-SPECIAL scheme (`tcp://`, which the mechanism expects): WHATWG `URL` strips a port that
+  // equals a SPECIAL scheme's default, so `https://relay:443` parses to `.port === ""` and would be
+  // refused here — `tcp://relay:443` keeps its port.
   if (url.port === "") {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_TUNNEL_RELAY_URL",

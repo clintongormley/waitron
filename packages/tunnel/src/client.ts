@@ -146,6 +146,12 @@ export async function runTunnelClient(deps: TunnelClientDeps): Promise<void> {
             return;
           }
           awaitingPong = true;
+          // Known, self-healing gap (spec §6, "the symmetric case"): a `ping` in flight box→relay when
+          // the relay pops this connection for pairing can be spliced raw into the cloud's TLS stream,
+          // corrupting that one handshake (rare — ~1 RTT per heartbeat, must coincide with a pairing —
+          // and sync retries, no data loss, no secret in a ping). Closing it is a relay-side barrier the
+          // real T1 relay adds (drain pre-`go` frames, or invert the heartbeat to relay→box); the
+          // single-box stand-in leaves it deliberately.
           relayConn.write(encodeFrame({ t: "ping" }));
         }
       };
