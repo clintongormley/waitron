@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
-import { deploymentEnvironment, loadConfig, loadSyncConfig } from "./config.js";
+import { deploymentEnvironment, loadConfig, loadSyncConfig, loadTunnelConfig } from "./config.js";
 
 // Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
 // coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
@@ -764,5 +764,103 @@ describe("loadSyncConfig", () => {
     expect(() => loadSyncConfig({ WAITRON_SYNC_PEERS: "not json" })).toThrow(
       /config_invalid|WAITRON_SYNC_PEERS/,
     );
+  });
+});
+
+describe("loadTunnelConfig", () => {
+  const base = {
+    WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example:9000",
+    WAITRON_TUNNEL_BOX_ID: "box-1",
+    WAITRON_TUNNEL_TOKEN: "secret",
+  };
+
+  it("returns undefined when the relay url is unset (tunnel off)", () => {
+    expect(loadTunnelConfig({})).toBeUndefined();
+  });
+
+  // BINDING RULING (task-5 brief): an absent OR empty WAITRON_TUNNEL_RELAY_URL means the tunnel is
+  // OFF (undefined), exactly like loadSyncConfig's empty WAITRON_SYNC_PEERS off-switch — via isUnset.
+  // The empty string does NOT fail closed here; returning undefined is how the empty value never
+  // reaches a dialer as "" ("an empty connection string is a valid connection string", CLAUDE.md §3).
+  // A PRESENT-but-unparseable url DOES fail closed (the cases below).
+  it("returns undefined when the relay url is empty (tunnel off), never reaching a dialer as ''", () => {
+    expect(loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "" })).toBeUndefined();
+  });
+
+  it("parses a full config with the default pool size", () => {
+    expect(loadTunnelConfig(base)).toEqual({
+      relayHost: "relay.example",
+      relayPort: 9000,
+      boxId: "box-1",
+      token: "secret",
+      poolSize: 4,
+    });
+  });
+
+  it("reads WAITRON_TUNNEL_POOL_SIZE as the connection pool size", () => {
+    expect(loadTunnelConfig({ ...base, WAITRON_TUNNEL_POOL_SIZE: "8" })!.poolSize).toBe(8);
+  });
+
+  it("refuses a present-but-unparseable relay url", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "not a url" })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "not_a_url",
+    });
+  });
+
+  // A url can parse yet name no host (`relay.example:9000` — no scheme, read as scheme + opaque path
+  // → hostname ""). A blank relayHost is exactly the "" a dialer must never see, so it fails closed
+  // too rather than being handed on (CLAUDE.md §3).
+  it("refuses a relay url that parses but names no host", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "relay.example:9000" }),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "not_a_url",
+    });
+  });
+
+  // Box id + token are required once the tunnel is on, and a blank one fails closed (the
+  // peer_field_blank shape loadSyncConfig uses for a blank peer field): a blank token must never mean
+  // "no auth", a blank box id names no box to the relay.
+  it("refuses a blank box id when the relay url is set", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_BOX_ID: "" })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_BOX_ID",
+      reason: "field_blank",
+    });
+  });
+
+  it("refuses a blank token when the relay url is set", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_TOKEN: "" })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_TOKEN",
+      reason: "field_blank",
+    });
+  });
+
+  it("refuses a non-positive pool size", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_POOL_SIZE: "0" })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_POOL_SIZE",
+      reason: "not_a_positive_integer",
+    });
   });
 });
