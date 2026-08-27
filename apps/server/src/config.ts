@@ -123,6 +123,16 @@ export interface ServerConfig {
    * `tillAppDir` above.
    */
   dashboardAppDir?: string;
+  /**
+   * The built `setup` wizard SPA directory this box serves at the origin root "/" while in SETUP MODE
+   * (unprovisioned), or `undefined` to serve the inline placeholder shell instead (dev leaves it unset
+   * and uses the Vite dev server). When set, `mountSetup` serves it as the setup surface's LAST
+   * catch-all — after `/setup-api/*`, the discovery/CA/trust routes and `/health` — so it never shadows
+   * them. Trading-mode only ever sees this via the `assertBuiltApp` fail-fast check; the MOUNT happens
+   * only in the setup branch, so a provisioned box never serves it. From `WAITRON_SETUP_APP_DIR`; absent
+   * OR empty → undefined, stored verbatim — same rules as `tillAppDir` above.
+   */
+  setupAppDir?: string;
   scheduler: SchedulerConfig;
 }
 
@@ -511,6 +521,7 @@ export function loadConfig(
     dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
       ? undefined
       : env.WAITRON_DASHBOARD_APP_DIR,
+    setupAppDir: isUnset(env.WAITRON_SETUP_APP_DIR) ? undefined : env.WAITRON_SETUP_APP_DIR,
     scheduler: {
       horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
       maxPeriodsPerTick: positiveInt(

@@ -329,8 +329,8 @@ runs them over a narrower set of packages, so a hook failure the pull request do
 not a hook that is wrong; it is a check CI has deferred to the unfiltered `main` run.
 
 **Coverage thresholds** are `statements 98 / lines 98 / functions 98 / branches 95` in every package
-except the two browser packages, `packages/ui` and `apps/till`, which each carry `95/95/90/88` with a
-documented reason in their own config.
+except the four browser packages, `packages/ui`, `apps/till`, `apps/dashboard` and `apps/setup`, which
+each carry `95/95/90/88` with a documented reason in their own config.
 
 ---
 

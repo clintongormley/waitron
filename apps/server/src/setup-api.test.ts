@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   AppError,
   hasCode,
@@ -561,5 +564,88 @@ describe("validateAeatCert — full cert-value validation before provisioning", 
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       field,
     );
+  });
+});
+
+// Slice 2c: when a built setup-wizard dir is configured, `mountSetup` serves it as the setup surface's
+// root catch-all via `mountSpa` (basePath "" = origin root, exactly like the till) INSTEAD of the
+// inline placeholder shell — but the routes registered BEFORE it (`/setup-api/status`,
+// `/setup-api/provision`, and any earlier `/health`) must still win their own paths, because that
+// catch-all is registered LAST. This is the route-ORDERING regression guard: moving the SPA/catch-all
+// above the `/setup-api/status` registration makes the first test below go RED (the `GET *` swallows
+// `/setup-api/status`, serving the wizard index.html instead of the JSON fact sheet).
+describe("mountSetup — serving a built setup wizard when setupAppDir is configured", () => {
+  // A throwaway built-wizard dir (index.html only) stands in for the real Vite output; a distinctive
+  // marker so serving the wizard is unambiguously distinguished from the inline placeholder shell
+  // (whose body reads "…needs setup"). Both strings match the placeholder tests' `/set ?up/i`, so the
+  // assertions below key on the DISTINCT substrings, not that loose regex.
+  let wizardDir: string | undefined;
+
+  beforeAll(() => {
+    wizardDir = mkdtempSync(join(tmpdir(), "waitron-setup-wizard-"));
+    writeFileSync(join(wizardDir, "index.html"), "<html>setup-wizard-spa</html>");
+  });
+
+  afterAll(() => {
+    // Guarded teardown (CLAUDE.md §4): a beforeAll that threw before `mkdtempSync` returned must not be
+    // followed by an `rmSync(undefined)` reported as a second failure beside the real one.
+    if (wizardDir !== undefined) rmSync(wizardDir, { recursive: true, force: true });
+  });
+
+  it("still serves /setup-api/status as JSON — the wizard catch-all does not shadow it", async () => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request("/setup-api/status");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual({
+      provisioned: false,
+      environment: "preproduction",
+      needs: ["venue"],
+    });
+  });
+
+  it("still routes POST /setup-api/provision — the wizard catch-all does not swallow it", async () => {
+    const app = new Hono();
+    // Only `environment` + `setupAppDir` are wired, so the synchronous deps gate answers
+    // 503 setup.not_ready — a JSON error, NOT the wizard index.html a shadowing `GET *` catch-all would
+    // have served. That distinguishes "the POST route matched" from "the catch-all answered".
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await postProvision(app, demoBody());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  });
+
+  it("serves the built wizard index.html at the origin root — NOT the placeholder shell", async () => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const text = await res.text();
+    expect(text).toContain("setup-wizard-spa"); // the built wizard bundle
+    expect(text).not.toContain("needs setup"); // NOT the inline placeholder shell
+  });
+
+  it("404s a stray unmatched path (mountSpa's no-SPA-fallback contract, exactly as the till)", async () => {
+    // A behaviour CHANGE from the inline placeholder — which answered every path with 200 HTML — worth
+    // pinning: `mountSpa` serves index.html only at the base-path root and 404s anything that is not a
+    // real file under the dir (spa-api.ts: "the existence check is what stops a stray unmatched path
+    // from being answered with HTML"). The wizard is an in-memory-state SPA (no client-side URL
+    // routing), so a reload only ever lands on "/", exactly like the till at the origin root.
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request("/anything/else");
+    expect(res.status).toBe(404);
+  });
+
+  it("falls back to the inline placeholder for a stray path when setupAppDir is absent (unchanged)", async () => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction" }, noopLog);
+    const res = await app.request("/anything/else");
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("needs setup"); // the inline placeholder shell
+    expect(text).not.toContain("setup-wizard-spa");
   });
 });

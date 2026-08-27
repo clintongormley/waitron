@@ -393,13 +393,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // opened or migrations run: `assertBuiltApp` is a pure `existsSync` with no database dependency, so
   // a wrong or never-built dir should fail the boot LOUDLY (`server.config_invalid`, naming the env
   // var — §8's "everything escapes") before it costs a migration run or an open app-role pool, not
-  // after. Gated exactly as the mounts below are — dev leaves both unset. The MOUNTS themselves stay
-  // LAST, after every API route (`mountSpa`'s "call me after every API route" contract).
+  // after. Gated exactly as the mounts are — dev leaves them unset. The trading SPA mounts stay LAST,
+  // after every API route (`mountSpa`'s "call me after every API route" contract); the setup wizard is
+  // mounted inside `mountSetup` (the setup branch below), but its dir is checked here, in BOTH modes,
+  // so a mis-built setup bundle fails a trading boot's config validation just as loudly.
   if (config.dashboardAppDir !== undefined) {
     assertBuiltApp(config.dashboardAppDir, "WAITRON_DASHBOARD_APP_DIR");
   }
   if (config.tillAppDir !== undefined) {
     assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
+  }
+  if (config.setupAppDir !== undefined) {
+    assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
   }
 
   // Before ANY write, including migrations: a host pointed at another environment's database must
@@ -438,8 +443,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `readOrderFlow`, no trading routes, no sync transport, and no drain/reconcile workers — there is
     // nothing to submit yet. The DB is migrated all the same (the shared prefix above ran
     // `applyMigrations`), ready for the provisioning wizard. The till/dashboard SPAs are deliberately
-    // NOT mounted — they are useless without a venue, and the real setup wizard app arrives in slice
-    // 2c; the media store is trading-only, so it is not created here either.
+    // NOT mounted — they are useless without a venue; the built setup wizard IS served (slice 2c) when
+    // `config.setupAppDir` is set, threaded into `mountSetup` below as its root catch-all (else the
+    // inline placeholder). The media store is trading-only, so it is not created here either.
     //
     // Slice 2b wires the provisioning surface: `ensureBoxSecrets` (2a) runs first (below), then this
     // branch recovers the vault key ring and opens an OWNER connection, and passes both — plus the
@@ -529,6 +535,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             databaseUrl: config.databaseUrl,
             migrationsDatabaseUrl: config.migrationsDatabaseUrl,
             requestRestart: () => process.kill(process.pid, "SIGTERM"),
+            // The built setup wizard (slice 2c) served as the setup surface's root catch-all when
+            // configured; `undefined` (dev/Vite, or an image without the bundle) keeps the inline
+            // placeholder shell. Its dir was already `assertBuiltApp`-checked in the fail-fast group
+            // above, so `mountSetup`'s `mountSpa` never becomes a 404-for-every-page catch-all.
+            setupAppDir: config.setupAppDir,
           },
           log,
         );

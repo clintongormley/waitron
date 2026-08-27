@@ -9,6 +9,7 @@ import { validateAeatCert } from "./aeat-credential.js";
 import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
+import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -44,6 +45,13 @@ export interface SetupDeps {
   /** The restart trigger (default at boot: SIGTERM → graceful shutdown → supervisor restart). Called
    * on the next tick AFTER the 200 flushes, so the wizard sees success before the box goes down. */
   requestRestart?: () => void;
+  /** The built setup-wizard SPA directory to serve as the setup surface's root catch-all (slice 2c),
+   * or `undefined` to serve the inline `SETUP_PLACEHOLDER_HTML` shell instead (dev/tests, and any box
+   * whose wizard bundle was not built into the image). When set, `mountSpa` answers every unclaimed
+   * path with the built wizard's `index.html` + assets; boot has already `assertBuiltApp`-checked the
+   * dir holds an `index.html`, so a mis-built dir fails the boot loudly rather than 404ing here. From
+   * `config.setupAppDir` (`WAITRON_SETUP_APP_DIR`). */
+  setupAppDir?: string;
 }
 
 /**
@@ -199,7 +207,10 @@ function directError(
  *     what the box still needs, so the shape is a contract: `provisioned` is always `false` here (a
  *     provisioned box never mounts these routes), and `needs` lists the outstanding steps — today
  *     only `"venue"`.
- *   - a root catch-all `GET *` → the `SETUP_PLACEHOLDER_HTML` shell, `text/html`, `no-cache`.
+ *   - a root catch-all `GET *` → either the built setup wizard (via `mountSpa`, when `deps.setupAppDir`
+ *     is configured — slice 2c) or, absent that, the inline `SETUP_PLACEHOLDER_HTML` shell
+ *     (`text/html`, `no-cache`). Either way it is registered LAST, so it only answers paths nothing
+ *     else claimed.
  *
  * Must be called LAST, after `/health` and after `GET /setup-api/status` (Task 3 mounts it that way):
  * the catch-all only runs for a path nothing else claimed, so a route registered earlier — `/health`,
@@ -323,9 +334,21 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
-  // Registered LAST and matching everything, so it answers only the paths `/setup-api/status` and
-  // `/setup-api/provision` (above) and any earlier route (e.g. `/health`) did not claim.
-  app.get("*", (c) =>
-    c.html(SETUP_PLACEHOLDER_HTML, 200, { "Cache-Control": REVALIDATE_CACHE_CONTROL }),
-  );
+  // The root catch-all, registered LAST and matching everything, so it answers only the paths
+  // `/setup-api/status` and `/setup-api/provision` (above) and any earlier route (e.g. `/health`, or
+  // the setup branch's discovery/CA/trust routes registered before this mount) did not claim. When a
+  // built wizard dir is configured (slice 2c), serve it as that catch-all via `mountSpa` — basePath
+  // "" = origin root, exactly like the till: the root "/" serves index.html and real files under the
+  // dir serve their bytes, while a stray unmatched path 404s (mountSpa has no SPA history fallback —
+  // the wizard is an in-memory-state SPA, so a reload only ever lands on "/"). Absent a configured dir
+  // serve the inline placeholder shell (dev, and any box whose wizard bundle was not built in). Boot
+  // has already `assertBuiltApp`-checked a configured dir holds an `index.html`, so `mountSpa` here
+  // never becomes a catch-all that 404s the root itself.
+  if (deps.setupAppDir !== undefined) {
+    mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
+  } else {
+    app.get("*", (c) =>
+      c.html(SETUP_PLACEHOLDER_HTML, 200, { "Cache-Control": REVALIDATE_CACHE_CONTROL }),
+    );
+  }
 }
