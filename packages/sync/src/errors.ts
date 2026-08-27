@@ -43,9 +43,9 @@ declare module "@waitron/shared" {
     "sync.stream_stalled":
       | { subscriberId: string; originId: string; backoffMs: number; lane: SyncLane }
       | { subscriberId: string; originId: string; lag: string };
-    /** A peer presented a missing, blank or wrong node token to this node's sync-api. NO PARAMS —
-     * the response is uniform (fail-closed, no oracle), and a token must never reach a log line or a
-     * test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */
+    /** A peer presented a missing, blank or invalid per-peer bearer token to this node's sync-api. NO
+     * PARAMS — the response is uniform (fail-closed, no oracle), and a token must never reach a log
+     * line or a test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */
     "sync.node_unauthorized": Record<string, never>;
   }
 }

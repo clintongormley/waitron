@@ -633,7 +633,7 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(await staff.text()).toMatch(/set ?up/i);
 
       // The box minted + persisted its secrets alongside the cert (`ensureBoxSecrets` writes
-      // secrets.env with the key ring + node token, 0600), ready for slice 2b to load.
+      // secrets.env with the credentials key ring, 0600), ready for slice 2b to load.
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
         /WAITRON_CREDENTIALS_KEY=/,
       );

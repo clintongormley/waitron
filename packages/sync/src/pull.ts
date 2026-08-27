@@ -148,7 +148,7 @@ export interface RunSyncPullDeps extends SyncPullDeps {
    * affecting the pull's own success/backoff. */
   reportCursor?: (
     peer: PullPeer,
-    report: { subscriberId: string; lane: SyncLane; lastAppliedSeq: string },
+    report: { lane: SyncLane; lastAppliedSeq: string },
   ) => Promise<void>;
 }
 
@@ -199,17 +199,15 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
   const pullOnce = deps.pullOnce ?? syncPullOnce;
   const lane: SyncLane = deps.lane ?? "ordered";
   // The cursor-report POST (spec §3.1): default to a real POST via `http` to the peer's
-  // /sync-api/cursor, carrying the peer's Bearer token and a JSON `{subscriberId, lane, lastAppliedSeq}`
-  // body — the shape the source's POST /sync-api/cursor route consumes. Injectable so the loop test
-  // captures it without the network.
+  // /sync-api/cursor, carrying the peer's Bearer token and a JSON `{lane, lastAppliedSeq}` body. The
+  // source derives the subscriber identity from that Bearer token (requirePeer → authenticatePeer) and
+  // IGNORES any body subscriberId, so this reporter names only the lane and the seq — a peer can move
+  // only ITS OWN cursor (spec §2/§8). Injectable so the loop test captures it without the network.
   const report =
     deps.reportCursor ??
-    (async (
-      peer: PullPeer,
-      r: { subscriberId: string; lane: SyncLane; lastAppliedSeq: string },
-    ) => {
-      // Observe the POST's status: /sync-api/cursor answers 200 on success (a blank subscriberId is a
-      // 200 no-op too), so a non-200 is a real failure — a 401 after a token rotation dropped this
+    (async (peer: PullPeer, r: { lane: SyncLane; lastAppliedSeq: string }) => {
+      // Observe the POST's status: /sync-api/cursor answers 200 on success, so a non-200 is a real
+      // failure — a 401 after a token rotation dropped this
       // reporter's token, or a 500. The `http` adapter RESOLVES such a response rather than throwing,
       // so ignoring `status` would treat a 401/500 as success and silently break cross-node retention
       // visibility. Throw on non-200 so the SURROUNDING try/catch logs sync.cursor_report_failed and
@@ -247,7 +245,6 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
         try {
           const seq = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
           await report(peer, {
-            subscriberId: deps.subscriberId,
             lane,
             lastAppliedSeq: seq.toString(),
           });
