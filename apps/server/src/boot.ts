@@ -315,7 +315,10 @@ function makeStartedServer(
       // Stop advertising FIRST — the box is going down, so `waitron.local` must stop resolving to it
       // before the listener and pools come apart. `stop()` is idempotent and destroys the UDP socket
       // once, so a second concurrent close() (guarded above) never double-destroys it either.
-      await mdns.stop();
+      // `.catch(() => {})`: `stop()` never rejects today (mdns.ts's own `Promise<void>` executor has
+      // no reject path), but a reject here must never skip the guaranteed pool teardown below, so this
+      // is defensive rather than a response to an observed failure.
+      await mdns.stop().catch(() => {});
       // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
       // close() never leaves a worker dangling. In trading mode this aborts the main loop and the
       // sync/retention workers and swallows a worker's settle-by-rejection so it can never skip the
@@ -559,7 +562,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     } catch (error) {
       // `mdns` started in the shared prefix above, so a throw in this branch must stop its UDP socket
       // before the pool is closed — otherwise the socket leaks on exactly the boot that failed.
-      await mdns.stop();
+      // Swallowed: a reject here must not mask `error`, the original failure being rethrown below.
+      await mdns.stop().catch(() => {});
       await db.close();
       throw error;
     }
@@ -592,7 +596,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // otherwise it leaks on this failed boot. The pre-existing `readOrderFlow`/`buildCardProvider`
     // throw sites further down leak both `db` AND this socket the same way and stay out of scope here
     // (they leaked `db` before slice 3 too — documented below), so only this guarded site is amended.
-    await mdns.stop();
+    // Swallowed: a reject here must not mask `error`, the original failure being rethrown below.
+    await mdns.stop().catch(() => {});
     await db.close();
     throw error;
   }

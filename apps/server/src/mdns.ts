@@ -26,9 +26,11 @@ export interface MdnsSocket {
     event: "query",
     handler: (query: { questions: { name: string; type: string }[] }) => void,
   ): void;
-  /** A bind/membership failure (EADDRINUSE/EACCES) arrives here — see `startMdnsResponder`. The real
-   *  instance emits `'error'` on the same EventEmitter, so an unhandled one would throw and kill the
-   *  process; the responder registers a handler that logs and swallows it. */
+  /** A BIND failure (EADDRINUSE/EACCES) arrives here — see `startMdnsResponder`. The real instance
+   *  emits `'error'` on the same EventEmitter only for that case, so an unhandled one would throw and
+   *  kill the process; the responder registers a handler that logs and swallows it. An `addMembership`
+   *  failure (no multicast route — the common case in a container) emits `'warning'` instead, which
+   *  this interface has no listener for and which never throws. */
   on(event: "error", handler: (err: Error) => void): void;
   respond(response: { answers: MdnsAnswer[] }): void;
   destroy(cb?: () => void): void;
@@ -64,6 +66,10 @@ export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAns
  */
 export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   const { hostname, getAddresses, log } = deps;
+  // Only ever runs on the real-`multicast-dns` default path — every unit test injects `makeSocket` —
+  // so it is left to the `apps/server` coverage aggregate rather than pinned by a real-socket unit
+  // test, the same real-only-path posture `box-reach.ts`'s `listBoxIpv4` and `discovery-api.ts`'s
+  // default `renderQrSvg` record.
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 
@@ -79,10 +85,12 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
 
   // mDNS advertisement is NON-load-bearing — a device still reaches the box by its LAN IP whether or
   // not `waitron.local` resolves — so a socket failure must never crash boot. The real
-  // `multicast-dns` instance emits `'error'` on a bind/membership failure (EADDRINUSE/EACCES on a
-  // host with no multicast route, seen in some CI/containers), and an unhandled `'error'` on an
-  // EventEmitter is rethrown by Node and takes the process down. Log it and swallow it: the box keeps
-  // trading, just without name-based discovery on that host.
+  // `multicast-dns` instance emits `'error'` only on a BIND failure (EADDRINUSE/EACCES), and an
+  // unhandled `'error'` on an EventEmitter is rethrown by Node and takes the process down, so this
+  // handler logs and swallows it. A no-multicast-route `addMembership` failure (the common case in a
+  // container, seen in some CI) emits `'warning'` instead, which has no listener here — it is harmless
+  // and never throws. Log it and swallow it: the box keeps trading, just without name-based discovery
+  // on that host.
   socket.on("error", (err) => {
     log("warn", "mdns.socket_error", { message: err.message });
   });

@@ -489,7 +489,7 @@ Make the discovery surface exercisable in the local onboarding flow and record s
 
 - [ ] **Step 4: Manual verification (documented).** Record the output of:
   ```bash
-  pnpm dev:reset >/dev/null 2>&1 || true
+  docker compose down -v >/dev/null 2>&1 || true
   pnpm dev:onboard
   pnpm --filter @waitron/server dev &
   sleep 4
