@@ -160,6 +160,48 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
+  it("refuses a re-provision of the SAME business in a DIFFERENT casing — cross-layer invariance (§5)", async () => {
+    // The most load-bearing path: the double-provision guard (provision.ts) recomputes the obligado id
+    // from the RAW request (`obligadoTenantId(req.venue.country, req.venue.taxId)`), while the stored
+    // id comes from `planVenue` (which canonicalizes country/taxId). For the guard to recognize a
+    // re-provision in a different casing, BOTH normalization layers must agree: planVenue canonicalizes
+    // the plan/stored row, and obligadoTenantId self-normalizes the id the guard recomputes. Without
+    // the latter, a re-provision in a NON-canonical casing recomputes a raw id that MISSES the stored
+    // (canonical) tenant, so the guard passes and applyVenue ADDS a second node → a second, permanent,
+    // unmergeable SIF/hash chain (§5). No existing test catches this: "refuses a second provision" sends
+    // byte-identical requests, so its guard id matches trivially.
+    //
+    // The re-provision is SECOND in a NON-canonical casing on purpose: the guard reads the SECOND
+    // call's raw request, so that call must be non-canonical for the cross-layer invariance to be under
+    // test. (A canonical second call derives the canonical id directly and would be refused even with
+    // obligadoTenantId's normalization removed — a false green.) `nextNif()` ends in an uppercase "K",
+    // so lower-casing the NIF plus a lowercase country gives a genuinely non-canonical re-provision of
+    // the same business.
+    const db = ownerDb();
+    const nif = nextNif(); // e.g. "60000001K" — canonical (uppercase)
+    const env = "preproduction" as const;
+
+    // First: provision in the CANONICAL casing.
+    await provisionVenue({ ownerDb: db }, { environment: env, venue: venueRequest(nif) });
+    const afterFirst = await fiscalCounts(db);
+    expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+
+    // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
+    const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
+    const error = await provisionVenue(
+      { ownerDb: db },
+      { environment: env, venue: nonCanonical },
+    ).catch((e: unknown) => e);
+    expect(isAppError(error)).toBe(true);
+    expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
+
+    // One tenant, one SIF/series set, one node — no duplicate chain. (Strip tenant-id.ts's
+    // self-normalization and this reads {sif:2, series:4, nodes:2}, the reviewer's negative control.)
+    const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    expect(tenants.rows[0]!.n).toBe(1);
+    expect(await fiscalCounts(db)).toEqual(afterFirst);
+  });
+
   it("lets a deployment.already_stamped from a changed environment propagate and mints nothing", async () => {
     const db = ownerDb();
     // The box is stamped production first ...
