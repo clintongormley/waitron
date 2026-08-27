@@ -407,7 +407,10 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const pStation = await makePrinter(tx, cfg, "Cocina printer", "station");
       const pGroup = await makePrinter(tx, cfg, "Pase", "order");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pStation });
+      await attachPrinterToStation(tx, printCfg(cfg), {
+        stationId: cocina.id,
+        printerId: pStation,
+      });
       await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pGroup });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });

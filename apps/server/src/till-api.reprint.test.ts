@@ -77,7 +77,12 @@ const suite = usePgliteDb({
   },
 });
 
-function makeCfg(tenantId: TenantId, tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(
+  tenantId: TenantId,
+  tillId: string,
+  locationId: string,
+  nodeId: string,
+): TillConfig {
   return {
     tenantId,
     tillId: brandTillId(tillId),
@@ -185,9 +190,7 @@ async function attachPrinterToDefaultStation(): Promise<string> {
 }
 
 /** The tenant's print-job outbox (RLS-scoped), each job's printer + decoded ESC/POS bytes. */
-async function printJobsFor(
-  printerId: string,
-): Promise<{ id: string; ticket: string }[]> {
+async function printJobsFor(printerId: string): Promise<{ id: string; ticket: string }[]> {
   const rows = await withTenant(suite.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return tx

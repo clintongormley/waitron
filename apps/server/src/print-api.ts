@@ -541,9 +541,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
-      const rows = await gated(sessionId, (tx) =>
-        listStationPrinters(tx, deps.cfg, { stationId }),
-      );
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { stationId }));
       return c.json(rows);
     }),
   );
@@ -555,9 +553,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      const rows = await gated(sessionId, (tx) =>
-        listStationPrinters(tx, deps.cfg, { printerId }),
-      );
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { printerId }));
       return c.json(rows);
     }),
   );
