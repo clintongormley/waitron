@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import type { PropertyValues } from "lit";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -10,7 +10,6 @@ import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonRole, PersonSummary } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 /** The role options the edit form offers, in the slice-1b staff API's own order (matches person-form). */
 const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];

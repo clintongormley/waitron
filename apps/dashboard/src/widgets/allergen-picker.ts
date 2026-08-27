@@ -1,12 +1,11 @@
 import { LitElement, type PropertyValues, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import type { AllergenDeclaration, AllergenEntry, AllergenPresence } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 /**
  * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order, redefined LOCALLY

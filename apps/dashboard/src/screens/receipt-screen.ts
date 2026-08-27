@@ -17,7 +17,8 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
  * is a `wt-input`; `footerMessage` is a native token-styled `<textarea>` — `wt-input` exposes no multiline
  * affordance (`packages/ui/src/components/wt-input.ts` renders a single `<input>`), so a multiline field
  * falls back to a native `<textarea>` styled with the shared tokens, exactly as the login/create-person
- * pickers fall back to a native `<select>` for want of a `wt-select` primitive (`select-styles.ts`).
+ * pickers fall back to a native `<select>` for want of a `wt-select` primitive (`@waitron/ui`'s
+ * `selectStyles`).
  *
  * GUARDAR composes the two fields back into a `ReceiptConfig` and calls `api.putReceipt`. A BLANK field
  * (empty or whitespace-only) is OMITTED, so its key is ABSENT rather than an empty string — the config a
