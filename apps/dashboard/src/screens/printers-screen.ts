@@ -260,6 +260,13 @@ export class PrintersScreen extends LitElement {
         this.api.listAgents(),
         this.api.listPrinters(),
         this.api.listRecentJobs(),
+        // The station↔printer mapping section needs the full station list for its toggles.
+        // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
+        // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
+        // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
+        // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
+        // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
+        // Copilot on the KDS-4 PR).
         this.api.listStations(),
       ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
