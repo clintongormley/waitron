@@ -920,5 +920,61 @@ declare module "@waitron/shared" {
      * `management.request_invalid`. Never renamed once shipped.
      */
     "setup.request_invalid": { field: string };
+    /**
+     * A LIVE provision of an `ES-common` venue arrived with no AEAT certificate (onboarding slice 2b,
+     * spec §10). A production ES-common till files its registros to the real AEAT and cannot do so
+     * without a sealed `fiscal.aeat` credential, so the provision is refused BEFORE `provisionVenue`
+     * runs — nothing is stamped and no SIF/chain is minted (an unrecoverable write, CLAUDE.md §5). A
+     * DEMO provision (preproduction) is exempt: it records its chain locally and never submits, so the
+     * cert is optional there.
+     *
+     * NO params: the fix is simply to supply the certificate, and there is nothing non-secret to
+     * carry — the same no-param shape `setup.cert_hostnames_empty` uses for its own "you gave me
+     * nothing to certify" guard. Never echoes the PFX or passphrase (they are not even present here).
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
+     * `setup.request_invalid` and `setup-api.ts` name), never the throwing file; `server.*` is
+     * reserved for facts about the process itself, and "this venue needs a cert to go live" is a fact
+     * about the setup request, the rule `tenant.not_found`'s note above gives. A request-shape fault
+     * → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`. Never renamed
+     * once shipped.
+     */
+    "setup.aeat_cert_required": Record<string, never>;
+    /**
+     * A second provision POST arrived while one is still in flight (onboarding slice 2b). The provision
+     * route holds a one-shot latch, set SYNCHRONOUSLY before its first `await`, so two near-simultaneous
+     * POSTs cannot both pass it — the loser gets THIS. The latch is the fiscal footgun guard's inner
+     * ring: `applyVenue` mints a fresh SIF/hash chain on every run (venue-apply.ts's own header) and the
+     * `provisionVenue` tenant-exists check is NOT atomic with `applyVenue`, so two concurrent provisions
+     * of the same box could each pass that check and mint a second chain. The single setup process +
+     * this latch prevent the concurrent case; the tenant-exists check backstops the sequential re-POST.
+     *
+     * NO params: there is nothing non-secret to carry beyond the code, and the fix is simply to wait
+     * for the in-flight provision to finish (on success the box restarts out of setup mode; on failure
+     * the latch resets and a corrected retry is accepted).
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding), never the throwing
+     * file; `server.*` is reserved for facts about the process itself, and "a provision is already
+     * running" is a fact about the setup, the rule `tenant.not_found`'s note above gives. A state
+     * conflict → HTTP 409 by `setup-api.ts`'s provision route (the same 409 `setup.already_provisioned`
+     * takes). Never renamed once shipped.
+     */
+    "setup.already_provisioning": Record<string, never>;
+    /**
+     * A provision POST arrived before the box wired its provisioning dependencies (onboarding slice 2b).
+     * `mountSetup`'s provision deps (the `provisionVenue` binding, the trading-config persister, the
+     * restart trigger, and the composed DB URLs) are OPTIONAL so the slice-1b setup surface still mounts
+     * without them; a POST that needs them when they are absent is answered with THIS rather than an
+     * opaque `server.internal` 500 — the box is up but not ready to provision.
+     *
+     * NO params: naming which dep is missing would leak nothing useful to a wizard that cannot wire it
+     * anyway, and the fix is an operator/boot concern, not a request one — the same no-param shape the
+     * other "nothing to work with" setup guards use.
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding), never the throwing
+     * file. A service-not-ready fault → HTTP 503 by `setup-api.ts`'s provision route (deliberately not
+     * a 4xx: the request is well-formed; the box simply cannot serve it yet). Never renamed once shipped.
+     */
+    "setup.not_ready": Record<string, never>;
   }
 }

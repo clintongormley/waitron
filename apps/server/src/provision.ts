@@ -28,6 +28,17 @@ export interface ProvisionDeps {
  * Returns the five ids the trading boot needs (tenant/location/till/node/series). Does NOT persist
  * config or seal the AEAT cert — the caller does that (onboarding slice 2b).
  *
+ * **Concurrency contract — callers MUST serialize concurrent provisions of the same tenant.** The
+ * tenant-exists guard below (step 2) is NOT atomic with `applyVenue` (step 4): it reads in one
+ * `withTenant` transaction and mints in a separate one, so two provisions of the same box running
+ * concurrently could BOTH pass the guard and each reach `applyVenue`, which has no business key on
+ * location/till/node/SIF and would mint a SECOND, unrecoverable SIF/hash chain (CLAUDE.md §5). This
+ * function does not lock, by design: the invariant is that a Waitron box runs ONE setup process, and
+ * the `/setup-api/provision` endpoint holds a synchronous one-shot latch (`setup-api.ts`) that refuses
+ * a second provision while one is in flight. That single-process + latch pairing is the serialization;
+ * the guard here backstops only the SEQUENTIAL re-POST (a retry after a completed provision), not the
+ * concurrent case. A future caller from another process would need its own external lock.
+ *
  * The order is load-bearing and matches the plan's D-decisions:
  *  1. `planVenue` FIRST — pure validation (locales/series/territory), so a malformed request throws
  *     before any DB write and no admin connection is spent.
