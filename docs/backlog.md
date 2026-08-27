@@ -39,8 +39,11 @@ follow.
 
 > **Elevated 2026-08-26 (owner): appliance onboarding — free tier (in-repo, no cloud/hardware) — is
 > the current *build* focus, ahead of the numbered tier below.** Slices **1a (serve the built SPAs,
-> #137) and 1b (setup-mode boot, #139) both LANDED 2026-08-26**; **slice 2 (cert-minting + persisted
-> secrets + the provisioning wizard) is next.** Rationale: it is the one deployment path that needs
+> #137) and 1b (setup-mode boot, #139) both LANDED 2026-08-26**. **Slice 2 was split into 2a/2b/2c;
+> 2a (self-signed CA/leaf minting + persisted box secrets, server-side, no UI) LANDED #141 2026-08-27;
+> slice 2b (the `/setup-api` provisioning endpoints — `planInstance`/`planVenue` in-process, demo/live
+> fork, AEAT-cert-required for live) is next**, then 2c (the `apps/setup` Vite+Lit wizard). Rationale:
+> it is the one deployment path that needs
 > **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
 > laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
 > sync's cloud-mirror leg (#2), and the appliance *paid* tier all wait on a "Waitron cloud" that **does
@@ -238,9 +241,16 @@ question (below).
   built SPAs — LANDED #137** (`spa-api.ts` + boot wiring; `WAITRON_{TILL,DASHBOARD}_APP_DIR`; till at
   `/`, dashboard at `/manage`); **1b setup-mode boot — LANDED #139** (`config.till` optional;
   `setup-api.ts` = `/setup-api/status` + placeholder; `startServer` branches setup vs trading with the
-  trading path byte-equivalent; `dev:onboard`); **next → slice 2: cert-minting + persisted secrets +
-  the actual provisioning wizard** (drives `instance`/`venue`; AEAT-cert-required for a production
-  venue); then 3 mDNS/`waitron.local` + per-device trust UX, 4 backup/status/break-glass. Slices 5–7
+  trading path byte-equivalent; `dev:onboard`); **slice 2 split 2a/2b/2c — 2a LANDED #141** (first
+  setup boot mints a self-signed CA + `waitron.local`/IP leaf into a persisted state dir
+  `WAITRON_STATE_DIR`, serves the setup surface over HTTPS from it, and generates+persists the vault
+  master key + sync node token in `secrets.env` — idempotent, atomic writes, `0600`; operator
+  `WAITRON_TLS_*` overrides the served cert but the box still generates its secrets; decided:
+  persist-config-then-restart transition, `apps/setup` Vite+Lit wizard); **next → slice 2b: the
+  `/setup-api` provisioning endpoints** (drive `planInstance`/`planVenue` in-process; demo/live fork;
+  AEAT-cert-required for a live/`production` venue; persist the till ids/DB URLs then restart into
+  trading); then **2c** the wizard SPA, then 3 mDNS/`waitron.local` + per-device trust UX, 4
+  backup/status/break-glass. Slices 5–7
   (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
   constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
   trading-healthy); a liveness/supervisor probe must gate on **`/setup-api/status`** (200), not
@@ -410,6 +420,19 @@ here is the cross-cutting or genuinely-decision-bearing work.
   deployed; end state is all that matters) — but **not** a `drizzle-kit generate` one-liner: the
   valuable migrations are hand-written custom SQL (FORCE RLS, policies, GRANTs, immutability triggers)
   that Drizzle does not emit.
+- **Onboarding slice-2a follow-ups** (deferred from #141, none blocking 2b): **(a)** the box's
+  self-signed **CA has no `nameConstraints`/`pathLen`** — an unconstrained signer; add
+  `nameConstraints` limiting it to `waitron.local` + the box IPs so a leaked `ca.key` can't sign
+  arbitrary hostnames (fits with slice-3 trust UX). **(b)** `apps/server/src/self-signed-cert.ts` and
+  the test-only `apps/server/src/testing/tls.ts` both define near-identical `CertExtension` +
+  `certificate()` node-forge builders (already drifted: `cRLSign` vs `clientAuth`) — three simplify
+  agents flagged it; extract the shared `keypair()`/`certificate()`/`CertExtension` into one internal
+  module both import (its own PR — touches the mtls fixture + re-runs those suites). **(c)** the leaf's
+  validity window is stamped from `now` at first boot with only 1 day of back-slack, so a box that
+  mints its cert **before NTP sync** (no RTC) persists a wrong/expired window and there is no renewal
+  in 2a — ties to the §13 time-health check and cert renewal (slice 3/4). *(Also: the setup-branch
+  boot pool-leak is now guarded (#141); the pre-existing `readOrderFlow`/`buildCardProvider`
+  **trading**-branch boot-throw pool-leaks remain, noted in the onboarding §.)*
 
 **Payments:**
 
