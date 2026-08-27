@@ -481,6 +481,17 @@ first:
 7. **Paid tier: ACME DNS-01 broker + canonical hostname + tunnel wiring** (consumes the
    already-designed relay). (§3, §8)
 
+**Implementation note (2026-08-26): slice 2 is built as 2a → 2b → 2c.** 2a = secret
+generation/persistence + self-signed CA/leaf minting, server-side, no UI (slice 2a): first setup
+boot mints a CA + `waitron.local`/IP leaf into a persisted state dir (`WAITRON_STATE_DIR`) and serves
+the setup surface over HTTPS from it, and generates+persists the vault master key + sync node token —
+idempotent across restarts; operator-supplied `WAITRON_TLS_*` overrides the served cert (the box still
+mints and persists its own secrets regardless). 2b = the
+`/setup-api` provisioning endpoints (`planInstance`/`planVenue` in-process, demo/live fork,
+AEAT-cert-required-for-live, persist the till ids/DB URLs, then restart into trading — decided:
+persist-config-then-restart, not hot-flip). 2c = a new `apps/setup` Vite+Lit wizard consuming 2b,
+served in setup mode.
+
 Slices 1–4 give a **wired, LAN-only, self-hosted box that trades** — the free tier, minus the
 appliance image (runs on any Node+Postgres host). 5–6 make it a true appliance. 7 is the paid tier.
 

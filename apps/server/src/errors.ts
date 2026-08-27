@@ -863,5 +863,22 @@ declare module "@waitron/shared" {
      * here. Never renamed once shipped.
      */
     "device.pairing_code_unavailable": Record<string, never>;
+    /**
+     * A self-signed server certificate was asked for with no hostname to put on the leaf — the
+     * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
+     * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no
+     * request (a TLS client matches the name it dialled against the cert's SANs), so the minter
+     * refuses it BEFORE generating any keypair rather than emitting a cert that can never complete a
+     * handshake. NO params: an empty list carries nothing non-secret worth echoing, and the fix is
+     * simply to supply at least one hostname — the same no-param shape `sale.empty_basket` uses for
+     * its own "you gave me nothing to work with" guard.
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup mode, the same concept the
+     * `setup.mode_active` log event and `setup-api.ts` name), never the throwing file
+     * (`tenant.not_found`'s note above gives the rule); `server.*` is reserved for facts about the
+     * process itself, and "no hostname to certify" is a fact about the setup input, not the process.
+     * Never renamed once shipped.
+     */
+    "setup.cert_hostnames_empty": Record<string, never>;
   }
 }

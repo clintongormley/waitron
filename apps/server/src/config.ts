@@ -58,6 +58,17 @@ export interface ServerConfig {
    */
   mediaDir: string;
   /**
+   * The persisted directory the box owns its self-signed cert PEMs and generated secrets under —
+   * resolved to an ABSOLUTE path at load (`resolve`) exactly like `mediaDir`, so later slices (3, 4)
+   * that materialise and read those files join onto a settled base, not one whose meaning shifts with
+   * the process's cwd. `WAITRON_STATE_DIR` overrides the boot-computed `defaultStateRoot` threaded
+   * into `loadConfig` (see `boot.ts`); an unset OR EMPTY value falls back to that default via
+   * `isUnset` — never `resolve("")`, which is cwd (the "empty value is a valid value" trap,
+   * CLAUDE.md §3). Deployment (#9) sets it to a durable, protected path (e.g. `/var/lib/waitron`);
+   * the dev default lives beside the bundle and is gitignored, because it holds secrets.
+   */
+  stateDir: string;
+  /**
    * The PEM files that make this host serve HTTPS. BOTH-or-NEITHER (loadConfig refuses a
    * half-configured pair): absent means plain HTTP for loopback dev, present means TLS. This task
    * only makes the process TLS-CAPABLE — production local-CA trust and LAN binding are deployment
@@ -362,6 +373,7 @@ export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
   defaultMediaRoot: string,
+  defaultStateRoot: string,
 ): ServerConfig {
   const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
   const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
@@ -432,6 +444,7 @@ export function loadConfig(
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const mediaDir = env.WAITRON_MEDIA_DIR;
+  const stateDir = env.WAITRON_STATE_DIR;
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
@@ -473,6 +486,9 @@ export function loadConfig(
     // takes `defaultMediaRoot`, never `resolve("")` — which is cwd, the "empty value is a valid
     // value" trap (CLAUDE.md §3). Same `isUnset` fallback `migrationsRoot` above uses.
     mediaDir: isUnset(mediaDir) ? defaultMediaRoot : resolve(mediaDir),
+    // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
+    // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
+    stateDir: isUnset(stateDir) ? defaultStateRoot : resolve(stateDir),
     // Conditionally present, never present-but-undefined: an absent `tls` key is what "no TLS
     // configured" means downstream (`config.tls !== undefined` decides `secureCookies` and whether
     // `buildServeOptions` reads any files at all).

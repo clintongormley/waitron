@@ -52,6 +52,7 @@ import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
@@ -108,6 +109,19 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  * `DEFAULT_MIGRATIONS_ROOT`.
  */
 export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
+
+/**
+ * The default persisted store for the box's self-signed cert PEMs and generated secrets, computed
+ * exactly as `DEFAULT_MEDIA_ROOT` above: beside the bundle (`<dist>/state`) for a built artefact, or
+ * `apps/server/src/state` run from source. The setup branch below materialises the box's self-signed
+ * cert + secrets here on first setup boot (`ensureBoxSecrets`, `box-secrets.ts`) and serves the setup
+ * surface over HTTPS from them; leaf renewal/rotation is later work. `WAITRON_STATE_DIR`
+ * overrides it (config.ts), and deployment (#9) sets a durable, protected path; this default only has
+ * to exist so a from-source dev boot has somewhere to write. The dev default is gitignored
+ * (`apps/server/src/state/`) because it holds SECRETS. Threaded into `loadConfig` as the
+ * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
+ */
+export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
 /**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
@@ -332,7 +346,7 @@ function makeStartedServer(
 export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
   const now = () => new Date();
   const log = createLogger((line) => process.stdout.write(line), now);
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,
@@ -403,13 +417,44 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // real setup wizard app arrives in slice 2; the media store is trading-only, so it is not created
     // here either.
     mountSetup(app, { environment: config.environment }, log);
-    const server = startListening(config, app, now, log);
-    return makeStartedServer(server, health, log, {
-      // A setup box runs no background work, so there is nothing to abort or await.
-      stopWork: () => Promise.resolve(),
-      // Only the app pool was opened — no sync/retention pools exist to tear down.
-      closePools: () => db.close(),
-    });
+    // NEW in slice 2a: the box serves this setup surface over HTTPS. `ensureBoxSecrets` runs on EVERY
+    // setup boot, unconditionally — its two halves are independently presence-gated inside (mint the
+    // self-signed cert quartet only when absent; generate `secrets.env`'s vault key + node token only
+    // when absent), so it is cheap and idempotent, and a reused box keeps both byte-for-byte. It runs
+    // regardless of `config.tls` because the box's OWN secrets (the vault key above all — slice 2b
+    // loads it to seal the first provisioned credential) must exist whichever front-door cert is
+    // served; gating the whole call on `config.tls === undefined` would strand an operator-TLS box with
+    // no vault key. THEN the served cert is chosen: an operator who supplied their own WAITRON_TLS_*
+    // pair keeps it — `config.tls` WINS — otherwise the box serves its own freshly-ensured self-signed
+    // leaf as the fallback. Only the leaf `{ certFile, keyFile }` feeds `config.tls`; the returned
+    // `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so it is
+    // narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity window
+    // is anchored to real boot time. The trading `else` branch reads `config.tls` unchanged — untouched.
+    //
+    // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
+    // dir, or `startListening` -> `buildServeOptions` -> `readFileSync` on a missing/unreadable
+    // operator TLS file) closes `db` before it propagates — mirroring the trading branch's own
+    // `loadKeyRing` guard below. `createPostgresDb` above already opened a LIVE pool, and on a throw
+    // path `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()`
+    // — the pool would leak. The happy path is unchanged.
+    try {
+      const ensured = await ensureBoxSecrets({
+        stateDir: config.stateDir,
+        hostnames: ["waitron.local", "localhost"],
+        now,
+      });
+      const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
+      const server = startListening({ ...config, tls }, app, now, log);
+      return makeStartedServer(server, health, log, {
+        // A setup box runs no background work, so there is nothing to abort or await.
+        stopWork: () => Promise.resolve(),
+        // Only the app pool was opened — no sync/retention pools exist to tear down.
+        closePools: () => db.close(),
+      });
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
   }
 
   // TRADING MODE — a venue is bound (`config.till` is present, narrowed for the rest of the function

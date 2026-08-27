@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
@@ -29,6 +29,7 @@ import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 /**
  * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
@@ -261,6 +262,23 @@ async function freePort(): Promise<number> {
 }
 
 /**
+ * A `fetch` init that trusts `ca` for an HTTPS dial against a self-signed leaf — the same
+ * `undici` `Agent` + cast the two HTTPS boot tests below each need, differing only in which CA
+ * they trust (the box-minted one vs. an operator-supplied one). `close()` wraps the dispatcher's
+ * own `close()` so callers still tear it down explicitly in their `finally`, alongside the server.
+ */
+function httpsVia(ca: string | Buffer): {
+  via: RequestInit & { dispatcher: Agent };
+  close: () => Promise<void>;
+} {
+  const dispatcher = new Agent({ connect: { ca } });
+  return {
+    via: { dispatcher } as RequestInit & { dispatcher: Agent },
+    close: () => dispatcher.close(),
+  };
+}
+
+/**
  * Polls `predicate` up to `POLL_TRIES` times, `POLL_INTERVAL_MS` apart, returning its first
  * defined result, or `undefined` once the budget is spent. The budget (200 x 50ms = 10s) lives
  * here once for `waitForPass`, `waitForExit` and `waitForEvent` below, all three of which are
@@ -462,26 +480,41 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 
-  it("boots in setup mode when no venue is bound: serves /setup-api/status and a placeholder, and does not mount the trading routes", async () => {
+  it("boots in setup mode over HTTPS from a minted self-signed cert, serves /setup-api/status, refuses plain HTTP, and does not mount the trading routes", async () => {
     // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all five
     // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
     // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
     // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
-    // routes, no sync transport, no drain/reconcile workers. This is the minimal env the brief names:
-    // DATABASE_URL + migrations + port + WAITRON_ENV, and deliberately nothing else (no
-    // WAITRON_CREDENTIALS_KEY, no WAITRON_TILL_*_ID) — the proof a setup box needs neither. DATABASE_URL
-    // is PROBE_ROLE so the shared applyMigrations still runs idempotently against the template.
+    // routes, no sync transport, no drain/reconcile workers. DATABASE_URL is PROBE_ROLE so the shared
+    // applyMigrations still runs idempotently against the template.
+    //
+    // NEW in slice 2a: the box serves this surface over HTTPS from a self-signed cert it MINTS + then
+    // reuses on later boots (`ensureBoxSecrets`), and generates its box secrets (key ring + node
+    // token) alongside. A fresh `WAITRON_STATE_DIR` (mkdtemp, cleaned up below) gives it somewhere to
+    // write; we read the minted CA back to trust the leaf, dial every route over HTTPS, then confirm a
+    // plain-HTTP dial to the same port now FAILS — proof this is HTTPS, not the plain HTTP slice 1b
+    // served. `WAITRON_STATE_DIR` is REQUIRED here, not optional: without it `ensureBoxSecrets` would
+    // write into `boot.ts`'s from-source default (`apps/server/src/state`) and pollute the checkout.
     const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-state-"));
     const server = await startServer({
       DATABASE_URL: databaseUrl,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
     });
+    // Trust the CA the box just minted, so the self-signed leaf verifies. `undici`'s `Agent` is real
+    // (this file mocks only `undici`'s `fetch`, not `Agent` — see the header comment), and Node's
+    // GLOBAL `fetch` (a separate module identity from the mocked `"undici"` specifier) honours a
+    // `dispatcher` on its init. The leaf carries `127.0.0.1` as an iPAddress SAN (ensureBoxSecrets adds
+    // it unconditionally), so a loopback dial verifies.
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const { via, close } = httpsVia(ca);
     try {
-      // The setup status fact sheet (Task 2's `mountSetup`), echoing the deployment environment boot
-      // resolved — proof `config.environment` threaded through the setup branch into `mountSetup`.
-      const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
+      // The setup status fact sheet (Task 2's `mountSetup`), over HTTPS — proof `config.environment`
+      // threaded through the setup branch into `mountSetup`, and that the minted cert actually serves.
+      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
         provisioned: false,
@@ -489,37 +522,160 @@ describe("startServer, against a real container as the deployment role", () => {
         needs: ["venue"],
       });
 
-      // The placeholder shell answers any unclaimed path (200 HTML), so a browser pointed at the box
-      // gets a "needs setup" page rather than a crash or a bare 404.
-      const root = await fetch(`http://127.0.0.1:${port}/`);
+      // The placeholder shell answers any unclaimed path (200 HTML) over HTTPS too.
+      const root = await fetch(`https://127.0.0.1:${port}/`, via);
       expect(root.status).toBe(200);
       expect(root.headers.get("content-type")).toContain("text/html");
       expect(await root.text()).toMatch(/set ?up/i);
 
       // /health still answers — `createHealthState` + `healthApp` are in the shared prefix. It reports
       // 503 (never-passed: a setup box runs no duty loop, so `lastPassAt` stays null), not a
-      // route-missing failure. The brief asserts only that it ANSWERS (status < 600), which
-      // distinguishes a live route from a crashed/absent one.
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      // route-missing failure; the assertion is only that it ANSWERS (status < 600).
+      const health = await fetch(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBeLessThan(600);
 
       // The trading routes are NOT mounted: /api/staff is answered by the setup catch-all (the HTML
       // placeholder), NOT the trading roster route — which would return the JSON `[]` the trading-mode
-      // test below asserts. The setup catch-all (`mountSetup`'s `GET *`) claims every otherwise
-      // unmatched path, so a mounted `mountTillApi` is the only thing that could make this JSON; a 200
-      // text/html placeholder here proves the trading route never registered. (A bare 404 is
-      // impossible while the catch-all is mounted — it is the same route that serves `/` above.)
-      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      // test below asserts. A 200 text/html placeholder here proves the trading route never registered.
+      const staff = await fetch(`https://127.0.0.1:${port}/api/staff`, via);
       expect(staff.status).toBe(200);
       expect(staff.headers.get("content-type")).toContain("text/html");
       expect(await staff.text()).toMatch(/set ?up/i);
+
+      // The box minted + persisted its secrets alongside the cert (`ensureBoxSecrets` writes
+      // secrets.env with the key ring + node token, 0600), ready for slice 2b to load.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+
+      // A plain-HTTP dial to the same port now FAILS: the listener speaks TLS, so an http:// request
+      // never completes a valid handshake (it is HTTPS now, not the plain HTTP slice 1b served). No
+      // dispatcher — a bare global fetch against the TLS port is torn down mid-request.
+      await expect(fetch(`http://127.0.0.1:${port}/setup-api/status`)).rejects.toThrow();
     } finally {
       await server.close();
+      await close();
+      await rm(stateDir, { recursive: true, force: true });
     }
     // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
-    // close() resolves without throwing, and the listener is genuinely gone.
+    // close() resolves without throwing, and the listener is genuinely gone. This probe TRUSTS the
+    // box's CA (a fresh dispatcher — the one built above was already closed in the `finally`), so a
+    // still-listening server would SUCCEED here (e.g. a 503 from /health) rather than rejecting on a
+    // TLS-verification failure regardless of whether the listener stopped. `rejects.toThrow()`
+    // therefore passes ONLY when the connection is genuinely refused, i.e. the listener is truly gone
+    // — a bare (CA-blind) fetch against a self-signed HTTPS endpoint would reject either way and prove
+    // nothing about close().
     await expect(server.close()).resolves.toBeUndefined();
-    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+    const afterClose = httpsVia(ca);
+    try {
+      await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
+    } finally {
+      await afterClose.close();
+    }
+  }, 60_000);
+
+  it("setup mode serves an operator-supplied WAITRON_TLS_* cert while STILL generating its own box secrets", async () => {
+    // The operator brings their own cert: `config.tls` is set from WAITRON_TLS_CERT_FILE/_KEY_FILE, so
+    // the setup branch serves THAT leaf as the front door. But `ensureBoxSecrets` runs on EVERY setup
+    // boot regardless (its two halves are independently presence-gated), so the box STILL mints its own
+    // self-signed fallback cert AND generates `secrets.env` — the vault key slice 2b needs must exist
+    // whichever front-door cert is served. Both facts are asserted below: the operator leaf verifies
+    // (its CA, not the box CA), and `secrets.env` is written.
+    //
+    // Prove-by-deletion target for "operator wins": forcing the code to ignore `config.tls` (serve the
+    // ensured BOX leaf instead) makes the operator-CA-trusting client's handshake fail
+    // (`CERT_SIGNATURE_FAILURE`) — the box leaf is not signed by the operator CA.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-op-tls-"));
+    const certDir = await mkdtemp(join(tmpdir(), "waitron-boot-op-cert-"));
+    // A pre-minted operator cert pair with a DISTINCTIVE identity (hostnames ["operator.example"]) so
+    // it cannot be confused with the box's own fallback leaf (hostnames ["waitron.local","localhost"]);
+    // it also carries 127.0.0.1 as an iPAddress SAN so a loopback dial verifies against it.
+    // `mintSelfSignedServerCert` is the same minter `ensureBoxSecrets` wraps.
+    const material = mintSelfSignedServerCert({
+      hostnames: ["operator.example"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+    const certFile = join(certDir, "operator.crt");
+    const keyFile = join(certDir, "operator.key");
+    await writeFile(certFile, material.serverCertPem);
+    await writeFile(keyFile, material.serverKeyPem);
+
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_TLS_CERT_FILE: certFile,
+      WAITRON_TLS_KEY_FILE: keyFile,
+      WAITRON_ENV: "preproduction",
+    });
+    // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
+    // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
+    const { via, close } = httpsVia(material.caCertPem);
+    try {
+      // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
+      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toMatchObject({ provisioned: false });
+
+      // (b) The box STILL generated its own secrets under operator TLS — `secrets.env` carries the
+      // vault key slice 2b loads. This is the finding this fix decoupled: gating the whole
+      // `ensureBoxSecrets` call on `config.tls === undefined` would have stranded this box with none.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+
+      // The box's OWN fallback leaf was minted too (the always-mint half), even though the operator's
+      // cert is the one served — so a later boot that drops the operator vars still has a cert to serve.
+      expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
+    } finally {
+      await server.close();
+      await close();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(certDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("setup mode: closes the app pool and rejects when startListening fails (missing operator TLS file)", async () => {
+    // Copilot round 3: before this fix, the SETUP branch opened `db` (the shared prefix) but did not
+    // guard against a throw inside the branch — unlike the TRADING branch's own `loadKeyRing` guard
+    // just below it. `ensureBoxSecrets` itself does not throw here (it mints the box's own fallback
+    // cert + secrets successfully, as the operator-TLS test above shows it always does); the throw
+    // comes one line later, from `startListening` -> `buildServeOptions` -> `readFileSync` (`tls.ts`),
+    // because `config.tls` is wired from `WAITRON_TLS_CERT_FILE`/`WAITRON_TLS_KEY_FILE` naming files
+    // that do not exist (`config.tls` WINS over the box's own ensured leaf — same precedence the
+    // operator-TLS test above exercises on the happy path). That reaches the new
+    // `catch (error) { await db.close(); throw error; }` in the setup branch. This test only pins the
+    // externally-observable half — `startServer` rejects — since the pool itself has no public "is it
+    // closed" surface to assert on directly; the line coverage on the catch body is what proves it ran.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-tls-missing-"));
+    try {
+      await expect(
+        startServer({
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          // Neither path exists — `loadConfig` stores WAITRON_TLS_* verbatim with no existence check
+          // (config.ts), so this reaches `readFileSync` inside `buildServeOptions` rather than failing
+          // any earlier config-validation guard.
+          WAITRON_TLS_CERT_FILE: join(stateDir, "does-not-exist.crt"),
+          WAITRON_TLS_KEY_FILE: join(stateDir, "does-not-exist.key"),
+          WAITRON_ENV: "preproduction",
+        }),
+      ).rejects.toThrow();
+      // ensureBoxSecrets ran (and succeeded) BEFORE the failing startListening call — it is
+      // unconditional in the setup branch — so the box's own secrets were generated even though the
+      // boot as a whole rejected.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {

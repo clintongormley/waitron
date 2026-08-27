@@ -38,3 +38,8 @@ certs/
 .claude/settings.local.json
 .superpowers/
 docs/handoffs/
+
+# The box's self-signed cert + generated secrets, materialised on first setup boot.
+# The dev default is apps/server/src/state (from-source) / apps/server/dist/state (built, already
+# covered by dist/). Never commit secrets. Deployment sets WAITRON_STATE_DIR to a protected path.
+apps/server/src/state/
