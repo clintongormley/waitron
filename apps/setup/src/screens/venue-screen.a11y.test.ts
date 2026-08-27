@@ -17,4 +17,13 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with a routed-back server error banner shown", async () => {
+    const { host } = await mountWidget<SetupVenueScreen>(
+      "setup-venue-screen",
+      { errorMessage: "The country must match the fiscal territory." },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

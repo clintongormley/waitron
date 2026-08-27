@@ -245,6 +245,41 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
   });
 
+  // Fix C: ES-common requires country ES — the one planVenue mismatch an operator can actually reach
+  // (country is free text; the territory <select> offers only ES-common). Prove-by-deletion: drop the
+  // country/ES check and this flips red (a "PT" + ES-common Next would then emit and advance).
+  it("blocks Next when the ES-common territory's country isn't ES, marking country invalid", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el, { country: "PT" }); // ES-common but not ES
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(q(el, "[data-test=country]")!.hasAttribute("invalid")).toBe(true);
+  });
+
+  it("accepts a lower-case, space-padded 'es' country for ES-common and emits it trimmed", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el, { country: "  es  " });
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events.some((e) => e.kind === "goto")).toBe(true);
+    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
+    expect(patch.venue?.country).toBe("es"); // trimmed, so the space-sensitive server check accepts it
+  });
+
+  it("renders a routed-back server error banner when errorMessage is set (no client banner yet)", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      errorMessage: "The country must match the fiscal territory.",
+    });
+    const banner = q(el, "[data-test=server-error]")!;
+    expect(banner.getAttribute("role")).toBe("alert");
+    expect(banner.textContent).toContain("country must match");
+    expect(q(el, "[data-test=error]")).toBeNull();
+  });
+
   it("blocks Next when no invoice locale is selected", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);

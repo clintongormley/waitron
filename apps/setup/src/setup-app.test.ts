@@ -279,8 +279,8 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
   });
 
-  it("maps setup.provision_failed (and any unforeseen code) to a retryable generic failure", async () => {
-    const provision = vi.fn().mockRejectedValue({ code: "setup.provision_failed", params: {} });
+  it("maps server.internal (the real generic-crash code) to a retryable in-place failure", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
@@ -291,13 +291,43 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
   });
 
-  it("maps an unmapped code through the default branch to the retryable generic failure", async () => {
-    const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
+  it("maps any unrecognised non-venue code through the default branch to a retryable failure", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "some.unexpected_code", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
     expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
       "Provisioning failed",
+    );
+  });
+
+  it.each([
+    ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
+    ["provisioning.invalid_locales", "Choose 1 or 2 invoice locales"],
+    ["provisioning.duplicate_series_code", "must differ"],
+    ["fiscal.regime_not_implemented", "isn't supported yet"],
+  ])(
+    "routes venue-data code %s BACK to the venue form with its message",
+    async (code, fragment) => {
+      const provision = vi.fn().mockRejectedValue({ code, params: {} });
+      const el = await mountSetupApp(stubApi({ provision }));
+      provisionRequest(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
+      expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(fragment);
+    },
+  );
+
+  it("routes an unlisted provisioning.* code back to venue with a generic message naming the code", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "provisioning.id_sistema_invalid", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
+    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
+      "provisioning.id_sistema_invalid",
     );
   });
 
@@ -315,6 +345,30 @@ describe("setup-app", () => {
     expect(provision).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
+
+  // The CRITICAL fiscal guard, at the shell boundary that actually POSTs: a draft carrying a live
+  // certificate that was later reverted to demo must NOT ship the cert. Asserts the REAL posted body.
+  it("never posts a stale AEAT cert on a demo provision reached by reverting from live", async () => {
+    const provision = vi.fn().mockResolvedValue({
+      provisioned: true,
+      tenantId: "t-1",
+      restarting: true,
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    // live → cert (PFX filled) → … → back to mode → switch to Demo: the draft still holds the cert.
+    patch(el, {
+      mode: "live",
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+    });
+    patch(el, { mode: "demo" });
+    expect(readDraft(el).aeatCert?.pfxBase64).toBe("AAAA"); // the stale cert is still in the draft
+    provisionRequest(el);
+    await flush(el);
+    expect(provision).toHaveBeenCalledOnce();
+    const body = provision.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body.mode).toBe("demo");
+    expect("aeatCert" in body).toBe(false);
+  });
 });
 
 describe("assembleBody", () => {
@@ -327,6 +381,16 @@ describe("assembleBody", () => {
     const aeatCert = { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" as const };
     const body = assembleBody({ mode: "live", venue: { taxId: "B1" }, aeatCert });
     expect(body.aeatCert).toEqual(aeatCert);
+  });
+
+  // Prove-by-deletion of the mode gate: drop `draft.mode === "live" &&` and this flips red — a demo
+  // provision would then carry the stale cert (the CRITICAL fiscal defect).
+  it("drops a stale certificate when the mode is demo, even with a present PFX", () => {
+    const body = assembleBody({
+      mode: "demo",
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+    });
+    expect("aeatCert" in body).toBe(false);
   });
 
   it("drops an aeatCert whose pfxBase64 is empty", () => {

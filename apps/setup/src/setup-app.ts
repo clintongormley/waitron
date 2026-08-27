@@ -60,22 +60,45 @@ function deepMerge(base: unknown, patch: unknown): unknown {
  * collecting screen has already client-validated its own fields before contributing them, so by the
  * `review` step the draft is complete and this only NARROWS the `DeepPartial` to a `ProvisionBody`.
  *
- * The one thing it does actively is the `aeatCert` OMISSION: the server distinguishes "no certificate
- * supplied" from a malformed one by the key's ABSENCE — `body.aeatCert === undefined ? undefined :
- * parseCert(...)` (`apps/server/src/setup-api.ts`) — and answers a live ES-common venue with no cert
- * `setup.aeat_cert_required` (which the shell routes back to `cert`), rather than provisioning it. So
- * the key is DROPPED entirely unless a PFX was actually read in; it is never sent as `null` or as an
- * empty certificate (a demo or non-ES-common venue never reaches the `cert` screen, so its draft
- * carries no `aeatCert` at all, and this leaves it absent).
+ * The one thing it does actively is the `aeatCert` gate, which is a FISCAL guard, not a tidiness one.
+ * The cert is included ONLY for a LIVE provision that actually carries a PFX; otherwise the key is
+ * DROPPED entirely (never sent as `null` or empty). Gating on `mode` — not just on "a PFX was read" —
+ * is load-bearing: an operator can go live → cert (fill the PFX) → Back → mode → switch to Demo →
+ * Provision, and the demo path skips the cert screen but the draft still holds the cert. Without the
+ * mode gate, `assembleBody` would POST that stale certificate onto a DEMO/preproduction tenant and the
+ * server would seal a real AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
+ * also distinguishes "no certificate" from "malformed" by the key's ABSENCE (`body.aeatCert ===
+ * undefined ? … : parseCert(...)`, `apps/server/src/setup-api.ts`) and answers a live ES-common venue
+ * with no cert `setup.aeat_cert_required` (which the shell routes back to `cert`).
  */
 export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   const body = { ...draft } as ProvisionBody & { aeatCert?: ProvisionBody["aeatCert"] };
   const cert = draft.aeatCert;
-  if (cert === undefined || cert.pfxBase64 === undefined || cert.pfxBase64 === "") {
+  const includeCert =
+    draft.mode === "live" &&
+    cert !== undefined &&
+    cert.pfxBase64 !== undefined &&
+    cert.pfxBase64 !== "";
+  if (!includeCert) {
     delete body.aeatCert;
   }
   return body as ProvisionBody;
 }
+
+/**
+ * Plain-English messages for the venue-data refusals `planVenue` (and the fiscal modules) throw
+ * (`packages/provisioning/src/venue-plan.ts`). The server's error boundary PROPAGATES these codes at
+ * HTTP 400 unchanged (`apps/server/src/error-boundary.ts`), so they reach the wizard verbatim and the
+ * shell routes them BACK to the `venue` form to be corrected. Any other `provisioning.*`/`fiscal.*`
+ * code falls back to a generic message that names the code (see {@link SetupApp.#mapProvisionError}).
+ */
+const VENUE_ERROR_MESSAGES: Record<string, string> = {
+  "provisioning.territory_country_mismatch": "The country must match the fiscal territory.",
+  "provisioning.invalid_locales": "Choose 1 or 2 invoice locales.",
+  "provisioning.duplicate_series_code":
+    "The series code and rectificative series code must differ.",
+  "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
+};
 
 /**
  * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
@@ -146,6 +169,13 @@ export class SetupApp extends LitElement {
   @state() private reviewError?: string;
 
   /**
+   * A venue-data validation code the server threw at provision time (a `planVenue` / fiscal-module
+   * refusal, `provisioning.*` / `fiscal.*`), routed back to the `venue` screen as a banner so the
+   * operator can correct the offending detail. `undefined` normally; cleared before every new POST.
+   */
+  @state() private venueError?: string;
+
+  /**
    * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
    * two fiscal 409s, `already_provisioning`, `not_ready`, `provision_failed`). `undefined` while a
    * POST is in flight (the screen then shows the in-flight state) or before one is attempted.
@@ -209,6 +239,7 @@ export class SetupApp extends LitElement {
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
     this.reviewError = undefined;
+    this.venueError = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.screen = "provisioning";
@@ -223,9 +254,15 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Map a rejected provision to the wizard's next state. Every code the provision route can throw
-   * (map §4b, verified against `apps/server/src/setup-api.ts`) is handled explicitly:
+   * Map a rejected provision to the wizard's next state. Every code the provision route can surface
+   * (map §4b, verified against `apps/server/src/setup-api.ts` + `error-boundary.ts` +
+   * `packages/provisioning/src/venue-plan.ts`) is handled:
    *
+   * - Any `provisioning.*` / `fiscal.*` code → a `planVenue` / fiscal-module refusal about the venue
+   *   DATA, propagated at 400 by the error boundary (it does NOT rewrite the code —
+   *   `setup.provision_failed` is only that boundary's log tag, never a wire code). Re-POSTing the same
+   *   data would just fail again, so route BACK to the `venue` form with a banner; the fix is editing,
+   *   not retrying in place.
    * - `setup.request_invalid` → back to `review` with a banner naming `params.field` (the field's own
    *   screen already validates the same rule, so this is a belt-and-suspenders path).
    * - `setup.aeat_cert_required` → back to `cert` to add the certificate.
@@ -233,10 +270,19 @@ export class SetupApp extends LitElement {
    * - `setup.already_provisioned` / `deployment.already_stamped` → "already set up", NO retry: these
    *   are the fiscal double-provision refusals and re-POSTing is unrecoverable (CLAUDE.md §5).
    * - `setup.not_ready` → not-ready notice, retryable.
-   * - `setup.provision_failed` (and any unforeseen code) → a generic failure, retryable.
+   * - `server.internal` (the real generic-crash code) and any unrecognised code → a generic failure,
+   *   retryable in place.
    */
   #mapProvisionError(error: ApiError): void {
-    switch (error.code) {
+    const code = error.code;
+    if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
+      this.venueError =
+        VENUE_ERROR_MESSAGES[code] ??
+        `The venue details were rejected — please review and correct them. (${code})`;
+      this.screen = "venue";
+      return;
+    }
+    switch (code) {
       case "setup.request_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         this.reviewError =
@@ -290,10 +336,10 @@ export class SetupApp extends LitElement {
    * stay uniform.
    *
    * `mode` reads `environment` (to warn on a production box); `venue`, `cert` and `review` read the
-   * accumulated `draft` (to seed their fields / summarise it); `review` also takes the routed-back
-   * `reviewError`; `provisioning` takes the mapped message + retry flag; `done` takes the `api` to
-   * poll during the restart. All are passed as properties, since neither an api nor a draft object can
-   * travel as an attribute.
+   * accumulated `draft` (to seed their fields / summarise it); `venue` and `review` also take a
+   * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
+   * retry flag; `done` takes the `api` to poll during the restart. All are passed as properties, since
+   * neither an api nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
@@ -303,6 +349,7 @@ export class SetupApp extends LitElement {
         return html`<setup-venue-screen
           data-test="screen-venue"
           .draft=${this.draft}
+          .errorMessage=${this.venueError}
         ></setup-venue-screen>`;
       case "cert":
         return html`<setup-cert-screen

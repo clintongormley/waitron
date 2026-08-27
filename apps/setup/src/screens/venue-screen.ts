@@ -142,6 +142,11 @@ export class SetupVenueScreen extends LitElement {
   /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
+  /** A server-side venue-validation error the shell routed back here (a `planVenue` refusal, e.g.
+   * `provisioning.territory_country_mismatch`), shown as a banner so the operator can correct the
+   * offending detail and re-submit. `undefined` normally. */
+  @property() errorMessage?: string;
+
   /** The editable text fields. Defaults match the shell's seeded draft; seeding overlays what it holds. */
   @state() private values: Record<TextField, string> = {
     country: "ES",
@@ -243,6 +248,14 @@ export class SetupVenueScreen extends LitElement {
     for (const key of REQUIRED_TEXT_FIELDS) {
       if (this.values[key].trim() === "") invalid.add(key);
     }
+    // ES-common is the only fiscal territory today, and the server requires its country to be ES —
+    // `planVenue` refuses a mismatch with `provisioning.territory_country_mismatch`, case-insensitive
+    // on the prefix (`packages/provisioning/src/venue-plan.ts`). `country` is free text here, so this
+    // is the one such refusal an operator can actually reach; block it client-side (the shell also
+    // routes the server code back here as a safety net).
+    if (this.fiscalTerritory === "ES-common" && this.values.country.trim().toUpperCase() !== "ES") {
+      invalid.add("country");
+    }
     if (this.invoiceLocales.length < 1 || this.invoiceLocales.length > 2) {
       invalid.add("invoiceLocales");
     }
@@ -263,7 +276,10 @@ export class SetupVenueScreen extends LitElement {
     const addressLine2 = this.values.addressLine2.trim() === "" ? null : this.values.addressLine2;
     const patch: DeepPartial<ProvisionBody> = {
       venue: {
-        country: this.values.country,
+        // Trimmed to match what the client validation checked: the server's territory-prefix match is
+        // space-sensitive (`packages/provisioning/src/venue-plan.ts`), so a padded "ES " that passed
+        // the trimmed check here must reach the server trimmed too, or it would be rejected there.
+        country: this.values.country.trim(),
         taxId: this.values.taxId,
         legalName: this.values.legalName,
         location: {
@@ -369,10 +385,16 @@ export class SetupVenueScreen extends LitElement {
         ${this.#field("Till name", "tillName")} ${this.#field("Invoice series code", "seriesCode")}
         ${this.#field("Rectificative series code", "rectificativeSeriesCode")}
         ${
+          this.errorMessage === undefined
+            ? nothing
+            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
+        }
+        ${
           this.showError
             ? html`<p class="error" role="alert" data-test="error">
-                Check the highlighted fields: fill every required field, pick one or two invoice
-                languages, and use a different code for the rectificative series.
+                Check the highlighted fields: fill every required field, use ES as the country for
+                the Spanish common territory, pick one or two invoice languages, and use a different
+                code for the rectificative series.
               </p>`
             : nothing
         }
