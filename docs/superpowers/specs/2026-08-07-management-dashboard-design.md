@@ -208,6 +208,14 @@ phase forces a change to the app or the fiscal core.
   still terminates on the box. Handles A + B + occasional C uniformly (remote == on-LAN). This is the
   **paid remote tier**. Known limit: box off → "venue offline."
 
+  **Update 2026-08-27:** the reusable box-dials-out blind-reverse-tunnel mechanism this bullet
+  describes — outbound connect from the box, relay routes by SNI, TLS end-to-end to the box, relay
+  sees only ciphertext — is now implemented as the pure-Node `@waitron/tunnel` package (on
+  `feat/sync-outbound-tunnel`) and proven against a local relay stand-in (a cloud pull reaches the
+  box through the tunnel while the relay stays blind). It first ships as the cloud-mirror's
+  outbound-tunnel leg rather than the dashboard's, but it is the *same* T1 mechanism, ready to reuse
+  here. See `docs/superpowers/specs/2026-08-27-sync-cloud-mirror-tunnel-design.md`.
+
 - **T2 — branded front door + custom domain (polish on T1).** `app.waitron.<tld>` shows a **venue
   picker** from a **thin cloud account** (the customer / billing / tunnel-ownership record — *not*
   operational identity), then tunnels to the chosen box, which does the real login. Custom domain: the
