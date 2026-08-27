@@ -3,12 +3,15 @@ import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
 
 /**
  * The enrolment registry is pinned here against spec §2's fourteen commercial-lane tables
- * (docs/superpowers/specs/2026-08-08-sync-slice1-commercial-outbox-spec.md). This table encodes the
- * spec INDEPENDENTLY of registry.ts, so the two must agree — a registry.ts that drifts from spec §2
- * fails here rather than shipping a wrong apply mode. The ops per group are grant facts, cited in
- * spec §2 to the migration that set each grant, and they match packages/sync/drizzle/0000_sync_outbox.sql's
- * capture triggers exactly (Group A AFTER INSERT, Group B AFTER INSERT OR UPDATE, Group C AFTER
- * INSERT OR UPDATE OR DELETE).
+ * (docs/superpowers/specs/2026-08-08-sync-slice1-commercial-outbox-spec.md) plus the three
+ * table-service tables the C1 slice enrols
+ * (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md) — seventeen in all.
+ * This table encodes the spec INDEPENDENTLY of registry.ts, so the two must agree — a registry.ts
+ * that drifts from it fails here rather than shipping a wrong apply mode. The ops per group are grant
+ * facts, cited in the spec to the migration that set each grant. Groups A–C match
+ * packages/sync/drizzle/0000_sync_outbox.sql's capture triggers exactly (Group A AFTER INSERT, Group B
+ * AFTER INSERT OR UPDATE, Group C AFTER INSERT OR UPDATE OR DELETE); Group D's capture triggers
+ * (AFTER INSERT OR UPDATE) land in a later C1 task — this unit suite pins only the registry shape.
  */
 const SPEC: Record<
   string,
@@ -132,14 +135,40 @@ const SPEC: Record<
     captureOps: ["insert", "update", "delete"],
     lane: "ordered",
   },
+  // Group D — mutable, NO watermark column, NO delete (deactivate via `active`) → ordered lane.
+  // The table-service floor closure working_orders.delivery_table_id depends on (C1). Captured
+  // AFTER INSERT OR UPDATE; app-role grant is SELECT/INSERT/UPDATE with NO DELETE
+  // (0044_dining_tables_rls.sql:13, 0048_table_service_statuses_rls.sql:14, 0052_floor_plan_fp1_rls.sql:15),
+  // so no delete is captured or applied. No updated_at → watermarkColumn null (seq-cursor monotonic).
+  floor_zones: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
+  table_service_statuses: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
+  dining_tables: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
 };
 
 const byName = new Map(ENROLLED.map((e) => [e.table, e]));
 
-describe("ENROLLED carries exactly spec §2's fourteen commercial-lane tables", () => {
-  it("has exactly fourteen rows, no duplicates", () => {
-    expect(ENROLLED).toHaveLength(14);
-    expect(byName.size).toBe(14);
+describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen)", () => {
+  it("has exactly seventeen rows, no duplicates", () => {
+    expect(ENROLLED).toHaveLength(17);
+    expect(byName.size).toBe(17);
   });
 
   it("enrols exactly the spec §2 table set", () => {
@@ -163,11 +192,11 @@ describe("the fast lane carries exactly payments and payment_refunds (spec §4b)
   it("tablesForLane('fast') is exactly {payments, payment_refunds}", () => {
     expect(new Set(tablesForLane("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
   });
-  it("tablesForLane('ordered') is the remaining twelve enrolled tables", () => {
+  it("tablesForLane('ordered') is the remaining fifteen enrolled tables", () => {
     const fast = new Set(["payments", "payment_refunds"]);
     const expected = ENROLLED.filter((e) => !fast.has(e.table)).map((e) => e.table);
     expect(tablesForLane("ordered").sort()).toEqual(expected.sort());
-    expect(tablesForLane("ordered")).toHaveLength(12);
+    expect(tablesForLane("ordered")).toHaveLength(15);
   });
   it("every enrolled table carries a lane, and the two lanes partition ENROLLED", () => {
     expect(tablesForLane("fast").length + tablesForLane("ordered").length).toBe(ENROLLED.length);
@@ -199,8 +228,12 @@ describe("captureOps match each table's group", () => {
         // Group B: mutable + watermark, captured AFTER INSERT OR UPDATE.
         expect(entry.captureOps).toEqual(["insert", "update"]);
       } else {
-        // Group C: mutable, no watermark, DELETE-capable, captured AFTER INSERT OR UPDATE OR DELETE.
-        expect(entry.captureOps).toEqual(["insert", "update", "delete"]);
+        // Group C (DELETE-capable: working_orders, working_order_lines) captures insert/update/delete;
+        // Group D (deactivate-only: dining_tables, floor_zones, table_service_statuses) captures
+        // insert/update. Both start [insert, update]; delete is present iff the table is DELETE-capable.
+        expect(entry.captureOps.slice(0, 2)).toEqual(["insert", "update"]);
+        expect([2, 3]).toContain(entry.captureOps.length);
+        if (entry.captureOps.length === 3) expect(entry.captureOps[2]).toBe("delete");
       }
     });
   }
@@ -214,6 +247,13 @@ describe("fkRank is a topological order — every parent ranks strictly before i
   //   sales → sale_lines/tenders/sale_settlements/sale_substitutions/sale_voids,
   //   payments → payment_refunds (payment-refunds.ts payment_fk),
   //   catalogues → categories → products.
+  // Plus the C1 table-service closure (spec 2026-08-27-sync-cloud-mirror-c1-enrolment-design.md §2):
+  //   floor_zones → dining_tables (dining_tables.zone_id, nullable, dining-tables.ts:55-57),
+  //   table_service_statuses → dining_tables (dining_tables.status_id, nullable, dining-tables.ts:72),
+  //   dining_tables → working_orders (working_orders.delivery_table_id, the C1 gate edge, orders.ts:95).
+  // The reverse dining_tables.tab_id → working_orders back-edge (dining-tables.ts:67) is a nullable
+  // pointer set by a LATER update, so it is deliberately NOT ranked — a static rank cannot encode the
+  // dining_tables ↔ working_orders cycle; runtime correctness rests on seq-ascending apply (spec §5).
   // Apply runs seq-ascending (spec §6), so fkRank is a static topological hint, not the apply order;
   // this asserts it never contradicts the FK graph.
   const PARENT_CHILD: [string, string][] = [
@@ -228,6 +268,9 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     ["payments", "payment_refunds"],
     ["catalogues", "categories"],
     ["categories", "products"],
+    ["floor_zones", "dining_tables"],
+    ["table_service_statuses", "dining_tables"],
+    ["dining_tables", "working_orders"],
   ];
   for (const [parent, child] of PARENT_CHILD) {
     it(`${parent}.fkRank < ${child}.fkRank`, () => {

@@ -104,9 +104,20 @@ describe("the DO UPDATE SET list is the schema's columns minus the conflict key 
 });
 
 describe("SYNC_SCHEMA_TABLES covers every enrolled table, and the watermark tables carry their column", () => {
-  it("has a drizzle object for all fourteen enrolled tables", () => {
+  it("has a drizzle object for all seventeen enrolled tables", () => {
     for (const e of ENROLLED) {
       expect(SYNC_SCHEMA_TABLES[e.table]).toBeDefined();
+    }
+  });
+
+  it("the C1 tables apply as an unconditional upsert and refuse a delete statement", () => {
+    for (const table of ["dining_tables", "floor_zones", "table_service_statuses"]) {
+      const e = ENROLLED.find((x) => x.table === table);
+      if (e === undefined) throw new Error(`registry is missing ${table}`);
+      const statement = applyStatementFor(e);
+      expect(statement).toContain(`on conflict (id) do update set`);
+      expect(statement).not.toContain("where excluded."); // watermarkColumn null → unconditional
+      expect(() => deleteStatementFor(e)).toThrow(); // deactivate-only: no delete captured
     }
   });
 
