@@ -322,6 +322,21 @@ describe("mountMeApi — swaps", () => {
     });
   });
 
+  it("400s a POST /swaps with a MALFORMED body (management.request_invalid, never a 500)", async () => {
+    // `c.req.json()` throws on a malformed body; the shared `readJsonBody` coerces that throw to `{}` →
+    // the same field-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send`
+    // would JSON.stringify a valid body.
+    const res = await mountApp().request("/management-api/me/schedule/swaps", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: await cookieFor(me) },
+      body: "{ not json",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
   it("400s a non-UUID fromShiftId (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
       cookie: await cookieFor(me),

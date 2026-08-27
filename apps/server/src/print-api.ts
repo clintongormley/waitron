@@ -41,6 +41,7 @@ import {
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireAgent } from "./print-agent-session.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
@@ -237,8 +238,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // exact posture; this limiter is built with THIS surface's own code (see `enrolLimiter` above), so
       // the throttle answers in the `agent.*` namespace directly — no catch-and-translate needed.
       enrolLimiter.check();
-      const body: { code?: unknown } =
-        (await c.req.json<{ code?: unknown }>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<{ code?: unknown }>(c);
       const code = requireString(body.code, "code");
       const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -287,8 +287,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // A non-uuid job id is a clear client bug (the agent builds this URL from a claimed job's id) →
       // a clean `shared.invalid_id` 400, never a `22P02` 500 in the `uuid` column.
       const jobId = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const body: { status?: unknown; error?: unknown } =
-        (await c.req.json<{ status?: unknown; error?: unknown }>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<{ status?: unknown; error?: unknown }>(c);
       // `status` is the ONE field the agent MUST get right for the report to mean anything — screened to
       // exactly `done`/`failed` (a bad/absent one → 400 naming the field). `error` (a `failed`
       // diagnostic) is optional; the report records it into `last_error` and bumps `attempts`.
@@ -313,8 +312,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/management-api/print-agents/codes", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body: { label?: unknown } =
-        (await c.req.json<{ label?: unknown }>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<{ label?: unknown }>(c);
       const label = requireString(body.label, "label");
       // The plaintext code leaves ONLY here, once, for the operator to read into the agent's config
       // (generateAgentCode stores only its SHA-256). Shown once — the dashboard surfaces it and forgets.
@@ -369,8 +367,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/management-api/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body: Record<string, unknown> =
-        (await c.req.json<Record<string, unknown>>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       // Screen the SHAPE here; `createPrinter` owns the required-field check (`printer.invalid_config`)
       // and the DB owns the transport CHECK + agent FK (mapped friendly). A non-uuid `agentId` is
       // screened here so it never `22P02`s the `uuid` column.
@@ -407,8 +404,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      const body: Record<string, unknown> =
-        (await c.req.json<Record<string, unknown>>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       // Every field OPTIONAL (a PATCH touches only what it names); the connection fields + `agentId`
       // accept an explicit `null` to CLEAR them. `updatePrinter` 404s a missing id and maps the DB
       // CHECK / agent FK to `printer.invalid_config` / `agent.not_found`.

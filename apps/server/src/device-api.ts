@@ -16,6 +16,7 @@ import { asAppUser, deviceKind, devices, ticketItems, withTenant } from "@waitro
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
@@ -156,16 +157,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // unauthenticated route from starving the sale path (CLAUDE.md §5, "nothing may block a sale").
       // Defense-in-depth over the code's own ~40-bit / single-use / 15-min-TTL controls (enrol-rate-limit.ts).
       enrolLimiter.check();
-      // Parsed DEFENSIVELY, guarding BOTH failure modes of `c.req.json()`. (1) It THROWS a `SyntaxError`
-      // on an empty or malformed body — `.catch(() => ({}))` turns that into `{}`. (2) It returns `null`
-      // (NO throw) for a literal JSON `null` body — the trailing `?? {}` turns that into `{}` too.
-      // Without the `.catch`, an empty/malformed body reaches `run` as a NON-AppError → an opaque
-      // `server.internal` 500; without the `?? {}`, `null.code` would TypeError to the same 500. Either
-      // way a degenerate body now flows to the `code` screen → a clean `management.request_invalid` 400
-      // naming the field (the verb's `normalizePairingCode` would TypeError on a non-string, so the
-      // string screen must run first).
-      const body: { code?: unknown } =
-        (await c.req.json<{ code?: unknown }>().catch(() => ({}))) ?? {};
+      // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
+      // 500) and flows to the `code` screen → a clean `management.request_invalid` 400 naming the field
+      // (the verb's `normalizePairingCode` would TypeError on a non-string, so the string screen must
+      // run first).
+      const body = await readJsonBody<{ code?: unknown }>(c);
       const code = requireString(body.code, "code");
       const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -216,13 +212,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
-      // Parsed DEFENSIVELY (as the enrol route above), guarding both `c.req.json()` failure modes: the
-      // `.catch(() => ({}))` turns an empty/malformed-body THROW into `{}`, and the `?? {}` turns a
-      // literal JSON `null` (which parses to `null` WITHOUT throwing) into `{}`. Without them a
-      // degenerate body reaches `run` as a non-AppError, or `null.to` TypeErrors — either way an opaque
-      // 500. With them `to` is undefined and reaches `advanceTicketItem`'s transition screen — the SAME
+      // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
+      // 500): `to` is then undefined and reaches `advanceTicketItem`'s transition screen — the SAME
       // `ticket.invalid_transition` an absent/garbage target gives, never a 500.
-      const body: { to?: string } = (await c.req.json<{ to?: string }>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<{ to?: string }>(c);
       // `to` reaches `advanceTicketItem` as-is (cast): the verb owns target validation, refusing
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
@@ -248,14 +241,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.post("/management-api/device-codes", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Parsed DEFENSIVELY, both failure modes of `c.req.json()` (see the enrol route): `.catch(() => ({}))`
-      // turns an empty/malformed body's `SyntaxError` into `{}`, and the trailing `?? {}` turns a literal
-      // `null` body into `{}` — either degenerate body then flows to the field screens below → a clean
-      // `management.request_invalid` 400, never an opaque `server.internal` 500.
-      const body: { kind?: unknown; stationId?: unknown; label?: unknown } =
-        (await c.req
-          .json<{ kind?: unknown; stationId?: unknown; label?: unknown }>()
-          .catch(() => ({}))) ?? {};
+      // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
+      // 500) and flows to the field screens below → a clean `management.request_invalid` 400.
+      const body = await readJsonBody<{ kind?: unknown; stationId?: unknown; label?: unknown }>(c);
       // `requireEnum` narrows `kind` to the `device_kind` pgEnum union (= `DeviceKind`) off
       // `deviceKind.enumValues`, so a future additive kind is accepted the moment the enum widens;
       // `requireBodyUuid` screens `stationId` to a UUID SHAPE (a non-uuid would `22P02` in

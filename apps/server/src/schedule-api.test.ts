@@ -211,11 +211,26 @@ describe("mountScheduleApi — swaps", () => {
   });
 
   it("400s a POST /swaps with a literal null JSON body (management.request_invalid, never a 500)", async () => {
-    // A null-parsing body degrades to `{}` (the route's `?? {}` guard) rather than dereferencing null;
+    // A null-parsing body degrades to `{}` (via `readJsonBody`) rather than dereferencing null;
     // the required `fromShiftId` is then absent → a clean 400, never a TypeError 500.
     const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
       cookie: await cookieFor(me, "1111"),
       body: null,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("400s a POST /swaps with a MALFORMED body (management.request_invalid, never a 500)", async () => {
+    // `c.req.json()` throws on a malformed body; `readJsonBody` coerces that throw to `{}` → the same
+    // field-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send` would
+    // JSON.stringify a valid body.
+    const res = await mountApp().request("/api/schedule/swaps", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: await cookieFor(me, "1111") },
+      body: "{ not json",
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

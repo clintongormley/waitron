@@ -17,6 +17,7 @@ import { getLayout } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
@@ -417,21 +418,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Set the LOGGED-IN operator's OWN UI-language preference (`persons.locale`). SESSION-GUARDED, and
   // the guard — not the body — supplies the identity: the write targets `session.personId`, so an
-  // operator can only ever set THEIR OWN locale (the body carries `locale` and nothing else). Parsed
-  // DEFENSIVELY, guarding BOTH failure modes of `c.req.json()` (the pattern `device-api.ts` uses): it
-  // THROWS a `SyntaxError` on an empty or malformed body — `.catch(() => ({}))` turns that into `{}` —
-  // and it returns `null` (no throw) for a literal JSON `null` body, which the trailing `?? {}` also
-  // turns into `{}`. Either degenerate body then flows through the same `locale` coercion below, so a
-  // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
-  // `assertSupportedLocale` rejects as `locale.unsupported` (400) exactly as any other unsupported
-  // value — the ONE rejection path, so there is no separate request-invalid branch and never an opaque
-  // `server.internal` 500. Runs under `withTenant` + `asAppUser` (RLS scopes the UPDATE to this till's
-  // tenant), and returns 204 on success (no body).
+  // operator can only ever set THEIR OWN locale (the body carries `locale` and nothing else). Read via
+  // `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque 500) and flows
+  // through the same `locale` coercion below, so a missing/non-string/unparsable `locale` all coerce to
+  // `""`, which `setPersonLocale`'s `assertSupportedLocale` rejects as `locale.unsupported` (400) —
+  // the ONE rejection path, no separate request-invalid branch. Runs under `withTenant` + `asAppUser`
+  // (RLS scopes the UPDATE to this till's tenant), and returns 204 on success (no body).
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const body: { locale?: unknown } =
-        (await c.req.json<{ locale?: unknown }>().catch(() => ({}))) ?? {};
+      const body = await readJsonBody<{ locale?: unknown }>(c);
       const locale = typeof body.locale === "string" ? body.locale : "";
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

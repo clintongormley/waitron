@@ -124,6 +124,18 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
+  it("400s a POST /roster with a MALFORMED body (never a 500)", async () => {
+    // `c.req.json()` throws on a malformed body; the shared `readJsonBody` coerces that throw to `{}` →
+    // `requireBodyUuid` rejects the missing locationId as a 400, not an opaque 500. Sent raw, since
+    // `send` would JSON.stringify a valid body.
+    const res = await mountApp().request("/management-api/roster", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "{ not json",
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("400s a shaped-but-invalid calendar date on POST (2026-02-30 → request_invalid, never a 500)", async () => {
     // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day; without a calendar-validity
     // check it reaches the `::date` column as 22008 → an opaque server.internal 500.

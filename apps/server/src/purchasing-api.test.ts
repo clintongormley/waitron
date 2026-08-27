@@ -273,6 +273,21 @@ describe("mountPurchasingApi — create request-shape screens", () => {
       (await res.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "header" } } });
   });
+
+  it("POST with a MALFORMED body → 400 management.request_invalid naming header (never a 500)", async () => {
+    // `c.req.json()` throws on a malformed body; `readJsonBody` coerces that throw to `{}` → the same
+    // header-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send` would
+    // JSON.stringify a valid body.
+    const res = await mountApp().request("/management-api/purchase-invoices", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: "{ not json",
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "header" } } });
+  });
 });
 
 describe("mountPurchasingApi — list", () => {
