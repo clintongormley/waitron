@@ -36,6 +36,13 @@
       "when": 1786492800004,
       "tag": "0004_sync_log_origin_seq_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786492800005,
+      "tag": "0005_sync_peers",
+      "breakpoints": true
     }
   ]
 }
