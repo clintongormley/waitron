@@ -348,7 +348,7 @@ describe("the generic capture trigger over the commercial lane", () => {
       await withTenantNode(app, base.tenantId, NODE_A, async (tx) => {
         await tx.execute(
           sql`insert into floor_zones (id, tenant_id, location_id, name)
-              values (${zone}, ${base.tenantId}, ${base.locationId}, 'Comedor')`,
+              values (${zone}, ${base.tenantId}, ${base.locationId}, 'Dining Room')`,
         );
         await tx.execute(
           sql`insert into table_service_statuses (id, tenant_id, label, color)

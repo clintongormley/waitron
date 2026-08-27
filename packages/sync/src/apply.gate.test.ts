@@ -189,7 +189,7 @@ function floorZoneImage(b: Base, over: Image = {}): Image {
     id: uuid(),
     tenant_id: b.tenantId,
     location_id: b.locationId,
-    name: "Comedor",
+    name: "Dining Room",
     display_order: 0,
     active: true,
     created_at: "2026-08-27T10:00:00+00:00",
