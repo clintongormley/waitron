@@ -24,7 +24,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { runRetentionSweep, runSyncPull } from "@waitron/sync";
+import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   MAX_UPLOAD_BYTES,
@@ -187,6 +187,14 @@ const suite = useTemplateDb({ template: "manifest" });
 let migrationsRoot: string;
 let databaseUrl: string;
 let runtimeDatabaseUrl: string;
+// The sync-api pool's URL — a `sync_applier` (app_user + sync_tailer member) URL, the exact
+// "sync_tailer + app_user member" shape boot.ts documents for the sync pool. It is NOT the deployment
+// role (PROBE_ROLE = app_user only): since Task 5 the source authenticates every request against
+// `sync_peers`, so its pool needs sync_tailer's SELECT + UPDATE(last_seen_at) on that table, which
+// app_user does not hold. `syncPeerToken` is a peer enrolled below (as the superuser admin), the token
+// the /sync-api/hello probes present.
+let syncDatabaseUrl: string;
+let syncPeerToken: string;
 
 beforeAll(async () => {
   const dbName = new URL(suite.pg.uri).pathname.replace(/^\//, "");
@@ -213,6 +221,14 @@ beforeAll(async () => {
   // EXISTS` reason `PROBE_ROLE`'s own comment above explains. Only its clone-scoped connection URL is
   // built here; no per-DATABASE grant is added, which is exactly what makes it least-privileged.
   runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
+
+  // The sync pool's role + a peer enrolled on this clone. `sync_applier` (app_user + sync_tailer) is
+  // created cluster-wide by the package globalSetup; enrolPeer runs as the superuser admin (setup
+  // bypasses grants). The sync tests below present `syncPeerToken` to /sync-api/hello, which the source
+  // now resolves against sync_peers through this pool (Task 5 — the auth path touches the DB).
+  syncDatabaseUrl = roleUrl(suite.pg.uri, "sync_applier", "ap");
+  syncPeerToken = (await enrolPeer(suite.admin, { subscriberId: "boot-mirror", name: "boot" }))
+    .token;
 
   // The till's own tenant + location, seeded once as the container superuser (RLS bypassed, exactly as
   // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
@@ -1088,15 +1104,17 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("mounts the node-token sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {
+  it("mounts the peer-authenticated sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {
     // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the pull
     // worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to reject in
     // this file) and the peer backs off — which is all this test needs from the worker: it exercises
     // the production HttpClient adapter and the boot wiring without a second live node. /sync-api/hello
-    // (no DB) proves mountSyncApi ran with this node's till.nodeId; a tokenless request proves the
-    // fail-closed middleware is live. The sync DB URL reuses the deployment role: /hello needs no DB
-    // and the worker never reaches a sync_log read (it fails at the peer handshake first). close() must
-    // tear the worker + pool down alongside the main loop.
+    // with an enrolled peer's token proves mountSyncApi ran with this node's till.nodeId AND that the
+    // auth path resolves against sync_peers (Task 5); a tokenless request proves the fail-closed guard
+    // is live. The sync DB URL is a sync_applier (app_user + sync_tailer) URL — the auth path now reads
+    // sync_peers, which the app-only deployment role cannot; the worker never reaches a sync_log read
+    // (it fails at the peer handshake first). close() must tear the worker + pool down alongside the
+    // main loop.
     //
     // WAITRON_SYNC_RETENTION_DATABASE_URL is also set (reusing the deployment role), so this same boot
     // schedules the retention sweep (spec §3.2 — what finally wires pruneSyncLog). runRetentionSweep is
@@ -1118,8 +1136,11 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token,rotated-token",
-      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+      // Still required by loadSyncConfig when sync is enabled (config.ts), but INERT since Task 5:
+      // mountSyncApi no longer reads it — the source authenticates against sync_peers. Task 6 retires
+      // both the config requirement and this env var.
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
       // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
       // are visibly different in the assertions below (spec §4d).
       WAITRON_SYNC_FAST_TICK_MS: "250",
@@ -1135,20 +1156,14 @@ describe("startServer, against a real container as the deployment role", () => {
     });
     try {
       const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-        headers: { Authorization: "Bearer boot-node-token" },
+        headers: { Authorization: `Bearer ${syncPeerToken}` },
       });
       expect(hello.status).toBe(200);
       expect(await hello.json()).toEqual({
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "production",
       });
-      // A SECOND accepted token (the rotation overlap window) authenticates too — the token SET rolled
-      // through boot end-to-end, so the secret can be rotated with no synchronized restart (spec §2).
-      const rotated = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-        headers: { Authorization: "Bearer rotated-token" },
-      });
-      expect(rotated.status).toBe(200);
-      // A tokenless request is refused — the fail-closed middleware, not just the route, is live.
+      // A tokenless request is refused — the fail-closed guard, not just the route, is live.
       const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
       expect(unauth.status).toBe(401);
       // Give the pull worker a beat to make its (failing) peer handshake, exercising fetchHttpClient.
@@ -1209,13 +1224,13 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
-      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token", // inert since Task 5; still required by loadSyncConfig
+      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
     });
 
     // The listener is up before close(): the sync source mounted and bound.
     const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-      headers: { Authorization: "Bearer boot-node-token" },
+      headers: { Authorization: `Bearer ${syncPeerToken}` },
     });
     expect(hello.status).toBe(200);
 
@@ -1258,15 +1273,15 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
-      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token", // inert since Task 5; still required by loadSyncConfig
+      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
       // Retention configured, so the sweep is started (and here rejected) and its pool is torn down.
       WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
     });
 
     // The listener is up before close(): the sync source mounted and bound.
     const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-      headers: { Authorization: "Bearer boot-node-token" },
+      headers: { Authorization: `Bearer ${syncPeerToken}` },
     });
     expect(hello.status).toBe(200);
 

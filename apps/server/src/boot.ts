@@ -801,7 +801,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // The active-active sync transport: enabled iff WAITRON_SYNC_PEERS is set (loadSyncConfig). It opens
   // its OWN pool (a sync_tailer + app_user member — the app pool cannot read sync_log), mounts the
-  // node-token-authenticated source group on the SAME app, and starts the background pull worker
+  // peer-authenticated source group on the SAME app (each caller's Bearer token resolves to its
+  // enrolled sync_peers identity), and starts the background pull worker
   // against each configured peer. The sync NODE ID is till.nodeId (one source of truth; no second
   // WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double as the worker's idle interval and backoff
   // ceiling. A host that sets no sync env leaves syncConfig undefined, so every existing boot is
@@ -824,7 +825,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         tenantId: till.tenantId,
         nodeId: till.nodeId,
         environment: config.environment,
-        nodeTokens: syncConfig.nodeTokens,
       },
       log,
     );

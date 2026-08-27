@@ -4,21 +4,24 @@ import { describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { decodeBatch } from "@waitron/sync";
+import { decodeBatch, enrolPeer } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
 
 const log: Logger = () => {};
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-// A clone of the full-manifest template (`sync` last) for the /log read as a non-superuser
-// sync_tailer member; the auth + /hello tests are hermetic and never touch the DB. `app_login` and
-// `sync_reader` (a sync_tailer member) are created cluster-wide by the package globalSetup, in place
-// of this suite's former per-file `setup` role creation.
+// A clone of the full-manifest template (`sync` last) for the peer lookups + /log read as a
+// non-superuser sync_tailer member; the pre-DB 401 cases are hermetic and never touch the DB.
+// `app_login` and `sync_reader` (a sync_tailer member) are created cluster-wide by the package
+// globalSetup, in place of this suite's former per-file `setup` role creation. Peers are enrolled as
+// `postgres.admin` (setup bypasses grants), then authenticated through a `sync_reader` pool — the
+// real deployment shape (`sync_tailer` holds SELECT + UPDATE(last_seen_at) on sync_peers).
 const postgres = useTemplateDb({ template: "manifest" });
 
-// A db whose every method throws: the auth guard must answer 401 BEFORE any DB work, so if a 401 path
-// ever touched the db this would surface it (the catalogue-api "401 before any DB work" convention).
+// A db whose every method throws: `requirePeer` must answer 401 BEFORE any DB work for a missing/blank
+// Bearer, so if a pre-DB 401 path ever touched the db this would surface it (the catalogue-api "401
+// before any DB work" convention).
 const throwingDb = {
   transaction: () => {
     throw new Error("db reached");
@@ -32,17 +35,18 @@ const deps = {
   tenantId: "t",
   nodeId: "n",
   environment: "production",
-  nodeTokens: ["s3cret"],
 };
 
-describe("mountSyncApi node-token auth + handshake", () => {
-  it("refuses a missing, blank or wrong Bearer token with 401 (fail-closed), never touching the DB", async () => {
+describe("mountSyncApi peer auth + handshake", () => {
+  it("refuses a missing, blank or non-Bearer token with 401 before any DB work", async () => {
+    // A missing/blank Bearer (or a header that is not a Bearer scheme at all) parses to an empty token,
+    // which `requirePeer` rejects BEFORE calling authenticatePeer — so the throwing db is never reached.
+    // The wrong-but-present token case moved to a DB-backed test below (it now needs a lookup).
     const app = new Hono();
-    mountSyncApi(app, deps, log);
+    mountSyncApi(app, deps, log); // deps.db is throwingDb
     const cases: Record<string, string>[] = [
-      {},
-      { Authorization: "Bearer " },
-      { Authorization: "Bearer wrong" },
+      {}, // no Authorization header
+      { Authorization: "Bearer " }, // blank Bearer
       { Authorization: "s3cret" }, // present but not a Bearer scheme
     ];
     for (const headers of cases) {
@@ -52,40 +56,55 @@ describe("mountSyncApi node-token auth + handshake", () => {
     }
   });
 
-  it("accepts ANY member of the node-token set (rotation overlap), rejects a retired token", async () => {
-    const app = new Hono();
-    mountSyncApi(app, { ...deps, nodeTokens: ["OLD", "NEW"] }, log);
-    for (const tok of ["OLD", "NEW"]) {
+  it("refuses a well-formed but unknown Bearer token with 401 (the DB-backed rejection)", async () => {
+    // A wrong-but-present token parses as a Bearer, so `requirePeer` calls authenticatePeer, which
+    // finds no matching enrolled row and folds the miss into the SAME uniform sync.node_unauthorized
+    // (oracle-free — the 401 confirms neither a peer's existence nor its revocation state). Enrol a real
+    // peer so the table is non-empty, then present a syntactically valid `${uuid}.${secret}` bearer
+    // whose selector matches no row.
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      await enrolPeer(postgres.admin, { subscriberId: "peerReal", name: "real" });
+      const app = new Hono();
+      mountSyncApi(
+        app,
+        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        log,
+      );
+      const garbage = "00000000-0000-4000-8000-000000000000.deadbeef";
       const res = await app.request("/sync-api/hello", {
-        headers: { Authorization: `Bearer ${tok}` },
-      });
-      expect(res.status).toBe(200);
-    }
-    for (const bad of ["Bearer STALE", "Bearer ", ""]) {
-      const res = await app.request("/sync-api/hello", {
-        headers: bad ? { Authorization: bad } : {},
+        headers: { Authorization: `Bearer ${garbage}` },
       });
       expect(res.status).toBe(401);
       expect((await res.json()).error.code).toBe("sync.node_unauthorized");
+    } finally {
+      await reader.close();
     }
   });
 
-  it("/sync-api/hello returns this node's id and environment (still behind the token)", async () => {
-    const app = new Hono();
-    mountSyncApi(app, deps, log);
-    const missing = await app.request("/sync-api/hello", {});
-    expect(missing.status).toBe(401); // /hello is behind the token too
-    const res = await app.request("/sync-api/hello", {
-      headers: { Authorization: "Bearer s3cret" },
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ nodeId: "n", environment: "production" });
+  it("/sync-api/hello returns this node's id and environment behind a valid peer token", async () => {
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "helloPeer", name: "hello" });
+      const app = new Hono();
+      mountSyncApi(app, { db: reader, tenantId: "t", nodeId: "n", environment: "production" }, log);
+      const missing = await app.request("/sync-api/hello", {});
+      expect(missing.status).toBe(401); // /hello is behind the peer token too
+      const res = await app.request("/sync-api/hello", {
+        headers: { Authorization: `Bearer ${peer.token}` },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ nodeId: "n", environment: "production" });
+    } finally {
+      await reader.close();
+    }
   });
 
   it("/sync-api/log streams the tenant's captured rows as NDJSON with row_image as raw jsonb text", async () => {
     // Seed a tenant + a captured products write (numeric 1.50 as a jsonb number) under app_login, then
-    // read it back through the mounted source as a sync_reader pool with a good token. The bytes on the
-    // wire are the raw jsonb text — decodeBatch recovers "1.50" verbatim (design §4b).
+    // read it back through the mounted source as a sync_reader pool authenticated by an enrolled peer's
+    // token. The bytes on the wire are the raw jsonb text — decodeBatch recovers "1.50" verbatim
+    // (design §4b).
     const tenantId = await seedTenant(postgres.admin);
     const cat = await postgres.admin.execute<{ id: string }>(
       sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Deli') returning id`,
@@ -143,15 +162,12 @@ describe("mountSyncApi node-token auth + handshake", () => {
 
     const reader = await postgres.pg.connectAs("sync_reader", "rp");
     try {
+      // An enrolled peer's token authenticates the source group (the real deployment shape).
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "logPeer", name: "log" });
+      const auth = { Authorization: `Bearer ${peer.token}` };
       const app = new Hono();
-      mountSyncApi(
-        app,
-        { db: reader, tenantId, nodeId: NODE_A, environment: "production", nodeTokens: ["s3cret"] },
-        log,
-      );
-      const res = await app.request("/sync-api/log?after=0&limit=10", {
-        headers: { Authorization: "Bearer s3cret" },
-      });
+      mountSyncApi(app, { db: reader, tenantId, nodeId: NODE_A, environment: "production" }, log);
+      const res = await app.request("/sync-api/log?after=0&limit=10", { headers: auth });
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("application/x-ndjson");
       const rows = decodeBatch(await res.text());
@@ -164,14 +180,12 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // No after/limit params → the route's own defaults (after=0, limit=500) apply and still return
       // the row; and an originId filter for NODE_A returns the products row (its origin), exercising
       // the query-parameter branches.
-      const defaults = await app.request("/sync-api/log", {
-        headers: { Authorization: "Bearer s3cret" },
-      });
+      const defaults = await app.request("/sync-api/log", { headers: auth });
       expect(defaults.status).toBe(200);
       expect(decodeBatch(await defaults.text()).some((r) => r.table === "products")).toBe(true);
 
       const filtered = await app.request(`/sync-api/log?originId=${NODE_A}&after=0&limit=10`, {
-        headers: { Authorization: "Bearer s3cret" },
+        headers: auth,
       });
       const filteredRows = decodeBatch(await filtered.text());
       expect(filteredRows.length).toBeGreaterThanOrEqual(1);
@@ -183,9 +197,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // logLimit). The two directions differ visibly (CLAUDE.md §1): every bad value still serves the
       // row with 200; without the clamp `?limit=abc` is a 500.
       for (const bad of ["abc", "0", "-5", "1.5", ""]) {
-        const clamped = await app.request(`/sync-api/log?after=0&limit=${bad}`, {
-          headers: { Authorization: "Bearer s3cret" },
-        });
+        const clamped = await app.request(`/sync-api/log?after=0&limit=${bad}`, { headers: auth });
         expect(clamped.status).toBe(200);
         expect(decodeBatch(await clamped.text()).some((r) => r.table === "products")).toBe(true);
       }
@@ -197,7 +209,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // (`BigInt("")` is 0n) — every one now serves the products row with 200 from seq 0.
       for (const bad of ["abc", "1.5", "-5", ""]) {
         const screened = await app.request(`/sync-api/log?after=${bad}&limit=10`, {
-          headers: { Authorization: "Bearer s3cret" },
+          headers: auth,
         });
         expect(screened.status).toBe(200);
         expect(decodeBatch(await screened.text()).some((r) => r.table === "products")).toBe(true);
@@ -206,7 +218,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // clamped to 0: a value past every captured seq returns 200 with the products row filtered OUT —
       // proof the screen keeps a good cursor rather than collapsing everything to the start.
       const highCursor = await app.request(`/sync-api/log?after=999999999&limit=10`, {
-        headers: { Authorization: "Bearer s3cret" },
+        headers: auth,
       });
       expect(highCursor.status).toBe(200);
       expect(decodeBatch(await highCursor.text()).some((r) => r.table === "products")).toBe(false);
@@ -218,7 +230,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       //
       // ?lane=fast returns ONLY the fast-lane tables: the payments row is present, products is NOT.
       const fast = await app.request("/sync-api/log?after=0&limit=100&lane=fast", {
-        headers: { Authorization: "Bearer s3cret" },
+        headers: auth,
       });
       expect(fast.status).toBe(200);
       const fastRows = decodeBatch(await fast.text());
@@ -228,7 +240,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // ?lane=ordered returns the ordered set: products present, payments absent. (Decode once — a
       // Response body is single-use.)
       const ordered = await app.request("/sync-api/log?after=0&limit=100&lane=ordered", {
-        headers: { Authorization: "Bearer s3cret" },
+        headers: auth,
       });
       expect(ordered.status).toBe(200);
       const orderedRows = decodeBatch(await ordered.text());
@@ -241,7 +253,7 @@ describe("mountSyncApi node-token auth + handshake", () => {
       // hides products; every clamp case shows the reverse.
       for (const bad of ["lane=weird", "lane=", ""]) {
         const clamped = await app.request(`/sync-api/log?after=0&limit=100&${bad}`, {
-          headers: { Authorization: "Bearer s3cret" },
+          headers: auth,
         });
         expect(clamped.status).toBe(200);
         const rows = decodeBatch(await clamped.text());
@@ -255,43 +267,70 @@ describe("mountSyncApi node-token auth + handshake", () => {
 });
 
 describe("POST /sync-api/cursor — subscribers report their cursor to the source (spec §3.1)", () => {
-  it("POST /sync-api/cursor is node-token fail-closed and never touches the DB on 401", async () => {
+  it("POST /sync-api/cursor is fail-closed on a missing token and never touches the DB", async () => {
     const app = new Hono();
-    mountSyncApi(app, { ...deps, nodeTokens: ["s3cret"] }, log); // deps.db is throwingDb
+    mountSyncApi(app, deps, log); // deps.db is throwingDb, no Authorization header
     const res = await app.request("/sync-api/cursor", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ subscriberId: "peerB", lane: "ordered", lastAppliedSeq: "5" }),
+      body: JSON.stringify({ lane: "ordered", lastAppliedSeq: "5" }),
     });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("sync.node_unauthorized");
   });
 
-  it("POST /sync-api/cursor records the report against origin=self (ignoring a peer-supplied origin)", async () => {
+  it("a peer can advance ONLY its own cursor — the body cannot name another subscriber (forge gap closed)", async () => {
+    const tenantId = await seedTenant(postgres.admin);
+    // Enrol two peers as admin (setup bypasses grants).
+    const x = await enrolPeer(postgres.admin, { subscriberId: "peerX", name: "X" });
+    await enrolPeer(postgres.admin, { subscriberId: "peerY", name: "Y" });
+
+    const pool = await postgres.pg.connectAs("sync_reader", "rp"); // a sync_tailer member
+    try {
+      const app = new Hono();
+      mountSyncApi(app, { db: pool, tenantId, nodeId: NODE_A, environment: "production" }, log);
+
+      // peerX presents its token but tries to move peerY's cursor via the (removed) body field.
+      const res = await app.request("/sync-api/cursor", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${x.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ subscriberId: "peerY", lane: "ordered", lastAppliedSeq: "999" }),
+      });
+      expect(res.status).toBe(200);
+
+      // peerY's cursor was NEVER created; peerX's advanced to 999.
+      const y = await postgres.admin.execute(
+        sql`select 1 from sync_cursor where subscriber_id = 'peerY' and origin_id = ${NODE_A}::uuid and lane = 'ordered'`,
+      );
+      expect(y.rows.length).toBe(0);
+      const xc = await postgres.admin.execute<{ s: string }>(
+        sql`select last_applied_seq::text as s from sync_cursor where subscriber_id = 'peerX' and origin_id = ${NODE_A}::uuid and lane = 'ordered'`,
+      );
+      expect(xc.rows[0]!.s).toBe("999");
+    } finally {
+      await postgres.admin.execute(
+        sql`delete from sync_cursor where subscriber_id in ('peerX', 'peerY')`,
+      );
+      await pool.close();
+    }
+  });
+
+  it("POST /sync-api/cursor records against origin=self and the peer's own subscriberId (ignoring a peer-supplied origin)", async () => {
     const reader = await postgres.pg.connectAs("sync_reader", "rp");
     try {
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "peerB", name: "B" });
       const app = new Hono();
       mountSyncApi(
         app,
-        {
-          db: reader,
-          tenantId: "t",
-          nodeId: NODE_A,
-          environment: "production",
-          nodeTokens: ["s3cret"],
-        },
+        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
         log,
       );
       const res = await app.request("/sync-api/cursor", {
         method: "POST",
-        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
-        // a hostile originId in the body must be IGNORED — the source stamps NODE_A
-        body: JSON.stringify({
-          subscriberId: "peerB",
-          originId: "deadbeef",
-          lane: "fast",
-          lastAppliedSeq: "7",
-        }),
+        headers: { Authorization: `Bearer ${peer.token}`, "content-type": "application/json" },
+        // a hostile originId in the body must be IGNORED — the source stamps NODE_A; the subscriberId
+        // comes from the token (peerB), never any body field.
+        body: JSON.stringify({ originId: "deadbeef", lane: "fast", lastAppliedSeq: "7" }),
       });
       expect(res.status).toBe(200);
       const row = await postgres.admin.execute<{ origin: string; lane: string; seq: string }>(
@@ -305,27 +344,39 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
     }
   });
 
-  it("a blank/missing subscriberId or a non-JSON body is a 200 no-op that never touches the DB", async () => {
-    // The machine surface never answers 400 — a report with no usable subscriberId is silently a
-    // no-op (spec §3.1). `deps.db` is throwingDb, so a 200 here also proves the no-op path returns
-    // BEFORE recordSubscriberCursor: the write is never reached. Covers the blank-subscriberId branch
-    // and the defensive `c.req.json().catch(() => ({}))` (a body that is not JSON → {}).
-    const app = new Hono();
-    mountSyncApi(app, { ...deps, nodeTokens: ["s3cret"] }, log); // deps.db is throwingDb
-    const cases: (BodyInit | undefined)[] = [
-      JSON.stringify({ lane: "ordered", lastAppliedSeq: "5" }), // subscriberId missing
-      JSON.stringify({ subscriberId: "", lastAppliedSeq: "5" }), // subscriberId blank
-      JSON.stringify({ subscriberId: 42 }), // subscriberId not a string
-      "not json at all", // body that is not JSON → catch → {}
-      undefined, // empty body → catch → {}
-    ];
-    for (const body of cases) {
-      const res = await app.request("/sync-api/cursor", {
-        method: "POST",
-        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
-        ...(body === undefined ? {} : { body }),
-      });
-      expect(res.status).toBe(200); // no-op, never a 400; throwingDb never reached
+  it("a non-JSON or empty body still records the peer's cursor at lane=ordered, seq=0 (the defensive parse)", async () => {
+    // The body no longer carries subscriberId (it is derived from the authenticated token), so there is
+    // no blank-subscriberId no-op branch any more. What remains to cover is the defensive
+    // `c.req.json().catch(() => ({}))`: a non-JSON or empty body yields {}, so lane clamps to ordered
+    // and seq screens to 0, and the cursor IS recorded under the authenticated peer.
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "peerD", name: "D" });
+      const app = new Hono();
+      mountSyncApi(
+        app,
+        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        log,
+      );
+      const cases: (BodyInit | undefined)[] = [
+        "not json at all", // body that is not JSON → catch → {}
+        undefined, // empty body → catch → {}
+      ];
+      for (const body of cases) {
+        const res = await app.request("/sync-api/cursor", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${peer.token}`, "content-type": "application/json" },
+          ...(body === undefined ? {} : { body }),
+        });
+        expect(res.status).toBe(200);
+      }
+      const row = await postgres.admin.execute<{ lane: string; seq: string }>(
+        sql`select lane, last_applied_seq::text as seq from sync_cursor where subscriber_id = 'peerD'`,
+      );
+      expect(row.rows[0]).toMatchObject({ lane: "ordered", seq: "0" }); // clamped to defaults
+    } finally {
+      await postgres.admin.execute(sql`delete from sync_cursor where subscriber_id = 'peerD'`);
+      await reader.close();
     }
   });
 
@@ -335,27 +386,21 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
     // lane → "ordered", seq → 0. Same no-400 posture the /log route takes for its query params.
     const reader = await postgres.pg.connectAs("sync_reader", "rp");
     try {
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "peerC", name: "C" });
       const app = new Hono();
       mountSyncApi(
         app,
-        {
-          db: reader,
-          tenantId: "t",
-          nodeId: NODE_A,
-          environment: "production",
-          nodeTokens: ["s3cret"],
-        },
+        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
         log,
       );
       const res = await app.request("/sync-api/cursor", {
         method: "POST",
-        headers: { Authorization: "Bearer s3cret", "content-type": "application/json" },
-        body: JSON.stringify({ subscriberId: "peerC", lane: 123, lastAppliedSeq: 456 }),
+        headers: { Authorization: `Bearer ${peer.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ lane: 123, lastAppliedSeq: 456 }),
       });
       expect(res.status).toBe(200);
       const row = await postgres.admin.execute<{ lane: string; seq: string }>(
-        sql`select lane, last_applied_seq::text as seq
-            from sync_cursor where subscriber_id = 'peerC'`,
+        sql`select lane, last_applied_seq::text as seq from sync_cursor where subscriber_id = 'peerC'`,
       );
       expect(row.rows[0]).toMatchObject({ lane: "ordered", seq: "0" }); // both clamped to their defaults
     } finally {
