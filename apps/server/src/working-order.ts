@@ -552,6 +552,10 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
  * catalogue reads (the venue default once, then all lines' product/category routes in one batched
  * `inArray`) and the insert all run on the CALLER's transaction under its tenant/app_user scope. An
  * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
+ *
+ * SIDE EFFECT (KDS-4 print-on-fire, §3b): after the insert, the newly-fired items (the insert's
+ * `.returning()` filtered to `firedAt != null`) are handed to `enqueueKitchenTickets`, which INSERTs
+ * kitchen print jobs into the outbox on this same tx — never blocking the fire (see `kitchen-print.ts`).
  */
 export async function fireLines(
   tx: Transaction,
@@ -751,6 +755,10 @@ export async function fireLines(
  * registro or huella. The `requireSession` gate (a waiter or kitchen operator) lives at the route
  * (Task 5), not here — this runs on the CALLER's transaction under its tenant/app_user scope, RLS
  * confining the update to the tenant.
+ *
+ * SIDE EFFECT (KDS-4 print-on-fire, §3b): the `IS NULL` UPDATE's `.returning()` is exactly this round's
+ * newly-fired items, which are handed to `enqueueKitchenTickets` to INSERT kitchen print jobs into the
+ * outbox on this same tx — never blocking the fire (see `kitchen-print.ts`).
  */
 export async function fireCourse(
   tx: Transaction,

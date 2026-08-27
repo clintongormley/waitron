@@ -20,7 +20,11 @@
 //      real-Postgres test in `kitchen-print.concurrency.test.ts`.
 // So for any single-actor / serial input `enqueuePrintJob` never throws (pre-filter alone), and the
 // FOR SHARE lock extends that to the concurrent-deactivation race — the admin config change waits
-// briefly; the sale never fails.
+// briefly; the sale never fails. The lock is symmetric, so in the reverse ordering — an admin
+// `updatePrinter`/`deactivatePrinter` UPDATE already holding the row when the fire's FOR SHARE runs —
+// the FIRE waits instead, bounded by that single-statement admin tx (`gated`, commits immediately). That
+// is a bounded wait that COMPLETES the sale, never an abort: §5 forbids a sale FAILING, not a sub-ms
+// lock wait on printer config.
 //
 // This file THROWS no domain code of its own (the only throw on the path, `enqueuePrintJob`'s
 // `printer.not_found`, is made unreachable by those two guards), so it needs no `import "./errors.js"`.
@@ -59,15 +63,19 @@ export interface FiredItem {
  * (`working_order_lines.descriptions`), which the `check_locales` trigger holds to EXACTLY the venue's
  * configured invoice locales. The till's own `locale` is normally one of them, so `descriptions[locale]`
  * hits directly. The fallback covers a till whose UI locale is NOT among the venue's invoice locales:
- * the printed ticket keeps the venue language (the first configured description) rather than a blank
+ * the printed ticket keeps a venue language (SOME configured description — every key is a venue invoice
+ * locale per `check_locales`, so any is a venue language; NOT guaranteed to be the venue's PRIMARY
+ * locale, since `descriptions` key order is not held to `invoice_locales` order) rather than a blank
  * line, per the printed-receipt-keeps-venue-language rule.
  */
 function ticketName(descriptions: Record<string, string>, locale: string): string {
   const localised = descriptions[locale];
   if (localised !== undefined) return localised;
-  // Fallback: the first configured venue-language description. `descriptions` is NOT NULL and
-  // `check_locales` requires ≥1 configured locale, so `Object.values(...)[0]` is always a string here —
-  // the `!` asserts that (compile-time only, so no runtime branch is left uncovered).
+  // Fallback: some venue-language description (every key is a venue invoice locale per `check_locales`;
+  // `Object.values(...)[0]` is the first STORED key, not provably `invoice_locales[0]` — any is acceptable
+  // on this rare mis-config path). `descriptions` is NOT NULL and `check_locales` requires ≥1 configured
+  // locale, so `Object.values(...)[0]` is always a string here — the `!` asserts that (compile-time only,
+  // so no runtime branch is left uncovered).
   return Object.values(descriptions)[0]!;
 }
 
