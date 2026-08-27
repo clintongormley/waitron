@@ -454,6 +454,12 @@ here is the cross-cutting or genuinely-decision-bearing work.
 - **The Impresoras editor leaves agent/transport re-binding read-only** — the management API already
   accepts a re-bind (PATCH `agentId`/`transport`/connection fields); wire the inline dashboard edit.
 
+**Localisation (per-user language preference landed #140 — `persons.locale`, live in-app language switch, venue default derived `province → country → English`; the printed/fiscal receipt keeps the *venue* language, structurally separate from the UI locale):**
+
+- **Province → language derivation is the deferred layer.** `PROVINCE_DEFAULT_LOCALE` is empty today, so every province falls through to country — a Cataluña venue shows **Spanish, not Catalan**. It lands with the **first regional catalogue** (add the catalogue + populate the map); `locations.province` is the hook. Same drop-in path adds any third language (a catalogue + one supported-list entry); only `en`/`es` exist today.
+- **The venue default is derive-only, not admin-editable.** The chain is `WAITRON_TILL_LOCALE` override → derivation; there is no stored, editable venue locale yet (a natural dashboard-config step). Decide when a venue needs to override the derived default without an env var.
+- **Per-device "remember this login-screen language" deliberately not built** — the pre-auth chooser is transient; a possible later nicety.
+
 **Product decisions (defensible before production; decide before it):**
 
 - **The orphan drift gate holds a customer's money pending a human, unbounded** (nothing re-sweeps a
