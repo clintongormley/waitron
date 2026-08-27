@@ -120,8 +120,8 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | **suppliers/POs/goods-in/stock/3-way reconcile/reorder (#6)**; AI forecast deferred |
 
-**Cross-cutting infra:** sync/replication (outbox + transport + payments fast lane + node-token
-rotation/retention — see *Open threads → Sync*) · SIF topology (`#33`, `node_id` re-key — see *SIF
+**Cross-cutting infra:** sync/replication (outbox + transport + payments fast lane + per-peer
+`sync_peers` auth + retention — see *Open threads → Sync*) · SIF topology (`#33`, `node_id` re-key — see *SIF
 topology follow-ups*) · device identity-1 · printing subsystem (`@waitron/printing` —
 agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras dashboard) · CI/test infra (scoped CI,
 pre-push hook, shared-container test rollout, job-sharding).
@@ -135,18 +135,32 @@ pre-push hook, shared-container test rollout, job-sharding).
 Mechanism is decided and slices 1–3 + ops have landed: cross-replication is **application-level** (an
 outbox — `sync_log` + a generic capture trigger, apply as the app role under `withTenant`), **not**
 native Postgres logical replication (which refuses to write an RLS table under a non-BYPASSRLS role).
-Built: commercial-lane outbox, symmetric HTTP-pull transport + node-token auth, payments fast lane,
-node-token rotation + retention sweep + explicit `waitron-sync-evict`. Design +
+Built: commercial-lane outbox, symmetric HTTP-pull transport + **per-peer `sync_peers` auth (#144)**,
+payments fast lane, retention sweep + explicit `waitron-sync-evict`. Design +
 findings: [app-level-sync](superpowers/specs/2026-08-02-app-level-sync-design.md),
 [force-RLS prototype](superpowers/specs/2026-08-02-replication-force-rls-prototype-findings.md),
 [container gates](superpowers/specs/2026-08-06-sync-container-gates-findings.md).
 
+The cloud-mirror is three sub-projects (A identity/auth · B outbound tunnel · C cloud read-mirror),
+to be proven against a local stand-in cloud. Spec + plan:
+[cloud-mirror-peer-identity](superpowers/specs/2026-08-27-sync-cloud-mirror-peer-identity-design.md).
+
 **Remaining, each its own design pass:**
 
-- **Cloud-mirror peer.** A third *distrusting* subscriber. `POST /sync-api/cursor` takes
-  `subscriberId` from the body, so under the shared node token any holder can advance any
-  subscriber's cursor — fine for two mutually-trusting nodes (the token *is* the trust boundary), but
-  the cloud-mirror needs **per-peer identity** to close it.
+- **Cloud-mirror peer — sub-project A (per-peer identity & auth) LANDED (#144).** Closed the
+  `POST /sync-api/cursor` forge gap (under the shared node token any holder could advance any
+  subscriber's cursor → silent retention data loss): a DB-backed `sync_peers` registry gives each peer
+  its own scrypt bearer token, the source derives `subscriberId` from the token (body field dropped),
+  and the shared `WAITRON_SYNC_NODE_TOKEN` is fully retired. `waitron-sync-peer` CLI for enrol/revoke/list.
+  Deferred minor: `enrolPeer` doesn't validate non-empty `subscriberId`/`name` at the core (only the
+  CLI guards; no reachable gap today).
+- **B — outbound tunnel** (deferred; builds on A). Invert the transport so the box always dials out and
+  the cloud's pull rides back down the box-initiated tunnel. Gated on standing up Waitron-cloud infra;
+  provable first against a local relay stand-in.
+- **C — cloud read-mirror** (deferred; builds on A+B). A "mirror mode" of `apps/server` that pulls +
+  applies into its own Postgres and serves the dashboard read-only. **Owns the `dining_tables`
+  FK-closure enrolment (the `fkRank` hard-gate)** — the first slice to activate a real ordered-lane
+  subscriber. Provable against a second local Postgres + a reader on another port.
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
@@ -247,7 +261,7 @@ question (below).
   trading path byte-equivalent; `dev:onboard`); **slice 2 split 2a/2b/2c — 2a LANDED #141** (first
   setup boot mints a self-signed CA + `waitron.local`/IP leaf into a persisted state dir
   `WAITRON_STATE_DIR`, serves the setup surface over HTTPS from it, and generates+persists the vault
-  master key + sync node token in `secrets.env` — idempotent, atomic writes, `0600`; operator
+  master key in `secrets.env` (the sync node-token mint was retired by #144) — idempotent, atomic writes, `0600`; operator
   `WAITRON_TLS_*` overrides the served cert but the box still generates its secrets; decided:
   persist-config-then-restart transition, `apps/setup` Vite+Lit wizard); **2b LANDED #142** — the
   `POST /setup-api/provision` endpoint: an in-process orchestrator (`provisionVenue` = `stampDeployment`
@@ -502,11 +516,6 @@ here is the cross-cutting or genuinely-decision-bearing work.
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make
   the job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed
   cause — if it recurs, per-test timeout + Playwright trace).
-- **`packages/shared` lacks `singleFork`, so the pre-push hook's whole-workspace `pnpm -r
-  test:coverage` intermittently under-reports its branch coverage** (the v8 fork-merge under-count, same
-  class as the `payments` precedent) — a spurious pre-push failure (`@waitron/shared` 80% branches)
-  that a retry clears; CI's *sharded* runs are unaffected and the package is 100% in isolation. Hit
-  during the #138 land. Add `singleFork` to `packages/shared/vitest.config.ts`.
 
 **Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
 
