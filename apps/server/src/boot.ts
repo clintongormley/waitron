@@ -519,9 +519,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           // A setup box runs no background work, so there is nothing to abort or await.
           stopWork: () => Promise.resolve(),
           // The app pool AND the provisioning owner pool — no sync/retention pools exist here.
+          // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
+          // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
+          // path (which `close()` runs even after a `server.close()` rejection).
           closePools: async () => {
-            await db.close();
-            await ownerDb.close();
+            await Promise.allSettled([db.close(), ownerDb.close()]);
           },
         });
       } catch (error) {

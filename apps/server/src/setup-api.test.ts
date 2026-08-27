@@ -1,10 +1,16 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { AppError, nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import {
+  AppError,
+  hasCode,
+  isAppError,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { ProvisionRequest } from "./provision.js";
-import type { AeatCert } from "./aeat-credential.js";
+import { validateAeatCert, type AeatCert } from "./aeat-credential.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 
@@ -280,6 +286,35 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(calls).toEqual(["provision", "sealAeat", "persistTrading", "requestRestart"]);
   });
 
+  // CRITICAL fiscal guard: a malformed AEAT cert must be refused BEFORE `provision` runs. Without the
+  // upfront `validateAeatCert` in `parseCert`, a live ES-common provision with `certKind:"bogus"` or a
+  // non-base64 `pfxBase64` would run `provision` first — stamping production and minting the SIF/hash
+  // chain (UNREPAIRABLE, CLAUDE.md §5) — and only THEN 400 inside `sealAeatCredential`, wedging the box
+  // permanently (a corrected retry then hits `setup.already_provisioned` 409 forever). The 0 provision
+  // calls below are the proof that NOTHING was stamped or minted. Deletion-proof: remove the
+  // `validateAeatCert(parsed)` line in `setup-api.ts`'s `parseCert` and these go RED — the bogus cert
+  // reaches `provision`.
+  it.each<[string, Record<string, unknown>]>([
+    ["a certKind outside {sello, representante}", { ...CERT, certKind: "bogus" }],
+    ["a non-base64 pfxBase64", { ...CERT, pfxBase64: "not valid base64!!!" }],
+  ])(
+    "refuses a live provision whose aeatCert has %s (400) WITHOUT stamping or minting",
+    async (_label, aeatCert) => {
+      const app = new Hono();
+      const { deps, provision, requestRestart } = makeDeps();
+      mountSetup(app, deps, noopLog);
+
+      const res = await postProvision(app, { ...liveBody(), aeatCert });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("setup.request_invalid");
+      // NOTHING stamped or minted — the malformed cert was rejected before `provision` ran.
+      expect(provision).not.toHaveBeenCalled();
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects an unparseable body with 400 setup.request_invalid, without provisioning", async () => {
     const app = new Hono();
     const { deps, provision } = makeDeps();
@@ -426,6 +461,28 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(requestRestart).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the latch SET after a SUCCESSFUL provision — a second POST is 409 while the box restarts", async () => {
+    // The success arm of the latch: unlike a FAILED provision (which resets it above), a successful one
+    // LEAVES the latch set — the box is on its way down to restart into trading mode, so a second POST
+    // arriving in that window must not start a second, unrecoverable chain. It is refused 409
+    // `setup.already_provisioning` and never reaches `provision`.
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const first = await postProvision(app, demoBody());
+    expect(first.status).toBe(200);
+    await tick(); // let the deferred restart fire; the latch stays set
+
+    const second = await postProvision(app, demoBody());
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({
+      error: { code: "setup.already_provisioning", params: {} },
+    });
+    // Only the first POST reached provision — the latch refused the second synchronously.
+    expect(provision).toHaveBeenCalledTimes(1);
+  });
+
   it("maps a thrown setup.already_provisioned to 409", async () => {
     const app = new Hono();
     const provision = vi.fn(async () => {
@@ -467,5 +524,42 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  });
+});
+
+// The upfront cert validator `parseCert` calls before `provision`. Tested directly (not only through
+// the endpoint) because `parseCert`'s own `asString` already rejects an empty passphrase, so that
+// branch is defense-in-depth unreachable from the endpoint — a direct test is what proves it fires.
+describe("validateAeatCert — full cert-value validation before provisioning", () => {
+  function goodCert(overrides: Partial<AeatCert> = {}): AeatCert {
+    return { ...CERT, ...overrides };
+  }
+
+  it("accepts a well-formed cert (sello + base64 pfx + non-empty passphrase)", () => {
+    expect(() => validateAeatCert(goodCert())).not.toThrow();
+    expect(() => validateAeatCert(goodCert({ certKind: "representante" }))).not.toThrow();
+  });
+
+  it.each<[string, AeatCert, string]>([
+    [
+      "a certKind outside the set",
+      goodCert({ certKind: "bogus" as AeatCert["certKind"] }),
+      "certKind",
+    ],
+    ["an empty pfxBase64", goodCert({ pfxBase64: "" }), "pfxBase64"],
+    ["a non-base64 pfxBase64", goodCert({ pfxBase64: "not base64!" }), "pfxBase64"],
+    ["a malformed base64 length", goodCert({ pfxBase64: "QQ" }), "pfxBase64"],
+    ["an empty passphrase", goodCert({ passphrase: "" }), "passphrase"],
+  ])("rejects %s with setup.request_invalid naming the field", (_label, cert, field) => {
+    let error: unknown;
+    try {
+      validateAeatCert(cert);
+    } catch (e) {
+      error = e;
+    }
+    expect(isAppError(error)).toBe(true);
+    expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
+      field,
+    );
   });
 });

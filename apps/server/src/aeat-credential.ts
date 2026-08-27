@@ -37,6 +37,32 @@ function isBase64(value: string): boolean {
 }
 
 /**
+ * Validate an AEAT cert's SHAPE fully — `certKind ∈ {sello, representante}`, a non-empty base64
+ * `pfxBase64`, and a non-empty `passphrase` — throwing `setup.request_invalid` (naming the offending
+ * field, NEVER its value) on the first fault. It reuses the exact `CERT_KINDS` + base64-shape checks
+ * `sealAeatCredential` makes below (which are KEPT there as defense-in-depth), lifted into a standalone
+ * predicate so the provision endpoint can reject a malformed cert BEFORE `provisionVenue` stamps the
+ * environment and mints the SIF/hash chain. That order matters: the mint is an UNREPAIRABLE fiscal
+ * write (CLAUDE.md §5), so a one-char typo in `certKind` or a non-base64 `pfxBase64` must 400 with
+ * nothing stamped or minted — not 400 AFTER the box has been permanently wedged.
+ */
+export function validateAeatCert(cert: {
+  certKind: string;
+  pfxBase64: string;
+  passphrase: string;
+}): void {
+  if (!CERT_KINDS.includes(cert.certKind as CertKind)) {
+    throw new AppError("setup.request_invalid", { field: "certKind" });
+  }
+  if (!isBase64(cert.pfxBase64)) {
+    throw new AppError("setup.request_invalid", { field: "pfxBase64" });
+  }
+  if (cert.passphrase.length === 0) {
+    throw new AppError("setup.request_invalid", { field: "passphrase" });
+  }
+}
+
+/**
  * Seal a LIVE ES-common venue's AEAT certificate into the `fiscal.aeat` vault purpose for `tenantId`.
  *
  * `certKind` and `pfxBase64` are validated HERE, before the write, and rejected with

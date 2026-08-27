@@ -5,6 +5,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
+import { validateAeatCert } from "./aeat-credential.js";
 import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -161,16 +162,20 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   };
 }
 
-/** Validate the OPTIONAL AEAT cert's SHAPE (present fields, right types). The `certKind` VALUE
- * (`sello`|`representante`) and the base64-ness of `pfxBase64` are validated by `sealAeatCredential`,
- * which throws the same `setup.request_invalid`; this only asserts the three fields are strings. */
+/** Validate the OPTIONAL AEAT cert. First the SHAPE (present fields, right types), then the VALUES
+ * via `validateAeatCert` — the `certKind` (`sello`|`representante`) and the base64-ness of `pfxBase64`.
+ * That value check happens HERE, before `provision`, so a malformed cert is a `400 setup.request_invalid`
+ * with NOTHING stamped or minted; `sealAeatCredential` runs the same checks again as defense-in-depth,
+ * but by the time it would fire the SIF/hash chain is already minted and unrepairable (CLAUDE.md §5). */
 function parseCert(certRaw: unknown): AeatCert {
   const cert = asObject(certRaw, "aeatCert");
-  return {
+  const parsed: AeatCert = {
     pfxBase64: asString(cert.pfxBase64, "pfxBase64"),
     passphrase: asString(cert.passphrase, "passphrase"),
     certKind: asString(cert.certKind, "certKind") as CertKind,
   };
+  validateAeatCert(parsed);
+  return parsed;
 }
 
 /** A direct structured error response mirroring the error boundary's `{ error: { code, params } }`
