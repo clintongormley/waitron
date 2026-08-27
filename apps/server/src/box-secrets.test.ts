@@ -84,11 +84,12 @@ describe("ensureBoxSecrets", () => {
 
   it("is idempotent: a second call reuses the exact same bytes and regenerates nothing", async () => {
     const d = await newDir();
-    // The default deps are deterministic (shared keypair, fixed clock, fixed secrets), so a
-    // REGENERATED cert/secrets file would be byte-identical anyway — byte-equality alone would pass
-    // even with the presence guards removed and so would not test them. Spy on every factory so the
-    // real tell of "never regenerates" is checkable: with the guards in place each is invoked once
-    // across two boots; drop a guard and the second boot bumps its count to 2 and this fails.
+    // secrets.env is regenerated from FIXED injected factories (keyring + token), so a re-write would
+    // be byte-identical — byte-equality on it alone would pass even with its presence guard removed,
+    // and so would not test that guard. (The cert's serials are random per mint, so a re-minted cert
+    // WOULD differ; we don't lean on that.) Spy on every factory instead — the uniform tell of "never
+    // regenerates": with the guards in place each is invoked once across two boots; drop a guard and
+    // the second boot bumps its count to 2 and this fails.
     const base = deps(d);
     const spied = {
       ...base,

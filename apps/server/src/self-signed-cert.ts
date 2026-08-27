@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import forge from "node-forge";
 import "./errors.js";
@@ -58,6 +59,18 @@ const VALIDITY_DAYS = 3650;
 /** The CA's subject CN, reused as the leaf's issuer CN so `ca.verify(leaf)` chains. */
 const CA_COMMON_NAME = "waitron-setup-ca";
 
+/**
+ * A fresh, positive X.509 serial as a hex string. The CA key is kept (see `caKeyPem` above) so the
+ * same CA can re-sign a rotated leaf in a later slice — a hardcoded leaf serial would collide with
+ * itself the second time that CA signs, which violates X.509 serial uniqueness per issuer. Random
+ * (rather than counter-based) sidesteps needing any persisted state to avoid that collision.
+ */
+function randomSerial(): string {
+  const bytes = randomBytes(16);
+  bytes[0] &= 0x7f; // clear the high bit so the ASN.1 INTEGER is positive (node-forge would otherwise treat it as negative)
+  return bytes.toString("hex");
+}
+
 function certificate(
   subjectCn: string,
   subjectKeys: forge.pki.rsa.KeyPair,
@@ -83,7 +96,7 @@ function certificate(
  * HTTPS. The leaf carries every `hostnames` entry as a `dNSName` SAN and every `ipAddresses` entry
  * as an `iPAddress` SAN, its CN is `hostnames[0]`, and it is `serverAuth`-only; the CA is a
  * `cA:true` signer. Both are valid from a day before `now` (clock-skew slack) to `VALIDITY_DAYS`
- * after it, and carry distinct serials (CA `01`, leaf `02`).
+ * after it, and carry distinct, cryptographically random serials (see `randomSerial` below).
  *
  * Throws `setup.cert_hostnames_empty` when `hostnames` is empty — a leaf with no `dNSName`
  * authenticates no request, so it is refused BEFORE any keypair is generated (the guard costs no
@@ -109,7 +122,7 @@ export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial 
     CA_COMMON_NAME,
     caKeys,
     { cn: CA_COMMON_NAME, key: caKeys.privateKey },
-    "01",
+    randomSerial(),
     validity,
     [
       { name: "basicConstraints", cA: true },
@@ -128,7 +141,7 @@ export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial 
     hostnames[0],
     serverKeys,
     { cn: CA_COMMON_NAME, key: caKeys.privateKey },
-    "02",
+    randomSerial(),
     validity,
     [
       { name: "basicConstraints", cA: false },

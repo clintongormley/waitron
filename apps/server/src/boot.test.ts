@@ -558,10 +558,20 @@ describe("startServer, against a real container as the deployment role", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
     // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
-    // close() resolves without throwing, and the listener is genuinely gone (connection refused now,
-    // regardless of TLS, so a bare fetch suffices to observe it).
+    // close() resolves without throwing, and the listener is genuinely gone. This probe TRUSTS the
+    // box's CA (a fresh dispatcher — the one built above was already closed in the `finally`), so a
+    // still-listening server would SUCCEED here (e.g. a 503 from /health) rather than rejecting on a
+    // TLS-verification failure regardless of whether the listener stopped. `rejects.toThrow()`
+    // therefore passes ONLY when the connection is genuinely refused, i.e. the listener is truly gone
+    // — a bare (CA-blind) fetch against a self-signed HTTPS endpoint would reject either way and prove
+    // nothing about close().
     await expect(server.close()).resolves.toBeUndefined();
-    await expect(fetch(`https://127.0.0.1:${port}/health`)).rejects.toThrow();
+    const afterClose = httpsVia(ca);
+    try {
+      await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
+    } finally {
+      await afterClose.close();
+    }
   }, 60_000);
 
   it("setup mode serves an operator-supplied WAITRON_TLS_* cert while STILL generating its own box secrets", async () => {
