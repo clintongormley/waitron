@@ -14,7 +14,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 // INSERT-only grant, the sync_tailer read path and echo suppression under a genuine non-superuser
 // role — PGlite connects as a superuser and bypasses all of it, so it is a false pass here
 // (CLAUDE.md §4). The whole migration manifest runs (now including `sync` last), so the container
-// carries sync_log + sync_capture + the 14 capture triggers over the enrolled commercial tables.
+// carries sync_log + sync_capture + the 17 capture triggers over the enrolled commercial tables.
 // The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
 // RLS actually applies to it — is now created once in src/testing/global-setup.ts and shared across
 // the gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
@@ -332,6 +332,54 @@ describe("the generic capture trigger over the commercial lane", () => {
       expect(underB.rows[0]).toMatchObject({ av: "0", bv: "1" }); // control: B visible, A hidden
     } finally {
       await tailer.close();
+    }
+  });
+
+  it("the C1 table-service triggers capture an app-role insert (dining_tables/floor_zones/table_service_statuses)", async () => {
+    const base = await seedBase(postgres.admin);
+    const app = await postgres.pg.connectAs("app_login", "app_pw");
+    try {
+      // floor_zone + status as the app role → each capture fires.
+      const [zone, status, table] = [
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+      ];
+      await withTenantNode(app, base.tenantId, NODE_A, async (tx) => {
+        await tx.execute(
+          sql`insert into floor_zones (id, tenant_id, location_id, name)
+              values (${zone}, ${base.tenantId}, ${base.locationId}, 'Comedor')`,
+        );
+        await tx.execute(
+          sql`insert into table_service_statuses (id, tenant_id, label, color)
+              values (${status}, ${base.tenantId}, 'Needs cleaning', '#ef4444')`,
+        );
+        await tx.execute(
+          sql`insert into dining_tables (id, tenant_id, location_id, label, zone_id, status_id)
+              values (${table}, ${base.tenantId}, ${base.locationId}, 'T1', ${zone}, ${status})`,
+        );
+      });
+      const captured = await postgres.admin.execute<{
+        table_name: string;
+        op: string;
+        origin_id: string;
+      }>(
+        sql`select table_name, op, origin_id from sync_log
+            where tenant_id = ${base.tenantId}
+              and table_name in ('floor_zones','table_service_statuses','dining_tables')
+            order by seq`,
+      );
+      expect(captured.rows.map((r) => r.table_name)).toEqual([
+        "floor_zones",
+        "table_service_statuses",
+        "dining_tables",
+      ]);
+      for (const r of captured.rows) {
+        expect(r.op).toBe("insert");
+        expect(r.origin_id).toBe(NODE_A); // the app.node_id GUC, verbatim
+      }
+    } finally {
+      await app.close();
     }
   });
 });
