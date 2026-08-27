@@ -616,14 +616,12 @@ describe("loadSyncConfig", () => {
     expect(loadSyncConfig({})).toBeUndefined();
   });
 
-  it("parses peers and requires a non-blank token and database url, defaulting the fast tick to 1000ms", () => {
+  it("parses peers and requires a non-blank database url, defaulting the fast tick to 1000ms", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "https://peer/", token: "tok2" }]),
-      WAITRON_SYNC_NODE_TOKEN: "mine",
       WAITRON_SYNC_DATABASE_URL: "postgres://sync@host/db",
     };
     expect(loadSyncConfig(env)).toEqual({
-      nodeTokens: ["mine"],
       databaseUrl: "postgres://sync@host/db",
       peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
       fastMinIdleMs: 1000,
@@ -634,35 +632,9 @@ describe("loadSyncConfig", () => {
     });
   });
 
-  it("reads WAITRON_SYNC_NODE_TOKEN as a comma-separated accepted-token SET", () => {
-    const base = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD,NEW" })!.nodeTokens).toEqual([
-      "OLD",
-      "NEW",
-    ]);
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "solo" })!.nodeTokens).toEqual([
-      "solo",
-    ]);
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a, b " })!.nodeTokens).toEqual([
-      "a",
-      "b",
-    ]);
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "a,,b" })).toThrow(
-      /config_invalid|blank_token_in_set/,
-    );
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_NODE_TOKEN: "OLD," })).toThrow(
-      /config_invalid|blank_token_in_set/,
-    );
-    expect(() => loadSyncConfig({ ...base })).toThrow(/config_missing|WAITRON_SYNC_NODE_TOKEN/);
-  });
-
   it("reads WAITRON_SYNC_FAST_TICK_MS as the fast lane's idle interval", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
       WAITRON_SYNC_FAST_TICK_MS: "500",
     };
@@ -672,7 +644,6 @@ describe("loadSyncConfig", () => {
   it("refuses a non-positive-integer WAITRON_SYNC_FAST_TICK_MS", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
       WAITRON_SYNC_FAST_TICK_MS: "0",
     };
@@ -682,7 +653,6 @@ describe("loadSyncConfig", () => {
   it("reads WAITRON_SYNC_RETENTION_TICK_MS as the retention sweep's idle interval, defaulting to 60000", () => {
     const base = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
     };
     // Default when unset.
@@ -696,7 +666,6 @@ describe("loadSyncConfig", () => {
   it("refuses a non-positive-integer WAITRON_SYNC_RETENTION_TICK_MS", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
       WAITRON_SYNC_RETENTION_TICK_MS: "0",
     };
@@ -706,7 +675,6 @@ describe("loadSyncConfig", () => {
   it("sets retentionDatabaseUrl only when WAITRON_SYNC_RETENTION_DATABASE_URL is set (absent → field omitted)", () => {
     const base = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
     };
     // Set → field carries the URL.
@@ -728,7 +696,6 @@ describe("loadSyncConfig", () => {
   it("sets lagAlarmRows only when WAITRON_SYNC_LAG_ALARM_ROWS is a positive int (absent → field omitted; non-positive → throws)", () => {
     const base = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
     };
     // Set to a positive int → field carries the threshold.
@@ -752,19 +719,9 @@ describe("loadSyncConfig", () => {
     );
   });
 
-  it("refuses a blank node token (VAR= is unset, must fail closed, never mean 'no auth')", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "",
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    expect(() => loadSyncConfig(env)).toThrow(/config_missing|WAITRON_SYNC_NODE_TOKEN/);
-  });
-
   it("refuses a blank sync database url", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "",
     };
     expect(() => loadSyncConfig(env)).toThrow(/config_missing|WAITRON_SYNC_DATABASE_URL/);
@@ -773,14 +730,13 @@ describe("loadSyncConfig", () => {
   it("refuses a peer with a blank url or token", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "", token: "t" }]),
-      WAITRON_SYNC_NODE_TOKEN: "m",
       WAITRON_SYNC_DATABASE_URL: "x",
     };
     expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_PEERS/);
   });
 
   it("refuses a peers value that is valid JSON but not a non-empty array", () => {
-    const base = { WAITRON_SYNC_NODE_TOKEN: "m", WAITRON_SYNC_DATABASE_URL: "x" };
+    const base = { WAITRON_SYNC_DATABASE_URL: "x" };
     expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_PEERS: "[]" })).toThrow(
       /config_invalid|WAITRON_SYNC_PEERS/,
     );

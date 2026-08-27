@@ -449,7 +449,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     //
     // `ensureBoxSecrets` runs on EVERY setup boot, unconditionally — its two halves are independently
     // presence-gated inside (mint the self-signed cert quartet only when absent; generate
-    // `secrets.env`'s vault key + node token only when absent), so it is cheap and idempotent, and a
+    // `secrets.env`'s vault key only when absent), so it is cheap and idempotent, and a
     // reused box keeps both byte-for-byte. It runs regardless of `config.tls` because the box's OWN
     // secrets (the vault key above all — this branch loads it below to seal the first provisioned
     // credential) must exist whichever front-door cert is served; gating the whole call on

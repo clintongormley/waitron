@@ -1,5 +1,4 @@
 import { mkdir, access } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
@@ -41,7 +40,6 @@ export interface EnsureBoxSecretsDeps {
   // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
   makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
-  makeToken?: () => string; // default randomBytes(32).toString("hex")
   listIpv4?: () => string[]; // default: non-internal IPv4s from os
 }
 
@@ -72,7 +70,7 @@ const defaultListIpv4 = (): string[] =>
 /**
  * Materialise the box's self-signed cert + secrets ONCE under `stateDir`, then reuse them on every
  * later boot. Presence is the whole idempotency contract: each write is guarded on the target being
- * absent, so a second call returns byte-identical files and never regenerates a key or a token —
+ * absent, so a second call returns byte-identical files and never regenerates a key —
  * the tell a POS depends on, since a fresh cert on every boot would break every already-trusting
  * setup client and a fresh key ring would strand every sealed credential.
  *
@@ -98,7 +96,6 @@ const defaultListIpv4 = (): string[] =>
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
   const makeKeyRing = deps.makeKeyRing ?? generateKeyRing;
-  const makeToken = deps.makeToken ?? (() => randomBytes(32).toString("hex"));
   const listIpv4 = deps.listIpv4 ?? defaultListIpv4;
 
   const tlsDir = join(deps.stateDir, "tls");
@@ -137,11 +134,9 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   const secretsFile = join(deps.stateDir, "secrets.env");
   if (!(await exists(secretsFile))) {
     const ring = makeKeyRing();
-    const token = makeToken();
     const body = formatEnvFile({
       WAITRON_CREDENTIALS_KEY: ring.key,
       WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
-      WAITRON_SYNC_NODE_TOKEN: token,
     });
     // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
     // observed torn — temp-then-rename means it is either fully present or absent, never truncated.

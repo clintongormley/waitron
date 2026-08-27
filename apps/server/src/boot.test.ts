@@ -1136,10 +1136,6 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      // Still required by loadSyncConfig when sync is enabled (config.ts), but INERT since Task 5:
-      // mountSyncApi no longer reads it — the source authenticates against sync_peers. Task 6 retires
-      // both the config requirement and this env var.
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
       WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
       // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
       // are visibly different in the assertions below (spec §4d).
@@ -1224,7 +1220,6 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token", // inert since Task 5; still required by loadSyncConfig
       WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
     });
 
@@ -1273,7 +1268,6 @@ describe("startServer, against a real container as the deployment role", () => {
           token: "peer-token",
         },
       ]),
-      WAITRON_SYNC_NODE_TOKEN: "boot-node-token", // inert since Task 5; still required by loadSyncConfig
       WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
       // Retention configured, so the sweep is started (and here rejected) and its pool is torn down.
       WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
