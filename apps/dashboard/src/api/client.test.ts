@@ -1829,4 +1829,52 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(api.testPrint("nope")).rejects.toMatchObject({ code: "printer.not_found" });
   });
+
+  // ── Station↔printer mapping (KDS-4) ────────────────────────────────────────────────────────────
+  // The three verbs the printer editor's station-mapping section drives (the print-api.ts routes at
+  // /management-api/printers/:pid/stations + /management-api/stations/:sid/printers/:pid). The GET
+  // decodes the { stationId, printerId } pairs; attach/detach resolve undefined on an empty 204. The
+  // path ORDER is load-bearing — the mutation route is /stations/:sid/printers/:pid, so the method's
+  // (stationId, printerId) arguments must land in that order.
+
+  it("listPrinterStations GETs the printer's stations route and decodes the pairs", async () => {
+    const rows = [{ stationId: "s1", printerId: "p1" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPrinterStations("p1")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/stations", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("attachPrinterToStation POSTs /stations/:sid/printers/:pid and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.attachPrinterToStation("s1", "p1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1/printers/p1", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("attachPrinterToStation rejects with { code } when an end is not live (station.not_found, 404)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "station.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.attachPrinterToStation("nope", "p1")).rejects.toMatchObject({
+      code: "station.not_found",
+    });
+  });
+
+  it("detachPrinterFromStation DELETEs /stations/:sid/printers/:pid and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.detachPrinterFromStation("s1", "p1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1/printers/p1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
 });

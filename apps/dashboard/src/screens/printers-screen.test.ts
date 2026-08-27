@@ -3,7 +3,14 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
-import type { DashboardApi, PrintAgentRow, PrintJobRow, Printer } from "../api/client.js";
+import type {
+  DashboardApi,
+  PrintAgentRow,
+  PrintJobRow,
+  Printer,
+  Station,
+  StationPrinter,
+} from "../api/client.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 afterEach(cleanupWidgets);
@@ -74,6 +81,11 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
+const stations: Station[] = [
+  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  { id: "s2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
@@ -85,6 +97,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    listStations: vi.fn().mockResolvedValue(stations),
+    listPrinterStations: vi.fn().mockResolvedValue([] as StationPrinter[]),
+    attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
+    detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -118,6 +134,11 @@ function pickSelect(el: PrintersScreen, sel: string, value: string): void {
   select.value = value;
   select.dispatchEvent(new Event("change"));
 }
+
+/** Read a wt-switch's live `checked` property (set synchronously by the `.checked=` binding on commit,
+ * so it is stable after the parent's `updateComplete` without waiting on the switch's own reflection). */
+const switchChecked = (el: PrintersScreen, sel: string): boolean =>
+  (q(el, sel) as unknown as { checked: boolean }).checked;
 
 describe("printers-screen", () => {
   it("loads agents, printers and jobs on connect and renders a row for each", async () => {
@@ -679,6 +700,106 @@ describe("printers-screen", () => {
     q(el, "[data-test=test-print-p1]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("printer.not_found");
+  });
+
+  // ── Printers: station mapping (which stations a printer serves) ────────────────────────────────────
+
+  it("renders a station toggle per station, checked when this printer is attached", async () => {
+    const api = stubApi({
+      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+        printerId === "p1" ? [{ stationId: "s1", printerId: "p1" }] : [],
+      ),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    // p1 is attached to s1 only; p2 to nothing. Each station is a labelled toggle on each printer.
+    expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeTruthy();
+    expect(q(el, "[data-test=station-toggle-p1-s2]")).toBeTruthy();
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(true);
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(false);
+    expect(switchChecked(el, "[data-test=station-toggle-p2-s1]")).toBe(false);
+    expect(switchChecked(el, "[data-test=station-toggle-p2-s2]")).toBe(false);
+    // The toggle labels are the station names.
+    expect(q(el, "[data-test=station-toggle-p1-s1]")!.getAttribute("label")).toBe("Cocina");
+    // Each printer read its own mapping on load.
+    expect(api.listPrinterStations).toHaveBeenCalledWith("p1");
+    expect(api.listPrinterStations).toHaveBeenCalledWith("p2");
+  });
+
+  it("attaches a station when its toggle is switched on, and reflects the change after reload", async () => {
+    const attached = new Set<string>();
+    const api = stubApi({
+      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+        printerId === "p1"
+          ? [...attached].map((stationId) => ({ stationId, printerId: "p1" }))
+          : [],
+      ),
+      attachPrinterToStation: vi.fn(async (stationId: string) => {
+        attached.add(stationId);
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(false);
+    toggleSwitch(el, "[data-test=station-toggle-p1-s2]", true);
+    await flush(el);
+
+    // stationId then printerId, mirroring the server route /stations/:sid/printers/:pid.
+    expect(api.attachPrinterToStation).toHaveBeenCalledWith("s2", "p1");
+    expect(api.detachPrinterFromStation).not.toHaveBeenCalled();
+    // #mutate reloaded, and the refreshed mapping now shows s2 attached to p1.
+    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(true);
+  });
+
+  it("detaches a station when its toggle is switched off, and reflects the change after reload", async () => {
+    const attached = new Set<string>(["s1"]);
+    const api = stubApi({
+      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+        printerId === "p1"
+          ? [...attached].map((stationId) => ({ stationId, printerId: "p1" }))
+          : [],
+      ),
+      detachPrinterFromStation: vi.fn(async (stationId: string) => {
+        attached.delete(stationId);
+      }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(true);
+    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
+    await flush(el);
+
+    expect(api.detachPrinterFromStation).toHaveBeenCalledWith("s1", "p1");
+    expect(api.attachPrinterToStation).not.toHaveBeenCalled();
+    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(false);
+  });
+
+  it("shows an error banner when a station toggle is rejected", async () => {
+    const api = stubApi({
+      attachPrinterToStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", true);
+    await flush(el);
+
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("station.not_found", "es-ES"));
+    expect(banner).not.toContain("station.not_found");
+  });
+
+  it("shows the no-stations placeholder when the venue has no stations", async () => {
+    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(text(el, "[data-test=no-stations-p1]")).toBe(t("printers.no_stations", "es-ES"));
+    expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
   });
 
   it("registers as a custom element", () => {

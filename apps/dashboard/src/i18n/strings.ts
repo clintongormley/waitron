@@ -198,6 +198,8 @@ export const en = {
   "printers.jobs_title": "Recent print jobs",
   "printers.no_jobs": "No print jobs yet",
   "printers.job_attempts": "Attempts",
+  "printers.stations_title": "Stations this printer serves",
+  "printers.no_stations": "No stations yet",
   // Person form
   "person.new": "New user",
   "person.name": "Name",
@@ -513,6 +515,8 @@ export const es: Record<StringKey, string> = {
   "printers.jobs_title": "Trabajos de impresión recientes",
   "printers.no_jobs": "Aún no hay trabajos de impresión",
   "printers.job_attempts": "Intentos",
+  "printers.stations_title": "Estaciones que sirve esta impresora",
+  "printers.no_stations": "Aún no hay estaciones",
   "person.new": "Nuevo usuario",
   "person.name": "Nombre",
   "person.role": "Rol",

@@ -731,6 +731,15 @@ export interface PrintJobRow {
   deliveredAt: string | null;
 }
 
+/** One station↔printer mapping pair as `GET /management-api/printers/:pid/stations` (and the mirrored
+ * per-station read) return it — mirrors apps/server's `StationPrinter` (`station-printers.ts`). The
+ * tenant is implicit in the session scope. NOT imported from `apps/server` (the #70 bundle rule the
+ * printing shapes above follow); a mismatch surfaces as a runtime shape error a view test catches. */
+export interface StationPrinter {
+  stationId: string;
+  printerId: string;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -1327,6 +1336,41 @@ export class DashboardApi {
     return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/test-print`,
       "POST",
+    );
+  }
+
+  // ── Station↔printer mapping (KDS-4) ──────────────────────────────────────────────────────────────
+  // The three verbs the printer editor's station-mapping section drives (the print-api.ts routes at
+  // /management-api/stations/:sid/printers/:pid + /management-api/printers/:pid/stations, printer.manage-
+  // gated). `listPrinterStations` reads a printer's current mapping (the editor's per-printer view);
+  // attach/detach are the toggle's two directions. Attach is idempotent server-side (re-attach = 204
+  // no-op) and detach is a pure idempotent delete, so a toggle never races itself into an error. The
+  // station LIST for the toggles reuses `listStations()` above (the KDS-1 stations read).
+
+  /** `GET /management-api/printers/:pid/stations` — the stations this printer serves, each a
+   * `{ stationId, printerId }` pair. The editor reads it to show a printer's current mapping. */
+  listPrinterStations(printerId: string): Promise<StationPrinter[]> {
+    return this.#request<StationPrinter[]>(`/management-api/printers/${printerId}/stations`, "GET");
+  }
+
+  /** `POST /management-api/stations/:sid/printers/:pid` — attach `printerId` to `stationId` (a fire at
+   * the station prints at the printer). Idempotent — re-attaching a pair is a 204 no-op. A retired/absent
+   * station rejects `{ code: "station.not_found" }`, a retired/absent printer `{ code: "printer.not_found" }`.
+   * Answers an empty 204. */
+  attachPrinterToStation(stationId: string, printerId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/stations/${stationId}/printers/${printerId}`,
+      "POST",
+    );
+  }
+
+  /** `DELETE /management-api/stations/:sid/printers/:pid` — detach `printerId` from `stationId`. A PURE
+   * idempotent delete: it validates neither end (a mapping to a since-retired station/printer stays
+   * detachable) and detaching an absent pair is a 204 no-op. Answers an empty 204. */
+  detachPrinterFromStation(stationId: string, printerId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/stations/${stationId}/printers/${printerId}`,
+      "DELETE",
     );
   }
 

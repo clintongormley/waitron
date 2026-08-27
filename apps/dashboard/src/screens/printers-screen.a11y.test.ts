@@ -2,7 +2,14 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
-import type { DashboardApi, PrintAgentRow, PrintJobRow, Printer } from "../api/client.js";
+import type {
+  DashboardApi,
+  PrintAgentRow,
+  PrintJobRow,
+  Printer,
+  Station,
+  StationPrinter,
+} from "../api/client.js";
 
 /**
  * The Impresoras screen scanned by axe in both themes, in two states: the default agents + printers +
@@ -68,6 +75,14 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
+// Two live stations so the per-printer "stations this printer serves" section renders under axe (a
+// group with a labelled toggle each). `p1` is attached to `s1`, so both a checked and an unchecked
+// toggle sit in the a11y tree.
+const stations: Station[] = [
+  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  { id: "s2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+];
+
 function stubApi(): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
@@ -79,6 +94,12 @@ function stubApi(): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    listStations: vi.fn().mockResolvedValue(stations),
+    listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
+      printerId === "p1" ? [{ stationId: "s1", printerId: "p1" }] : [],
+    ),
+    attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
+    detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
 }
 
