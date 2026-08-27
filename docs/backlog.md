@@ -501,7 +501,7 @@ here is the cross-cutting or genuinely-decision-bearing work.
   (not least-priv `app_user`) until that retrofit.
 - **Onboarding slice-2c follow-ups** (deferred from #146, none blocking; the fiscal surface was verified
   solid by two heavyweight whole-branch reviews + deletion-proofs — cert single-chokepoint, 409s
-  no-retry, trading path untouched, secrets never leak). **Landed: (h) #147, (i)+(l) #148. Open: (j) (k) (m) (n) (o).** **(h) ✅ LANDED #147 — FISCAL, pre-existing (#57):**
+  no-retry, trading path untouched, secrets never leak). **✅ ALL LANDED: (h) #147, (i)+(l) #148, (j)+(k)+(m) #149, (n)+(o) #151.** **(h) ✅ LANDED #147 — FISCAL, pre-existing (#57):**
   `tenant-id.ts` derives `obligadoTenantId` as a UUIDv5 over `country` + a newline + `taxId`, **not
   case/whitespace normalized**, so `es` vs `ES` (or a `taxId` casing/spacing difference) for the same business derives a
   **different** tenant id → could defeat `provisionVenue`'s double-provision guard across two separate
@@ -512,18 +512,19 @@ here is the cross-cutting or genuinely-decision-bearing work.
   whenever `aeatCert` is present **without checking `mode`** (a `boot.test.ts` pins that a demo provision
   carrying a cert seals it) — the box should refuse/ignore an AEAT cert when `mode !== "live"`. 2c's
   client gates the cert on live mode (the Critical fix), closing the *reachable* path; this is the
-  server-side belt. (Landed as a symmetric gate — a cert is accepted iff `live + ES-common`, else refused `setup.request_invalid`/`aeatCert` before parse; + a live+cert full-boot seal test.) **(j)** a11y: the venue-screen server-routed banner + the client-validation banner can
-  co-render (two `role="alert"`); Fix 3 clears the routed error on manual Back, a fuller dedupe is
-  deferred. **(k)** terminal failure states (`already_provisioning`/`already_provisioned`/
-  `deployment.already_stamped`) render a bare alert with no next-step (reload / go-to-till) guidance.
+  server-side belt. (Landed as a symmetric gate — a cert is accepted iff `live + ES-common`, else refused `setup.request_invalid`/`aeatCert` before parse; + a live+cert full-boot seal test.) **(j) ✅ LANDED #149 —** a11y: the venue-screen server-routed banner + the client-validation banner could
+  co-render (two `role="alert"`); now a single alert region (client-validation takes precedence). **(k) ✅ LANDED #149 —** terminal failure states (`already_provisioning`/`already_provisioned`/
+  `deployment.already_stamped`) rendered a bare alert with no next-step; now a "Reload to open the till" / "Reload" action (the two fiscal 409s still offer no retry).
   **(l) ✅ LANDED #148 —** `setup-api.ts`'s provision-error doc comment implied the client sees `setup.provision_failed`;
-  that's only the boundary's log *tag* — a crash sends `server.internal` (comment corrected). **(m)**
-  altitude: the venue→`cert`/`review` conditional is computed in `venue-screen` (reads `draft.mode`);
-  `dashboard-app.ts` centralizes conditional routing in the shell (`#applyMe`) — centralize if onboarding
-  grows a second conditional. **(n)** `select-styles.ts` is now the **3rd** verbatim copy
-  (till/dashboard/setup) → hoist to `packages/ui`. **(o)** the 14 raw `new CustomEvent(...)` dispatch
-  sites have no typed helper (a typo'd screen name compiles + silently misroutes) — matches house
-  convention, so a cross-app typed-dispatch follow-up.
+  that's only the boundary's log *tag* — a crash sends `server.internal` (comment corrected). **(m) ✅ LANDED #149 —**
+  altitude: the venue→`cert`/`review` conditional was computed in `venue-screen` (read `draft.mode`); lifted
+  into the shell (a screen-agnostic `setup-advance` event; the shell's `#onAdvance` decides cert vs review),
+  matching `dashboard-app.ts`'s `#applyMe`. **(n) ✅ LANDED #151 —** hoist the shared `<select>` styling to
+  `packages/ui`. **Correction:** the "3rd verbatim copy" premise was wrong — `apps/dashboard` and `apps/setup`
+  were identical (form select, `width:100%`) but `apps/till` genuinely differs (touch tap-target: `min-height`,
+  no width). Hoisted the dashboard/setup version to `@waitron/ui` as `selectStyles`; till left as-is (documented). **(o) ✅ LANDED #151 —** the 14 raw `new CustomEvent(...)` dispatch
+  sites had no typed helper (a mistyped `screen` value compiled + silently misrouted); now `apps/setup/src/events.ts`
+  exports typed `dispatchSetup*` helpers (typed on the `Screen` union + `DeepPartial<ProvisionBody>`; event names centralised).
 
 **Payments:**
 
