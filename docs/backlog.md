@@ -40,9 +40,12 @@ follow.
 > **Elevated 2026-08-26 (owner): appliance onboarding — free tier (in-repo, no cloud/hardware) — is
 > the current *build* focus, ahead of the numbered tier below.** Slices **1a (serve the built SPAs,
 > #137) and 1b (setup-mode boot, #139) both LANDED 2026-08-26**. **Slice 2 was split into 2a/2b/2c;
-> 2a (self-signed CA/leaf minting + persisted box secrets, server-side, no UI) LANDED #141 2026-08-27;
-> slice 2b (the `/setup-api` provisioning endpoints — `planInstance`/`planVenue` in-process, demo/live
-> fork, AEAT-cert-required for live) is next**, then 2c (the `apps/setup` Vite+Lit wizard). Rationale:
+> 2a (self-signed CA/leaf + persisted box secrets) LANDED #141 and 2b (the `/setup-api/provision`
+> endpoint — stamp demo/live + `applyVenue` in-process, seal the AEAT cert for live, persist
+> `trading.env`, restart into trading) LANDED #142, both 2026-08-27; **slice 2c (the `apps/setup`
+> Vite+Lit wizard driving 2b's endpoint) is next**. NB 2b is **venue-only** (deviation R1): it stamps +
+> `applyVenue`s into the already-migrated setup DB and does NOT run the full `instance` role-splitting —
+> deferred to the appliance-image slice (the DB/roles pre-exist; dev works on the superuser). Rationale:
 > it is the one deployment path that needs
 > **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
 > laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
@@ -246,10 +249,15 @@ question (below).
   `WAITRON_STATE_DIR`, serves the setup surface over HTTPS from it, and generates+persists the vault
   master key + sync node token in `secrets.env` — idempotent, atomic writes, `0600`; operator
   `WAITRON_TLS_*` overrides the served cert but the box still generates its secrets; decided:
-  persist-config-then-restart transition, `apps/setup` Vite+Lit wizard); **next → slice 2b: the
-  `/setup-api` provisioning endpoints** (drive `planInstance`/`planVenue` in-process; demo/live fork;
-  AEAT-cert-required for a live/`production` venue; persist the till ids/DB URLs then restart into
-  trading); then **2c** the wizard SPA, then 3 mDNS/`waitron.local` + per-device trust UX, 4
+  persist-config-then-restart transition, `apps/setup` Vite+Lit wizard); **2b LANDED #142** — the
+  `POST /setup-api/provision` endpoint: an in-process orchestrator (`provisionVenue` = `stampDeployment`
+  demo/live + the landed `applyVenue` → tenant/location/till/node/**SIF/series**), a double-provision
+  guard + a synchronous one-shot latch (no duplicate hash chain on a re-POST), the AEAT cert validated
+  **before** the mint + sealed into `fiscal.aeat` for a live ES-common venue, admin PIN/password hashed
+  at the boundary, `trading.env` persisted (`writeTradingEnv`, 0600 atomic) then a `requestRestart`
+  (SIGTERM → supervisor → trading mode); dev launcher sources `secrets.env`/`trading.env`. **Venue-only
+  (R1)** — full `instance` role-split deferred (see Debt). **next → slice 2c**: the `apps/setup` Vite+Lit
+  wizard consuming 2b's endpoint; then 3 mDNS/`waitron.local` + per-device trust UX, 4
   backup/status/break-glass. Slices 5–7
   (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
   constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
@@ -433,6 +441,25 @@ here is the cross-cutting or genuinely-decision-bearing work.
   in 2a — ties to the §13 time-health check and cert renewal (slice 3/4). *(Also: the setup-branch
   boot pool-leak is now guarded (#141); the pre-existing `readOrderFlow`/`buildCardProvider`
   **trading**-branch boot-throw pool-leaks remain, noted in the onboarding §.)*
+- **Onboarding slice-2b follow-ups** (deferred from #142, none blocking 2c): **(d)** `provisionVenue`'s
+  double-provision guard is a separate transaction from `applyVenue`; the in-process one-shot latch on
+  `/setup-api/provision` closes the concurrent case (ONE setup process), so this is defence-in-depth
+  only — a DB-level advisory lock (keyed on `tenantId`, spanning guard→stamp→`applyVenue`) would make
+  `provisionVenue` safe regardless of caller. **(e)** a `sealAeat`/`persistTrading` I/O failure *after*
+  `provisionVenue` succeeds wedges the box (tenant minted, but no `trading.env`; a retry is safely
+  refused `setup.already_provisioned` 409, and `/setup-api/status` still reports `provisioned:false`
+  with no distinguishing signal) — add a recovery path: on setup boot detect "DB already provisioned for
+  this tenant but no `trading.env`" and offer re-derive-`trading.env`+restart, and/or make the wedge
+  loud. **(f)** the **trading-branch** `closePools` (`boot.ts`) still closes `db`/`syncDb`/`retentionDb`
+  **sequentially**, so a throw from the first skips the rest — the same leak the setup branch fixed via
+  `Promise.allSettled` in #142; harden separately (extract one `closeAll(pools)`), NOT touched in 2b to
+  keep the trading path byte-identical. **(g) R1 owner-connection:** 2b runs provisioning over
+  `config.migrationsDatabaseUrl`, correct only because dev's superuser owns the tables; on a real
+  role-split appliance the setup-mode owner connection must be the role that ran `waitron-provision
+  instance` (the DB owner), **not** `waitron_migrator` (an `app_user` member with no INSERT on
+  `tenants`) — wire it with the deferred appliance instance role-split. And a wizard-only box persists
+  that owner connection as `trading.env`'s `DATABASE_URL`, so it runs its trading life on the owner role
+  (not least-priv `app_user`) until that retrofit.
 
 **Payments:**
 
