@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { authenticatePeer, enrolPeer } from "./peers.js";
+import { authenticatePeer, enrolPeer, listPeers, revokePeer } from "./peers.js";
 
 const postgres = useTemplateDb({ template: "manifest" });
 
@@ -76,6 +76,46 @@ describe("enrolPeer + authenticatePeer", () => {
     } finally {
       await pruner.close();
       await tailer.close();
+    }
+  });
+});
+
+describe("revokePeer + listPeers + rotation", () => {
+  it("revoke flips active and is idempotent; rotation keeps a second token working", async () => {
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
+    try {
+      const a = await enrolPeer(pruner, { subscriberId: "cloud", name: "token-1" });
+      const b = await enrolPeer(pruner, { subscriberId: "cloud", name: "token-2" }); // rotation overlap
+      const first = await revokePeer(pruner, a.peerId);
+      expect(first.revoked).toBe(true);
+      const again = await revokePeer(pruner, a.peerId);
+      expect(again.revoked).toBe(false); // already revoked
+      const unknown = await revokePeer(pruner, "11111111-1111-4111-8111-111111111111");
+      expect(unknown.revoked).toBe(false);
+      const nonUuid = await revokePeer(pruner, "not-a-uuid"); // short-circuits, matches nothing
+      expect(nonUuid.revoked).toBe(false);
+      // the revoked token is refused, the rotated-in one still authenticates
+      await expect(authenticatePeer(tailer, a.token)).rejects.toMatchObject({
+        code: "sync.node_unauthorized",
+      });
+      expect((await authenticatePeer(tailer, b.token)).subscriberId).toBe("cloud");
+    } finally {
+      await pruner.close();
+      await tailer.close();
+    }
+  });
+
+  it("listPeers reports summaries without the hash", async () => {
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      const { peerId } = await enrolPeer(pruner, { subscriberId: "cloud", name: "DR" });
+      const peers = await listPeers(pruner);
+      const found = peers.find((p) => p.peerId === peerId);
+      expect(found).toMatchObject({ subscriberId: "cloud", name: "DR", active: true });
+      expect(JSON.stringify(peers)).not.toMatch(/token_hash|tokenHash/);
+    } finally {
+      await pruner.close();
     }
   });
 });

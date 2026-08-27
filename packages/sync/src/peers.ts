@@ -71,3 +71,48 @@ export async function authenticatePeer(
   );
   return { subscriberId: row.subscriber_id };
 }
+
+/** Revoke a peer: active := false. `revoked` is whether a row actually moved (unknown or
+ * already-revoked -> false, not an error), so the CLI reports the truth without an exception. A
+ * non-uuid id short-circuits to false (it can match nothing). */
+export async function revokePeer(db: Database, peerId: string): Promise<{ revoked: boolean }> {
+  if (!UUID_RE.test(peerId)) return { revoked: false };
+  const res = await db.execute<{ id: string }>(
+    sql`update sync_peers set active = false
+        where id = ${peerId}::uuid and active = true
+        returning id`,
+  );
+  return { revoked: res.rows.length > 0 };
+}
+
+export interface PeerSummary {
+  peerId: string;
+  subscriberId: string;
+  name: string;
+  active: boolean;
+  lastSeenAt: string | null;
+  enrolledAt: string;
+}
+
+/** All peers, oldest first, for the CLI (and later C's dashboard). Never selects token_hash. */
+export async function listPeers(db: Database): Promise<PeerSummary[]> {
+  const res = await db.execute<{
+    id: string;
+    subscriber_id: string;
+    name: string;
+    active: boolean;
+    last_seen_at: string | null;
+    enrolled_at: string;
+  }>(
+    sql`select id, subscriber_id, name, active, last_seen_at, enrolled_at
+        from sync_peers order by enrolled_at`,
+  );
+  return res.rows.map((r) => ({
+    peerId: r.id,
+    subscriberId: r.subscriber_id,
+    name: r.name,
+    active: r.active,
+    lastSeenAt: r.last_seen_at,
+    enrolledAt: r.enrolled_at,
+  }));
+}
