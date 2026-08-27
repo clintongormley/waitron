@@ -29,6 +29,7 @@ import {
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -157,7 +158,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ name?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown }>(c);
       if (typeof body.name !== "string") {
         throw new AppError("management.request_invalid", { field: "name" });
       }
@@ -179,7 +180,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ name?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown }>(c);
       if (typeof body.name !== "string") {
         throw new AppError("management.request_invalid", { field: "name" });
       }
@@ -202,25 +203,24 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/products", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Coerced to `{}` (`?? {}`) so a `null`/non-object body hits the field screens as a 400 rather
-      // than TypeErroring into an opaque 500 (the management-api convention). Each REQUIRED field is
+      // Read via `readJsonBody` so an empty/malformed/`null`/non-object body hits the field screens as
+      // a 400 rather than becoming an opaque 500 (the management-api convention). Each REQUIRED field is
       // type-screened, refusing a missing/wrong-typed one as `management.request_invalid` naming the
       // FIELD, never the value. `allergens` is left to `createProduct`'s `validateAllergens`, which
       // throws the authoritative `allergen.*` codes; a well-formed-but-out-of-range `pricingUnit` /
       // `vatClass` (a string the CHECK rejects) flows on to the DB, the same typeof-only posture the
       // management staff routes take.
-      const body =
-        (await c.req.json<{
-          catalogueId?: unknown;
-          categoryId?: unknown;
-          descriptions?: unknown;
-          pricingUnit?: unknown;
-          unitPrice?: unknown;
-          vatClass?: unknown;
-          allergens?: unknown;
-          image?: unknown;
-          active?: unknown;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        catalogueId?: unknown;
+        categoryId?: unknown;
+        descriptions?: unknown;
+        pricingUnit?: unknown;
+        unitPrice?: unknown;
+        vatClass?: unknown;
+        allergens?: unknown;
+        image?: unknown;
+        active?: unknown;
+      }>(c);
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
       }
@@ -265,22 +265,21 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      // Every field is OPTIONAL (a PATCH touches only what it names) and the body is coerced to `{}`,
-      // so an empty/`null` body is a legitimate no-op that bumps `updatedAt`. A field PRESENT with a
+      // Every field is OPTIONAL (a PATCH touches only what it names) and the body is coerced to `{}` by
+      // `readJsonBody`, so an empty/malformed/`null` body is a legitimate no-op that bumps `updatedAt`. A field PRESENT with a
       // wrong type is refused as `management.request_invalid` naming it; `allergens` is validated by
       // `updateProduct` (the `allergen.*` authority). Only present keys enter `patch`, so an absent
       // field is never written.
-      const body =
-        (await c.req.json<{
-          descriptions?: unknown;
-          unitPrice?: unknown;
-          vatClass?: unknown;
-          pricingUnit?: unknown;
-          categoryId?: unknown;
-          allergens?: unknown;
-          image?: unknown;
-          active?: unknown;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        descriptions?: unknown;
+        unitPrice?: unknown;
+        vatClass?: unknown;
+        pricingUnit?: unknown;
+        categoryId?: unknown;
+        allergens?: unknown;
+        image?: unknown;
+        active?: unknown;
+      }>(c);
       const patch: UpdateProductInput = {};
       if (body.descriptions !== undefined) {
         if (!isPlainObject(body.descriptions)) {

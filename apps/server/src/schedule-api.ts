@@ -11,6 +11,7 @@ import {
   absenceKind,
 } from "@waitron/workforce";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireSession } from "./till-session.js";
 import {
   requireBodyUuid,
@@ -104,7 +105,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.post("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       const fromShiftId = requireBodyUuid(body.fromShiftId, "fromShiftId");
       const toPersonId = requireBodyUuid(body.toPersonId, "toPersonId");
       const toShiftId = requireNullableBodyUuid(body.toShiftId, "toShiftId");
@@ -149,7 +150,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.post("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       const kind = requireEnum(body.kind, "kind", absenceKind.enumValues);
       const startsOn = requirePeriod(body.startsOn, "startsOn");
       const endsOn = requirePeriod(body.endsOn, "endsOn");

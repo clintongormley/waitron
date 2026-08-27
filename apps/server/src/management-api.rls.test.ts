@@ -615,22 +615,47 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(await readRow()).toEqual(before);
   });
 
-  it("maps an unparseable request body to an opaque 500 (run's server-fault branch)", async () => {
-    const { tenantId } = await setupTenant();
+  it("maps an unparseable request body to the route's own 4xx (guarded parse, never a 500)", async () => {
+    const { tenantId, managerId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
 
-    // Invalid JSON: `c.req.json()` throws a non-AppError, which `run` documents as a server fault →
-    // opaque `server.internal` 500 (management-api.ts's `run` doc comment). Asserting the documented
-    // behaviour, not forcing it.
-    const res = await app.request("/management-api/session", {
+    // `c.req.json()` throws a SyntaxError on a malformed body; the shared `readJsonBody` coerces that
+    // throw to `{}`, exactly as a literal JSON `null` body is coerced, so each route answers its own
+    // documented 4xx (or the PATCH no-op 204) rather than an opaque `server.internal` 500. This is the
+    // same three cases as the `null JSON body` tests above, with a malformed body in place of `"null"`.
+    const malformedHeaders = { "content-type": "application/json" };
+
+    // Login is unauthenticated → the same `password.invalid` 401 a `{}`/null body yields, and no cookie.
+    const loginRes = await app.request("/management-api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: malformedHeaders,
       body: "{ not json",
     });
-    expect(res.status).toBe(500);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "server.internal" },
+    expect(loginRes.status).toBe(401);
+    expect((await loginRes.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "password.invalid" },
     });
+    expect(loginRes.headers.get("set-cookie")).toBeNull();
+
+    // An authenticated write route → the field-screen 400.
+    const cookie = await login(app, managerId);
+    const create = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { ...malformedHeaders, cookie },
+      body: "{ not json",
+    });
+    expect(create.status).toBe(400);
+    expect((await create.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+
+    // A PATCH carries no field to change from a `{}` body → the empty-body 204 no-op.
+    const patch = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { ...malformedHeaders, cookie },
+      body: "{ not json",
+    });
+    expect(patch.status).toBe(204);
   });
 });
 

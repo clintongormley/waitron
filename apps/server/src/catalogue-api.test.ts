@@ -627,6 +627,33 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
     });
     expect(res.status).toBe(204);
   });
+
+  // A malformed body makes `c.req.json()` throw; the shared `readJsonBody` coerces that throw to `{}`,
+  // the same shape the null-body cases above rely on, so POST hits the field-screen 400 and PATCH the
+  // empty-body 204 — never an opaque 500. Sent raw — `send` would JSON.stringify a valid body.
+  it("POST /products and PATCH /products/:id with a malformed body → 400 / 204 (never a 500)", async () => {
+    const app = mountApp();
+    const headers = { "content-type": "application/json", cookie: managerCookie };
+
+    const post = await app.request("/management-api/products", {
+      method: "POST",
+      headers,
+      body: "{ not json",
+    });
+    expect(post.status).toBe(400);
+    expect(
+      (await post.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "catalogueId" } },
+    });
+
+    const patch = await app.request(`/management-api/products/${DUMMY_UUID}`, {
+      method: "PATCH",
+      headers,
+      body: "{ not json",
+    });
+    expect(patch.status).toBe(204);
+  });
 });
 
 describe("mountCatalogueApi — image upload", () => {

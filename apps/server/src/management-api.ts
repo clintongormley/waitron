@@ -74,6 +74,7 @@ import {
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -398,7 +399,7 @@ function parseCapacity(value: unknown): number | undefined {
 /**
  * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
  * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
- * The body is coerced to `{}` (`?? {}`, see the login route for why a `null`/non-object body must not
+ * The body is coerced to `{}` (via `readJsonBody`, see the login route for why a `null`/non-object body must not
  * TypeError → 500). `challengeHandle` is screened to a UUID (load-bearing, not cosmetic: it flows into
  * `eq(webauthnChallenges.id, …)` against a `uuid` PK, so a non-UUID would `22P02` → opaque 500) and
  * `response` to a non-null object before it reaches the verifier; either failure is
@@ -409,7 +410,7 @@ function parseCapacity(value: unknown): number | undefined {
 async function parsePasskeyVerifyBody(
   c: Context,
 ): Promise<{ challengeHandle: string; response: object }> {
-  const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
+  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown }>(c);
   if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
     throw new AppError("management.request_invalid", { field: "challengeHandle" });
   }
@@ -445,13 +446,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Login: password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as the app
   // role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person lookup and
   // a wrong password, missing/wrong TOTP, unknown or suspended person surfaces as the identity
-  // credential codes `STATUS` maps to 401/403/404. The parsed body is coerced to `{}` (`?? {}`) FIRST,
-  // and this is the representative site for WHY every body-parsing route below does the same: a valid
-  // JSON `null` body (the 4-byte string `null`) parses to `null`, and reading a field off `null` — or
-  // destructuring it — throws a `TypeError` that `run` cannot tell from a server fault, turning a
-  // client's degenerate body into an opaque 500. `?? {}` makes a `null`/`undefined` body fall through
-  // the screen as the route's own 4xx instead; a JSON primitive/array body needs no coercion, since a
-  // field access on it is `undefined` rather than a throw. The body is then screened: a non-string or
+  // credential codes `STATUS` maps to 401/403/404. The body is read via `readJsonBody`
+  // (`read-json-body.ts`), which coerces an empty/malformed/`null` body to `{}` so it never reaches
+  // `run` as an opaque 500 — see its doc for the two degenerate-body cases it handles. This is the
+  // representative site the other body-parsing routes point at: a degenerate body falls through to the
+  // screen as the route's OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on
+  // it is `undefined`, not a throw.) The body is then screened: a non-string or
   // non-UUID `personId`, a non-string `password`, or a `totp` present but not a string, is refused as
   // `password.invalid` — the SAME code a wrong password gets, so nothing in the response tells an
   // unauthenticated caller which field failed. (Screening `totp` does NOT avert a 500: `verifyTotp`
@@ -464,8 +464,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // the review's "totp → 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
-      const body =
-        (await c.req.json<{ personId?: string; password?: string; totp?: string }>()) ?? {};
+      const body = await readJsonBody<{ personId?: string; password?: string; totp?: string }>(c);
       if (
         typeof body.personId !== "string" ||
         !isUuid(body.personId) ||
@@ -528,7 +527,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
-  // The parsed body is coerced to `{}` (`?? {}`, see the login route for why) and screened: a missing
+  // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why) and screened: a missing
   // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
   // is refused as `management.request_invalid` naming the FIELDS, never their values. The narrowed
   // fields are bound to locals AFTER the guard because that narrowing does not survive into the
@@ -536,12 +535,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body =
-        (await c.req.json<{
-          displayName?: string;
-          role?: PersonRoleValue;
-          pin?: string;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        displayName?: string;
+        role?: PersonRoleValue;
+        pin?: string;
+      }>(c);
       if (
         typeof body.displayName !== "string" ||
         typeof body.role !== "string" ||
@@ -577,19 +575,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // "suspended"/"active" drives suspend/reactivate (a STRING `status` outside that pair, e.g.
   // "frozen", matches neither branch and is a deliberate 204 no-op — a value check the pgEnum would
   // catch on `role` is intentionally NOT applied here, keeping the screen typeof-only like create).
-  // The parsed body is coerced to `{}` (`?? {}`, see the login route): an empty JSON object `{}`, or
-  // a `null`/non-object body, leaves both `role` and `status` undefined → no writes → a no-op 204.
-  // (Only a JSON `null` body would otherwise throw on the destructure below; a truly empty or
-  // unparseable HTTP body is the separate SyntaxError→500 case that `run` maps to `server.internal`,
-  // out of scope here.) `role`/`status` are bound to locals before the closure and narrowed inside
+  // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route): an empty JSON object
+  // `{}`, or a `null`/non-object/empty/unparseable body — all handed back as `{}` by `readJsonBody` —
+  // leaves both `role` and `status` undefined → no writes → a no-op 204. (A `null` body would
+  // otherwise throw on the destructure below, and an empty/unparseable body would otherwise reach `run`
+  // as a SyntaxError → `server.internal` 500; `readJsonBody` averts both.) `role`/`status` are bound to
+  // locals before the closure and narrowed inside
   // it, so no field narrowing has to cross the closure boundary. The identity calls enforce
   // `person.manage`.
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body =
-        (await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>()) ?? {};
+      const body = await readJsonBody<{ role?: PersonRoleValue; status?: "active" | "suspended" }>(
+        c,
+      );
       const { role, status } = body;
       // Typeof screen mirroring the create/reset-pin/set-password routes: refuse a PRESENT field that
       // is not a string (leaving an absent one as the no-op it should be). This is where a non-string
@@ -619,7 +619,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body is
-  // coerced to `{}` (`?? {}`, see the login route) so a `null`/non-object body hits the same guard,
+  // coerced to `{}` (via `readJsonBody`, see the login route) so a `null`/non-object body hits the same guard,
   // then `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN
   // itself. The narrowed `pin` is bound to a local before the closure; `resetPin` enforces
   // `person.manage` and length-checks the value.
@@ -627,7 +627,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = (await c.req.json<{ pin?: string }>()) ?? {};
+      const body = await readJsonBody<{ pin?: string }>(c);
       if (typeof body.pin !== "string") {
         throw new AppError("management.request_invalid", { field: "pin" });
       }
@@ -641,7 +641,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Set a person's dashboard password. Gated. `:id` screened with `isUuid` (→ `person.not_found`);
-  // the body is coerced to `{}` (`?? {}`, see the login route) so a `null`/non-object body hits the
+  // the body is coerced to `{}` (via `readJsonBody`, see the login route) so a `null`/non-object body hits the
   // same guard, then `password` must be a string else `management.request_invalid` naming the FIELD,
   // never the password itself. The narrowed `password` is bound to a local before the closure;
   // `setPassword` enforces `person.manage` and length-checks the value.
@@ -649,7 +649,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = (await c.req.json<{ password?: string }>()) ?? {};
+      const body = await readJsonBody<{ password?: string }>(c);
       if (typeof body.password !== "string") {
         throw new AppError("management.request_invalid", { field: "password" });
       }
@@ -694,8 +694,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Author (full replacement) the tenant's till layout. Gated (401 before any DB work); `putLayout`
   // then enforces `till.configure` (403 `authorization.not_permitted`) and validates the definition
-  // (400 `layout.invalid`) before the upsert. The parsed body is coerced to `{}` (`?? {}`, see the
-  // login route for why a `null`/non-object body must not TypeError → 500) and screened: a body that
+  // (400 `layout.invalid`) before the upsert. The parsed body is coerced to `{}` (via `readJsonBody`,
+  // see the login route for why an empty/malformed/`null` body must not reach `run` as a 500) and
+  // screened: a body that
   // is not a plain object, or one that omits `definition`, is refused as `management.request_invalid`
   // naming the FIELD (never the value) — the same shape as the staff write routes. A PRESENT
   // `definition` (even `null` or a malformed shape) flows to `putLayout`, whose `validateLayout`
@@ -704,7 +705,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.put("/management-api/layout", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ definition?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ definition?: unknown }>(c);
       if (
         typeof body !== "object" ||
         body === null ||
@@ -733,7 +734,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.put("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ receipt?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ receipt?: unknown }>(c);
       if (
         typeof body !== "object" ||
         body === null ||
@@ -765,8 +766,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body =
-        (await c.req.json<{ label?: unknown; color?: unknown; displayOrder?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ label?: unknown; color?: unknown; displayOrder?: unknown }>(
+        c,
+      );
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -812,13 +814,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStatusId(c.req.param("id"));
-      const body =
-        (await c.req.json<{
-          label?: unknown;
-          color?: unknown;
-          displayOrder?: unknown;
-          active?: unknown;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        label?: unknown;
+        color?: unknown;
+        displayOrder?: unknown;
+        active?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -857,7 +858,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // empty/`null` body as (`PATCH /management-api/staff/:id` → 204, no write). Return 204 WITHOUT
       // touching the DB rather than reaching `updateStatus`'s `.set()` with an empty object, which
       // Drizzle rejects ("No values to set") — a non-AppError the boundary would turn into an opaque
-      // 500. A `null`/`{}` body coerces to `{}` above (`?? {}`), so this is where a degenerate PATCH
+      // 500. A `null`/`{}`/malformed body coerces to `{}` above (via `readJsonBody`), so this is where a degenerate PATCH
       // body maps to a clean 204 rather than a 500, the same null-body discipline the sibling
       // layout/receipt PUT routes follow.
       if (
@@ -910,7 +911,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body = (await c.req.json<{ name?: unknown; displayOrder?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -947,8 +948,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
+        c,
+      );
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -998,8 +1000,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1048,8 +1049,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1114,14 +1114,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{
-          zoneId?: unknown;
-          posX?: unknown;
-          posY?: unknown;
-          shape?: unknown;
-          rotation?: unknown;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        zoneId?: unknown;
+        posX?: unknown;
+        posY?: unknown;
+        shape?: unknown;
+        rotation?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1181,8 +1180,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ name?: unknown; displayOrder?: unknown; isDefault?: unknown }>()) ?? {};
+      const body = await readJsonBody<{
+        name?: unknown;
+        displayOrder?: unknown;
+        isDefault?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1227,8 +1229,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
+        c,
+      );
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1305,7 +1308,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         const sessionId = requireManagementSession(c);
         const cfg = requireVenueCfg(deps);
         const id = c.req.param("id");
-        const body = (await c.req.json<{ stationId?: unknown }>()) ?? {};
+        const body = await readJsonBody<{ stationId?: unknown }>(c);
         if (typeof body.stationId !== "string" && body.stationId !== null) {
           throw new AppError("management.request_invalid", { field: "stationId" });
         }
@@ -1332,7 +1335,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ mode?: unknown }>(c);
       if (body.mode !== "line" && body.mode !== "ticket") {
         throw new AppError("management.request_invalid", { field: "mode" });
       }
@@ -1359,7 +1362,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body = (await c.req.json<{ name?: unknown; displayOrder?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1395,8 +1398,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body =
-        (await c.req.json<{ name?: unknown; displayOrder?: unknown; active?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
+        c,
+      );
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -1449,7 +1453,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const id = c.req.param("id");
-      const body = (await c.req.json<{ courseId?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ courseId?: unknown }>(c);
       if (typeof body.courseId !== "string" && body.courseId !== null) {
         throw new AppError("management.request_invalid", { field: "courseId" });
       }
@@ -1489,7 +1493,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body = (await c.req.json<{ mode?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ mode?: unknown }>(c);
       if (
         typeof body.mode !== "string" ||
         !(fireControlMode.enumValues as readonly string[]).includes(body.mode)
@@ -1531,7 +1535,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Finish passkey registration (gated): verify the signed response against the stored challenge and
-  // persist the credential. The parsed body is coerced to `{}` (`?? {}`, see the login route for why a
+  // persist the credential. The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why a
   // `null`/non-object body must not TypeError → 500) and `challengeHandle` is screened to a UUID (else
   // `management.request_invalid` naming the FIELD, matching the sibling write routes). The UUID screen
   // is load-bearing, not cosmetic: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against

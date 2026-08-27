@@ -293,4 +293,40 @@ describe("mountRecipeApi", () => {
       error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
     });
   });
+
+  // A malformed body makes `c.req.json()` throw; the shared `readJsonBody` coerces that throw to `{}`,
+  // the same shape the null-body test above relies on, so each write route answers its field-screen
+  // 4xx (or the PATCH no-op 204) instead of an opaque 500. Sent raw — `send` would JSON.stringify.
+  it("coerces a malformed body on POST/PATCH/PUT to the field-screen 4xx (not a 500)", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "pimentón");
+    const headers = { "content-type": "application/json", cookie: managerCookie };
+
+    const post = await app.request("/management-api/ingredients", {
+      method: "POST",
+      headers,
+      body: "{ not json",
+    });
+    expect(post.status).toBe(400);
+    expect((await post.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+
+    const patch = await app.request(`/management-api/ingredients/${id}`, {
+      method: "PATCH",
+      headers,
+      body: "{ not json",
+    });
+    expect(patch.status).toBe(204);
+
+    const put = await app.request(`/management-api/products/${productId}/recipe`, {
+      method: "PUT",
+      headers,
+      body: "{ not json",
+    });
+    expect(put.status).toBe(400);
+    expect((await put.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
+    });
+  });
 });

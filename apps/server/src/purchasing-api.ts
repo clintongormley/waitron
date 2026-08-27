@@ -28,6 +28,7 @@ import {
 } from "@waitron/purchasing";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireNullableString, requirePeriod, requireUuidParam } from "./request-screens.js";
 import type { Logger } from "./logger.js";
@@ -238,9 +239,9 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
   app.post("/management-api/purchase-invoices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Coerced to `{}` (`?? {}`) so a `null`/non-object body reaches the header screen as a 400 (naming
-      // `header`) rather than TypeErroring into an opaque 500 — the catalogue null-body convention.
-      const body = (await c.req.json<{ header?: unknown; lines?: unknown }>()) ?? {};
+      // Read via `readJsonBody` so an empty/malformed/`null`/non-object body reaches the header screen as
+      // a 400 (naming `header`) rather than becoming an opaque 500 — the catalogue null-body convention.
+      const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const header = screenHeaderCreate(body.header);
       const lines = screenLines(body.lines);
       const created = await gated(sessionId, (tx) => createPurchaseInvoice(tx, { header, lines }));
@@ -253,10 +254,10 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PurchaseInvoiceId");
-      // Both `header` and `lines` are OPTIONAL; the body is coerced to `{}` so an empty/`null` body is a
-      // legitimate no-op that still bumps `updated_at` (and 404s a missing id, via the op). `lines`
-      // present ⇒ a FULL replacement of the desglose (the op's contract).
-      const body = (await c.req.json<{ header?: unknown; lines?: unknown }>()) ?? {};
+      // Both `header` and `lines` are OPTIONAL; the body is coerced to `{}` by `readJsonBody` so an
+      // empty/malformed/`null` body is a legitimate no-op that still bumps `updated_at` (and 404s a
+      // missing id, via the op). `lines` present ⇒ a FULL replacement of the desglose (the op's contract).
+      const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const patch: UpdatePurchaseInvoiceInput = {};
       if (body.header !== undefined) patch.header = screenHeaderPatch(body.header);
       if (body.lines !== undefined) patch.lines = screenLines(body.lines);

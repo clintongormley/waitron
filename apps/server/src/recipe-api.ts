@@ -21,6 +21,7 @@ import {
 import type { ProductAllergens } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireBodyUuid, requireUuidParam } from "./request-screens.js";
 import type { Logger } from "./logger.js";
@@ -114,9 +115,9 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
   app.post("/management-api/ingredients", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Coerced to `{}` (`?? {}`) so a `null`/non-object body reaches the `name` screen as a 400 rather
-      // than TypeErroring into an opaque 500 — the catalogue null-body convention.
-      const body = (await c.req.json<{ name?: unknown; allergens?: unknown }>()) ?? {};
+      // Read via `readJsonBody` so an empty/malformed/`null`/non-object body reaches the `name` screen
+      // as a 400 rather than becoming an opaque 500 — the catalogue null-body convention.
+      const body = await readJsonBody<{ name?: unknown; allergens?: unknown }>(c);
       if (typeof body.name !== "string") {
         throw new AppError("management.request_invalid", { field: "name" });
       }
@@ -137,8 +138,7 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "IngredientId");
-      const body =
-        (await c.req.json<{ name?: unknown; allergens?: unknown; active?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ name?: unknown; allergens?: unknown; active?: unknown }>(c);
       const patch: { name?: string; allergens?: ProductAllergens | null; active?: boolean } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string") {
@@ -179,7 +179,7 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = (await c.req.json<{ ingredientIds?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ ingredientIds?: unknown }>(c);
       if (!Array.isArray(body.ingredientIds)) {
         throw new AppError("management.request_invalid", { field: "ingredientIds" });
       }

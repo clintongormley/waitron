@@ -18,6 +18,7 @@ import {
 } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import {
   requireBodyUuid,
@@ -137,7 +138,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.post("/management-api/roster", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ locationId?: unknown; period?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ locationId?: unknown; period?: unknown }>(c);
       const locationId = requireBodyUuid(body.locationId, "locationId");
       const period = requirePeriod(body.period, "period");
       const versionId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
@@ -151,7 +152,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
-      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       const personId = requireBodyUuid(body.personId, "personId");
       const locationId = requireBodyUuid(body.locationId, "locationId");
       const startsAt = requireTimestamp(body.startsAt, "startsAt");
@@ -183,7 +184,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
-      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const body = await readJsonBody<Record<string, unknown>>(c);
       const patch: import("@waitron/workforce").UpdateShiftInput = {
         tenantId: deps.cfg.tenantId,
         shiftId,
@@ -264,7 +265,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
-      const body = (await c.req.json<{ decision?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -298,7 +299,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const absenceId = requireUuidParam(c.req.param("absenceId"), "AbsenceId");
-      const body = (await c.req.json<{ decision?: unknown }>()) ?? {};
+      const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
