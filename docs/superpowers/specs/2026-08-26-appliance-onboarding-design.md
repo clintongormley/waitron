@@ -502,6 +502,19 @@ AEAT-cert-required-for-live, persist the till ids/DB URLs, then restart into tra
 persist-config-then-restart, not hot-flip). 2c = a new `apps/setup` Vite+Lit wizard consuming 2b,
 served in setup mode.
 
+**Implementation note (2026-08-27): slice 2c built — the `apps/setup` Vite+Lit setup wizard.** Six
+in-memory screens (mode → admin → venue → cert → review → provisioning/done); the `cert` step is
+reached only for a **live + `ES-common`** provision. The wizard consumes 2b's `/setup-api` endpoints
+(`GET /setup-api/status`, `POST /setup-api/provision`) and is served in setup mode via a new
+`WAITRON_SETUP_APP_DIR` — `mountSetup` serves the built bundle at the origin root when the dir is set,
+falling back to the inline placeholder otherwise (mirrors `tillAppDir`/`dashboardAppDir` + `mountSpa`;
+the trading boot path is untouched). **Rulings:** the polished per-device trust UX + pairing QR are
+**slice 3**, not 2c (the wizard carries only a one-line "the browser security warning is expected —
+this box uses its own certificate" reassurance); the chrome is **English-only** for the MVP (es-ES
+localisation deferred). The provision body is assembled client-side and posted whole; the AEAT PFX
+rides the body **only for a live provision, never a demo** (gated on `mode === "live"`), so a
+certificate can never be sealed onto a preproduction tenant.
+
 Slices 1–4 give a **wired, LAN-only, self-hosted box that trades** — the free tier, minus the
 appliance image (runs on any Node+Postgres host). 5–6 make it a true appliance. 7 is the paid tier.
 
