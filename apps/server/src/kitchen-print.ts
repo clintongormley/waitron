@@ -229,21 +229,23 @@ export async function enqueueKitchenTickets(
   // collected and deduped, then print ONE consolidated whole-event ticket each, below.
   const groupPrinterIds = new Set<string>();
   for (const station of stations) {
+    // Build this station's ticket bytes ONCE per station, then enqueue the SAME bytes to each
+    // attached station-scope printer — a station with N station-scope printers formats byte-identical
+    // bytes once, not N times. `formatKitchenTicket` is a pure byte producer, so building it for a
+    // station that turns out to have only group-scope printers computes an unused (discarded) value
+    // and enqueues nothing — no behaviour change. Mirrors the consolidated group ticket below, which
+    // is likewise built once then looped over its printers.
+    const stationTicket = formatKitchenTicket({
+      scope: "station",
+      stationName: station.name,
+      tableLabel,
+      orderNumber,
+      firedAt,
+      items: station.items,
+    });
     for (const attached of printersByStation.get(station.id) ?? []) {
       if (attached.ticketScope === "station") {
-        await enqueuePrintJob(
-          tx,
-          printCfg,
-          attached.printerId,
-          formatKitchenTicket({
-            scope: "station",
-            stationName: station.name,
-            tableLabel,
-            orderNumber,
-            firedAt,
-            items: station.items,
-          }),
-        );
+        await enqueuePrintJob(tx, printCfg, attached.printerId, stationTicket);
       } else {
         groupPrinterIds.add(attached.printerId);
       }

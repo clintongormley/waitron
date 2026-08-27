@@ -24,6 +24,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the `requireSession`
@@ -198,7 +199,7 @@ async function printJobsFor(printerId: string): Promise<{ id: string; ticket: st
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId));
   });
-  return rows.map((r) => ({ id: r.id, ticket: Buffer.from(r.payload).toString("latin1") }));
+  return rows.map((r) => ({ id: r.id, ticket: decodeTicket(r.payload) }));
 }
 
 describe("POST /api/orders/:id/reprint", () => {

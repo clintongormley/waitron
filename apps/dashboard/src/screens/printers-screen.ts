@@ -262,13 +262,17 @@ export class PrintersScreen extends LitElement {
         this.api.listRecentJobs(),
         this.api.listStations(),
       ]);
-      const stationSets = await Promise.all(
-        printers.map((p: Printer) => this.api.listPrinterStations(p.id)),
+      // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
+      // a later reorder/filter the way a positional array-zip would. (Still one call per printer — the
+      // N+1 is a tracked follow-up, out of scope here; only the zip fragility is being removed.)
+      const printerStations: Record<string, string[]> = Object.fromEntries(
+        await Promise.all(
+          printers.map(
+            async (p: Printer) =>
+              [p.id, (await this.api.listPrinterStations(p.id)).map((sp) => sp.stationId)] as const,
+          ),
+        ),
       );
-      const printerStations: Record<string, string[]> = {};
-      printers.forEach((p: Printer, i: number) => {
-        printerStations[p.id] = stationSets[i].map((sp) => sp.stationId);
-      });
       this.agents = agents;
       this.printers = printers.map((p: Printer) => ({
         id: p.id,

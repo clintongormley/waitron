@@ -20,6 +20,7 @@ import { createCourse, createStation, setProductCourse, setProductStation } from
 import { addTabRound, createOpenOrder, fireCourse, fireLines, openTab } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import "./errors.js";
 
 // PGlite is the correct target: print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx —
@@ -111,11 +112,6 @@ async function printJobsFor(
     })
     .from(printJobs);
 }
-
-/** ESC/POS payloads are Latin-1 text (escpos.ts) — decode them so a ticket's contents can be asserted.
- *  PGlite hands the bytea back as a Uint8Array, so wrap in `Buffer.from` (a Uint8Array's own `toString`
- *  ignores the encoding and comma-joins its bytes). */
-const decode = (payload: Uint8Array): string => Buffer.from(payload).toString("latin1");
 
 /** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines/addTabRound consume. */
 const line = (productId: string) => ({ productId, quantity: "1" });
@@ -216,12 +212,12 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(groupJobs).toHaveLength(1); // ONE consolidated ticket, NOT two (deduped across both stations)
 
     // The Cocina station ticket carries its own item and NOT Barra's.
-    const cocinaTicket = decode(cocinaJobs[0]!.payload);
+    const cocinaTicket = decodeTicket(cocinaJobs[0]!.payload);
     expect(cocinaTicket).toContain("Chuleton");
     expect(cocinaTicket).not.toContain("Cerveza");
 
     // The consolidated group ticket carries BOTH items, each under its station sub-header.
-    const groupTicket = decode(groupJobs[0]!.payload);
+    const groupTicket = decodeTicket(groupJobs[0]!.payload);
     expect(groupTicket).toContain("Chuleton");
     expect(groupTicket).toContain("Cerveza");
     expect(groupTicket).toContain("Cocina");
@@ -293,7 +289,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     // Round 1: one ticket, the soup only — the steak is held, so it is NOT printed yet.
     expect(jobsFor(afterRound1)).toHaveLength(1);
-    const round1Ticket = decode(afterRound1[0]!.payload);
+    const round1Ticket = decodeTicket(afterRound1[0]!.payload);
     expect(round1Ticket).toContain("Sopa");
     expect(round1Ticket).not.toContain("Chuleton");
 
@@ -303,8 +299,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const round1Ids = new Set(afterRound1.map((j) => j.id));
     const round2New = afterRound2.filter((j) => !round1Ids.has(j.id));
     expect(round2New).toHaveLength(1);
-    expect(decode(round2New[0]!.payload)).toContain("Chuleton");
-    expect(decode(round2New[0]!.payload)).not.toContain("Sopa");
+    expect(decodeTicket(round2New[0]!.payload)).toContain("Chuleton");
+    expect(decodeTicket(round2New[0]!.payload)).not.toContain("Sopa");
 
     // The re-fire enqueued nothing.
     expect(jobsFor(afterRefire)).toHaveLength(2);
@@ -334,7 +330,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
-    const ticket = decode(stationJobs[0]!.payload);
+    const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Mesa 5"); // the dining-table label on the header
     expect(ticket).toContain("Cafe con leche"); // venue-language fallback (de-DE absent → the es-ES value)
   });
@@ -396,7 +392,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
-    expect(decode(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
+    expect(decodeTicket(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
   });
 
   it("returns early after the single mapping read when the involved stations have NO attached printer", async () => {
@@ -483,12 +479,12 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 
     // The reprinted STATION ticket carries BOTH rounds' items — the whole current ticket, not just the
     // last-fired course (round 2's print-on-fire ticket carried only Chuleton).
-    const stationTicket = decode(newStation[0]!.payload);
+    const stationTicket = decodeTicket(newStation[0]!.payload);
     expect(stationTicket).toContain("Sopa");
     expect(stationTicket).toContain("Chuleton");
 
     // The reprinted GROUP ticket is the consolidated whole-event ticket, both items under the Cocina header.
-    const groupTicket = decode(newGroup[0]!.payload);
+    const groupTicket = decodeTicket(newGroup[0]!.payload);
     expect(groupTicket).toContain("Sopa");
     expect(groupTicket).toContain("Chuleton");
     expect(groupTicket).toContain("Cocina");

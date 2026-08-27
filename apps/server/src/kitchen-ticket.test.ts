@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formatKitchenTicket } from "./kitchen-ticket.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 
 // The formatter is a PURE byte producer (design §3c) — no DB, no container — so these are ordinary
 // unit tests. We decode the ESC/POS payload back to its Latin-1 text (the encoding escpos.ts uses,
@@ -8,11 +9,6 @@ import { formatKitchenTicket } from "./kitchen-ticket.js";
 // tail. GS V 0 (full cut) is 0x1D 0x56 0x00 (escpos.ts / escpos.test.ts); feed precedes it, so the
 // final three bytes are always the cut.
 const CUT_BYTES = [0x1d, 0x56, 0x00];
-
-/** Decode a payload back to the Latin-1 text a printer would render, for content assertions. */
-function decode(bytes: Uint8Array): string {
-  return new TextDecoder("latin1").decode(bytes);
-}
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
@@ -29,7 +25,7 @@ describe("formatKitchenTicket", () => {
         ],
       });
 
-      const text = decode(bytes);
+      const text = decodeTicket(bytes);
       expect(text).toContain("Cocina");
       expect(text).toContain("Mesa 4");
       expect(text).toContain("A-17");
@@ -42,7 +38,7 @@ describe("formatKitchenTicket", () => {
     });
 
     it("zero-pads a single-digit hour and minute to local HH:MM", () => {
-      const text = decode(
+      const text = decodeTicket(
         formatKitchenTicket({
           scope: "station",
           stationName: "Cocina",
@@ -64,7 +60,7 @@ describe("formatKitchenTicket", () => {
         firedAt: new Date(2026, 7, 17, 14, 30),
         items: [],
       });
-      expect(decode(bytes)).toContain("Cocina");
+      expect(decodeTicket(bytes)).toContain("Cocina");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
   });
@@ -82,7 +78,7 @@ describe("formatKitchenTicket", () => {
         ],
       });
 
-      const text = decode(bytes);
+      const text = decodeTicket(bytes);
       expect(text).toContain("PASE");
       expect(text).toContain("Mesa 4");
       expect(text).toContain("A-17");
@@ -109,7 +105,7 @@ describe("formatKitchenTicket", () => {
         firedAt: new Date(2026, 7, 17, 14, 30),
         stations: [],
       });
-      expect(decode(bytes)).toContain("PASE");
+      expect(decodeTicket(bytes)).toContain("PASE");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
   });
