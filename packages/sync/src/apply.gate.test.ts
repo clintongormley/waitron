@@ -1079,7 +1079,10 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
     const subscriberId = uuid();
     const applier = await postgres.pg.connectAs("sync_applier", "ap");
     try {
-      const missingTableId = uuid(); // a dining_table that is NEVER applied (models "not enrolled")
+      // A dining_table that is NEVER applied: this models an ABSENT FK PARENT (the 23503 park path),
+      // NOT the literal "not enrolled" case — that is the inline proven-by-deletion above, which
+      // throws sync.table_not_enrolled when dining_tables is dropped from ENROLLED.
+      const missingTableId = uuid();
       const order = workingOrderImage(b, 2, { delivery_table_id: missingTableId });
       const rows: SyncLogRow[] = [
         {
@@ -1100,6 +1103,98 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
           sql`select count(*)::int::text as v from working_orders where id = ${order.id as string}`,
         ),
       ).toBe("0"); // never inserted
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("replicates a settle's status clear: the working_orders→dining_tables cascade (0050) applies and echo-suppresses", async () => {
+    // Models the REAL source→mirror flow for a tab settling on a laid-out floor. On the SOURCE a single
+    // settle UPDATE of the working_order fires working_orders_clear_table_status
+    // (packages/db/drizzle/0050_clear_table_status_trigger.sql:48-52 — AFTER UPDATE, NOT gated on
+    // app.sync_apply), which cascades `UPDATE dining_tables SET status_id = NULL WHERE tab_id = NEW.id`
+    // (0050:40-43). Because working_orders_capture fires before working_orders_clear_table_status
+    // (alphabetical trigger order), the source captures BOTH — a working_orders UPDATE (status=settled)
+    // at the LOWER seq and the cascaded dining_tables UPDATE (status_id=NULL) at the higher. This asserts
+    // a DR mirror converges on applying that batch.
+    //
+    // On the apply path applyBatch sets app.sync_apply='on' (apply.ts:298-312), so the BEFORE-UPDATE
+    // working_orders_enforce_transition is gated OFF (0037 — the settle applies verbatim) while the
+    // AFTER-UPDATE 0050 cascade is NOT gated → it fires locally and clears the mirror's status_id, and
+    // the dining_tables_capture WHEN clause (0006, IS DISTINCT FROM 'on') echo-suppresses that cascaded
+    // write so it is not re-captured. The 0050 comment defers exactly this to "a future replication
+    // slice" (0050:32) — C1 is that slice.
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // Pre-state on the mirror: an OPEN tab whose dining_table is occupied (tab_id → the order) and
+      // carries a manual status. Seed the FK-parents first — the open working_order
+      // (dining_tables.tab_id → it) and the status (dining_tables.status_id → it) — THEN the
+      // dining_table, respecting the dining_tables.tab_id → working_orders FK ordering.
+      const woId = await seedWorkingOrder(b, 1); // open
+      const statusRes = await postgres.admin.execute<{ id: string }>(
+        sql`insert into table_service_statuses (tenant_id, label, color)
+            values (${b.tenantId}, 'Bill requested', '#f59e0b') returning id`,
+      );
+      const statusId = statusRes.rows[0]!.id;
+      const tableRes = await postgres.admin.execute<{ id: string }>(
+        sql`insert into dining_tables (tenant_id, location_id, label, tab_id, status_id)
+            values (${b.tenantId}, ${b.locationId}, 'T1', ${woId}, ${statusId}) returning id`,
+      );
+      const tableId = tableRes.rows[0]!.id;
+
+      const tableStatusId = () =>
+        scalar(sql`select status_id::text as v from dining_tables where id = ${tableId}`);
+      const syncLogCount = () =>
+        scalar(sql`select count(*)::int::text as v from sync_log where tenant_id = ${b.tenantId}`);
+
+      // Control (the other direction): the table carries the status BEFORE the settle arrives.
+      expect(await tableStatusId()).toBe(statusId);
+
+      // The settle batch the source captured: the working_orders UPDATE (open→settled, settled_at set to
+      // satisfy working_orders_settled_at_ck) at the lower seq, then the cascaded dining_tables UPDATE
+      // (status_id cleared, tab_id left set — 0050 clears only status_id) at the higher seq.
+      const settledOrder = workingOrderImage(b, 1, {
+        id: woId,
+        status: "settled",
+        settled_at: "2026-08-27T12:00:00+00:00",
+      });
+      const clearedTable = diningTableImage(b, {
+        id: tableId,
+        tab_id: woId,
+        status_id: null,
+        zone_id: null,
+      });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "working_orders",
+          op: "update",
+          tenantId: b.tenantId,
+          rowImage: wire(settledOrder),
+        },
+        {
+          seq: 2n,
+          originId,
+          table: "dining_tables",
+          op: "update",
+          tenantId: b.tenantId,
+          rowImage: wire(clearedTable),
+        },
+      ];
+
+      const before = await syncLogCount();
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 2, deferred: 0 }); // both landed, nothing parked
+      expect(await woStatus(woId)).toBe("settled"); // the settle applied verbatim (transition gated off)
+      expect(await tableStatusId()).toBeNull(); // the 0050 cascade cleared the status on the mirror
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n); // cursor advanced past both
+      expect(await syncLogCount()).toBe(before); // echo suppressed — apply captured no new sync_log row
     } finally {
       await applier.close();
     }

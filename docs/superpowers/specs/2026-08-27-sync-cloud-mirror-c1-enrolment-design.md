@@ -180,6 +180,36 @@ any of the three tables** — their referential rules are FK *constraints*, whic
 `23503`-park on a genuine gap rather than wedging. The plan re-verifies this definitively against a
 real database via `information_schema.triggers`, not by grep alone.
 
+**The `working_orders_clear_table_status` cascade (0050) — a trigger _on_ `working_orders` that _targets_
+`dining_tables`.** The grep above scoped triggers *on* the three tables and so did not surface this one:
+`working_orders_clear_table_status` is an `AFTER UPDATE` trigger on `working_orders`
+([0050:48-52](../../../packages/db/drizzle/0050_clear_table_status_trigger.sql)) whose body runs
+`UPDATE dining_tables SET status_id = NULL WHERE tenant_id = NEW.tenant_id AND tab_id = NEW.id`
+([0050:40-43](../../../packages/db/drizzle/0050_clear_table_status_trigger.sql)) when a tab settles or is
+abandoned. It is **not** gated on `app.sync_apply` — deliberately, as an idempotent data-validity cascade
+rather than a state-machine gate (0050:29-33) — and 0050's own comment defers `dining_tables`
+sync-enrolment to "a future replication slice" (0050:32). **C1 is that slice**, so the hand-off lands
+here, and it is safe in both directions:
+
+- **On the apply path it cannot wedge, and does not echo.** When the mirror applies a settling
+  `working_orders` UPDATE, `applyBatch` has set `app.sync_apply='on'` in the same transaction
+  ([apply.ts:298-312](../../../packages/sync/src/apply.ts)), so the `BEFORE UPDATE`
+  `working_orders_enforce_transition` is gated off (0037 — the settle applies verbatim) while this
+  `AFTER UPDATE` cascade still fires and clears the mirror's `status_id` locally. The cascaded
+  `dining_tables` write is then **echo-suppressed** by the new `dining_tables_capture` `WHEN` clause
+  (`app.sync_apply IS DISTINCT FROM 'on'`, 0006:24-26), so it is not re-captured into the mirror's own
+  `sync_log`. The cascade is an `AFTER`, same-tenant (`tenant_id = NEW.tenant_id`), idempotent,
+  zero-or-more-row `UPDATE` that clears only `status_id`: a zero-match is a no-op and a same-tenant one is
+  RLS-permitted (0050:22-27), so it can raise neither `23503` nor `42501` and cannot wedge apply.
+- **On the source the same settle now captures a `dining_tables` UPDATE.** With `dining_tables` enrolled,
+  the source's settle fires the cascade and captures it as a normal ordered-lane `dining_tables` UPDATE
+  (`status_id=NULL`) alongside the `working_orders` UPDATE. It replicates and converges idempotently — a
+  null-watermark unconditional upsert whose non-regression rests on the seq cursor, exactly like the
+  `working_orders` row beside it. Before C1 that cascaded write was captured nowhere, so a mirror's own
+  `working_orders` apply was the *only* thing that cleared its `status_id`; enrolment makes the two paths
+  agree. The `apply.gate.test.ts` settle-cascade test exercises this end to end (both rows applied, the
+  mirror's `status_id` cleared, cursor advanced, no new `sync_log` row captured).
+
 **No new active-active conflict class.** The three tables ride the ordered lane with a null watermark,
 so under multiple origins they carry the same "last-writer-by-seq" property `working_orders` already
 has (§3). That rests on the design's **one-writer-per-row** invariant (app-level-sync §1: partitioned

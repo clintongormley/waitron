@@ -382,4 +382,29 @@ describe("the generic capture trigger over the commercial lane", () => {
       await app.close();
     }
   });
+
+  it("the three C1 capture triggers fire on {INSERT, UPDATE} and NOT DELETE (spec §6)", async () => {
+    // Spec §6 promises "the new triggers are asserted present with the right op set". These tables
+    // deactivate via `active`, never hard-delete (the app-role grant is SELECT/INSERT/UPDATE with no
+    // DELETE — 0044/0048/0052), so 0006 declares them AFTER INSERT OR UPDATE: a DELETE must never be
+    // captured. information_schema.triggers carries ONE row per (trigger, event_manipulation), so a
+    // trigger firing on INSERT OR UPDATE shows exactly {INSERT, UPDATE} — the presence of a DELETE row
+    // would mean a delete is captured. Read as the superuser admin (it sees every trigger).
+    const triggers: [table: string, trigger: string][] = [
+      ["floor_zones", "floor_zones_capture"],
+      ["table_service_statuses", "table_service_statuses_capture"],
+      ["dining_tables", "dining_tables_capture"],
+    ];
+    for (const [table, trigger] of triggers) {
+      const events = await postgres.admin.execute<{ event: string }>(
+        sql`select event_manipulation as event from information_schema.triggers
+            where trigger_schema = 'public' and event_object_table = ${table}
+              and trigger_name = ${trigger}
+            order by event_manipulation`,
+      );
+      const set = events.rows.map((r) => r.event);
+      expect(set).toEqual(["INSERT", "UPDATE"]); // exactly INSERT + UPDATE — the AFTER INSERT OR UPDATE op set
+      expect(set).not.toContain("DELETE"); // no delete captured (deactivate-only)
+    }
+  });
 });

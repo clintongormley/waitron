@@ -11,7 +11,8 @@ import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
  * facts, cited in the spec to the migration that set each grant. Groups A–C match
  * packages/sync/drizzle/0000_sync_outbox.sql's capture triggers exactly (Group A AFTER INSERT, Group B
  * AFTER INSERT OR UPDATE, Group C AFTER INSERT OR UPDATE OR DELETE); Group D's capture triggers
- * (AFTER INSERT OR UPDATE) land in a later C1 task — this unit suite pins only the registry shape.
+ * (AFTER INSERT OR UPDATE) are in packages/sync/drizzle/0006_enrol_table_service.sql; this unit suite
+ * pins only the registry shape.
  */
 const SPEC: Record<
   string,

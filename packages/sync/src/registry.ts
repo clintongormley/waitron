@@ -2,8 +2,9 @@
 // tables an apply mode is registered for. This is the audit surface for "what crosses the wire" — the
 // fiscal lane is deliberately absent (spec §1). The fourteen slice-1 rows each carry a capture trigger
 // in packages/sync/drizzle/0000_sync_outbox.sql and match spec §2 and those triggers exactly; the three
-// C1 table-service rows (dining_tables, floor_zones, table_service_statuses) are enrolled here ahead of
-// their capture triggers/grants, which land in a later C1 task (spec
+// C1 table-service rows (dining_tables, floor_zones, table_service_statuses) carry their capture triggers
+// in packages/sync/drizzle/0006_enrol_table_service.sql and add no grants (the tables already hold
+// SELECT/INSERT/UPDATE — 0044/0048/0052; spec
 // docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). registry.test.ts pins
 // both agreements.
 
