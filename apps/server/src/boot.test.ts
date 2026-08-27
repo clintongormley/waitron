@@ -638,6 +638,46 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("setup mode: closes the app pool and rejects when startListening fails (missing operator TLS file)", async () => {
+    // Copilot round 3: before this fix, the SETUP branch opened `db` (the shared prefix) but did not
+    // guard against a throw inside the branch — unlike the TRADING branch's own `loadKeyRing` guard
+    // just below it. `ensureBoxSecrets` itself does not throw here (it mints the box's own fallback
+    // cert + secrets successfully, as the operator-TLS test above shows it always does); the throw
+    // comes one line later, from `startListening` -> `buildServeOptions` -> `readFileSync` (`tls.ts`),
+    // because `config.tls` is wired from `WAITRON_TLS_CERT_FILE`/`WAITRON_TLS_KEY_FILE` naming files
+    // that do not exist (`config.tls` WINS over the box's own ensured leaf — same precedence the
+    // operator-TLS test above exercises on the happy path). That reaches the new
+    // `catch (error) { await db.close(); throw error; }` in the setup branch. This test only pins the
+    // externally-observable half — `startServer` rejects — since the pool itself has no public "is it
+    // closed" surface to assert on directly; the line coverage on the catch body is what proves it ran.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-tls-missing-"));
+    try {
+      await expect(
+        startServer({
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          // Neither path exists — `loadConfig` stores WAITRON_TLS_* verbatim with no existence check
+          // (config.ts), so this reaches `readFileSync` inside `buildServeOptions` rather than failing
+          // any earlier config-validation guard.
+          WAITRON_TLS_CERT_FILE: join(stateDir, "does-not-exist.crt"),
+          WAITRON_TLS_KEY_FILE: join(stateDir, "does-not-exist.key"),
+          WAITRON_ENV: "preproduction",
+        }),
+      ).rejects.toThrow();
+      // ensureBoxSecrets ran (and succeeded) BEFORE the failing startListening call — it is
+      // unconditional in the setup branch — so the box's own secrets were generated even though the
+      // boot as a whole rejected.
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
+        /WAITRON_CREDENTIALS_KEY=/,
+      );
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
     // The regression guard for the branch: a provisioned box (all five WAITRON_TILL_*_ID + a
     // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the

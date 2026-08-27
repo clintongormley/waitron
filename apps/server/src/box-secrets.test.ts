@@ -57,10 +57,16 @@ describe("ensureBoxSecrets", () => {
     expect(env).toMatch(/^WAITRON_SYNC_NODE_TOKEN=deadbeef/m);
   });
 
-  it("writes private keys and the secrets file 0600", async () => {
+  it("writes all four PEMs and the secrets file 0600 (owner-only, uniform)", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
-    for (const f of ["tls/server.key", "tls/ca.key", "secrets.env"]) {
+    for (const f of [
+      "tls/server.key",
+      "tls/ca.key",
+      "tls/server.crt",
+      "tls/ca.crt",
+      "secrets.env",
+    ]) {
       const mode = (await stat(join(d, f))).mode & 0o777;
       expect(mode).toBe(0o600);
     }

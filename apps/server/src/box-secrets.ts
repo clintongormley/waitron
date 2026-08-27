@@ -78,7 +78,8 @@ const defaultListIpv4 = (): string[] =>
  * the tell a POS depends on, since a fresh cert on every boot would break every already-trusting
  * setup client and a fresh key ring would strand every sealed credential.
  *
- * Layout written/read (private material 0600, public certs default mode):
+ * Layout written/read — all four PEMs plus secrets.env are 0600 (owner-only), inside the 0700
+ * state dir:
  *
  *     <stateDir>/tls/ca.crt          <stateDir>/tls/ca.key    (0600)
  *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
@@ -122,9 +123,14 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
     // purpose: it is the quartet's presence sentinel the guard above tests, so a crash BETWEEN the
     // four renames leaves the quartet incomplete (server.key still absent) and the next boot re-mints
     // all four cleanly. The guard's correctness depends on this ordering.
-    await writeFileAtomic(files.caCertFile, m.caCertPem);
+    // All four PEMs are written 0600: the CA cert and the leaf cert are public-by-content (they carry
+    // no secret), but both live in the 0700 state dir, owned by the server process, and the CA cert is
+    // distributed to a setup client via an HTTP route (a later slice) that reads it server-side — not
+    // via world-read filesystem permissions — so there is no reason for either to be world-readable.
+    // Uniform 0600 across all persisted material is simpler to reason about than a two-tier scheme.
+    await writeFileAtomic(files.caCertFile, m.caCertPem, 0o600);
     await writeFileAtomic(files.caKeyFile, m.caKeyPem, 0o600);
-    await writeFileAtomic(files.certFile, m.serverCertPem);
+    await writeFileAtomic(files.certFile, m.serverCertPem, 0o600);
     await writeFileAtomic(files.keyFile, m.serverKeyPem, 0o600);
   }
 

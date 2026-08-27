@@ -430,19 +430,31 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `caCertFile` is the CA a setup CLIENT trusts to accept the leaf, not a server input, so it is
     // narrowed off here. `now` is `startServer`'s own `() => new Date()`, so the cert's validity window
     // is anchored to real boot time. The trading `else` branch reads `config.tls` unchanged — untouched.
-    const ensured = await ensureBoxSecrets({
-      stateDir: config.stateDir,
-      hostnames: ["waitron.local", "localhost"],
-      now,
-    });
-    const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
-    const server = startListening({ ...config, tls }, app, now, log);
-    return makeStartedServer(server, health, log, {
-      // A setup box runs no background work, so there is nothing to abort or await.
-      stopWork: () => Promise.resolve(),
-      // Only the app pool was opened — no sync/retention pools exist to tear down.
-      closePools: () => db.close(),
-    });
+    //
+    // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
+    // dir, or `startListening` -> `buildServeOptions` -> `readFileSync` on a missing/unreadable
+    // operator TLS file) closes `db` before it propagates — mirroring the trading branch's own
+    // `loadKeyRing` guard below. `createPostgresDb` above already opened a LIVE pool, and on a throw
+    // path `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()`
+    // — the pool would leak. The happy path is unchanged.
+    try {
+      const ensured = await ensureBoxSecrets({
+        stateDir: config.stateDir,
+        hostnames: ["waitron.local", "localhost"],
+        now,
+      });
+      const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
+      const server = startListening({ ...config, tls }, app, now, log);
+      return makeStartedServer(server, health, log, {
+        // A setup box runs no background work, so there is nothing to abort or await.
+        stopWork: () => Promise.resolve(),
+        // Only the app pool was opened — no sync/retention pools exist to tear down.
+        closePools: () => db.close(),
+      });
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
   }
 
   // TRADING MODE — a venue is bound (`config.till` is present, narrowed for the rest of the function
