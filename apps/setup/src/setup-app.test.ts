@@ -82,6 +82,11 @@ function patch(el: SetupApp, p: DeepPartial<ProvisionBody>): void {
   );
 }
 
+/** Fires the composed, screen-agnostic `setup-advance` the venue screen emits on a valid Next. */
+function advance(el: SetupApp): void {
+  wizard(el).dispatchEvent(new CustomEvent("setup-advance", { bubbles: true, composed: true }));
+}
+
 /** Fires the composed `provision-requested` the review + provisioning screens emit, into the shell. */
 function provisionRequest(el: SetupApp): void {
   wizard(el).dispatchEvent(
@@ -144,6 +149,84 @@ describe("setup-app", () => {
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)).not.toBeNull();
     }
+  });
+
+  // Fix (m): the venue→cert/review conditional lives in the SHELL now (it owns the merged draft), not
+  // in the venue screen. On a screen-agnostic `setup-advance` from venue, the shell routes by the
+  // draft's `mode` and fiscal territory. Both branches are asserted here.
+
+  // Prove-by-deletion of the `mode === "live"` operand: change it to a constant `true` and this test
+  // (demo → review) flips red, since a demo draft would then route to cert.
+  it("routes a demo draft to review on setup-advance from venue", async () => {
+    const el = await mountSetupApp();
+    goto(el, "venue");
+    patch(el, { mode: "demo" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
+  });
+
+  it("routes a live ES-common draft to cert on setup-advance from venue", async () => {
+    const el = await mountSetupApp();
+    // The seeded draft already carries `venue.location.fiscalTerritory = "ES-common"`.
+    goto(el, "venue");
+    patch(el, { mode: "live" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
+  });
+
+  // Prove-by-deletion of the `fiscalTerritory === "ES-common"` operand: drop it (leaving only
+  // `mode === "live"`) and this test flips red — a live NON-ES-common draft would then route to cert.
+  it("routes a live non-ES-common draft to review on setup-advance (both operands matter)", async () => {
+    const el = await mountSetupApp();
+    goto(el, "venue");
+    patch(el, {
+      mode: "live",
+      venue: { location: { fiscalTerritory: "ES-other" } },
+    } as unknown as DeepPartial<ProvisionBody>);
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
+  });
+
+  // The advance is inert off the venue screen (only venue emits it today, but the guard is real).
+  it("ignores setup-advance when the current screen is not venue", async () => {
+    const el = await mountSetupApp();
+    goto(el, "review");
+    await el.updateComplete;
+    patch(el, { mode: "live" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
+  });
+
+  // A routed-back venue error must not linger once the operator corrects it and advances forward — the
+  // shell clears it on `setup-advance` just as it does on a manual `setup-goto`. Prove-by-deletion: drop
+  // the `this.venueError = undefined` line in `#onAdvance` and this flips red.
+  it("clears a routed venue error when advancing forward off the venue screen", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "provisioning.territory_country_mismatch", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    // Routed back to venue with the server banner.
+    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
+      "country must match",
+    );
+    // The operator corrects and advances (demo → review): the stale banner does not follow.
+    patch(el, { mode: "demo" });
+    advance(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    goto(el, "venue");
+    await el.updateComplete;
+    expect(await screenText(el, "venue", "[data-test=server-error]")).toBeNull();
   });
 
   it("#onPatch deep-merges a screen's slice into the draft, preserving seeded siblings", async () => {
@@ -244,7 +327,8 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
   });
 
-  it("maps setup.already_provisioning to an in-progress message with no retry", async () => {
+  // Fix (k): a terminal 409 offers a RELOAD action, not a retry — the shell wires the label per code.
+  it("maps setup.already_provisioning to an in-progress message with a reload (no retry)", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioning", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
@@ -254,10 +338,11 @@ describe("setup-app", () => {
     );
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
   });
 
   it.each(["setup.already_provisioned", "deployment.already_stamped"])(
-    "maps the fiscal 409 %s to 'already set up' with NO retry (re-POST is unrecoverable)",
+    "maps the fiscal 409 %s to 'already set up' with a reload and NO retry (re-POST is unrecoverable)",
     async (code) => {
       const provision = vi.fn().mockRejectedValue({ code, params: {} });
       const el = await mountSetupApp(stubApi({ provision }));
@@ -266,6 +351,9 @@ describe("setup-app", () => {
       expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
       const host = await screenHost(el, "provisioning");
       expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain(
+        "open the till",
+      );
     },
   );
 

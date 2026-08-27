@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./provisioning-screen.js";
 import type { SetupProvisioningScreen } from "./provisioning-screen.js";
@@ -53,5 +53,51 @@ describe("setup-provisioning-screen", () => {
     });
     expect(q(el, "[data-test=error]")!.textContent).toContain("already set up");
     expect(q(el, "[data-test=retry]")).toBeNull();
+  });
+
+  // Fix (k): a TERMINAL failure (canRetry false + a reloadLabel) renders its guidance message plus a
+  // RELOAD action instead of a retry — the two double-provision 409s, each with the shell's label.
+  it.each([
+    ["This box is already set up.", "Reload to open the till", "already set up", "open the till"],
+    ["Setup is already in progress on this box.", "Reload", "already in progress", "Reload"],
+  ])(
+    "renders the guidance message and its reload action for a terminal state (%s)",
+    async (message, reloadLabel, msgFragment, labelFragment) => {
+      const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+        message,
+        canRetry: false,
+        reloadLabel,
+      });
+      expect(q(el, "[data-test=error]")!.textContent).toContain(msgFragment);
+      const reload = q(el, "[data-test=reload]")!;
+      expect(reload).not.toBeNull();
+      expect(reload.textContent).toContain(labelFragment);
+      // A terminal state offers a reload, never a retry, and is no longer in flight.
+      expect(q(el, "[data-test=retry]")).toBeNull();
+      expect(q(el, "[data-test=status]")).toBeNull();
+    },
+  );
+
+  it("calls the injected reload when the terminal reload control is clicked", async () => {
+    const reload = vi.fn();
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "This box is already set up.",
+      canRetry: false,
+      reloadLabel: "Reload to open the till",
+      reload,
+    });
+    q(el, "[data-test=reload]")!.click();
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  // A retryable failure keeps its retry and offers NO reload, even if a reloadLabel were somehow set —
+  // canRetry wins. Guards against a terminal reload leaking onto a retryable state.
+  it("offers retry (not reload) for a retryable failure", async () => {
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "Provisioning failed. You can try again.",
+      canRetry: true,
+    });
+    expect(q(el, "[data-test=retry]")).not.toBeNull();
+    expect(q(el, "[data-test=reload]")).toBeNull();
   });
 });

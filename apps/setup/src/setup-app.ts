@@ -106,8 +106,10 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
  *
  * It owns the two things the whole flow shares: the injected {@link SetupApi}, and the accumulated
  * request {@link SetupApp.draft} that each screen contributes a slice of (via a bubbling `setup-patch`
- * event the shell deep-merges) and the `review` step finally POSTs. Nav is a plain `setup-goto` event
- * that flips {@link SetupApp.screen} — no server call, no history entry.
+ * event the shell deep-merges) and the `review` step finally POSTs. Most nav is a plain `setup-goto`
+ * event that flips {@link SetupApp.screen} — no server call, no history entry. The one CONDITIONAL
+ * transition, venue→`cert`/`review`, is a screen-agnostic `setup-advance` the shell resolves against
+ * the merged draft ({@link SetupApp.#onAdvance}), so the venue screen need not read `mode` to route.
  *
  * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
  * so the wizard can warn before provisioning a real `production` venue. That read is fully wrapped: a
@@ -186,6 +188,16 @@ export class SetupApp extends LitElement {
    * refusals (re-POSTing an already-set-up box is meaningless and unrecoverable, CLAUDE.md §5). */
   @state() private provisionCanRetry = false;
 
+  /**
+   * The label for a reload action offered ON a TERMINAL provisioning failure — the box is already set
+   * up (`already_provisioned` / `deployment.already_stamped` → "Reload to open the till", since the
+   * provisioned box serves the till) or a provision is already running elsewhere (`already_provisioning`
+   * → "Reload"). `undefined` for the in-flight and retryable states, which carry no reload (a retryable
+   * failure keeps its `Try again`, never a reload). Mutually exclusive with {@link
+   * SetupApp.provisionCanRetry}: a terminal 409 sets this and clears retry.
+   */
+  @state() private provisionReloadLabel?: string;
+
   override firstUpdated(): void {
     void this.#boot();
   }
@@ -235,6 +247,28 @@ export class SetupApp extends LitElement {
   }
 
   /**
+   * Resolve a screen-agnostic `setup-advance` (only the venue screen emits it today) against the merged
+   * {@link SetupApp.draft}. The venue→`cert`/`review` decision lives HERE, not in the venue screen: the
+   * shell owns the draft, so it — mirroring `apps/dashboard/src/dashboard-app.ts`'s conditional routing
+   * — is where the conditional belongs. A live ES-common venue still needs the AEAT certificate
+   * (`cert`); every other case (demo, or a non-ES-common territory) goes straight to `review`.
+   *
+   * Same boundary `stopPropagation` and stale-banner clear as {@link SetupApp.#onGoto}: advancing off
+   * the venue form is a user-initiated navigation, so a routed-back `venueError` must not linger.
+   * Guarded on `screen === "venue"` so a stray advance from anywhere else is inert.
+   */
+  #onAdvance(event: CustomEvent): void {
+    event.stopPropagation();
+    if (this.screen !== "venue") return;
+    this.venueError = undefined;
+    this.reviewError = undefined;
+    this.screen =
+      this.draft.mode === "live" && this.draft.venue?.location?.fiscalTerritory === "ES-common"
+        ? "cert"
+        : "review";
+  }
+
+  /**
    * Fire the provision — the review screen's `Provision`, and the provisioning screen's `Try again`,
    * both reach here through the shared composed `provision-requested`. Client validation already ran
    * on every collecting screen, so this assembles the body and POSTs it. Success takes the box down
@@ -250,6 +284,7 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
     this.screen = "provisioning";
     try {
       await this.api.provision(assembleBody(this.draft));
@@ -276,9 +311,11 @@ export class SetupApp extends LitElement {
    * - `setup.request_invalid` → back to `review` with a banner naming `params.field` (the field's own
    *   screen already validates the same rule, so this is a belt-and-suspenders path).
    * - `setup.aeat_cert_required` → back to `cert` to add the certificate.
-   * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is running).
+   * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is
+   *   running); offers a plain "Reload" so the operator isn't stranded on a dead-end alert.
    * - `setup.already_provisioned` / `deployment.already_stamped` → "already set up", NO retry: these
-   *   are the fiscal double-provision refusals and re-POSTing is unrecoverable (CLAUDE.md §5).
+   *   are the fiscal double-provision refusals and re-POSTing is unrecoverable (CLAUDE.md §5). Offers a
+   *   "Reload to open the till" action instead, since the provisioned box serves the till.
    * - `setup.not_ready` → not-ready notice, retryable.
    * - `server.internal` (the real generic-crash code) and any unrecognised code → a generic failure,
    *   retryable in place.
@@ -315,11 +352,16 @@ export class SetupApp extends LitElement {
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this box.";
         this.provisionCanRetry = false;
+        // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
+        // isn't stranded on a dead-end alert.
+        this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
       case "deployment.already_stamped":
         this.provisionMessage = "This box is already set up.";
         this.provisionCanRetry = false;
+        // The box is provisioned and serves the till at the origin root — reloading opens it.
+        this.provisionReloadLabel = "Reload to open the till";
         return;
       case "setup.not_ready":
         this.provisionMessage = "The box isn't ready yet. Wait a moment, then try again.";
@@ -334,13 +376,15 @@ export class SetupApp extends LitElement {
 
   override render(): TemplateResult {
     // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the
-    // draft), `setup-goto` (flip the visible screen), and `provision-requested` (review's Provision
-    // and the provisioning screen's retry both fire it). Wiring them on the container means each screen
-    // talks back without the shell knowing which one is mounted.
+    // draft), `setup-goto` (flip the visible screen), `setup-advance` (the venue screen's conditional
+    // next-step, resolved here against the draft), and `provision-requested` (review's Provision and the
+    // provisioning screen's retry both fire it). Wiring them on the container means each screen talks
+    // back without the shell knowing which one is mounted.
     return html`<div
       class="wizard"
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
+      @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
       @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
     >
       ${this.#renderScreen()}
@@ -355,7 +399,7 @@ export class SetupApp extends LitElement {
    * `mode` reads `environment` (to warn on a production box); `admin`, `venue`, `cert` and `review`
    * read the accumulated `draft` (to seed their fields / summarise it, so stepping Back is
    * non-destructive); `venue` and `review` also take a routed-back server error (`venueError` /
-   * `reviewError`); `provisioning` takes the mapped message + retry flag; `done` takes the `api` to
+   * `reviewError`); `provisioning` takes the mapped message + retry flag + terminal reload label; `done` takes the `api` to
    * poll during the restart. All are passed as properties, since neither an api nor a draft object can
    * travel as an attribute.
    */
@@ -388,6 +432,7 @@ export class SetupApp extends LitElement {
           data-test="screen-provisioning"
           .message=${this.provisionMessage}
           .canRetry=${this.provisionCanRetry}
+          .reloadLabel=${this.provisionReloadLabel}
         ></setup-provisioning-screen>`;
       case "done":
         return html`<setup-done-screen
