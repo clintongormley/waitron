@@ -8,8 +8,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { captureError, stampDeployment, withTenant } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { captureError, readDeploymentEnvironment, stampDeployment, withTenant } from "@waitron/db";
+import {
+  cloneTemplate,
+  nextCloneName,
+  pickTemplate,
+  resolveSharedHandle,
+  useTemplateDb,
+} from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
@@ -361,6 +367,74 @@ async function withMockedExit<T>(fn: (exits: (number | undefined)[]) => Promise<
   }
 }
 
+/**
+ * `boot.ts`'s setup branch defaults `requestRestart` to `process.kill(process.pid, "SIGTERM")` — the
+ * identical hardcoded-side-effect design `withMockedExit` above already works around for
+ * `process.exit`, applied to the one restart side effect this file needs to observe WITHOUT actually
+ * signalling the vitest worker (no `bin.ts` SIGTERM handler is installed under vitest, so a real
+ * SIGTERM would terminate it). Every call is recorded — pid + signal — so the provision test can
+ * assert the restart fired exactly once, with what, after the 200.
+ */
+async function withMockedKill<T>(
+  fn: (kills: { pid: number; signal: string | number | undefined }[]) => Promise<T>,
+): Promise<T> {
+  const original = process.kill;
+  const kills: { pid: number; signal: string | number | undefined }[] = [];
+  process.kill = ((pid: number, signal?: string | number) => {
+    kills.push({ pid, signal });
+    return true;
+  }) as typeof process.kill;
+  try {
+    return await fn(kills);
+  } finally {
+    process.kill = original;
+  }
+}
+
+/** A valid ES-common venue body for `POST /setup-api/provision`, with PLAINTEXT admin secrets (the
+ * endpoint hashes them at its boundary). Mirrors `provision.test.ts`'s fixture shape; shared by the
+ * two provision full-boot tests below, which differ only in the `taxId` and whether an `aeatCert`
+ * rides alongside it. */
+function provisionVenueBody(taxId: string) {
+  return {
+    country: "ES",
+    taxId,
+    legalName: "Deli Test SL",
+    location: {
+      name: "Sala principal",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
+    },
+    tillName: "Caja 1",
+    seriesCode: "A",
+    rectificativeSeriesCode: "R",
+    admin: { displayName: "Administradora", pin: "1234", password: "dashPass123" },
+  };
+}
+
+/** Parse a `KEY=value\n` env file's lines (split on the FIRST `=`, so a value's own `=` — a base64
+ * pad or a URI query — survives), for reading `trading.env` back. Mirrors `writeTradingEnv`'s writer
+ * and boot's own `parseEnvFile`. */
+function parseEnvLines(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    out[line.slice(0, eq)] = line.slice(eq + 1);
+  }
+  return out;
+}
+
 /** The first captured line naming `event`, waiting for it to arrive rather than assuming it already
  * has — `lines` is being appended to concurrently by the loop running in the background. */
 async function waitForEvent(lines: readonly string[], event: string): Promise<LogLine> {
@@ -674,6 +748,166 @@ describe("startServer, against a real container as the deployment role", () => {
         /WAITRON_CREDENTIALS_KEY=/,
       );
     } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("setup mode: POST /setup-api/provision provisions a demo venue, writes trading.env, stamps preproduction, and requests a restart", async () => {
+    // The slice-2b full-boot proof: boot unprovisioned over HTTPS (as the 2a test above does), then
+    // drive the whole provisioning flow through the real endpoint — validate + hash, `provisionVenue`
+    // (stamp + `applyVenue` as the OWNER connection boot now wires), persist `trading.env`, request the
+    // restart. A FRESH manifest clone (not the file-shared `suite`) keeps this isolated: `provisionVenue`
+    // stamps the GLOBAL `deployment` singleton AND mints a venue, either of which would fix or pollute
+    // every other test's shared DB (CLAUDE.md §4). The clone's superuser default connection OWNS the
+    // manifest tables — exactly the owner connection `applyVenue` documents it needs — so both
+    // `DATABASE_URL` and `WAITRON_MIGRATIONS_DATABASE_URL` point at it here (`config.migrationsDatabaseUrl`
+    // is what boot opens `ownerDb` from).
+    //
+    // `requestRestart` defaults to `process.kill(process.pid, "SIGTERM")` (boot.ts) — which, with no
+    // `bin.ts` SIGTERM handler installed under vitest, would kill this worker. `withMockedKill`
+    // intercepts it the identical way `withMockedExit` intercepts the listen-failure `process.exit`.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-state-"));
+    const handle = resolveSharedHandle(undefined);
+    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
+    const check = await pg.connect();
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          DATABASE_URL: pg.uri,
+          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        });
+        // Trust the CA the box minted, so the self-signed leaf verifies over the loopback dial.
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        try {
+          // A valid DEMO venue, no `aeatCert` (a plain demo box files nothing to AEAT).
+          const body = { mode: "demo", venue: provisionVenueBody("60000009K") };
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
+          expect(json.provisioned).toBe(true);
+
+          // `trading.env` was written with the five till ids + `WAITRON_ENV` + `DATABASE_URL`, so the
+          // next boot enters trading mode. Parsed (not substring-matched) so a missing key really fails.
+          const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
+          for (const key of [
+            "WAITRON_TILL_TENANT_ID",
+            "WAITRON_TILL_TILL_ID",
+            "WAITRON_TILL_NODE_ID",
+            "WAITRON_TILL_SERIES_ID",
+            "WAITRON_TILL_LOCATION_ID",
+          ]) {
+            expect(trading[key]).toBeTruthy();
+          }
+          expect(trading.WAITRON_ENV).toBe("preproduction");
+          expect(trading.DATABASE_URL).toBe(pg.uri);
+          // The tenant id the endpoint returned is the one persisted for the trading boot.
+          expect(trading.WAITRON_TILL_TENANT_ID).toBe(json.tenantId);
+
+          // The DB is now stamped preproduction and holds exactly one venue (one tenant, one node/SIF).
+          // `check` is the clone's superuser connection, so it BYPASSES RLS and sees the true counts.
+          expect(await readDeploymentEnvironment(check)).toBe("preproduction");
+          const tenants = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenants`,
+          );
+          expect(tenants.rows[0]!.n).toBe(1);
+          const nodes = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from nodes`,
+          );
+          expect(nodes.rows[0]!.n).toBe(1);
+
+          // The restart was requested exactly once, AFTER the 200 flushed (setTimeout(0) in
+          // setup-api.ts), as a SIGTERM to this process — the graceful-shutdown latch bin.ts installs.
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await check.close();
+      await pg.stop();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("setup mode: a demo provision carrying an AEAT test cert seals it into the tenant's fiscal.aeat vault", async () => {
+    // The `sealAeat` wiring boot now binds (`sealAeatCredential(ownerDb, ring, …)`) — recovered vault
+    // ring AND owner connection together. A demo/preproduction box CAN carry a test cert for AEAT's
+    // homologation endpoint (map §3), so `POST /setup-api/provision` with an `aeatCert` seals it after
+    // `applyVenue` mints the tenant. This proves the ring `boot.ts` read back off `secrets.env` is the
+    // one that sealed the row (a broken ring recovery would throw here), and the same FRESH-clone
+    // isolation the demo test above uses. Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported
+    // for the mTLS-transport test) rather than inventing a new PFX.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-seal-state-"));
+    const handle = resolveSharedHandle(undefined);
+    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
+    const check = await pg.connect();
+    const material = mintMtlsMaterial();
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          DATABASE_URL: pg.uri,
+          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        });
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        try {
+          const body = {
+            mode: "demo",
+            venue: provisionVenueBody("60000011K"),
+            aeatCert: {
+              pfxBase64: material.clientPfx.toString("base64"),
+              passphrase: material.clientPassphrase,
+              certKind: "representante",
+            },
+          };
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
+          expect(json.provisioned).toBe(true);
+
+          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned. `check`
+          // is the clone's superuser connection, so it BYPASSES the FORCE-RLS on `tenant_credentials`.
+          const sealed = await check.execute<{ n: number; tenant: string }>(
+            sql`select count(*)::int as n, max(tenant_id::text) as tenant
+                from tenant_credentials where purpose = 'fiscal.aeat'`,
+          );
+          expect(sealed.rows[0]!.n).toBe(1);
+          expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
+
+          // The restart still fires once after the seal + persist, as for the plain demo above.
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await check.close();
+      await pg.stop();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
