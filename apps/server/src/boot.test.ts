@@ -664,6 +664,44 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("fails the boot LOUDLY when WAITRON_SETUP_APP_DIR is set but holds no index.html, naming the var", async () => {
+    // Slice 2c: the setup-wizard app dir joins the till/dashboard app dirs in the `assertBuiltApp`
+    // fail-fast group, which runs in the SHARED prefix BEFORE any pool is opened. A configured-but-
+    // never-built wizard dir must therefore throw `server.config_invalid` naming WAITRON_SETUP_APP_DIR
+    // before boot ever touches the database — the same LOUD posture the other two app dirs get
+    // (spa-api.test.ts unit-tests `assertBuiltApp` itself; THIS proves boot wires it for the setup
+    // dir). No container needed: the throw precedes `createPostgresDb`, so the dummy DATABASE_URL below
+    // is never dialled and no pool leaks. Deletion-proof: remove the `assertBuiltApp(config.setupAppDir,
+    // …)` line in boot.ts and this goes RED (the mis-built dir reaches `mountSpa`, 404ing every page
+    // load instead of failing the boot).
+    const emptyDir = mkdtempSync(join(tmpdir(), "waitron-boot-setup-noindex-"));
+    try {
+      let caught: unknown;
+      try {
+        await startServer({
+          DATABASE_URL: "postgres://unused:unused@localhost/unused",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+          WAITRON_SETUP_APP_DIR: emptyDir,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(isAppError(caught)).toBe(true);
+      expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
+      // Names the env var the operator must fix and a reason CODE, never the path itself — the no-leak,
+      // name-the-variable discipline every other `server.config_invalid` follows.
+      expect(isAppError(caught) && caught.params).toEqual({
+        variable: "WAITRON_SETUP_APP_DIR",
+        reason: "missing_index_html",
+      });
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+    }
+  });
+
   it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS (slice 3)", async () => {
     // Slice 3's discovery surface is mounted in the SETUP branch only (a trading box's tills are
     // already paired). It rides the same minted self-signed cert the shared setup path produces
