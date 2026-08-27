@@ -257,15 +257,27 @@ question (below).
   at the boundary, `trading.env` persisted (`writeTradingEnv`, 0600 atomic) then a `requestRestart`
   (SIGTERM → supervisor → trading mode); dev launcher sources `secrets.env`/`trading.env`. **Venue-only
   (R1)** — full `instance` role-split deferred (see Debt). **next → slice 2c**: the `apps/setup` Vite+Lit
-  wizard consuming 2b's endpoint; then 3 mDNS/`waitron.local` + per-device trust UX, 4
-  backup/status/break-glass. Slices 5–7
+  wizard consuming 2b's endpoint. **Slice 3 discovery + CA-serving — LANDED #143** (built independent of
+  2c, on top of 2a's cert): in-process `multicast-dns` advertises `waitron.local` in **both** modes
+  (crash-safe — a no-multicast-route box still boots; the responder is acquired LAST in each boot branch
+  so no failure path leaks the UDP socket); a new `discovery-api.ts` serves `GET /setup-api/ca.crt` (the
+  CA 2a minted) + `GET /setup-api/discovery` + a server-rendered `GET /setup/trust` per-OS page with an
+  IP-QR fallback; `BOX_HOSTNAME`/`caCertPath` single-source the hostname + CA path; **`setup-api.ts`
+  untouched**. The **automated per-device "is the CA trusted?" check is deferred to a browser-behaviour
+  spike** — spec §17/§18's "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and
+  unverified, so the trust page instructs + offers the download/QR but does not assert trust state. Then
+  **4** backup/status/break-glass. Slices 5–7
   (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
   constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
   trading-healthy); a liveness/supervisor probe must gate on **`/setup-api/status`** (200), not
   `/health`, or it restart-loops an unprovisioned box. *Notes:* SPAs are served as bundles only —
   **installable** PWAs (service worker + manifest) are a later slice; and a pre-existing
   `readOrderFlow`/`buildCardProvider` boot-throw pool-leak in `boot.ts` (a boot that throws after the
-  app pool opens doesn't close it; moot in prod — process exits) is a candidate cleanup. And the
+  app pool opens doesn't close it; moot in prod — process exits) is a candidate cleanup — slice 3 (#143)
+  acquires its mDNS responder LAST so it adds **no** socket leak there, but a generalized top-level boot
+  teardown that would also close this `db` leak remains deferred (Copilot raised it on #143). **Other
+  slice-3 debt:** two QR libraries now coexist — `qrcode` (`apps/server`) vs `apps/till`'s fiscal-pinned
+  `qrcode-generator` — worth unifying into `packages/shared` later. And the
   **reroute** itself (the till reaches any live server — selling is active-active — keeping a stable
   local origin in front).
 
