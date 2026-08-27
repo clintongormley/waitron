@@ -231,10 +231,12 @@ describe("captureOps match each table's group", () => {
       } else {
         // Group C (DELETE-capable: working_orders, working_order_lines) captures insert/update/delete;
         // Group D (deactivate-only: dining_tables, floor_zones, table_service_statuses) captures
-        // insert/update. Both start [insert, update]; delete is present iff the table is DELETE-capable.
-        expect(entry.captureOps.slice(0, 2)).toEqual(["insert", "update"]);
-        expect([2, 3]).toContain(entry.captureOps.length);
-        if (entry.captureOps.length === 3) expect(entry.captureOps[2]).toBe("delete");
+        // insert/update. delete is present iff the table is DELETE-capable; the real-PG capture gate
+        // asserts the ACTUAL trigger op set (capture.gate.test.ts §6), while this pins the registry shape.
+        const hasDelete = entry.captureOps.includes("delete");
+        expect(entry.captureOps).toEqual(
+          hasDelete ? ["insert", "update", "delete"] : ["insert", "update"],
+        );
       }
     });
   }

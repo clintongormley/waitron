@@ -395,16 +395,21 @@ describe("the generic capture trigger over the commercial lane", () => {
       ["table_service_statuses", "table_service_statuses_capture"],
       ["dining_tables", "dining_tables_capture"],
     ];
-    for (const [table, trigger] of triggers) {
-      const events = await postgres.admin.execute<{ event: string }>(
-        sql`select event_manipulation as event from information_schema.triggers
-            where trigger_schema = 'public' and event_object_table = ${table}
-              and trigger_name = ${trigger}
-            order by event_manipulation`,
-      );
-      const set = events.rows.map((r) => r.event);
-      expect(set).toEqual(["INSERT", "UPDATE"]); // exactly INSERT + UPDATE — the AFTER INSERT OR UPDATE op set
-      expect(set).not.toContain("DELETE"); // no delete captured (deactivate-only)
+    // One query for all three (the sibling capture test above batches the same way): a row per
+    // (trigger, event_manipulation), so a captured DELETE would surface as a third event row.
+    const events = await postgres.admin.execute<{ tbl: string; event: string }>(
+      sql`select event_object_table as tbl, event_manipulation as event
+          from information_schema.triggers
+          where trigger_schema = 'public'
+            and event_object_table in ('floor_zones', 'table_service_statuses', 'dining_tables')
+            and trigger_name in ('floor_zones_capture', 'table_service_statuses_capture', 'dining_tables_capture')
+          order by event_object_table, event_manipulation`,
+    );
+    for (const [table] of triggers) {
+      const set = events.rows.filter((r) => r.tbl === table).map((r) => r.event);
+      // Exactly {INSERT, UPDATE}: the AFTER INSERT OR UPDATE op set. toEqual pins it, so a captured
+      // DELETE (a third event row) fails here — no delete captured (deactivate-only).
+      expect(set).toEqual(["INSERT", "UPDATE"]);
     }
   });
 });

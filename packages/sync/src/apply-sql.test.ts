@@ -112,8 +112,7 @@ describe("SYNC_SCHEMA_TABLES covers every enrolled table, and the watermark tabl
 
   it("the C1 tables apply as an unconditional upsert and refuse a delete statement", () => {
     for (const table of ["dining_tables", "floor_zones", "table_service_statuses"]) {
-      const e = ENROLLED.find((x) => x.table === table);
-      if (e === undefined) throw new Error(`registry is missing ${table}`);
+      const e = entry(table);
       const statement = applyStatementFor(e);
       expect(statement).toContain(`on conflict (id) do update set`);
       expect(statement).not.toContain("where excluded."); // watermarkColumn null → unconditional
