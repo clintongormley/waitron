@@ -24,11 +24,12 @@
 //
 // This file THROWS no domain code of its own (the only throw on the path, `enqueuePrintJob`'s
 // `printer.not_found`, is made unreachable by those two guards), so it needs no `import "./errors.js"`.
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   kitchenStations,
   printers,
   stationPrinters,
+  ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -257,4 +258,45 @@ export async function enqueueKitchenTickets(
       await enqueuePrintJob(tx, printCfg, printerId, consolidated);
     }
   }
+}
+
+/**
+ * Reprint the current kitchen tickets for a whole order (design §3d) — the operator's "a jam ate the
+ * paper, print it again" lever, surfaced on the station display + expo. Gathers EVERY currently-fired
+ * ticket item of the order (`fired_at IS NOT NULL`, tenant-scoped) and re-enqueues them through the same
+ * `enqueueKitchenTickets` the fire path uses, so the reprinted tickets are byte-for-byte the ones a fire
+ * produces (station tickets per involved station, one consolidated ticket per group printer).
+ *
+ * Re-querying ALL fired items here is CORRECT — the OPPOSITE of the fire path. Print-on-fire captures
+ * only the newly-fired set from its write's `RETURNING` (ruling R-D) precisely so it does NOT reprint
+ * earlier rounds; reprint WANTS the whole current ticket across every round, so it re-reads the lot.
+ * HELD items (`fired_at` NULL) are excluded — they are not in the kitchen yet, so there is nothing to
+ * reprint for them.
+ *
+ * An order with no fired items (an unknown/never-fired order, or one whose items are all held) yields an
+ * empty set and is a pure NO-OP: `enqueueKitchenTickets` short-circuits on the empty input and enqueues
+ * nothing, so reprint needs — and throws — no error code of its own. It inherits the fire path's
+ * never-block posture for free: enqueue is an outbox INSERT that opens no socket, and the `FOR SHARE`
+ * lock in `enqueueKitchenTickets` keeps `enqueuePrintJob`'s `printer.not_found` unreachable exactly as it
+ * does on the fire path (see the header). Tenant-scoped (belt-and-braces beside the caller's RLS).
+ */
+export async function reprintOrderTickets(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<void> {
+  const fired = await tx
+    .select({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+    })
+    .from(ticketItems)
+    .where(
+      and(
+        eq(ticketItems.tenantId, cfg.tenantId),
+        eq(ticketItems.workingOrderId, orderId),
+        isNotNull(ticketItems.firedAt),
+      ),
+    );
+  await enqueueKitchenTickets(tx, cfg, orderId, fired);
 }

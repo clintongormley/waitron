@@ -86,7 +86,7 @@ function mountApp(tenant: Tenant): Hono {
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string } = {},
 ): Promise<Response> {
@@ -128,6 +128,16 @@ async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): 
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
   });
+}
+
+/** Seed one kitchen station for `tenant` directly (owner SQL) — the attach target the mapping routes
+ * wire a printer to. A fresh unique name each call keeps `kitchen_stations_name_key` happy across the
+ * shared clone. */
+async function seedStation(tenant: Tenant, name: string): Promise<string> {
+  const row = await suite.admin.execute<{ id: string }>(sql`
+    insert into kitchen_stations (tenant_id, location_id, name, is_default, active)
+    values (${tenant.tenantId}, ${tenant.locationId}, ${name}, false, true) returning id`);
+  return row.rows[0]!.id;
 }
 
 /** Seed an agent + a network_tcp printer + a queued job for `tenant` directly (owner SQL), for the
@@ -256,5 +266,114 @@ describe("Print API over real Postgres (app role, FORCE RLS)", () => {
       body: { label: "Gate OK" },
     });
     expect(manager.status).toBe(201);
+  });
+});
+
+describe("Station ↔ printer mapping routes over real Postgres (printer.manage, FORCE RLS)", () => {
+  it("attaches, lists both directions, is idempotent, and detaches a pair as a manager", async () => {
+    const app = mountApp(tenantA);
+    const agent = await enrolAgent(app, "Mapping agent");
+    const printerId = await createPrinter(app, agent.agentId, "Mapping printer");
+    const stationId = await seedStation(tenantA, `Cocina ${randomUUID()}`);
+    const at = `/management-api/stations/${stationId}/printers/${printerId}`;
+    const byStation = `/management-api/stations/${stationId}/printers`;
+    const byPrinter = `/management-api/printers/${printerId}/stations`;
+
+    // Attach → 204.
+    expect((await send(app, "POST", at, { cookie: managerCookie })).status).toBe(204);
+
+    // Both reads see the pair: the station-centric list and the R-J printer-centric mirror.
+    const station = (await (
+      await send(app, "GET", byStation, { cookie: managerCookie })
+    ).json()) as { stationId: string; printerId: string }[];
+    expect(station).toContainEqual({ stationId, printerId });
+    const printer = (await (
+      await send(app, "GET", byPrinter, { cookie: managerCookie })
+    ).json()) as { stationId: string; printerId: string }[];
+    expect(printer).toContainEqual({ stationId, printerId });
+
+    // Re-attaching the same pair is an idempotent no-op (204, no duplicate row).
+    expect((await send(app, "POST", at, { cookie: managerCookie })).status).toBe(204);
+    expect(
+      ((await (await send(app, "GET", byStation, { cookie: managerCookie })).json()) as unknown[])
+        .length,
+    ).toBe(1);
+
+    // Detach → 204, and both reads are empty again.
+    expect((await send(app, "DELETE", at, { cookie: managerCookie })).status).toBe(204);
+    expect(
+      ((await (await send(app, "GET", byStation, { cookie: managerCookie })).json()) as unknown[])
+        .length,
+    ).toBe(0);
+    expect(
+      ((await (await send(app, "GET", byPrinter, { cookie: managerCookie })).json()) as unknown[])
+        .length,
+    ).toBe(0);
+  });
+
+  it("404s an unknown station/printer and 400s a malformed id (never a 22P02 → 500)", async () => {
+    const app = mountApp(tenantA);
+    const agent = await enrolAgent(app, "Miss agent");
+    const printerId = await createPrinter(app, agent.agentId, "Miss printer");
+    const stationId = await seedStation(tenantA, `Barra ${randomUUID()}`);
+
+    // Unknown station → station.not_found (404).
+    const noStation = await send(
+      app,
+      "POST",
+      `/management-api/stations/${randomUUID()}/printers/${printerId}`,
+      { cookie: managerCookie },
+    );
+    expect(noStation.status).toBe(404);
+    expect(await noStation.json()).toMatchObject({ error: { code: "station.not_found" } });
+
+    // Unknown printer → printer.not_found (404).
+    const noPrinter = await send(
+      app,
+      "POST",
+      `/management-api/stations/${stationId}/printers/${randomUUID()}`,
+      { cookie: managerCookie },
+    );
+    expect(noPrinter.status).toBe(404);
+    expect(await noPrinter.json()).toMatchObject({ error: { code: "printer.not_found" } });
+
+    // Malformed station id → shared.invalid_id (400) from requireUuidParam, before any query.
+    const malformed = await send(
+      app,
+      "POST",
+      `/management-api/stations/not-a-uuid/printers/${printerId}`,
+      { cookie: managerCookie },
+    );
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
+  it("require printer.manage — 401 unauth, 403 staff, 204 manager (gate proven by deletion via the shared `gated`)", async () => {
+    // The mapping routes funnel through the SAME `gated` helper the sibling management routes use, so
+    // the by-deletion proof recorded on that block covers these too: deleting the `authorizeManager(...)`
+    // call from print-api.ts's `gated` flips this staff case from 403 to 204; restoring it turns it green.
+    const app = mountApp(tenantA);
+    const agent = await enrolAgent(app, "Gate agent");
+    const printerId = await createPrinter(app, agent.agentId, "Gate printer");
+    const stationId = await seedStation(tenantA, `Plancha ${randomUUID()}`);
+    const at = `/management-api/stations/${stationId}/printers/${printerId}`;
+
+    // Unauthenticated → 401 on a representative mapping route.
+    const unauth = await send(app, "GET", `/management-api/stations/${stationId}/printers`);
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+
+    // Staff session → 403 (the gate refuses it).
+    const staff = await send(app, "POST", at, { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+
+    // Manager session → 204 (the gate admits it).
+    const manager = await send(app, "POST", at, { cookie: managerCookie });
+    expect(manager.status).toBe(204);
   });
 });

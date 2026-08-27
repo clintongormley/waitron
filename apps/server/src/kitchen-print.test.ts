@@ -19,7 +19,7 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines, openTab } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
 import "./errors.js";
 
 // PGlite is the correct target: print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx —
@@ -397,5 +397,80 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
     expect(decode(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
+  });
+});
+
+describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)", () => {
+  it("re-enqueues EVERY currently-fired item across all fire rounds — not just the last round (the print-on-fire contrast)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { pStation, pGroup, beforeReprint, afterReprint } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const pStation = await makePrinter(tx, cfg, "Cocina printer", "station");
+      const pGroup = await makePrinter(tx, cfg, "Pase", "order");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pStation });
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pGroup });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+        stationId: cocina.id,
+        courseId: ent.id,
+      });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+        stationId: cocina.id,
+        courseId: pri.id,
+      });
+
+      // Fire round 1 (auto-fires Entrantes/soup, holds Principales/steak), then round 2 releases the
+      // held course — so BOTH items are now fired, from two separate rounds.
+      const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const beforeReprint = await printJobsFor(tx);
+
+      // Reprint re-queries ALL currently-fired items (both rounds) and re-enqueues the whole ticket —
+      // unlike print-on-fire, which prints only the newly-fired set. This is the load-bearing difference.
+      await reprintOrderTickets(tx, cfg, orderId);
+      const afterReprint = await printJobsFor(tx);
+      return { pStation, pGroup, beforeReprint, afterReprint };
+    });
+
+    // The reprint added NEW jobs on top of the two rounds' print-on-fire jobs.
+    const beforeIds = new Set(beforeReprint.map((j) => j.id));
+    const newJobs = afterReprint.filter((j) => !beforeIds.has(j.id));
+
+    // One station ticket + one consolidated group ticket = two new jobs (the one involved station, Cocina,
+    // its station printer once and its group printer once), no more.
+    const newStation = newJobs.filter((j) => j.printerId === pStation);
+    const newGroup = newJobs.filter((j) => j.printerId === pGroup);
+    expect(newStation).toHaveLength(1);
+    expect(newGroup).toHaveLength(1);
+    expect(newJobs).toHaveLength(2);
+
+    // The reprinted STATION ticket carries BOTH rounds' items — the whole current ticket, not just the
+    // last-fired course (round 2's print-on-fire ticket carried only Chuleton).
+    const stationTicket = decode(newStation[0]!.payload);
+    expect(stationTicket).toContain("Sopa");
+    expect(stationTicket).toContain("Chuleton");
+
+    // The reprinted GROUP ticket is the consolidated whole-event ticket, both items under the Cocina header.
+    const groupTicket = decode(newGroup[0]!.payload);
+    expect(groupTicket).toContain("Sopa");
+    expect(groupTicket).toContain("Chuleton");
+    expect(groupTicket).toContain("Cocina");
+  });
+
+  it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+
+      // An order id that has no fired ticket_items at all — a well-formed but unknown/never-fired order.
+      // The verb re-queries zero fired rows and enqueues nothing, never throwing a new error code.
+      await reprintOrderTickets(tx, cfg, randomUUID());
+      return printJobsFor(tx);
+    });
+    expect(jobs).toHaveLength(0);
   });
 });
