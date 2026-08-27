@@ -664,6 +664,57 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
+    // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
+    // → `mountSpa`: a real `startServer` boot in setup mode (all five WAITRON_TILL_*_ID omitted) with
+    // WAITRON_SETUP_APP_DIR pointed at a marked throwaway dir. `GET /` must return that marker (the built
+    // wizard), NOT the inline placeholder shell — the setup-mode analogue of the till/dashboard
+    // end-to-end SPA test below. This is the missing wire-up proof: the other setup tests are a
+    // `mountSetup`-direct unit test (bypasses config/boot) plus a full-boot test for only the
+    // missing-index FAILURE path. Deletion-proof: mutate boot.ts's `setupAppDir: config.setupAppDir` to
+    // `undefined` (or to `config.tillAppDir`, unset here) and this goes RED — `GET /` falls back to the
+    // placeholder. Same HTTPS setup-mode harness the status test above uses (the box mints + serves its
+    // own self-signed cert), so `/` is dialled over https trusting the box CA.
+    const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-setup-spa-"));
+    writeFileSync(join(wizardApp, "index.html"), "<html>setup-wizard-served-e2e</html>");
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-spa-state-"));
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_ENV: "preproduction",
+      WAITRON_SETUP_APP_DIR: wizardApp,
+    });
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const { via, close } = httpsVia(ca);
+    try {
+      // GET / serves the built wizard bundle, not the placeholder — the whole config→boot→mountSpa wire.
+      const root = await fetch(`https://127.0.0.1:${port}/`, via);
+      expect(root.status).toBe(200);
+      expect(root.headers.get("content-type")).toContain("text/html");
+      const text = await root.text();
+      expect(text).toContain("setup-wizard-served-e2e"); // the built wizard
+      expect(text).not.toContain("needs setup"); // NOT the inline placeholder shell
+
+      // The setup API still answers as JSON: the wizard's `mountSpa` catch-all (registered LAST) did not
+      // shadow /setup-api/status.
+      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+      });
+    } finally {
+      await server.close();
+      await close();
+      await rm(stateDir, { recursive: true, force: true });
+      rmSync(wizardApp, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+    }
+  }, 60_000);
+
   it("fails the boot LOUDLY when WAITRON_SETUP_APP_DIR is set but holds no index.html, naming the var", async () => {
     // Slice 2c: the setup-wizard app dir joins the till/dashboard app dirs in the `assertBuiltApp`
     // fail-fast group, which runs in the SHARED prefix BEFORE any pool is opened. A configured-but-
