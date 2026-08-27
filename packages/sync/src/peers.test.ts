@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { AppError } from "@waitron/shared";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { authenticatePeer, enrolPeer, listPeers, revokePeer } from "./peers.js";
 
@@ -56,7 +55,11 @@ describe("enrolPeer + authenticatePeer", () => {
     try {
       const { peerId, token } = await enrolPeer(pruner, { subscriberId: "cloud", name: "m" });
       await pruner.execute(sql`update sync_peers set active = false where id = ${peerId}::uuid`);
-      await expect(authenticatePeer(tailer, token)).rejects.toBeInstanceOf(AppError);
+      // Assert the CODE, not just that it is an AppError: the oracle-free contract requires a revoked
+      // peer to fold into the SAME sync.node_unauthorized as every other failure (Copilot #144).
+      await expect(authenticatePeer(tailer, token)).rejects.toMatchObject({
+        code: "sync.node_unauthorized",
+      });
     } finally {
       await pruner.close();
       await tailer.close();
