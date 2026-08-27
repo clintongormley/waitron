@@ -48,8 +48,9 @@ export default defineConfig({
       // omitting the spread lets vite.config.ts, vitest.config.ts, and vite-env.d.ts reappear in the
       // report. Spread the defaults (test files, *.d.ts, config files) and add this app's own
       // non-source surface: src/main.ts is the browser entry point that wires the app together at
-      // startup (tokens, the mount) and is exercised only in a real browser, not under the runner.
-      exclude: [...coverageConfigDefaults.exclude, "src/main.ts"],
+      // startup (tokens, the mount) and is exercised only in a real browser, not under the runner;
+      // src/widgets/test-helpers.ts is test-only mount/axe support (mirrors apps/dashboard).
+      exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
       // Thresholds match packages/ui and the other browser apps (till/dashboard) — the workspace's
       // Chromium/Playwright packages — rather than the 98/98/98/95 the pure-Node packages carry. A
       // browser app is a small number of files where per-percent swings are coarse, so functions and

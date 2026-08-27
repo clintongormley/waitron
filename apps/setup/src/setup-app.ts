@@ -1,8 +1,10 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-// Side-effect import registers the <wt-card> element this shell names as a tag below.
-import "@waitron/ui/src/components/wt-card.js";
+// Side-effect imports register the screen custom elements this shell only names as tags below.
+import "./screens/mode-screen.js";
+import "./screens/admin-screen.js";
+import "./screens/review-screen.js";
 import type { ProvisionBody, SetupApi } from "./api/client.js";
 
 /**
@@ -163,30 +165,37 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * The mounted screen for the current {@link SetupApp.screen}. Only `mode` renders its real
-   * placeholder card in this task; the collecting screens (`admin`/`venue`/`cert`/`review`/
-   * `provisioning`/`done`) arrive in later tasks of slice 2c and render a labelled stub for now, so
-   * the machine and its nav are exercisable end to end.
+   * The mounted screen for the current {@link SetupApp.screen}. `mode`, `admin` and `review` are the
+   * real screens (this task); the remaining collecting screens (`venue`/`cert`) and the terminal
+   * `provisioning`/`done` arrive in later tasks of slice 2c and render a labelled stub for now, so the
+   * machine and its nav are exercisable end to end. The real screens carry the `data-test="screen-*"`
+   * hook on their own host so the shell's screen-switching tests stay uniform across stub and real.
+   *
+   * `mode` reads `environment` (to warn on a production box) and `review` reads the accumulated
+   * `draft` (to summarise it); both are passed as properties, since neither can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "admin":
-        return html`<p data-test="screen-admin">admin</p>`;
+        return html`<setup-admin-screen data-test="screen-admin"></setup-admin-screen>`;
       case "venue":
         return html`<p data-test="screen-venue">venue</p>`;
       case "cert":
         return html`<p data-test="screen-cert">cert</p>`;
       case "review":
-        return html`<p data-test="screen-review">review</p>`;
+        return html`<setup-review-screen
+          data-test="screen-review"
+          .draft=${this.draft}
+        ></setup-review-screen>`;
       case "provisioning":
         return html`<p data-test="screen-provisioning">provisioning</p>`;
       case "done":
         return html`<p data-test="screen-done">done</p>`;
       default:
-        return html`<wt-card data-test="screen-mode">
-          <h1>Set up this Waitron box</h1>
-          ${this.environment ? html`<p data-test="environment">${this.environment}</p>` : nothing}
-        </wt-card>`;
+        return html`<setup-mode-screen
+          data-test="screen-mode"
+          .environment=${this.environment}
+        ></setup-mode-screen>`;
     }
   }
 }

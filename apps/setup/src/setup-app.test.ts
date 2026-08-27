@@ -52,6 +52,20 @@ async function flush(el: SetupApp): Promise<void> {
 /** The shell's event-listening container, from which composed screen events are dispatched in tests. */
 const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>(".wizard")!;
 
+/**
+ * The real `mode`/`admin`/`review` screens each render into their OWN shadow root, so the shell's
+ * `shadowRoot.querySelector` cannot see their contents. This grabs the mounted screen host and awaits
+ * its render, so a test can read into its shadow root. `updateComplete` is awaited because the shell
+ * awaiting its own render does not await a freshly-mounted child's.
+ */
+async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
+  const host = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    `[data-test=screen-${screen}]`,
+  )!;
+  await host.updateComplete;
+  return host;
+}
+
 /** Reads the shell's private accumulated draft — the internal the `setup-patch` merge writes into,
  * which has no DOM surface until the later `review` screen. TS-private is erased at runtime. */
 const readDraft = (el: SetupApp) => (el as unknown as { draft: DeepPartial<ProvisionBody> }).draft;
@@ -72,7 +86,8 @@ describe("setup-app", () => {
   it("renders the mode screen with the setup heading on boot", async () => {
     const el = await mountSetupApp();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
   });
 
   it("boot reads the box environment via getStatus and surfaces it", async () => {
@@ -84,7 +99,10 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
-    expect(el.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe("production");
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
+      "production",
+    );
   });
 
   it("still renders when boot's getStatus rejects (the try/catch is proven)", async () => {
@@ -93,7 +111,8 @@ describe("setup-app", () => {
     await flush(el);
     // The shell rendered its first screen despite the rejection, and no environment is shown.
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
   });
 
   it("#goto flips the visible screen", async () => {
