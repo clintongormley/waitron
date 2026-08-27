@@ -492,10 +492,10 @@ export class TillStationQueue extends LitElement {
 
   /** The per-order reprint button (KDS-4 §3d), shown only when {@link showReprint} is on (the station
    * display's OPERATOR mode — the R-K guard). A full-width secondary `wt-button` at the card foot, under
-   * the collect handover. Its accessible name is the slotted "Reprint" text (like every other wt-button in
-   * the till): `aria-label` on a `wt-button` host is a11y-prohibited (the host carries no role — the inner
-   * `<button>` does), so the card heading (#N) supplies the order context, not the button name. Emits
-   * `reprint-order` (via {@link #reprint}). */
+   * the collect handover. Its accessible name is the slotted "Reprint" text; that suffices here (a
+   * "Reprint" button is self-explanatory and the order context comes from the card heading, #N), so no
+   * `aria-label` is added and no differentiated per-order name is needed — the light/dark axe sweeps pass
+   * with the button present. Emits `reprint-order` (via {@link #reprint}). */
   #reprintAction(group: StationQueueGroup): TemplateResult | typeof nothing {
     if (!this.showReprint) return nothing;
     return html`<wt-button

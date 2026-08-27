@@ -370,10 +370,10 @@ export class TillExpoScreen extends LitElement {
 
   /** The per-order reprint button (KDS-4 §3d) — a full-width secondary `wt-button` at the card foot, under
    *  the per-course levers. The expo/pass ALWAYS has a session (R-K), so it is shown on every card (no mode
-   *  guard, unlike the station display). Its accessible name is the slotted "Reprint" text (like every
-   *  other wt-button in the till): `aria-label` on a `wt-button` host is a11y-prohibited (the host carries
-   *  no role — the inner `<button>` does), so the card heading (#N) supplies the order context. The click
-   *  runs {@link #reprint}. */
+   *  guard, unlike the station display). Its accessible name is the slotted "Reprint" text; that suffices
+   *  here (a "Reprint" button is self-explanatory and the order context comes from the card heading, #N), so
+   *  no `aria-label` is added and no differentiated per-order name is needed — the light/dark axe sweeps
+   *  pass with the button present. The click runs {@link #reprint}. */
   #reprintAction(order: ExpoOrder): TemplateResult {
     return html`<wt-button
       class="reprint"
