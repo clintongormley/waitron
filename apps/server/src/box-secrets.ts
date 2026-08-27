@@ -33,10 +33,17 @@ export interface EnsureBoxSecretsDeps {
   listIpv4?: () => string[]; // default: non-internal IPv4s from os
 }
 
-const exists = (p: string) =>
+// ENOENT means genuinely absent, so callers proceed to mint. Any other error (EACCES/EIO/etc.) is
+// "can't tell" rather than "absent" — treating it as absent would make ensureBoxSecrets regenerate
+// secrets.env's unrepairable vault master key over an existing one it merely couldn't read, orphaning
+// anything already sealed under it. Rethrow instead, so setup boot fails loudly.
+const exists = (p: string): Promise<boolean> =>
   access(p).then(
     () => true,
-    () => false,
+    (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return false;
+      throw err;
+    },
   );
 
 /**

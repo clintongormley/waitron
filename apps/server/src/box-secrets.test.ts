@@ -6,6 +6,18 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
+// `access` alone is wrapped so one test can inject a non-ENOENT failure for a single path; every
+// other export (and every OTHER call to `access`) forwards to the real node:fs/promises
+// implementation, so the rest of this file's real-fs tests are unaffected. `vi.hoisted` is needed
+// because `vi.mock` factories run in an isolated scope — this is the documented way to reach the
+// mock function from a test body.
+const { accessMock } = vi.hoisted(() => ({ accessMock: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  accessMock.mockImplementation(actual.access);
+  return { ...actual, access: accessMock };
+});
+
 let kp: forge.pki.rsa.KeyPair;
 beforeAll(() => {
   kp = forge.pki.rsa.generateKeyPair(2048);
@@ -150,5 +162,30 @@ describe("ensureBoxSecrets", () => {
     // The real leaf always carries 127.0.0.1 even if the box has no non-internal IPv4.
     const cert = new X509Certificate(serverCrt);
     expect(cert.subjectAltName).toContain("127.0.0.1");
+  });
+
+  it("rethrows a non-ENOENT access error instead of treating the file as absent", async () => {
+    const d = await newDir();
+    // secrets.env exists (holds the unrepairable vault master key); a permission/IO error probing it
+    // must NOT be read as "absent" — that would make ensureBoxSecrets mint a brand new key ring over
+    // it and orphan anything already sealed under the old one. Simulate that by making `access` reject
+    // with EACCES for exactly the secrets.env path, real fs otherwise (restored in `finally`, so a
+    // failing assertion still cannot leak the override into a later test).
+    const secretsFile = join(d, "secrets.env");
+    const eacces = Object.assign(new Error("permission denied"), {
+      code: "EACCES",
+    }) as NodeJS.ErrnoException;
+    const passthrough = accessMock.getMockImplementation()!;
+    accessMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      if (p === secretsFile) throw eacces;
+      return (passthrough as (...a: unknown[]) => unknown)(p, ...rest);
+    });
+    try {
+      await expect(ensureBoxSecrets(deps(d))).rejects.toBe(eacces);
+    } finally {
+      accessMock.mockImplementation(passthrough);
+    }
+    // Proves it wasn't swallowed-and-regenerated: nothing was ever written for secrets.env.
+    await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
