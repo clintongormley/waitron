@@ -67,6 +67,8 @@ Productise the cert-construction helpers currently living **only** in the test f
   ```
   Behaviour: mints a CA (basicConstraints `cA:true`, keyUsage `keyCertSign,cRLSign,digitalSignature`), then a leaf signed by that CA (basicConstraints `cA:false`, keyUsage `digitalSignature,keyEncipherment`, extKeyUsage `serverAuth`, subjectAltName = the hostnames as dNSName + the IPs as iPAddress). Leaf CN = `hostnames[0]`. Validity: `notBefore = now − 1 day` (clock-skew slack), `notAfter = now + 3650 days`. Distinct serials (CA `01`, leaf `02`). Throws `AppError("setup.cert_hostnames_empty", {})` if `hostnames` is empty (a leaf with no dNSName is useless; register the code in `errors.ts`).
 
+  > **Corrected 2026-08-27 (Copilot review round 2):** the minter uses **cryptographically-random positive serials** (`randomBytes(16)`, high bit cleared) per cert, **not** the fixed `01`/`02` this line planned. Fixed serials would collide if the retained CA ever re-signs a rotated leaf — exactly the future re-issue this slice keeps the CA key for — so per-issuer serial uniqueness is generated, not hardcoded. The tests assert serial *distinctness*, not specific values.
+
 - [ ] **Step 1: Move `node-forge` to a runtime dependency + reinstall.** In `apps/server/package.json` move `"node-forge": "^1.3.1"` from `devDependencies` to `dependencies` (leave `@types/node-forge` in `devDependencies`). Then from the repo root: `pnpm install` and stage `pnpm-lock.yaml`. Verify: `pnpm --filter @waitron/server exec node -e "require.resolve('node-forge')"` prints a path (proves it resolves as a prod dep).
 
 - [ ] **Step 2: Write the failing tests** in `self-signed-cert.test.ts`. Generate ONE keypair up front and inject it into every mint so the suite pays keygen once, not per-case:
