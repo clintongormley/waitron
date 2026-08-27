@@ -1,8 +1,15 @@
 import { connect, createServer, type AddressInfo, type Server, type Socket } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { decodeFrame, encodeFrame, type Frame } from "./protocol.js";
+import { encodeFrame } from "./protocol.js";
 import { createRelayStandin, type RelayStandin } from "./testing/relay.js";
 import { runTunnelClient } from "./client.js";
+import {
+  onceRegister,
+  realSleep,
+  scriptRelay,
+  wait,
+  type ScriptRelay,
+} from "./testing/script-relay.js";
 
 let relay: RelayStandin | undefined;
 let scripted: ScriptRelay | undefined;
@@ -15,75 +22,6 @@ afterEach(async () => {
   if (local !== undefined) await new Promise((r) => local!.close(() => r(null)));
   relay = scripted = local = ac = undefined;
 });
-
-// A scriptable stand-in relay: for each incoming box connection it invokes `script(box, index)`, so a
-// test drives the handshake bytes directly — to coalesce `go` with its leftover, send a garbage line,
-// reset the socket, or reject a registration. The real relay stand-in is well-behaved, so these edge
-// paths need a relay the test controls. `count()` reports how many box connections have been accepted
-// (a replacement dial shows up as a new one).
-interface ScriptRelay {
-  port: number;
-  count: () => number;
-  close: () => Promise<void>;
-}
-
-function scriptRelay(script: (box: Socket, index: number) => void): Promise<ScriptRelay> {
-  const boxes = new Set<Socket>();
-  let index = 0;
-  const server = createServer((box) => {
-    boxes.add(box);
-    box.on("error", () => box.destroy());
-    box.on("close", () => boxes.delete(box));
-    script(box, index++);
-  });
-  return new Promise((res) =>
-    server.listen(0, "127.0.0.1", () =>
-      res({
-        port: (server.address() as AddressInfo).port,
-        count: () => index,
-        close: () =>
-          new Promise<void>((r) => {
-            for (const b of boxes) b.destroy();
-            server.close(() => r());
-          }),
-      }),
-    ),
-  );
-}
-
-// Resolve with the first complete frame a box connection sends (the client's `register`). The client
-// only writes one frame before the relay speaks, so a single decode of the buffer suffices.
-function onceRegister(box: Socket): Promise<Frame> {
-  let buf = Buffer.alloc(0);
-  return new Promise((res) => {
-    const onData = (d: Buffer): void => {
-      buf = Buffer.concat([buf, d]);
-      const r = decodeFrame(buf);
-      if (r !== null) {
-        box.off("data", onData);
-        res(r.frame);
-      }
-    };
-    box.on("data", onData);
-  });
-}
-
-const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-// The injected `deps.sleep`: a real abort-aware setTimeout that rejects on abort. Task 3 does not call
-// it (no backoff yet), but the signature must be honoured; Task 4 starts driving it.
-const realSleep = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((res, rej) => {
-    const t = setTimeout(res, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(t);
-        rej(new Error("aborted"));
-      },
-      { once: true },
-    );
-  });
 
 it("splices a client request down to the local service and back", async () => {
   local = createServer((s: Socket) =>

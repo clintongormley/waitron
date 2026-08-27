@@ -109,7 +109,6 @@ export async function runTunnelClient(deps: TunnelClientDeps): Promise<void> {
       let buf: Buffer = Buffer.alloc(0);
       let registered = false;
       let awaitingPong = false;
-      let heartbeatStarted = false;
 
       // On `go`: dial the local service and splice. `rest` (bytes buffered past the `go` newline — the
       // cloud's first TLS bytes) is fed to the local socket FIRST so nothing already sent is dropped,
@@ -167,13 +166,11 @@ export async function runTunnelClient(deps: TunnelClientDeps): Promise<void> {
           buf = decoded.rest;
           const { frame } = decoded;
           if (frame.t === "ack") {
+            const firstAck = !registered; // start the heartbeat once; a repeat `ack` must not restart it
             registered = true;
             backoff = 0; // a successful register clears the shared reconnect backoff
             deps.log("info", "tunnel.connection_registered", { boxId: deps.boxId });
-            if (!heartbeatStarted) {
-              heartbeatStarted = true;
-              void heartbeat();
-            }
+            if (firstAck) void heartbeat();
             continue;
           }
           if (frame.t === "go") {

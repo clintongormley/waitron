@@ -1,5 +1,6 @@
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent } from "undici";
 import type { HttpClient } from "@waitron/sync";
+import { undiciHttpClient } from "./sync-http.js";
 
 /**
  * The tunnel-aware counterpart of {@link fetchHttpClient} (`sync-http.ts`), behind the same
@@ -28,11 +29,5 @@ export function tunnelHttpClient(opts: { ca?: string; servername?: string }): Ht
       ...(opts.ca === undefined ? {} : { ca: opts.ca }),
     },
   });
-  return (url, init) =>
-    undiciFetch(url, {
-      method: init.method ?? "GET",
-      headers: init.headers,
-      body: init.body,
-      dispatcher,
-    });
+  return undiciHttpClient(dispatcher);
 }

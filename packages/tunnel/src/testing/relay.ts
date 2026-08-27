@@ -4,12 +4,16 @@
 //   - the box port: box connections `register` with a boxId + token; a valid one is `ack`'d and
 //     parked idle (answering heartbeat pings), an invalid one is `reject`'d and closed;
 //   - the client port: a client (the cloud side) connects, the relay pops the oldest idle box
-//     connection for any box, sends it `go`, and then splices the two TCP streams raw in both
-//     directions.
+//     connection, sends it `go`, and then splices the two TCP streams raw in both directions.
 //
 // The relay is deliberately BLIND: after `go` it copies bytes without interpreting them (TLS runs
 // end-to-end box<->cloud). `bytesSeen()` records every client->box buffer so a test can assert the
 // relay only ever saw ciphertext.
+//
+// It serves a SINGLE box (the sub-project-B scope): the idle pool is a flat FIFO and a client is
+// paired with any idle connection, with no box selection. Routing a client to a SPECIFIC box among
+// many — which the blind relay can only do by peeking the TLS ClientHello's SNI — is the real T1
+// relay's job and is deliberately out of scope here (tunnel design spec §3).
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { decodeFrame, encodeFrame } from "../protocol.js";
 
@@ -56,9 +60,10 @@ export function createRelayStandin(opts: RelayStandinOptions): Promise<RelayStan
   const waitForBoxMs = opts.waitForBoxMs ?? 1000;
   const verifyToken = opts.verifyToken;
 
-  // Idle box connections keyed by boxId, oldest first. A pool is deleted the moment it empties, so
-  // any pool present in the map is non-empty.
-  const idle = new Map<string, Parked[]>();
+  // Idle box connections, oldest first. A flat FIFO: this stand-in serves one box and does no
+  // box-selective routing (see the header note), so a client is paired with whichever registered
+  // first.
+  const idle: Parked[] = [];
   // Clients waiting for an idle box, oldest first (Set preserves insertion order).
   const waiters = new Set<Waiter>();
   // Every live socket (box or client), so close() can tear them all down regardless of phase.
@@ -80,17 +85,14 @@ export function createRelayStandin(opts: RelayStandinOptions): Promise<RelayStan
   }
 
   function popIdle(): Socket | undefined {
-    for (const [boxId, pool] of idle) {
-      const parked = pool.shift() as Parked; // pools in the map are never empty (see `idle`)
-      if (pool.length === 0) idle.delete(boxId);
-      parked.box.off("data", parked.onData); // stop ponging; the raw splice takes over its bytes
-      return parked.box;
-    }
-    return undefined;
+    const parked = idle.shift();
+    if (parked === undefined) return undefined;
+    parked.box.off("data", parked.onData); // stop ponging; the raw splice takes over its bytes
+    return parked.box;
   }
 
   // A registered box with no client waiting: park it and answer its heartbeat pings until popped.
-  function parkIdle(boxId: string, box: Socket, rest: Buffer): void {
+  function parkIdle(box: Socket, rest: Buffer): void {
     let buf = rest;
     const onData = (chunk: Buffer): void => {
       buf = Buffer.concat([buf, chunk]);
@@ -106,9 +108,7 @@ export function createRelayStandin(opts: RelayStandinOptions): Promise<RelayStan
       }
     };
     box.on("data", onData);
-    const pool = idle.get(boxId);
-    if (pool === undefined) idle.set(boxId, [{ box, onData }]);
-    else pool.push({ box, onData });
+    idle.push({ box, onData });
   }
 
   // --- box side: registration ---
@@ -145,7 +145,7 @@ export function createRelayStandin(opts: RelayStandinOptions): Promise<RelayStan
       const waiter = takeWaiter();
       if (waiter !== undefined)
         waiter.resolve(box); // a client is waiting — pair immediately
-      else parkIdle(frame.boxId, box, rest);
+      else parkIdle(box, rest);
     };
     box.on("data", onData);
   }

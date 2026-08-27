@@ -1,7 +1,14 @@
-import { createServer, type AddressInfo, type Socket } from "node:net";
+import { type Socket } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { decodeFrame, encodeFrame, type Frame } from "./protocol.js";
+import { decodeFrame, encodeFrame } from "./protocol.js";
 import { runTunnelClient } from "./client.js";
+import {
+  onceRegister,
+  realSleep,
+  scriptRelay,
+  wait,
+  type ScriptRelay,
+} from "./testing/script-relay.js";
 
 // Task 4 drives every backoff/heartbeat delay through the INJECTED `sleep`, so these suites assert
 // durations and tick counts rather than waiting real time out. The one exception is the "keeps a
@@ -15,72 +22,6 @@ afterEach(async () => {
   if (scripted !== undefined) await scripted.close();
   scripted = ac = undefined;
 });
-
-// A scriptable stand-in relay (mirrors client.test.ts): for each incoming box connection it invokes
-// `script(box, index)`, so a test drives the handshake bytes directly. `count()` reports how many box
-// connections have been accepted (a replacement dial shows up as a new one).
-interface ScriptRelay {
-  port: number;
-  count: () => number;
-  close: () => Promise<void>;
-}
-
-function scriptRelay(script: (box: Socket, index: number) => void): Promise<ScriptRelay> {
-  const boxes = new Set<Socket>();
-  let index = 0;
-  const server = createServer((box) => {
-    boxes.add(box);
-    box.on("error", () => box.destroy());
-    box.on("close", () => boxes.delete(box));
-    script(box, index++);
-  });
-  return new Promise((res) =>
-    server.listen(0, "127.0.0.1", () =>
-      res({
-        port: (server.address() as AddressInfo).port,
-        count: () => index,
-        close: () =>
-          new Promise<void>((r) => {
-            for (const b of boxes) b.destroy();
-            server.close(() => r());
-          }),
-      }),
-    ),
-  );
-}
-
-// Resolve with the first complete frame a box connection sends (the client's `register`), then detach.
-function onceRegister(box: Socket): Promise<Frame> {
-  let buf = Buffer.alloc(0);
-  return new Promise((res) => {
-    const onData = (d: Buffer): void => {
-      buf = Buffer.concat([buf, d]);
-      const r = decodeFrame(buf);
-      if (r !== null) {
-        box.off("data", onData);
-        res(r.frame);
-      }
-    };
-    box.on("data", onData);
-  });
-}
-
-const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-// The injected `deps.sleep`: a real abort-aware setTimeout that rejects on abort (the client's `nap`
-// wrapper swallows that rejection). Used by the shutdown test, where timing is driven by the abort.
-const realSleep = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((res, rej) => {
-    const t = setTimeout(res, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(t);
-        rej(new Error("aborted"));
-      },
-      { once: true },
-    );
-  });
 
 describe("runTunnelClient resilience", () => {
   it("backs off exponentially on an unreachable relay and logs stream_stalled at saturation", async () => {
