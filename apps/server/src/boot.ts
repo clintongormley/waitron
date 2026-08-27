@@ -17,7 +17,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
-import { loadConfig, loadSyncConfig, type ServerConfig } from "./config.js";
+import { loadConfig, loadSyncConfig, loadTunnelConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -64,6 +64,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
+import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueLocale } from "./venue-locale.js";
@@ -916,6 +917,44 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     }
   }
 
+  // The outbound cloud-mirror tunnel (sub-project B): enabled iff WAITRON_TUNNEL_RELAY_URL is set
+  // (loadTunnelConfig). The box sits behind NAT with no inbound ports, so it dials OUT to the relay and
+  // keeps a pool of idle registered connections open; when the relay pairs one with a cloud client it
+  // splices raw bytes to the box's OWN served port (config.httpPort — the exact listener
+  // startListening binds below), TLS end-to-end. Its own AbortController + worker promise, declared
+  // beside the sync worker's above: the tunnel runs INDEPENDENTLY of sync (it can be enabled with sync
+  // off), so it carries a dedicated controller rather than borrowing syncController, and close() below
+  // aborts and awaits it the same way. runTunnelClient resolves on abort and never rejects (its slots
+  // back off every establish error), so the `.catch` mirrors the pull worker's: in production it never
+  // fires, but an unexpected throw escaping the client's own handling would be a silent unhandled
+  // rejection in the pre-close() window otherwise — logged, the same codeOf-classified shape. A host
+  // that sets no tunnel env (every existing boot) leaves tunnelConfig undefined and dials nothing —
+  // logged once so the off state is visible in the boot log. Torn down in close() below.
+  const tunnelConfig = loadTunnelConfig(env);
+  const tunnelController = new AbortController();
+  let tunnelWorker: Promise<void> | undefined;
+  if (tunnelConfig !== undefined) {
+    tunnelWorker = runTunnelClient({
+      relayHost: tunnelConfig.relayHost,
+      relayPort: tunnelConfig.relayPort,
+      boxId: tunnelConfig.boxId,
+      token: tunnelConfig.token,
+      // The box's OWN served port — a paired connection is spliced to the exact listener
+      // `startListening` binds below, so the cloud reaches the same surface a LAN client does.
+      localPort: config.httpPort,
+      // The operator's standing-pool size (WAITRON_TUNNEL_POOL_SIZE, defaulted in loadTunnelConfig),
+      // threaded through so the knob is live rather than dead config — runTunnelClient's poolSize is
+      // its only consumer.
+      poolSize: tunnelConfig.poolSize,
+      sleep: realSleep,
+      signal: tunnelController.signal,
+      log,
+    });
+    tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
+  } else {
+    log("info", "tunnel.disabled", {});
+  }
+
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
   // `/media`, `/health` or the sync routes (`mountSpa`'s "call me after every API route" contract).
@@ -1032,6 +1071,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
         // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
         syncController.abort();
+        // Stop the outbound tunnel client the same way — its own controller, aborted here so close()
+        // never leaves it dialing; runTunnelClient resolves promptly on abort (it destroys every live
+        // socket and cancels every pending backoff nap). Aborted alongside the others, awaited below.
+        tunnelController.abort();
         await loop;
         // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
         // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
@@ -1046,6 +1089,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
         // swallowed inside runRetentionSweep, not here.
         if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
+        // The outbound tunnel worker, torn down the identical way: tunnelController.abort() above
+        // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
+        // can never skip the guaranteed pool teardown below. It never rejects in production (its slots
+        // back off every error), and holds no connection pool of its own — nothing to add to
+        // closePools.
+        if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
       },
       closePools: async () => {
         await db.close();

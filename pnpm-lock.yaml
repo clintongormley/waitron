@@ -144,6 +144,9 @@ importers:
       '@waitron/sync':
         specifier: workspace:*
         version: link:../../packages/sync
+      '@waitron/tunnel':
+        specifier: workspace:*
+        version: link:../../packages/tunnel
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../../packages/verifactu

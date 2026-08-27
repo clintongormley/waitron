@@ -25,6 +25,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
+import { runTunnelClient } from "@waitron/tunnel";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   MAX_UPLOAD_BYTES,
@@ -90,6 +91,23 @@ vi.mock("@waitron/sync", async (importOriginal) => {
   };
 });
 
+/**
+ * `boot.ts` starts the outbound cloud-mirror tunnel client via `runTunnelClient`, imported directly
+ * (no injection seam), exactly like the sync workers above. The tunnel tests below observe the CALL
+ * (was it started, with which relay host/port/boxId/token, with `localPort === config.httpPort`, and
+ * under the boot AbortSignal close() aborts) via this spy, which calls THROUGH to the real client so
+ * close()'s teardown is exercised for real — the client resolves on abort, tearing every live socket
+ * down. Every OTHER test in this file sets no `WAITRON_TUNNEL_*`, so `loadTunnelConfig` returns
+ * undefined and the spy is never called there.
+ */
+vi.mock("@waitron/tunnel", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/tunnel")>();
+  return {
+    ...actual,
+    runTunnelClient: vi.fn(actual.runTunnelClient),
+  };
+});
+
 // The two sync-worker spies accumulate calls across tests (one shared module mock), so clear them
 // before each so the call-count/args assertions below are order-independent — this file's own rule
 // (several tests were fixed for order-dependence). `mockClear` resets only `mock.calls`, keeping each
@@ -97,6 +115,7 @@ vi.mock("@waitron/sync", async (importOriginal) => {
 beforeEach(() => {
   vi.mocked(runSyncPull).mockClear();
   vi.mocked(runRetentionSweep).mockClear();
+  vi.mocked(runTunnelClient).mockClear();
 });
 
 /**
@@ -1471,6 +1490,71 @@ describe("startServer, against a real container as the deployment role", () => {
     // retention-worker await into the try, whose finally then closed the app, sync, and retention pools.
     await expect(server.close()).resolves.toBeUndefined();
     await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
+  }, 60_000);
+
+  it("dials the outbound cloud-mirror tunnel to config.httpPort when WAITRON_TUNNEL_* is set, and close() aborts it", async () => {
+    // The tunnel is enabled by WAITRON_TUNNEL_RELAY_URL (loadTunnelConfig). The relay is unreachable
+    // (127.0.0.1:1), so the real call-through client's pool slots just fail to establish and back off —
+    // all this test needs from the client, which it drives through realSleep exactly as the sync test
+    // drives the pull worker against an unreachable peer. What it asserts is the boot WIRING: the client
+    // is started once with the configured relay host/port/boxId/token, the box's OWN served port as
+    // localPort (config.httpPort — the same listener startListening binds), the operator's pool size,
+    // and the boot AbortSignal. close() then aborts that signal (its stopWork path), which is what tears
+    // the client down.
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      // A relay url whose host + port the box dials out to. Unreachable on purpose (port 1), so the
+      // call-through client backs off rather than pairing — the same unreachable-endpoint shape the sync
+      // worker test uses. A distinctive pool size so the pass-through assertion below cannot pass by
+      // coincidence with the client's own default (4).
+      WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
+      WAITRON_TUNNEL_BOX_ID: "box-mirror-7",
+      WAITRON_TUNNEL_TOKEN: "tunnel-secret",
+      WAITRON_TUNNEL_POOL_SIZE: "3",
+    });
+    try {
+      expect(runTunnelClient).toHaveBeenCalledTimes(1);
+      const deps = vi.mocked(runTunnelClient).mock.calls[0]![0];
+      // The box's OWN served port — a paired connection is spliced to the exact listener bound below.
+      expect(deps.localPort).toBe(port);
+      expect(deps.relayHost).toBe("127.0.0.1");
+      expect(deps.relayPort).toBe(1);
+      expect(deps.boxId).toBe("box-mirror-7");
+      expect(deps.token).toBe("tunnel-secret");
+      expect(deps.poolSize).toBe(3); // WAITRON_TUNNEL_POOL_SIZE, threaded through so the knob is live
+      // The boot signal, not yet aborted while the host runs.
+      expect(deps.signal.aborted).toBe(false);
+      // ...and close() aborts exactly that signal (stopWork), which is what tears the client down.
+      await server.close();
+      expect(deps.signal.aborted).toBe(true);
+    } finally {
+      await server.close(); // idempotent; guarantees teardown even if an assertion above threw
+    }
+  }, 60_000);
+
+  it("does not dial the tunnel when WAITRON_TUNNEL_* is unset", async () => {
+    // The off-switch: no WAITRON_TUNNEL_RELAY_URL, so loadTunnelConfig returns undefined and boot dials
+    // nothing (it logs the tunnel-off line and starts no client). Every other boot in this suite is this
+    // case; asserting it explicitly here — with the beforeEach-cleared spy — pins that a plain trading
+    // boot never starts the tunnel worker.
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+    });
+    try {
+      expect(runTunnelClient).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
   }, 60_000);
 
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
