@@ -57,13 +57,23 @@ describe("tunnelHttpClient", () => {
     }
   });
 
-  it("fails the TLS handshake when the box CA is not trusted", async () => {
+  it("fails the TLS handshake with a cert-trust error when the box CA is not trusted", async () => {
     const { port, close } = await startBoxServer();
     try {
       // No `ca`: Node's default trust store cannot verify the box's self-signed CA, so the handshake
-      // is rejected. This proves the trust in the passing case is real, not a bypassed check.
+      // is rejected. Pin the REASON to a cert-trust failure, not any throw — a bare `.rejects.toThrow()`
+      // would also pass on an unrelated error (e.g. ECONNREFUSED) and prove nothing (CLAUDE.md §4).
+      // undici wraps the Node TLS error, so the trust code lives on `cause.code`. Observed here
+      // (Node built-in TLS, 2026-08-27): UNABLE_TO_VERIFY_LEAF_SIGNATURE. The alternation covers the
+      // self-signed family in case a Node version reports a sibling code for the same untrusted CA.
       const http = tunnelHttpClient({ servername: "box.test" });
-      await expect(http(`https://127.0.0.1:${port}/`, { headers: {} })).rejects.toThrow();
+      await expect(http(`https://127.0.0.1:${port}/`, { headers: {} })).rejects.toMatchObject({
+        cause: {
+          code: expect.stringMatching(
+            /^(UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|DEPTH_ZERO_SELF_SIGNED_CERT)$/,
+          ),
+        },
+      });
     } finally {
       await close();
     }

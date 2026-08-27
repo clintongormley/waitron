@@ -208,13 +208,17 @@ phase forces a change to the app or the fiscal core.
   still terminates on the box. Handles A + B + occasional C uniformly (remote == on-LAN). This is the
   **paid remote tier**. Known limit: box off → "venue offline."
 
-  **Update 2026-08-27:** the reusable box-dials-out blind-reverse-tunnel mechanism this bullet
-  describes — outbound connect from the box, relay routes by SNI, TLS end-to-end to the box, relay
-  sees only ciphertext — is now implemented as the pure-Node `@waitron/tunnel` package (on
-  `feat/sync-outbound-tunnel`) and proven against a local relay stand-in (a cloud pull reaches the
-  box through the tunnel while the relay stays blind). It first ships as the cloud-mirror's
-  outbound-tunnel leg rather than the dashboard's, but it is the *same* T1 mechanism, ready to reuse
-  here. See `docs/superpowers/specs/2026-08-27-sync-cloud-mirror-tunnel-design.md`.
+  **Update 2026-08-27:** the *box-dials-out* half of this bullet now exists as the pure-Node
+  `@waitron/tunnel` package (on `feat/sync-outbound-tunnel`): the box makes the outbound connect, TLS
+  runs end-to-end to the box, and the relay sees only ciphertext — proven against a local relay
+  stand-in (a cloud pull reaches the box through the tunnel while the relay stays blind). What shipped
+  is a **blind single-box** stand-in relay that pops the oldest idle box connection for any incoming
+  client, with **no SNI inspection**; **SNI-based routing to the right box among many is NOT
+  implemented** and remains the real T1 relay's job (the tunnel spec defers SNI-peek + multi-box
+  routing —
+  [`2026-08-27-sync-cloud-mirror-tunnel-design.md` §3](2026-08-27-sync-cloud-mirror-tunnel-design.md)).
+  It first ships as the cloud-mirror's outbound-tunnel leg rather than the dashboard's, but the
+  box-dials-out mechanism is the *same* one T1 will reuse.
 
 - **T2 — branded front door + custom domain (polish on T1).** `app.waitron.<tld>` shows a **venue
   picker** from a **thin cloud account** (the customer / billing / tunnel-ownership record — *not*

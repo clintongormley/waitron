@@ -126,6 +126,11 @@ New `packages/tunnel` (`@waitron/tunnel`), following the enumerated-`exports` co
 | `src/index.ts` | Barrel. | `.` |
 | `src/testing/relay.ts` | The relay stand-in: `createRelayStandin({ verifyToken })` → a listening TCP server that pairs + splices. For tests and local dev only. | `./testing/relay.js` |
 
+**Note (impl 2026-08-27):** shipped **without** `src/errors.ts` — the `tunnel.*` codes are *logged*
+free strings, not thrown, so there is no `AppError` to register and no reachability guard to satisfy
+(the plan reconciled this against the `sync.pull_failed` precedent). No `errors.ts` row and no
+`import "./errors.js"` exist in the package.
+
 **Isolation check.** `runTunnelClient`'s one job is "keep the box reachable through the relay by
 proxying to a local port"; it knows nothing of sync, cursors, or SQL. The relay stand-in's one job is
 "pair a registered box connection with a client connection and splice." Either can be understood and
@@ -273,6 +278,10 @@ confirm:
   logged, not thrown across a request boundary (there is no HTTP surface here); they exist for the log
   vocabulary and the reachability guard. Grep the `tunnel.` siblings before adding a code; register
   each in `errors.ts` and `import "./errors.js"` from every file that names one.
+  **Note (impl 2026-08-27):** shipped without `errors.ts` — because the `tunnel.*` codes are logged,
+  not thrown, no registry entry (and hence no `import "./errors.js"`) is needed; the reachability guard
+  only covers packages that ship both `index.ts` and `errors.ts`. Reconciled against the
+  `sync.pull_failed` precedent (see the plan's Global Constraints).
 - **English identifiers throughout** (the package is under the english-only guard's scope); no new
   `SPANISH_WORDS`.
 - **Reuse crypto** — `verifySecret`/`timingSafeEqual` for the relay token; write none.

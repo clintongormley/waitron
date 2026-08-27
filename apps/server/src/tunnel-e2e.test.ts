@@ -252,6 +252,11 @@ describe("headline e2e — the cloud pulls through the outbound tunnel and the r
       expect(wire).not.toContain("sync-api"); // no path
       expect(wire).not.toContain("Bearer"); // no Authorization scheme
       expect(wire.includes(sourcePeerToken)).toBe(false); // no per-peer token, anywhere
+      // SECONDARY, corroborating check only. The plaintext-substring-absence assertions ABOVE are the
+      // robust primary blindness proof. This per-buffer first-byte test assumes each recorded buffer
+      // begins on a TLS record boundary, which TCP framing does NOT guarantee for multi-record payloads
+      // (a chunk could start mid-record). So if this loop ever flakes, drop THIS loop — not the
+      // substring assertions above, which do not depend on record alignment.
       for (const buf of seen) {
         expect(buf.length).toBeGreaterThan(0);
         expect(buf[0]!).toBeGreaterThanOrEqual(0x14); // a TLS content-type: 0x14–0x17…

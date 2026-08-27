@@ -233,6 +233,10 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
+      // The first dial is rejected, driving a redial; without this the client waits the default
+      // 1000ms backoff first, so the test would burn ~1s of real time (assertions are count/log-based,
+      // duration-independent).
+      minBackoffMs: 1,
       sleep: realSleep,
       signal: ac.signal,
       log: (level, code) => logs.push({ level, code }),
@@ -261,6 +265,9 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
+      // The relay resets the first dial, driving a redial; without this the client waits the default
+      // 1000ms backoff first, adding ~1s of real time (the assertion is count-based, duration-independent).
+      minBackoffMs: 1,
       sleep: realSleep,
       signal: ac.signal,
       log: () => {},
