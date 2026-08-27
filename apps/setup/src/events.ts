@@ -4,9 +4,12 @@ import type { ProvisionBody } from "./api/client.js";
 /**
  * Typed dispatchers for the four events the setup-wizard screens emit UP to the shell
  * ({@link SetupApp}). Every wizard screen goes through these rather than hand-rolling a
- * `new CustomEvent(...)`, so the event NAME and its detail shape are checked by the compiler: a
- * mistyped `"setup-goto"` or an invalid `screen` value is a type error here, not a silently
- * misrouted event at runtime.
+ * `new CustomEvent(...)`, which buys two things. The compiler checks each event's DETAIL shape and
+ * the `screen` VALUE (against the {@link Screen} union), so an invalid `screen` or a malformed
+ * detail is a type error at the call site. And the event-name STRINGS live in exactly one place
+ * here — the names are still plain literals (TypeScript does not verify them), but centralising them
+ * means a screen can no longer drift its own spelling of `"setup-goto"` out of sync with the
+ * shell's listener; fixing the string once fixes every caller.
  *
  * All four are `composed: true, bubbles: true` — the emitting screen lives in its own shadow root,
  * so the events must cross that boundary to reach the shell, which is their only (and final)
