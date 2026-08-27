@@ -47,6 +47,11 @@ export type { PruneResult, RetentionSweepDeps, SubscriberLag } from "./retention
 export { recordSubscriberCursor } from "./cursor-report.js";
 export type { RecordSubscriberCursorArgs } from "./cursor-report.js";
 
+// Per-peer subscriber identity for the sync source: mint a peer's bearer token and resolve a
+// presented token to its subscriber_id (spec docs/.../2026-08-27-sync-cloud-mirror-peer-identity-design.md).
+export { authenticatePeer, enrolPeer } from "./peers.js";
+export type { EnrolPeerInput } from "./peers.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
