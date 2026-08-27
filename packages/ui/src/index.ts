@@ -1,5 +1,5 @@
 export { applyTokens } from "./tokens/index.js";
-export { baseStyles, disabledStyles, floorTrayStyles } from "./base-styles.js";
+export { baseStyles, disabledStyles, floorTrayStyles, selectStyles } from "./base-styles.js";
 export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
 export { WtButton } from "./components/wt-button.js";
 export type { WtButtonVariant, WtButtonSize } from "./components/wt-button.js";

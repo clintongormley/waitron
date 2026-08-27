@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { actionsStyles } from "../form-styles.js";
+import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 
 /**
  * The wizard's first step: welcome the operator, warn that the browser's certificate warning is
@@ -101,16 +102,8 @@ export class SetupModeScreen extends LitElement {
    * patch into its draft and flips the visible screen.
    */
   #advance(mode: "demo" | "live"): void {
-    this.dispatchEvent(
-      new CustomEvent("setup-patch", {
-        detail: { patch: { mode } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "admin" }, bubbles: true, composed: true }),
-    );
+    dispatchSetupPatch(this, { mode });
+    dispatchSetupGoto(this, "admin");
   }
 
   /** DEMO is reversible in practice, so it advances immediately with no confirmation. */

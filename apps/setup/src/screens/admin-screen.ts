@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
@@ -100,32 +101,20 @@ export class SetupAdminScreen extends LitElement {
       return;
     }
     this.showError = false;
-    this.dispatchEvent(
-      new CustomEvent("setup-patch", {
-        detail: {
-          patch: {
-            venue: {
-              admin: {
-                displayName: this.values.displayName,
-                pin: this.values.pin,
-                password: this.values.password,
-              },
-            },
-          },
+    dispatchSetupPatch(this, {
+      venue: {
+        admin: {
+          displayName: this.values.displayName,
+          pin: this.values.pin,
+          password: this.values.password,
         },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "venue" }, bubbles: true, composed: true }),
-    );
+      },
+    });
+    dispatchSetupGoto(this, "venue");
   }
 
   #back(): void {
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "mode" }, bubbles: true, composed: true }),
-    );
+    dispatchSetupGoto(this, "mode");
   }
 
   /** Renders one credential field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */

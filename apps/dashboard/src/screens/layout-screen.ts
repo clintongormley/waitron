@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -8,7 +8,6 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { DashboardApi, LayoutDef, WidgetInstance, WidgetType } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 /** The two regions a widget can sit in on the counter screen (mirrors layouts' `Region`). */
 type Region = "main" | "aside";

@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -25,7 +25,6 @@ import type {
   Station,
   VatClass,
 } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 // Re-export so composing views (the a11y test, the catalogue screen) can name the category shape the
 // form consumes without a second import path.

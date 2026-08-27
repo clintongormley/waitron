@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -9,7 +9,6 @@ import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
-import { selectStyles } from "../select-styles.js";
 import type {
   DashboardApi,
   PrintAgentRow,

@@ -1,12 +1,11 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import type { CategorySummary, Station } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 /**
  * The management dashboard's CATEGORY MANAGER: it lists the existing categories and owns a single

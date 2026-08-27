@@ -11,6 +11,7 @@ import {
   floorTrayStyles,
   isTableZoneless,
   resolveActiveTabKey,
+  selectStyles,
   toFloorTable,
 } from "@waitron/ui";
 import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
@@ -20,7 +21,6 @@ import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone, TableShape } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 
 /** A floor zone the editor holds in local, editable state (a defensive copy of the loaded FloorZone). */
 interface EditableZone {

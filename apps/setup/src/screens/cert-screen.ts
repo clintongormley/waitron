@@ -1,11 +1,11 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { selectStyles } from "../select-styles.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
 
@@ -185,34 +185,18 @@ export class SetupCertScreen extends LitElement {
       return;
     }
     this.showError = false;
-    this.dispatchEvent(
-      new CustomEvent("setup-patch", {
-        detail: {
-          patch: {
-            aeatCert: {
-              pfxBase64: this.pfxBase64,
-              passphrase: this.passphrase,
-              certKind: this.certKind,
-            },
-          },
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", {
-        detail: { screen: "review" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dispatchSetupPatch(this, {
+      aeatCert: {
+        pfxBase64: this.pfxBase64,
+        passphrase: this.passphrase,
+        certKind: this.certKind,
+      },
+    });
+    dispatchSetupGoto(this, "review");
   }
 
   #back(): void {
-    this.dispatchEvent(
-      new CustomEvent("setup-goto", { detail: { screen: "venue" }, bubbles: true, composed: true }),
-    );
+    dispatchSetupGoto(this, "venue");
   }
 
   override render(): TemplateResult {

@@ -3,13 +3,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, RosterEntry } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 // The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
 // `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
 import "../widgets/language-chooser.js";

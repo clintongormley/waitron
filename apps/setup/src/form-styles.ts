@@ -6,7 +6,7 @@ import { css } from "lit";
  * across the seven step screens (in two drifted spellings that computed the same result), so each is
  * extracted here as a single `css` fragment. A screen composes only the fragments it uses into its
  * `static styles`, after `baseStyles`, and keeps its own unique rules inline. Mirrors the
- * import-and-compose idiom of `apps/setup/src/select-styles.ts`.
+ * import-and-compose idiom of `@waitron/ui`'s `selectStyles`.
  */
 export const actionsStyles = css`
   .actions {

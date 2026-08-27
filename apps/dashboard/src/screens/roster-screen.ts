@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 // Value import (not `import type`): pulls in the widget module for its `@customElement` side effect,
 // so `<dashboard-shift-dialog>` is registered before this screen renders it (the widget-registration
@@ -18,7 +18,6 @@ import type {
   RosterSnapshot,
   Shift,
 } from "../api/client.js";
-import { selectStyles } from "../select-styles.js";
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 
 /** The 7 local dates Mon..Sun of the week starting at `monday`. */
