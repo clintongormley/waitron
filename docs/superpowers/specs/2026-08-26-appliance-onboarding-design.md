@@ -278,6 +278,16 @@ is the stronger foundation; recommend wired-for-the-server where a cable is poss
   Plex `*.plex.direct` pattern — **[verify]** §18) and to the relay remotely, so the same trusted
   cert works LAN and remote and passkeys stay portable (dashboard design §4c/§5).
 
+**Implementation note (2026-08-27): slice 3 = in-process mDNS + CA-serving, no OS Avahi.** The box
+advertises `waitron.local` from inside the server process (`multicast-dns`), in both setup and
+trading modes, so it runs on any Node host with no appliance OS. The setup surface serves the box CA
+for download (`GET /setup-api/ca.crt`), machine-readable discovery (`GET /setup-api/discovery`), and
+a minimal server-rendered trust page with per-OS steps + an IP-QR fallback (`GET /setup/trust`).
+**Deferred:** the polished trust UX → slice 2c (`apps/setup`); the automated "is this device trusting
+the CA?" check → a browser-behaviour spike, because §17/§18's untrusted-CA-blocks-PWA claim is still
+unverified and must not be built on. OS-level Avahi publication and trading-mode
+HTTPS-from-the-box-cert remain later (appliance / separate) work.
+
 ---
 
 ## 8. HTTPS & certificates

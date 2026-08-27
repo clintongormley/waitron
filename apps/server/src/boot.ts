@@ -57,6 +57,9 @@ import { mountSetup } from "./setup-api.js";
 import { provisionVenue } from "./provision.js";
 import { sealAeatCredential } from "./aeat-credential.js";
 import { writeTradingEnv } from "./trading-config.js";
+import { mountDiscovery } from "./discovery-api.js";
+import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
+import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
@@ -127,6 +130,14 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
  * `defaultStateRoot` argument, the same way this file supplies `DEFAULT_MEDIA_ROOT`.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
+
+/**
+ * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the three wirings that MUST
+ * agree can never drift into a certificate-hostname mismatch — the exact failure the trust flow exists
+ * to avoid (spec §7/§8): the mDNS responder that ANSWERS for the name, the discovery/trust surface that
+ * ADVERTISES it, and the self-signed leaf's SAN list (`ensureBoxSecrets`) that must COVER it.
+ */
+const BOX_HOSTNAME = "waitron.local";
 
 /**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
@@ -285,13 +296,15 @@ function startListening(
  * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
  * and awaits it (the loop plus the sync/retention workers in trading mode; a no-op in setup mode),
  * then `closePools` releases the pools (app + sync + retention in trading mode; the app pool alone in
- * setup mode).
+ * setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
+ * FIRST — the box is going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(
   server: ReturnType<typeof serve>,
   health: HealthState,
   log: Logger,
   teardown: BootTeardown,
+  mdns: MdnsResponder,
 ): StartedServer {
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
   // teardown (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than
@@ -307,6 +320,13 @@ function makeStartedServer(
     close: async () => {
       if (closed) return;
       closed = true;
+      // Stop advertising FIRST — the box is going down, so `waitron.local` must stop resolving to it
+      // before the listener and pools come apart. `stop()` is idempotent and destroys the UDP socket
+      // once, so a second concurrent close() (guarded above) never double-destroys it either.
+      // `.catch(() => {})`: `stop()` never rejects today (mdns.ts's own `Promise<void>` executor has
+      // no reject path), but a reject here must never skip the guaranteed pool teardown below, so this
+      // is defensive rather than a response to an observed failure.
+      await mdns.stop().catch(() => {});
       // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
       // close() never leaves a worker dangling. In trading mode this aborts the main loop and the
       // sync/retention workers and swallows a worker's settle-by-rejection so it can never skip the
@@ -441,6 +461,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `startServer`'s own `() => new Date()`, so the cert's validity window is anchored to real boot
     // time. The trading `else` branch reads `config.tls` unchanged — untouched.
     //
+    // The discovery + CA-serving surface (slice 3): GET /setup-api/ca.crt (the CA 2a minted),
+    // GET /setup-api/discovery, and GET /setup/trust. Registered BEFORE mountSetup (below, inside the
+    // provisioning try) so the GET * placeholder catch-all inside mountSetup cannot shadow these paths
+    // (Hono is first-match-wins). Setup-mode only — a trading box needs neither (its tills are already
+    // paired). `secure: true` — the box serves the setup surface over HTTPS (2a), so every reach URL is
+    // https. Registered here, before the provisioning try, because it needs none of that try's
+    // resources (the owner pool / key ring) — only config.
+    mountDiscovery(
+      app,
+      { stateDir: config.stateDir, hostname: BOX_HOSTNAME, port: config.httpPort, secure: true },
+      log,
+    );
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
     // dir, a missing/unreadable `secrets.env`, or `startListening` -> `buildServeOptions` ->
     // `readFileSync` on a missing/unreadable operator TLS file) closes `db` before it propagates —
@@ -450,7 +482,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
-        hostnames: ["waitron.local", "localhost"],
+        hostnames: [BOX_HOSTNAME, "localhost"],
         now,
       });
       // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
@@ -502,17 +534,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         );
         const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
         const server = startListening({ ...config, tls }, app, now, log);
-        return makeStartedServer(server, health, log, {
-          // A setup box runs no background work, so there is nothing to abort or await.
-          stopWork: () => Promise.resolve(),
-          // The app pool AND the provisioning owner pool — no sync/retention pools exist here.
-          // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
-          // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
-          // path (which `close()` runs even after a `server.close()` rejection).
-          closePools: async () => {
-            await Promise.allSettled([db.close(), ownerDb.close()]);
+        // Advertise waitron.local over mDNS LAST — after every throwing setup step above AND once
+        // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket
+        // (an earlier throw simply never started it, which is why the catches below no longer stop it).
+        // Both modes advertise; the responder is stopped in makeStartedServer's close() below. mDNS is
+        // non-load-bearing (the box stays reachable by IP); a bind / no-multicast-route failure logs and
+        // is swallowed inside the responder.
+        const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+        return makeStartedServer(
+          server,
+          health,
+          log,
+          {
+            // A setup box runs no background work, so there is nothing to abort or await.
+            stopWork: () => Promise.resolve(),
+            // The app pool AND the provisioning owner pool — no sync/retention pools exist here.
+            // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
+            // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
+            // path (which `close()` runs even after a `server.close()` rejection).
+            closePools: async () => {
+              await Promise.allSettled([db.close(), ownerDb.close()]);
+            },
           },
-        });
+          mdns,
+        );
       } catch (error) {
         // A throw AFTER `ownerDb` opened (`mountSetup` / `startListening` / `buildServeOptions`) must
         // close it before propagating to the outer catch that closes `db` — neither pool may leak.
@@ -520,6 +565,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         throw error;
       }
     } catch (error) {
+      // mDNS is not started until just before `makeStartedServer` below (after every throwing step in
+      // this branch), so a throw reaching here never opened the UDP socket — only the DB pool (the app
+      // pool AND, if it opened, the provisioning owner pool via the inner catch) needs closing.
       await db.close();
       throw error;
     }
@@ -548,6 +596,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   try {
     ring = loadKeyRing(env);
   } catch (error) {
+    // mDNS is not started until just before `makeStartedServer` (after every throwing setup step), so a
+    // `loadKeyRing` throw here never opened the UDP socket — only `db` needs closing. The pre-existing
+    // `readOrderFlow`/`buildCardProvider` throw sites further down still leak `db` the same way and stay
+    // out of scope here (they leaked `db` before slice 3 too — documented above).
     await db.close();
     throw error;
   }
@@ -954,31 +1006,42 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // sync and retention pools. Byte-for-byte the sequence this branch ran inline before the setup/
   // trading split — the ordering guarantees (abort the loop and sync together, await the loop, swallow
   // a worker's settle-by-rejection so it can never skip the guaranteed pool teardown) are unchanged.
-  return makeStartedServer(server, health, log, {
-    stopWork: async () => {
-      controller.abort();
-      // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
-      // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
-      syncController.abort();
-      await loop;
-      // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
-      // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
-      // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
-      // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the pool
-      // teardown, which would leak the HTTP server and both connection pools on exactly the path that
-      // failed. close() resolves either way; the worker's own errors are logged inside runSyncPull
-      // (sync.pull_failed / sync.stream_stalled), not here.
-      if (syncWorker !== undefined) await syncWorker.catch(() => {});
-      // The retention sweep worker, torn down the identical way: `syncController.abort()` above already
-      // stopped it (it shares that signal), so this only awaits its settle, swallowing a rejection so
-      // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
-      // swallowed inside runRetentionSweep, not here.
-      if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
+  //
+  // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
+  // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
+  // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
+  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+  return makeStartedServer(
+    server,
+    health,
+    log,
+    {
+      stopWork: async () => {
+        controller.abort();
+        // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
+        // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
+        syncController.abort();
+        await loop;
+        // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
+        // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
+        // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
+        // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the pool
+        // teardown, which would leak the HTTP server and both connection pools on exactly the path that
+        // failed. close() resolves either way; the worker's own errors are logged inside runSyncPull
+        // (sync.pull_failed / sync.stream_stalled), not here.
+        if (syncWorker !== undefined) await syncWorker.catch(() => {});
+        // The retention sweep worker, torn down the identical way: `syncController.abort()` above already
+        // stopped it (it shares that signal), so this only awaits its settle, swallowing a rejection so
+        // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
+        // swallowed inside runRetentionSweep, not here.
+        if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
+      },
+      closePools: async () => {
+        await db.close();
+        if (syncDb !== undefined) await syncDb.close();
+        if (retentionDb !== undefined) await retentionDb.close();
+      },
     },
-    closePools: async () => {
-      await db.close();
-      if (syncDb !== undefined) await syncDb.close();
-      if (retentionDb !== undefined) await retentionDb.close();
-    },
-  });
+    mdns,
+  );
 }

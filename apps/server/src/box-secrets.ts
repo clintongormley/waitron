@@ -19,6 +19,16 @@ export interface BoxTlsFiles {
   caCertFile: string;
 }
 
+/**
+ * The on-disk path of the box's self-signed CA certificate under a state dir. Exported as the ONE
+ * source of truth for the `tls/ca.crt` layout convention: `ensureBoxSecrets` WRITES it here and
+ * `discovery-api.ts`'s `GET /setup-api/ca.crt` READS it back, so neither re-derives the path and the
+ * two can never drift apart (CLAUDE.md §1's "grep the siblings before asserting a convention").
+ */
+export function caCertPath(stateDir: string): string {
+  return join(stateDir, "tls", "ca.crt");
+}
+
 export interface EnsureBoxSecretsDeps {
   /** Directory the box owns its state under; the layout below is materialised beneath it. */
   stateDir: string;
@@ -99,7 +109,7 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   const files = {
     certFile: join(tlsDir, "server.crt"),
     keyFile: join(tlsDir, "server.key"),
-    caCertFile: join(tlsDir, "ca.crt"),
+    caCertFile: caCertPath(deps.stateDir),
     caKeyFile: join(tlsDir, "ca.key"),
   };
 

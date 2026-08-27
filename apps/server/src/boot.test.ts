@@ -648,6 +648,51 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS (slice 3)", async () => {
+    // Slice 3's discovery surface is mounted in the SETUP branch only (a trading box's tills are
+    // already paired). It rides the same minted self-signed cert the shared setup path produces
+    // (`ensureBoxSecrets`), so every route is dialled over HTTPS trusting the box CA — read back the
+    // same way the setup-mode HTTPS test above does. This is the prove-by-deletion target for
+    // "setup-only": moving `mountDiscovery` into the trading branch makes `/setup-api/discovery` 404
+    // here (the setup catch-all answers 200 text/html, failing the JSON `toMatchObject` below).
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-disc-"));
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_ENV: "preproduction",
+    });
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const { via, close } = httpsVia(ca);
+    try {
+      // The machine-readable discovery document: this box's hostname plus whether its CA is
+      // downloadable. `caDownloadAvailable` is TRUE because the shared setup path minted the box's own
+      // self-signed CA at <stateDir>/tls/ca.crt (the file `ca` above was just read from).
+      const disc = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
+      expect(disc.status).toBe(200);
+      expect(await disc.json()).toMatchObject({
+        hostname: "waitron.local",
+        caDownloadAvailable: true,
+      });
+
+      // The CA download — served as a named attachment so a device can install and trust it.
+      const crt = await fetch(`https://127.0.0.1:${port}/setup-api/ca.crt`, via);
+      expect(crt.status).toBe(200);
+      expect(crt.headers.get("content-disposition")).toContain("waitron-ca.crt");
+
+      // The server-rendered trust page — HTML, self-contained, over HTTPS.
+      const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      expect(trust.status).toBe(200);
+      expect(trust.headers.get("content-type")).toContain("text/html");
+    } finally {
+      await server.close();
+      await close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode serves an operator-supplied WAITRON_TLS_* cert while STILL generating its own box secrets", async () => {
     // The operator brings their own cert: `config.tls` is set from WAITRON_TLS_CERT_FILE/_KEY_FILE, so
     // the setup branch serves THAT leaf as the front door. But `ensureBoxSecrets` runs on EVERY setup
@@ -944,6 +989,45 @@ describe("startServer, against a real container as the deployment role", () => {
       // { provisioned: false, ... } fact sheet a setup box serves.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
       expect(status.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("trading mode does NOT mount the setup-only discovery routes (slice 3), and the trading surface is unchanged", async () => {
+    // Slice 3's discovery/CA/trust surface is mounted in the SETUP branch only. A provisioned box
+    // (all five WAITRON_TILL_*_ID + a credentials key, via KEY_ENV) mounts NONE of it: /setup-api/
+    // discovery is a bare Hono 404 (no setup routes, no till SPA catch-all here — WAITRON_TILL_APP_DIR
+    // is unset), while today's trading routes (/api/staff, /health) still answer exactly as before —
+    // the mDNS start/stop added to the shared prefix is the only trading-path change. The real
+    // multicast-dns socket this boot now starts is torn down by server.close() below (→ mdns.stop()).
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    try {
+      const disc = await fetch(`http://127.0.0.1:${port}/setup-api/discovery`);
+      expect(disc.status).toBe(404);
+      // And the CA download + trust page are equally absent in trading mode.
+      expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
+      expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(404);
+
+      // The trading surface is unchanged: the unauthenticated roster route answers this till's empty
+      // staff list under RLS (200 [], not 404), and /health still answers its JSON.
+      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      expect(staff.status).toBe(200);
+      expect(await staff.json()).toEqual([]);
+
+      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(health.status).toBe(200);
+      expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
     } finally {
       await server.close();
     }
