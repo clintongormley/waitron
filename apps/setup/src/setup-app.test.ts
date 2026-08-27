@@ -301,6 +301,63 @@ describe("setup-app", () => {
     );
   });
 
+  // Fix 2: `#request` has no try/catch, so a network drop rejects `provision()` with a bare `TypeError`
+  // and a non-JSON error body (the dev proxy's 502 HTML) rejects with a `SyntaxError` — neither carries
+  // a `.code`. Without the coercion `#mapProvisionError` did `undefined.startsWith(...)`, throwing out of
+  // the catch as an unhandled rejection and stranding the operator on "Provisioning…" forever. Prove by
+  // deletion: drop the `typeof … === "string" ? … : "server.internal"` coercion and this flips red.
+  it.each([
+    ["a bare TypeError (network drop mid-provision)", new TypeError("network")],
+    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+  ])(
+    "routes a code-less rejection (%s) to the generic retryable failure without stranding",
+    async (_label, rejection) => {
+      const rejections: PromiseRejectionEvent[] = [];
+      const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
+      window.addEventListener("unhandledrejection", onReject);
+      try {
+        const provision = vi.fn().mockRejectedValue(rejection);
+        const el = await mountSetupApp(stubApi({ provision }));
+        provisionRequest(el);
+        await flush(el);
+        // On the provisioning screen with the generic retryable message + a retry control — NOT stranded
+        // on the in-flight state, which is what a thrown `undefined.startsWith` would have left behind.
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+          "Provisioning failed",
+        );
+        const host = await screenHost(el, "provisioning");
+        expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+      } finally {
+        window.removeEventListener("unhandledrejection", onReject);
+      }
+      expect(rejections).toEqual([]); // the catch handled it — nothing escaped
+    },
+  );
+
+  // Fix 3: a routed-back server error must not reappear once the operator has corrected + advanced and
+  // later steps back onto that screen manually. `#onGoto` clears it; the error-routing in
+  // `#mapProvisionError` assigns `screen` directly (not via goto), so the banner still shows initially.
+  // Prove by deletion: drop the `this.venueError = undefined` line in `#onGoto` and this flips red.
+  it("clears a routed venue error on a manual re-navigation so it doesn't reappear stale", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "provisioning.territory_country_mismatch", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    // Routed back to venue with the server banner showing.
+    expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
+    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
+      "country must match",
+    );
+    // The operator navigates away (Back to admin) and returns to venue: the stale banner is gone.
+    goto(el, "admin");
+    await el.updateComplete;
+    goto(el, "venue");
+    await el.updateComplete;
+    expect(await screenText(el, "venue", "[data-test=server-error]")).toBeNull();
+  });
+
   it.each([
     ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
     ["provisioning.invalid_locales", "Choose 1 or 2 invoice locales"],

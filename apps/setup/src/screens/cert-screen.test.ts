@@ -65,6 +65,21 @@ const PFX_SOURCE = [1, 2, 3, 4, 250, 200, 0, 255];
 /** The canonical base64 the browser must produce — with NO `data:…;base64,` prefix. */
 const EXPECTED_BASE64 = btoa(String.fromCharCode(...PFX_SOURCE));
 
+/**
+ * A stand-in `FileReader` whose `readAsDataURL` fails via `onerror`, so a test can drive the
+ * read-failure path deterministically (a real Chromium reader does not error on a valid Blob). The SUT
+ * looks up the global `FileReader` at call time, so swapping `globalThis.FileReader` for this is picked
+ * up by `readFileAsBase64`.
+ */
+class FailingFileReader {
+  error: unknown = new Error("file read failed");
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  readAsDataURL(): void {
+    queueMicrotask(() => this.onerror?.());
+  }
+}
+
 afterEach(cleanupWidgets);
 
 describe("setup-cert-screen", () => {
@@ -216,5 +231,48 @@ describe("setup-cert-screen", () => {
     const events = collect(host);
     q(el, "[data-test=back]")!.click();
     expect(events).toEqual([{ kind: "goto", detail: { screen: "venue" } }]);
+  });
+
+  // Fix 4: the `@change` binding void-discards `#onFileChange`, so a `readFileAsBase64` rejection
+  // (`reader.onerror`) would escape as an unhandled rejection and strand the operator with no feedback.
+  // Prove by deletion: drop the try/catch in `#onFileChange` and this flips red — no banner shows and
+  // the rejection escapes.
+  it("shows a read-error banner and stays blocked when the FileReader fails, without an unhandled rejection", async () => {
+    const rejections: PromiseRejectionEvent[] = [];
+    const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
+    window.addEventListener("unhandledrejection", onReject);
+    const RealFileReader = globalThis.FileReader;
+    globalThis.FileReader = FailingFileReader as unknown as typeof FileReader;
+    try {
+      const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      const events = collect(host);
+      // Choose a file → the (faked) reader fails via onerror.
+      const input = q(el, "[data-test=pfx]") as HTMLInputElement;
+      const file = new File([new Uint8Array([1, 2, 3])], "cert.pfx", {
+        type: "application/x-pkcs12",
+      });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change"));
+      // Let the microtask (onerror), the catch, and the re-render settle.
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+
+      // A clean read-error banner shows; nothing counts as loaded.
+      const banner = q(el, "[data-test=error]");
+      expect(banner).not.toBeNull();
+      expect(banner!.textContent).toContain("couldn't read that file");
+      expect(q(el, "[data-test=file-status]")).toBeNull();
+
+      // Next stays blocked (pfxBase64 empty) — nothing is emitted.
+      q(el, "[data-test=next]")!.click();
+      await el.updateComplete;
+      expect(events).toEqual([]);
+    } finally {
+      globalThis.FileReader = RealFileReader;
+      window.removeEventListener("unhandledrejection", onReject);
+    }
+    expect(rejections).toEqual([]); // the catch handled it — nothing escaped
   });
 });

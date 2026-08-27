@@ -1,10 +1,12 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import type { DeepPartial } from "../setup-app.js";
+import type { ProvisionBody } from "../api/client.js";
 
 /**
  * The wizard's second step: the first operator's credentials — a display name, a login password, and
@@ -16,6 +18,11 @@ import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
  * `setup-patch` and navigates to `venue`. `Back` returns to `mode`. Both nav events are the composed/
  * bubbling pair the shell listens for. Following `apps/dashboard/src/screens/login-screen.ts` for the
  * field/`wt-change`/error idiom.
+ *
+ * The form seeds its local state from the shell's `draft` ONCE on mount, so stepping `venue`→Back→
+ * `admin`→forward restores the operator's typed credentials rather than blanking them (the shell
+ * reassigns `draft` on every merge, so the seed must be guarded to the first update). Mirrors the
+ * `#seeded`/`#seedFromDraft` idiom in `apps/setup/src/screens/venue-screen.ts`.
  */
 
 /** The three credential fields, each a `wt-input`. */
@@ -35,7 +42,10 @@ export class SetupAdminScreen extends LitElement {
     `,
   ];
 
-  /** The editable credential fields. */
+  /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
+  @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+
+  /** The editable credential fields. Seeding overlays whatever the draft already holds. */
   @state() private values: Record<AdminField, string> = {
     displayName: "",
     password: "",
@@ -45,6 +55,29 @@ export class SetupAdminScreen extends LitElement {
 
   /** True once a `Next` with a blank field has been rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
+
+  /** Guards {@link SetupAdminScreen.#seedFromDraft} to run only on the first update. */
+  #seeded = false;
+
+  override willUpdate(): void {
+    if (this.#seeded) return;
+    this.#seeded = true;
+    this.#seedFromDraft();
+  }
+
+  /**
+   * Overlay whatever admin credentials the shell's draft already holds onto the local field state, so
+   * Back-then-forward restores every value the operator entered. `??` keeps the local default ("") when
+   * a field is absent.
+   */
+  #seedFromDraft(): void {
+    const admin = this.draft.venue?.admin ?? {};
+    this.values = {
+      displayName: admin.displayName ?? this.values.displayName,
+      password: admin.password ?? this.values.password,
+      pin: admin.pin ?? this.values.pin,
+    };
+  }
 
   #onField(key: AdminField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();

@@ -110,6 +110,9 @@ export class SetupCertScreen extends LitElement {
   /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
+  /** True when the last file read failed (`reader.onerror`) — drives a distinct read-error banner. */
+  @state() private fileReadFailed = false;
+
   /** Guards {@link SetupCertScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
 
@@ -139,10 +142,22 @@ export class SetupCertScreen extends LitElement {
     if (!file) {
       this.pfxBase64 = "";
       this.fileName = "";
+      this.fileReadFailed = false;
       return;
     }
+    this.fileReadFailed = false;
     this.fileName = file.name;
-    this.pfxBase64 = await readFileAsBase64(file);
+    try {
+      this.pfxBase64 = await readFileAsBase64(file);
+    } catch {
+      // The @change binding void-discards this handler's promise, so a `readFileAsBase64` rejection
+      // (`reader.onerror`) would otherwise escape as an unhandled rejection. Surface a clean banner,
+      // drop any partial state, and leave `pfxBase64` empty so Next stays blocked until a readable file
+      // is chosen. The bytes are never touched here, so nothing secret is logged or rendered.
+      this.pfxBase64 = "";
+      this.fileName = "";
+      this.fileReadFailed = true;
+    }
   }
 
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
@@ -245,9 +260,13 @@ export class SetupCertScreen extends LitElement {
           </select>
         </label>
         ${
-          this.showError
+          this.showError || this.fileReadFailed
             ? html`<p class="error" role="alert" data-test="error">
-                Choose the certificate file and enter its passphrase.
+                ${
+                  this.fileReadFailed
+                    ? "We couldn't read that file. Please choose the certificate file again."
+                    : "Choose the certificate file and enter its passphrase."
+                }
               </p>`
             : nothing
         }

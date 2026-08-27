@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./admin-screen.js";
 import type { SetupAdminScreen } from "./admin-screen.js";
+import type { DeepPartial } from "../setup-app.js";
+import type { ProvisionBody } from "../api/client.js";
 
 type Emitted = { kind: "patch" | "goto"; detail: unknown };
 
@@ -99,5 +101,49 @@ describe("setup-admin-screen", () => {
     const events = collect(host);
     q(el, "[data-test=back]")!.click();
     expect(events).toEqual([{ kind: "goto", detail: { screen: "mode" } }]);
+  });
+
+  // Fix 1: the shell renders `<setup-admin-screen .draft>`, so a `venue`→Back→`admin` return must
+  // restore the operator's typed credentials (password + PIN included) rather than blanking them.
+  it("seeds the editable fields from a draft so Back-then-forward is non-destructive", async () => {
+    const draft: DeepPartial<ProvisionBody> = {
+      venue: { admin: { displayName: "Alba", password: "correct horse", pin: "1234" } },
+    };
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
+    const val = (field: string) =>
+      (q(el, `[data-test=${field}]`) as unknown as { value: string }).value;
+    expect(val("displayName")).toBe("Alba");
+    expect(val("password")).toBe("correct horse");
+    expect(val("pin")).toBe("1234");
+  });
+
+  it("seeds only the fields a partial draft admin carries, leaving the rest blank", async () => {
+    const draft: DeepPartial<ProvisionBody> = {
+      venue: { admin: { displayName: "Alba" } }, // no password, no pin
+    };
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
+    const val = (field: string) =>
+      (q(el, `[data-test=${field}]`) as unknown as { value: string }).value;
+    expect(val("displayName")).toBe("Alba");
+    expect(val("password")).toBe("");
+    expect(val("pin")).toBe("");
+  });
+
+  // The seed-once (`#seeded`) guard, mirroring venue-screen's. Prove-by-deletion: drop the
+  // `if (this.#seeded) return; this.#seeded = true;` guard in `willUpdate` and this flips red — the
+  // shell's per-merge `draft` reassignment would re-seed `password` back to "reseeded", losing the edit.
+  it("seeds from the draft only once, so a later draft reassignment keeps local edits", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {
+      draft: { venue: { admin: { password: "initial" } } },
+    });
+    const val = () => (q(el, "[data-test=password]") as unknown as { value: string }).value;
+    expect(val()).toBe("initial");
+
+    await type(el, "password", "edited");
+    expect(val()).toBe("edited");
+
+    el.draft = { venue: { admin: { password: "reseeded" } } };
+    await el.updateComplete;
+    expect(val()).toBe("edited");
   });
 });

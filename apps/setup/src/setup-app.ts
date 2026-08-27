@@ -220,9 +220,17 @@ export class SetupApp extends LitElement {
   /**
    * Advance (or step back) to another screen — a plain local state change, no server call. Same
    * boundary `stopPropagation` as {@link SetupApp.#onPatch}.
+   *
+   * A user-initiated navigation clears any routed-back server banner (`venueError` / `reviewError`), so
+   * a stale rejection message does not reappear when the operator later steps back onto that screen
+   * after already correcting and advancing past it. This is safe because {@link
+   * SetupApp.#mapProvisionError} routes by assigning `this.screen` DIRECTLY (never via a `setup-goto`
+   * event), so its own error-showing routing does not pass through here and is not cleared.
    */
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
+    this.venueError = undefined;
+    this.reviewError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -256,7 +264,9 @@ export class SetupApp extends LitElement {
   /**
    * Map a rejected provision to the wizard's next state. Every code the provision route can surface
    * (map §4b, verified against `apps/server/src/setup-api.ts` + `error-boundary.ts` +
-   * `packages/provisioning/src/venue-plan.ts`) is handled:
+   * `packages/provisioning/src/venue-plan.ts`) is handled; a rejection carrying NO string `code` (a
+   * bare `TypeError`/`SyntaxError` out of `#request` — see the coercion below) is treated as the
+   * generic crash and routes to the retryable default too.
    *
    * - Any `provisioning.*` / `fiscal.*` code → a `planVenue` / fiscal-module refusal about the venue
    *   DATA, propagated at 400 by the error boundary (it does NOT rewrite the code —
@@ -274,7 +284,14 @@ export class SetupApp extends LitElement {
    *   retryable in place.
    */
   #mapProvisionError(error: ApiError): void {
-    const code = error.code;
+    // A rejection without a string `code` is real and reachable: `#request` has no try/catch, so a
+    // network drop mid-provision rejects with a bare `TypeError` and a non-JSON error body (e.g. the
+    // dev proxy's 502 HTML) rejects with a `SyntaxError` from `res.json()` — neither carries a `.code`.
+    // Coerce those to the generic bucket so they route to the retryable default rather than throwing on
+    // `undefined.startsWith` and escaping as an unhandled rejection that strands the operator on
+    // "Provisioning…". A re-POST is safe: it either succeeds or returns the 409 already_provisioned.
+    const code =
+      typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
       this.venueError =
         VENUE_ERROR_MESSAGES[code] ??
@@ -335,16 +352,20 @@ export class SetupApp extends LitElement {
    * carrying the `data-test="screen-*"` hook on its own host so the shell's screen-switching tests
    * stay uniform.
    *
-   * `mode` reads `environment` (to warn on a production box); `venue`, `cert` and `review` read the
-   * accumulated `draft` (to seed their fields / summarise it); `venue` and `review` also take a
-   * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
-   * retry flag; `done` takes the `api` to poll during the restart. All are passed as properties, since
-   * neither an api nor a draft object can travel as an attribute.
+   * `mode` reads `environment` (to warn on a production box); `admin`, `venue`, `cert` and `review`
+   * read the accumulated `draft` (to seed their fields / summarise it, so stepping Back is
+   * non-destructive); `venue` and `review` also take a routed-back server error (`venueError` /
+   * `reviewError`); `provisioning` takes the mapped message + retry flag; `done` takes the `api` to
+   * poll during the restart. All are passed as properties, since neither an api nor a draft object can
+   * travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "admin":
-        return html`<setup-admin-screen data-test="screen-admin"></setup-admin-screen>`;
+        return html`<setup-admin-screen
+          data-test="screen-admin"
+          .draft=${this.draft}
+        ></setup-admin-screen>`;
       case "venue":
         return html`<setup-venue-screen
           data-test="screen-venue"
