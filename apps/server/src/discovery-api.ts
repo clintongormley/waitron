@@ -1,9 +1,9 @@
 import { readFile, access } from "node:fs/promises";
-import { join } from "node:path";
 import type { Hono } from "hono";
 import QRCode from "qrcode";
 import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
+import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -55,7 +55,7 @@ const defaultRenderQrSvg = (text: string): Promise<string> =>
  *     note), concise per-OS trust steps, and the inline SVG QR of the IP-QR target.
  */
 export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): void {
-  const caPath = join(deps.stateDir, "tls", "ca.crt");
+  const caPath = caCertPath(deps.stateDir);
   const renderQrSvg = deps.renderQrSvg ?? defaultRenderQrSvg;
 
   // The reach info is the same lookup for both read routes — one options object, built here once so
@@ -123,8 +123,13 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
 
   app.get("/setup/trust", async (c) => {
     const reach = getReach();
-    const qr = reach.qrTarget ? await renderQrSvg(reach.qrTarget) : null;
-    const html = renderTrustPage(reach, await caExists(), qr);
+    // `renderQrSvg` (encode the reach URL) and `caExists` (stat the CA file) are independent, so run
+    // them concurrently — the route's latency is max(qr, fs) rather than their sum.
+    const [qr, caAvailable] = await Promise.all([
+      reach.qrTarget ? renderQrSvg(reach.qrTarget) : Promise.resolve(null),
+      caExists(),
+    ]);
+    const html = renderTrustPage(reach, caAvailable, qr);
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });
 

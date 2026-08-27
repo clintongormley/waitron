@@ -132,6 +132,14 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
 /**
+ * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the three wirings that MUST
+ * agree can never drift into a certificate-hostname mismatch — the exact failure the trust flow exists
+ * to avoid (spec §7/§8): the mDNS responder that ANSWERS for the name, the discovery/trust surface that
+ * ADVERTISES it, and the self-signed leaf's SAN list (`ensureBoxSecrets`) that must COVER it.
+ */
+const BOX_HOSTNAME = "waitron.local";
+
+/**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
  * than config: it is a DoS ceiling on an unauthenticated-adjacent write path, not an operator knob.
  * The upload route (a later slice) enforces it both coarsely (a `bodyLimit` middleware) and
@@ -431,7 +439,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // many servers never leaks the UDP :5353 socket. Started AFTER the fail-fast config guards and the
   // migrations above, so a boot that aborts there never opened a socket; a throw AFTER this point
   // (either branch's own catch) stops it explicitly before it propagates (see those catches).
-  const mdns = startMdnsResponder({ hostname: "waitron.local", getAddresses: listBoxIpv4, log });
+  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
 
   if (config.till === undefined) {
     // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
@@ -471,10 +479,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // resources (the owner pool / key ring) — only config.
     mountDiscovery(
       app,
-      { stateDir: config.stateDir, hostname: "waitron.local", port: config.httpPort, secure: true },
+      { stateDir: config.stateDir, hostname: BOX_HOSTNAME, port: config.httpPort, secure: true },
       log,
     );
-    //
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
     // dir, a missing/unreadable `secrets.env`, or `startListening` -> `buildServeOptions` ->
     // `readFileSync` on a missing/unreadable operator TLS file) closes `db` before it propagates —
@@ -484,7 +491,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
-        hostnames: ["waitron.local", "localhost"],
+        hostnames: [BOX_HOSTNAME, "localhost"],
         now,
       });
       // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
