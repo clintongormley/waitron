@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
+    "@waitron/identity": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",

@@ -208,15 +208,11 @@ export interface SyncPeer {
   token: string;
 }
 export interface SyncTransportConfig {
-  /** The accepted INBOUND node tokens — the set a peer's Bearer is validated against. From
-   * WAITRON_SYNC_NODE_TOKEN (comma-separated, ≥1 non-blank member). A set of one is the pre-rotation
-   * case; ≥2 is the overlap window that rolls the secret with no synchronized restart (spec §2). */
-  nodeTokens: string[];
   databaseUrl: string;
   peers: SyncPeer[];
   /** The fast lane's idle interval (ms) — the tighter tick the payments lane polls at, beside the
    * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
-   * the sync config because it is meaningless without sync enabled, like nodeTokens/peers. */
+   * the sync config because it is meaningless without sync enabled, like peers. */
   fastMinIdleMs: number;
   /** The retention sweep's idle interval (ms) between prunes — from WAITRON_SYNC_RETENTION_TICK_MS,
    * default 60000 (spec §3.2). Always present (defaulted), unlike retentionDatabaseUrl below, because
@@ -240,26 +236,17 @@ export interface SyncTransportConfig {
   lagAlarmRows?: number;
 }
 
-/** Parses a comma-separated accepted-token SET. `required` fails closed on unset/empty (a blank
- * secret must never mean "no auth", CLAUDE.md §3); a blank MEMBER (a stray `a,,b`) is a hard
- * config_invalid so an empty token can never enter the accepted set. */
-function tokenSet(env: Env, variable: string): string[] {
-  const tokens = required(env, variable)
-    .split(",")
-    .map((t) => t.trim());
-  if (tokens.some((t) => t.length === 0)) {
-    throw new AppError("server.config_invalid", { variable, reason: "blank_token_in_set" });
-  }
-  return tokens;
-}
-
 /**
  * Sync is enabled iff `WAITRON_SYNC_PEERS` is set (a non-empty JSON array of `{ nodeId, url, token }`).
- * Then the node token and the sync database URL (a LOGIN role that is a member of `app_user` AND
- * `sync_tailer` — the app-role pool cannot read `sync_log`) are required, and a blank token or peer
- * field fails closed (the empty-value trap, CLAUDE.md §3): a blank secret must never mean "no auth".
- * The sync NODE ID is `config.till.nodeId`, deliberately NOT a second `WAITRON_SYNC_NODE_ID` variable
- * — two variables that must agree is the drift the one-source-of-truth rule forbids (design deviation,
+ * Then the sync database URL (a LOGIN role that is a member of `app_user` AND `sync_tailer` — the
+ * app-role pool cannot read `sync_log`) is required, and a blank URL or peer field fails closed (the
+ * empty-value trap, CLAUDE.md §3): a blank secret must never mean "no auth". There is no shared
+ * inbound node token any more: the SOURCE authenticates each peer against the `sync_peers` registry
+ * (`sync-api.ts`, per-peer identity), so no shared inbound token is read here. The SUBSCRIBER
+ * side is unchanged — each `WAITRON_SYNC_PEERS[].token` is the Bearer a node presents when it pulls
+ * (`syncPullOnce`), now one a `waitron-sync-peer enrol` minted on the source it dials. The sync NODE
+ * ID is `config.till.nodeId`, deliberately NOT a second `WAITRON_SYNC_NODE_ID` variable — two
+ * variables that must agree is the drift the one-source-of-truth rule forbids (design deviation,
  * flagged to the owner). Absent peers → `undefined` → no sync is mounted, so a host that sets no sync
  * env (every existing boot) is unaffected.
  */
@@ -296,7 +283,6 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
   // non-positive one.
   const lagAlarmRows = optionalPositiveInt(env, "WAITRON_SYNC_LAG_ALARM_ROWS");
   return {
-    nodeTokens: tokenSet(env, "WAITRON_SYNC_NODE_TOKEN"),
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
     peers,
     fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),

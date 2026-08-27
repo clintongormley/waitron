@@ -294,9 +294,10 @@ describe("runSyncPull loop control", () => {
 
   it("defaults reportCursor to a POST /sync-api/cursor via http (Bearer + JSON body) when none is injected", async () => {
     // The DEFAULT report (no reportCursor injected) POSTs the cursor to `${peer.url}/sync-api/cursor`
-    // with `Authorization: Bearer <peer.token>` + a JSON `{subscriberId, lane, lastAppliedSeq}` body —
-    // the shape B4's `POST /sync-api/cursor` route consumes. localDb is stubbed so readCursor resolves
-    // the seq the report stringifies; http is a spy capturing the request.
+    // with `Authorization: Bearer <peer.token>` + a JSON `{lane, lastAppliedSeq}` body — the shape B4's
+    // `POST /sync-api/cursor` route consumes. The subscriber identity is NOT in the body: the source
+    // derives it from the Bearer token and ignores any body subscriberId (spec §2/§8). localDb is
+    // stubbed so readCursor resolves the seq the report stringifies; http is a spy capturing the request.
     const controller = new AbortController();
     const calls: Array<{
       url: string;
@@ -329,7 +330,6 @@ describe("runSyncPull loop control", () => {
       "content-type": "application/json",
     });
     expect(JSON.parse(calls[0]!.init.body!)).toEqual({
-      subscriberId: "node-a",
       lane: "ordered",
       lastAppliedSeq: "7",
     });

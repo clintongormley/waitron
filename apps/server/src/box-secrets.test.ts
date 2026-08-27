@@ -39,7 +39,6 @@ const deps = (stateDir: string) => ({
   mint: (o: Parameters<typeof mintSelfSignedServerCert>[0]) =>
     mintSelfSignedServerCert({ ...o, keypair: () => kp }),
   makeKeyRing: () => ({ key: "A".repeat(43) + "=", version: 1 }), // shape only; boot uses the real one
-  makeToken: () => "deadbeef".repeat(8),
   listIpv4: () => ["192.168.1.50"],
 });
 
@@ -50,11 +49,10 @@ describe("ensureBoxSecrets", () => {
     expect(tls.certFile).toBe(join(d, "tls", "server.crt"));
     expect(tls.keyFile).toBe(join(d, "tls", "server.key"));
     expect(tls.caCertFile).toBe(join(d, "tls", "ca.crt"));
-    // secrets.env holds all three names
+    // secrets.env holds both credentials-key names
     const env = await readFile(join(d, "secrets.env"), "utf8");
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY=/m);
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY_VERSION=1$/m);
-    expect(env).toMatch(/^WAITRON_SYNC_NODE_TOKEN=deadbeef/m);
   });
 
   it("writes all four PEMs and the secrets file 0600 (owner-only, uniform)", async () => {
@@ -90,7 +88,7 @@ describe("ensureBoxSecrets", () => {
 
   it("is idempotent: a second call reuses the exact same bytes and regenerates nothing", async () => {
     const d = await newDir();
-    // secrets.env is regenerated from FIXED injected factories (keyring + token), so a re-write would
+    // secrets.env is regenerated from a FIXED injected factory (the key ring), so a re-write would
     // be byte-identical — byte-equality on it alone would pass even with its presence guard removed,
     // and so would not test that guard. (The cert's serials are random per mint, so a re-minted cert
     // WOULD differ; we don't lean on that.) Spy on every factory instead — the uniform tell of "never
@@ -101,7 +99,6 @@ describe("ensureBoxSecrets", () => {
       ...base,
       mint: vi.fn(base.mint),
       makeKeyRing: vi.fn(base.makeKeyRing),
-      makeToken: vi.fn(base.makeToken),
       listIpv4: vi.fn(base.listIpv4),
     };
     await ensureBoxSecrets(spied);
@@ -114,7 +111,6 @@ describe("ensureBoxSecrets", () => {
     expect(spied.mint).toHaveBeenCalledTimes(1);
     expect(spied.listIpv4).toHaveBeenCalledTimes(1);
     expect(spied.makeKeyRing).toHaveBeenCalledTimes(1);
-    expect(spied.makeToken).toHaveBeenCalledTimes(1);
   });
 
   it("puts 127.0.0.1 and the detected LAN IP into the leaf SANs", async () => {
@@ -140,12 +136,12 @@ describe("ensureBoxSecrets", () => {
     expect(san.split("127.0.0.1").length - 1).toBe(1);
   });
 
-  // Every case above injects mint/makeKeyRing/makeToken/listIpv4, which leaves the REAL default
-  // branches (mintSelfSignedServerCert, generateKeyRing, randomBytes token, defaultListIpv4)
+  // Every case above injects mint/makeKeyRing/listIpv4, which leaves the REAL default
+  // branches (mintSelfSignedServerCert, generateKeyRing, defaultListIpv4)
   // unexercised. Task 4's boot test — which would drive them — does not exist yet, so this one
   // case runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
   // single fresh temp dir and asserting the four PEMs + a well-formed secrets.env land.
-  it("uses the real minter, key ring, token and IPv4 detection with no injectables", async () => {
+  it("uses the real minter, key ring and IPv4 detection with no injectables", async () => {
     const d = await newDir();
     const tls = await ensureBoxSecrets({
       stateDir: d,
@@ -161,11 +157,10 @@ describe("ensureBoxSecrets", () => {
     expect(await readFile(join(d, "tls", "ca.key"), "utf8")).toMatch(
       /-----BEGIN RSA PRIVATE KEY-----/,
     );
-    // The real key ring is base64 of 32 bytes (44 chars, one '=' pad); the token is 32 bytes of hex.
+    // The real key ring is base64 of 32 bytes (44 chars, one '=' pad).
     const env = await readFile(join(d, "secrets.env"), "utf8");
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY=[A-Za-z0-9+/]{43}=$/m);
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY_VERSION=1$/m);
-    expect(env).toMatch(/^WAITRON_SYNC_NODE_TOKEN=[0-9a-f]{64}$/m);
     // The real leaf always carries 127.0.0.1 even if the box has no non-internal IPv4.
     const cert = new X509Certificate(serverCrt);
     expect(cert.subjectAltName).toContain("127.0.0.1");

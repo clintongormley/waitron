@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { captureError, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { syncPullOnce, type HttpClient } from "@waitron/sync";
+import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
 
@@ -44,6 +44,11 @@ let targetAdmin: Database;
 let targetApplier: Database;
 let sourceReader: Database;
 let sourceWriter: Database;
+// The Bearer token a subscriber presents to the source. It must be one an `enrolPeer` minted on the
+// SOURCE (spec §9): the mounted source authenticates every /hello + /log request against source's
+// `sync_peers` through `sourceReader` (a sync_tailer member). The peer's own subscriber_id is
+// irrelevant to /hello + /log — they need only a valid peer — so one enrolment serves every pull below.
+let sourcePeerToken: string;
 
 /** Seed the FK parents (tenant, location, till, node, series) with the fixed ids on one database.
  * None of these tables is enrolled, so this captures no sync_log rows. */
@@ -93,11 +98,7 @@ async function captureSaleOnSource(saleId: string, invoiceNumber: number): Promi
 /** The HTTP seam: a real Hono app.request against a mounted source, advertising `environment` on /hello. */
 function sourceHttp(environment: "production" | "preproduction"): HttpClient {
   const app = new Hono();
-  mountSyncApi(
-    app,
-    { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment, nodeTokens: ["shared"] },
-    log,
-  );
+  mountSyncApi(app, { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment }, log);
   return (url, init) => Promise.resolve(app.request(url, { headers: init.headers }));
 }
 
@@ -139,6 +140,11 @@ beforeAll(async () => {
   targetApplier = await target.pg.connectAs("sync_applier", "ap");
   sourceReader = await source.pg.connectAs("sync_reader", "rp");
   sourceWriter = await source.pg.connectAs("app_login", "app_pw");
+  // Mint the subscriber's Bearer token on the SOURCE (enrolPeer runs as the superuser admin — setup
+  // bypasses grants). Every `peer` below presents this token; the mounted source resolves it to this
+  // enrolled row via sourceReader on each /hello + /log call.
+  sourcePeerToken = (await enrolPeer(source.admin, { subscriberId: "e2e-mirror", name: "e2e" }))
+    .token;
 });
 
 afterAll(async () => {
@@ -164,7 +170,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
     };
-    const peer = { nodeId: NODE_A, url: "", token: "shared" };
+    const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 
     const first = await syncPullOnce(deps, peer);
     expect(first.applied).toBeGreaterThanOrEqual(1);
@@ -206,7 +212,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
     };
-    const peer = { nodeId: NODE_A, url: "", token: "shared" };
+    const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
     const err = await captureError(() => syncPullOnce(mismatched, peer));
     expect(err).toBeInstanceOf(AppError);
     expect((err as AppError).code).toBe("sync.peer_environment_mismatch");
@@ -244,7 +250,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
     };
-    const peer = { nodeId: NODE_A, url: "", token: "shared" };
+    const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 
     // FAST lane → the payment lands; the sale is not carried on this lane.
     const fast = await syncPullOnce({ ...base, lane: "fast" as const }, peer);
