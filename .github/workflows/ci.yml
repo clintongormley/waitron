@@ -91,6 +91,7 @@ jobs:
       ui: ${{ steps.gates.outputs.ui }}
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
+      setup: ${{ steps.gates.outputs.setup }}
       server: ${{ steps.gates.outputs.server }}
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
       light_a: ${{ steps.gates.outputs.light_a }}
@@ -837,6 +838,61 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/dashboard" test:coverage
 
+  # apps/setup alone: the setup-wizard browser app, the workspace's FOURTH Chromium consumer after
+  # packages/ui, apps/till and apps/dashboard. It has a shard of its own for the same reason
+  # test-dashboard does — a @vitest/browser + Playwright package sharing test-light with the rest of
+  # the workspace is the shape that hung that shard on packages/ui, twice (the receipts are on
+  # UI_PACKAGE in scripts/changed-scope.mjs). This split is PREEMPTIVE: apps/setup has never run in
+  # test-light and so has never hung it, and nothing here proves it would — see SETUP_PACKAGE in
+  # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a fourth
+  # wedged browser can never take the other packages' test-light results down with it.
+  #
+  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui/till/dashboard:
+  # apps/setup drives Chromium through Playwright and touches no database.
+  test-setup:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/setup exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # Same as test-ui/till/dashboard: scope the exec to the @waitron/setup workspace (where
+      # playwright is a devDependency) — plain `pnpm exec` at the repo root does not resolve a
+      # member-scoped bin — and no `--with-deps`, because the ubuntu-latest image already ships
+      # Chromium's shared libraries; see the test-ui step above for the full rationale and the receipt.
+      - run: pnpm --filter @waitron/setup exec playwright install chromium
+
+      # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
+      # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
+      # run no tests.
+      - name: Run the setup shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/setup" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/setup" test:coverage
+
   # The "everything else" packages, split into two balanced halves run on separate free 4-vCPU
   # runners IN PARALLEL — test-light-a and test-light-b. --no-sort removes the dependency ordering,
   # which earns nothing for tests: every member resolves to ./src/*.ts and no test imports a
@@ -919,6 +975,7 @@ jobs:
           set -- "$@" --filter "!@waitron/ui"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
+          set -- "$@" --filter "!@waitron/setup"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
@@ -982,6 +1039,7 @@ jobs:
           set -- "$@" --filter "!@waitron/ui"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
+          set -- "$@" --filter "!@waitron/setup"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
@@ -1104,6 +1162,7 @@ jobs:
       - test-ui
       - test-till
       - test-dashboard
+      - test-setup
       - test-light-a
       - test-light-b
       - mutation-verifactu

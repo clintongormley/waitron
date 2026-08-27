@@ -109,6 +109,23 @@ export const TILL_PACKAGE = "@waitron/till";
 export const DASHBOARD_PACKAGE = "@waitron/dashboard";
 
 /**
+ * The `test-setup` shard's package: apps/setup, the setup-wizard browser app and the workspace's
+ * FOURTH Chromium consumer after @waitron/ui, apps/till and apps/dashboard.
+ *
+ * It gets a shard of its own for the SAME reason apps/dashboard does, and on the same precedent
+ * rather than on a hang of its own. apps/setup drives Chromium through @vitest/browser + Playwright
+ * exactly as the other three do (its package.json carries @vitest/browser and a `test:coverage` that
+ * runs Vitest in the browser), and the receipt for what a Chromium consumer does to the shared
+ * `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's first browser
+ * package, twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken
+ * on that precedent — apps/setup has never run in test-light and so has never hung it, and nothing
+ * here proves it would; the claim is only that adding a fourth browser package to the shard that
+ * already hung on the first is the shape worth avoiding. Whether isolation is what fixes the hang can
+ * only be read off future runs, as UI_PACKAGE notes for itself.
+ */
+export const SETUP_PACKAGE = "@waitron/setup";
+
+/**
  * The `test-server` shard's package: apps/server, the workspace's largest suite.
  *
  * Unlike the three browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
@@ -158,6 +175,7 @@ export const OWN_SHARD_PACKAGES = [
   UI_PACKAGE,
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
+  SETUP_PACKAGE,
   SERVER_PACKAGE,
   FISCAL_VERIFACTU_PACKAGE,
 ];
@@ -233,7 +251,7 @@ export const LIGHT_B_PACKAGES = [
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 
-/** A gate that fires when one named package is in the resolved scope — eight of the ten. */
+/** A gate that fires when one named package is in the resolved scope — nine of the eleven. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
 /**
@@ -247,7 +265,7 @@ const runsInLightShard = (bin) => (name) =>
 /**
  * A gate that fires when the resolved scope holds a package in `bin` that declares tests — the two
  * light shards' predicate, the counterpart to `membership` for the single-package gates. The other
- * two of the ten gates.
+ * two of the eleven gates.
  */
 const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin));
 
@@ -291,6 +309,7 @@ export const SCOPE_GATES = [
   { output: "ui", covers: membership(UI_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
+  { output: "setup", covers: membership(SETUP_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
