@@ -364,15 +364,18 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
       reason: "not_a_url",
     });
   }
-  // A well-formed url can still OMIT the port — `tcp://relay.example` parses fine, but `.port` is
-  // `""` and `Number("")` is `0`. `relayPort: 0` is exactly the degenerate value the dialer must
-  // never see, so a portless relay url fails closed HERE at boot, the mirror image of the hostname
-  // guard above. A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the
-  // port we require, so labelling it "not a url" would mislead the operator (CLAUDE.md §1).
-  // Use a NON-SPECIAL scheme (`tcp://`, which the mechanism expects): WHATWG `URL` strips a port that
-  // equals a SPECIAL scheme's default, so `https://relay:443` parses to `.port === ""` and would be
-  // refused here — `tcp://relay:443` keeps its port.
-  if (url.port === "") {
+  // A well-formed url can still fail to name a USABLE port, two ways, both yielding `relayPort: 0` —
+  // the degenerate value the dialer must never see (you cannot connect to port 0): it OMITS the port
+  // (`tcp://relay.example` → `.port` is `""`, `Number("")` is `0`) or it names port ZERO explicitly
+  // (`tcp://relay.example:0` → `.port` is `"0"`). `Number(url.port) === 0` catches BOTH (a parsed
+  // `url.port` is only ever `""` or a valid `"0".."65535"`, since `new URL` rejects an out-of-range or
+  // non-numeric port), so both fail closed HERE at boot — the mirror image of the hostname guard above.
+  // A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the usable port we
+  // require, so "not a url" would mislead the operator (CLAUDE.md §1). Use a NON-SPECIAL scheme
+  // (`tcp://`, which the mechanism expects): WHATWG `URL` strips a port equal to a SPECIAL scheme's
+  // default, so `https://relay:443` parses to `.port === ""` and would be refused here — `tcp://relay:443`
+  // keeps its port.
+  if (Number(url.port) === 0) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_TUNNEL_RELAY_URL",
       reason: "no_port",

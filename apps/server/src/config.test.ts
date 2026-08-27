@@ -845,6 +845,22 @@ describe("loadTunnelConfig", () => {
     });
   });
 
+  // An EXPLICIT port zero (`tcp://relay.example:0`) parses with `.port` "0", not "", so the empty-string
+  // check alone would let `relayPort: 0` through — you cannot connect to port 0, so it fails closed too
+  // (the `Number(url.port) === 0` guard catches both the omitted and the explicit-zero case).
+  it("refuses a relay url whose port is zero", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example:0" }),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "no_port",
+    });
+  });
+
   // Box id + token are required once the tunnel is on, and a blank one fails closed (the
   // peer_field_blank shape loadSyncConfig uses for a blank peer field): a blank token must never mean
   // "no auth", a blank box id names no box to the relay.

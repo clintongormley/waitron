@@ -122,14 +122,14 @@ New `packages/tunnel` (`@waitron/tunnel`), following the enumerated-`exports` co
 |---|---|---|
 | `src/protocol.ts` | Frame types + a newline-delimited-JSON encode/decode with the leftover-buffer contract (§6). Pure, no I/O. | `.` |
 | `src/client.ts` | `runTunnelClient(deps)` — pool, handshake, splice-to-localhost, heartbeat, reconnect/backoff, abort. | `.` |
-| `src/errors.ts` | `tunnel.*` codes; `import "./errors.js"` keeps them reachable (tree-wide guard). | `.` |
 | `src/index.ts` | Barrel. | `.` |
 | `src/testing/relay.ts` | The relay stand-in: `createRelayStandin({ verifyToken })` → a listening TCP server that pairs + splices. For tests and local dev only. | `./testing/relay.js` |
+| `src/testing/script-relay.ts` | A scriptable stand-in relay + timing helpers shared by the two client test suites. Tests only — imported by relative path, not published in the `exports` map. | — |
 
-**Note (impl 2026-08-27):** shipped **without** `src/errors.ts` — the `tunnel.*` codes are *logged*
-free strings, not thrown, so there is no `AppError` to register and no reachability guard to satisfy
-(the plan reconciled this against the `sync.pull_failed` precedent). No `errors.ts` row and no
-`import "./errors.js"` exist in the package.
+**Note (impl 2026-08-27):** the package ships **no** `src/errors.ts` (this design pass originally
+sketched one). The `tunnel.*` codes are *logged* free strings, not thrown, so there is no `AppError`
+to register and no reachability guard to satisfy — the plan reconciled this against the
+`sync.pull_failed` precedent, which is likewise logged without a registry entry.
 
 **Isolation check.** `runTunnelClient`'s one job is "keep the box reachable through the relay by
 proxying to a local port"; it knows nothing of sync, cursors, or SQL. The relay stand-in's one job is
