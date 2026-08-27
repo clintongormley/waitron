@@ -1069,6 +1069,92 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("setup mode: a LIVE ES-common provision WITH an AEAT cert seals it into the tenant's fiscal.aeat vault, stamps production, restarts", async () => {
+    // The legitimate seal path end-to-end — the assertion the (now-inverted) demo+cert test used to
+    // make, moved onto the CORRECT path. A LIVE ES-common venue files to the real AEAT, so its cert
+    // IS expected (`certExpected` in setup-api.ts): the endpoint accepts it and `sealAeat` seals it via
+    // boot.ts's real `sealAeatCredential(ownerDb, ring, …)` wiring — the ONLY full-boot exercise of
+    // that binding, and of the ring `boot.ts` reads back off `secrets.env` (a broken recovery would
+    // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
+    //
+    // No real AEAT call is made and none can be: a FRESH provision seeds NO `envios`, and a box in
+    // SETUP mode never starts the drain worker (it enters trading mode only after the restart, which is
+    // mocked here) — so `resolveClient`/`mtlsFetch` are never reached even though a usable `fiscal.aeat`
+    // credential now exists (the transport-seam obstacle in this file's header is about the drain, not
+    // the SEAL). The module-mocked `undici` fetch is the belt-and-braces backstop.
+    //
+    // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
+    // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
+    // mode-derived value (live → production, provision.ts:76) — NOT `config.environment`, which
+    // `boot.ts` (line 528) never threads into `provisionVenue`. So this isolates the SEAL without
+    // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
+    // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-live-seal-state-"));
+    const handle = resolveSharedHandle(undefined);
+    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
+    const check = await pg.connect();
+    const material = mintMtlsMaterial();
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          DATABASE_URL: pg.uri,
+          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        });
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        try {
+          const body = {
+            mode: "live",
+            venue: provisionVenueBody("60000013K"),
+            aeatCert: {
+              pfxBase64: material.clientPfx.toString("base64"),
+              passphrase: material.clientPassphrase,
+              certKind: "representante",
+            },
+          };
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
+          expect(json.provisioned).toBe(true);
+
+          // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot env).
+          // `check` is the clone's superuser connection, so it BYPASSES RLS on both reads.
+          expect(await readDeploymentEnvironment(check)).toBe("production");
+
+          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
+          // `sealAeatCredential` wiring (boot.ts:529) ran end-to-end.
+          const sealed = await check.execute<{ n: number; tenant: string }>(
+            sql`select count(*)::int as n, max(tenant_id::text) as tenant
+                from tenant_credentials where purpose = 'fiscal.aeat'`,
+          );
+          expect(sealed.rows[0]!.n).toBe(1);
+          expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
+
+          // The restart fires once after the seal + persist, as for the plain demo above.
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await check.close();
+      await pg.stop();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
     // The regression guard for the branch: a provisioned box (all five WAITRON_TILL_*_ID + a
     // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the
