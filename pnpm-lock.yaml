@@ -217,9 +217,6 @@ importers:
 
   apps/setup:
     dependencies:
-      '@waitron/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@waitron/ui':
         specifier: workspace:*
         version: link:../../packages/ui
