@@ -432,15 +432,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const health = createHealthState(now());
   const app = healthApp(health, now);
 
-  // Advertise waitron.local over mDNS from inside the process (slice 3) — in BOTH modes, so a
-  // device reaches the box by name whether it is being set up or already trading. The name→IP
-  // mapping is independent of which front-door cert is served; the reachable URL carries the port.
-  // Stopped in makeStartedServer's close() below (shared teardown), so a test that opens and closes
-  // many servers never leaks the UDP :5353 socket. Started AFTER the fail-fast config guards and the
-  // migrations above, so a boot that aborts there never opened a socket; a throw AFTER this point
-  // (either branch's own catch) stops it explicitly before it propagates (see those catches).
-  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
-
   if (config.till === undefined) {
     // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
     // are set). It serves ONLY `/health` and the unauthenticated setup surface: no reconciler/duty, no
@@ -543,6 +534,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         );
         const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
         const server = startListening({ ...config, tls }, app, now, log);
+        // Advertise waitron.local over mDNS LAST — after every throwing setup step above AND once
+        // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket
+        // (an earlier throw simply never started it, which is why the catches below no longer stop it).
+        // Both modes advertise; the responder is stopped in makeStartedServer's close() below. mDNS is
+        // non-load-bearing (the box stays reachable by IP); a bind / no-multicast-route failure logs and
+        // is swallowed inside the responder.
+        const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
         return makeStartedServer(
           server,
           health,
@@ -567,10 +565,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         throw error;
       }
     } catch (error) {
-      // `mdns` started in the shared prefix above, so a throw in this branch must stop its UDP socket
-      // before the pool is closed — otherwise the socket leaks on exactly the boot that failed.
-      // Swallowed: a reject here must not mask `error`, the original failure being rethrown below.
-      await mdns.stop().catch(() => {});
+      // mDNS is not started until just before `makeStartedServer` below (after every throwing step in
+      // this branch), so a throw reaching here never opened the UDP socket — only the DB pool (the app
+      // pool AND, if it opened, the provisioning owner pool via the inner catch) needs closing.
       await db.close();
       throw error;
     }
@@ -599,12 +596,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   try {
     ring = loadKeyRing(env);
   } catch (error) {
-    // `mdns` started in the shared prefix above, so stop its UDP socket before closing the pool —
-    // otherwise it leaks on this failed boot. The pre-existing `readOrderFlow`/`buildCardProvider`
-    // throw sites further down leak both `db` AND this socket the same way and stay out of scope here
-    // (they leaked `db` before slice 3 too — documented below), so only this guarded site is amended.
-    // Swallowed: a reject here must not mask `error`, the original failure being rethrown below.
-    await mdns.stop().catch(() => {});
+    // mDNS is not started until just before `makeStartedServer` (after every throwing setup step), so a
+    // `loadKeyRing` throw here never opened the UDP socket — only `db` needs closing. The pre-existing
+    // `readOrderFlow`/`buildCardProvider` throw sites further down still leak `db` the same way and stay
+    // out of scope here (they leaked `db` before slice 3 too — documented above).
     await db.close();
     throw error;
   }
@@ -1011,6 +1006,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // sync and retention pools. Byte-for-byte the sequence this branch ran inline before the setup/
   // trading split — the ordering guarantees (abort the loop and sync together, await the loop, swallow
   // a worker's settle-by-rejection so it can never skip the guaranteed pool teardown) are unchanged.
+  //
+  // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
+  // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
+  // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
+  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
   return makeStartedServer(
     server,
     health,
