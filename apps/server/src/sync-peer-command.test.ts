@@ -15,6 +15,18 @@ describe("syncPeerCommand", () => {
     expect(code).toBe(2);
   });
 
+  it("closes the pool even when the operation throws (withDb finally)", async () => {
+    const close = vi.fn(async () => {});
+    const execute = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    const db = { execute, close } as unknown as Database;
+    await expect(
+      syncPeerCommand({ argv: ["list"], env: RETENTION, connect: async () => db, out: () => {} }),
+    ).rejects.toThrow("boom");
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("enrol prints the token exactly once and closes the pool", async () => {
     const close = vi.fn(async () => {});
     const execute = vi.fn(async () => ({ rows: [{ id: "11111111-1111-4111-8111-111111111111" }] }));
