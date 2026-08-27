@@ -324,9 +324,8 @@ export interface TunnelConfig {
   poolSize: number;
 }
 
-/** The number of pre-dialed outbound connections the box keeps to the relay when
- * WAITRON_TUNNEL_POOL_SIZE is unset. A small standing pool so a burst of mirror pulls does not each
- * pay a fresh dial; a tuning starting point, not a settled constant. */
+/** Standing outbound connections the box pre-dials to the relay when WAITRON_TUNNEL_POOL_SIZE is
+ * unset. */
 const DEFAULT_TUNNEL_POOL_SIZE = 4;
 
 /**
@@ -363,6 +362,17 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_TUNNEL_RELAY_URL",
       reason: "not_a_url",
+    });
+  }
+  // A well-formed url can still OMIT the port — `tcp://relay.example` parses fine, but `.port` is
+  // `""` and `Number("")` is `0`. `relayPort: 0` is exactly the degenerate value the dialer must
+  // never see, so a portless relay url fails closed HERE at boot, the mirror image of the hostname
+  // guard above. A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the
+  // port we require, so labelling it "not a url" would mislead the operator (CLAUDE.md §1).
+  if (url.port === "") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "no_port",
     });
   }
   const boxId = env.WAITRON_TUNNEL_BOX_ID;

@@ -828,6 +828,23 @@ describe("loadTunnelConfig", () => {
     });
   });
 
+  // A well-formed url can still omit the port (`tcp://relay.example` → `.port` "" → `Number("")` 0).
+  // relayPort 0 is exactly the degenerate value a dialer must never see, so a portless relay url
+  // fails closed at boot — the mirror of the hostname guard, with a dedicated `no_port` reason
+  // because the url IS valid, it just lacks the port we require.
+  it("refuses a relay url that omits the port", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example" }),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TUNNEL_RELAY_URL",
+      reason: "no_port",
+    });
+  });
+
   // Box id + token are required once the tunnel is on, and a blank one fails closed (the
   // peer_field_blank shape loadSyncConfig uses for a blank peer field): a blank token must never mean
   // "no auth", a blank box id names no box to the relay.
