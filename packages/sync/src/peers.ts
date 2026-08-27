@@ -54,21 +54,30 @@ export async function authenticatePeer(
   const secret = token.slice(dot + 1);
   if (!UUID_RE.test(peerId)) throw new AppError("sync.node_unauthorized", {});
 
-  const res = await db.execute<{ token_hash: string; subscriber_id: string }>(
-    sql`select token_hash, subscriber_id from sync_peers
+  // The gate is computed by Postgres (`sighting_due`) in the SAME select that resolves the peer, so
+  // the JS decision below uses the DB's clock, not the app's, and needs no timestamp parsing.
+  const res = await db.execute<{
+    token_hash: string;
+    subscriber_id: string;
+    sighting_due: boolean;
+  }>(
+    sql`select token_hash, subscriber_id,
+               (last_seen_at is null or last_seen_at < now() - interval '1 minute') as sighting_due
+        from sync_peers
         where id = ${peerId}::uuid and active = true`,
   );
   const row = res.rows[0];
   if (row === undefined) throw new AppError("sync.node_unauthorized", {});
   if (!verifySecret(secret, row.token_hash)) throw new AppError("sync.node_unauthorized", {});
 
-  // Gated sighting write — skip if already seen within the last minute (the print-agent gate). Only
-  // last_seen_at is written, the one column the auth-path role holds UPDATE on.
-  await db.execute(
-    sql`update sync_peers set last_seen_at = now()
-        where id = ${peerId}::uuid
-          and (last_seen_at is null or last_seen_at < now() - interval '1 minute')`,
-  );
+  // Gated sighting write — auth runs on EVERY pull/report tick (the hot path; the fast lane polls
+  // ~1/s), so the second round-trip is SKIPPED entirely, not just no-op'd server-side, unless a minute
+  // has passed since the last sighting. Reading `sighting_due` above moves the gate to JS, turning
+  // ~one UPDATE per request into ~one per peer per minute. Only last_seen_at is written — the one
+  // column the auth-path role (sync_tailer) holds UPDATE on.
+  if (row.sighting_due) {
+    await db.execute(sql`update sync_peers set last_seen_at = now() where id = ${peerId}::uuid`);
+  }
   return { subscriberId: row.subscriber_id };
 }
 

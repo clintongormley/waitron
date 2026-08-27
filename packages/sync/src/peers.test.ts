@@ -78,6 +78,29 @@ describe("enrolPeer + authenticatePeer", () => {
       await tailer.close();
     }
   });
+
+  it("skips the sighting write within the gate window (no redundant round-trip)", async () => {
+    // Proves the `sighting_due` gate SKIPS the UPDATE on a second auth inside the minute: if it did
+    // not, the second auth would re-stamp last_seen_at to a later now(), so equality is the guard.
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
+    try {
+      const { peerId, token } = await enrolPeer(pruner, { subscriberId: "cloud", name: "m" });
+      const readSeen = async (): Promise<string> => {
+        const r = await pruner.execute<{ seen: string }>(
+          sql`select last_seen_at::text as seen from sync_peers where id = ${peerId}::uuid`,
+        );
+        return r.rows[0]!.seen;
+      };
+      await authenticatePeer(tailer, token);
+      const first = await readSeen();
+      await authenticatePeer(tailer, token);
+      expect(await readSeen()).toBe(first); // unchanged — the second sighting was gated out
+    } finally {
+      await pruner.close();
+      await tailer.close();
+    }
+  });
 });
 
 describe("revokePeer + listPeers + rotation", () => {

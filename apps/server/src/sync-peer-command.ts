@@ -3,6 +3,21 @@ import { type Database } from "@waitron/db";
 
 type Env = Record<string, string | undefined>;
 
+/** Open a pool, run `fn` against it, and always close it — the connect/try/finally each subcommand
+ * otherwise repeats verbatim. Returns `fn`'s result (the process exit code). */
+async function withDb<T>(
+  connect: (url: string) => Promise<Database>,
+  url: string,
+  fn: (db: Database) => Promise<T>,
+): Promise<T> {
+  const db = await connect(url);
+  try {
+    return await fn(db);
+  } finally {
+    await db.close();
+  }
+}
+
 /**
  * The operator-run peer registry CLI (spec §7). A human runs this locally against the source node to
  * enrol a subscriber (minting its bearer token, printed ONCE), revoke one (instant — active := false),
@@ -29,16 +44,13 @@ export async function syncPeerCommand(deps: {
       deps.out("usage: waitron-sync-peer enrol <subscriberId> <name>");
       return 2;
     }
-    const db = await deps.connect(url);
-    try {
+    return withDb(deps.connect, url, async (db) => {
       const { peerId, token } = await enrolPeer(db, { subscriberId, name });
       deps.out(`enrolled peer ${peerId} for subscriber ${subscriberId}`);
       deps.out("token (shown once — copy it into the peer's WAITRON_SYNC_PEERS now):");
       deps.out(token);
       return 0;
-    } finally {
-      await db.close();
-    }
+    });
   }
 
   if (cmd === "revoke") {
@@ -47,19 +59,15 @@ export async function syncPeerCommand(deps: {
       deps.out("usage: waitron-sync-peer revoke <peerId>");
       return 2;
     }
-    const db = await deps.connect(url);
-    try {
+    return withDb(deps.connect, url, async (db) => {
       const { revoked } = await revokePeer(db, peerId);
       deps.out(revoked ? `revoked peer ${peerId}` : `no active peer ${peerId}`);
       return revoked ? 0 : 1;
-    } finally {
-      await db.close();
-    }
+    });
   }
 
   if (cmd === "list") {
-    const db = await deps.connect(url);
-    try {
+    return withDb(deps.connect, url, async (db) => {
       const peers = await listPeers(db);
       if (peers.length === 0) {
         deps.out("no peers enrolled");
@@ -72,9 +80,7 @@ export async function syncPeerCommand(deps: {
         );
       }
       return 0;
-    } finally {
-      await db.close();
-    }
+    });
   }
 
   deps.out("usage: waitron-sync-peer <enrol <subscriberId> <name> | revoke <peerId> | list>");
