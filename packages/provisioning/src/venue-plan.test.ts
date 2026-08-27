@@ -160,13 +160,15 @@ describe("planVenue", () => {
     }
   });
 
-  it("canonicalizes country/taxId casing+whitespace so es/ES cannot mint two obligados (§5)", () => {
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two obligados (§5)", () => {
     // The wizard emits a trimmed-but-not-uppercased country ("es") and never touches taxId casing;
     // the CLI trims taxId but never uppercases it. Both paths go through planVenue, so canonicalizing
-    // HERE — once, at the top — makes the derived id AND the stored (country, tax_id) unique-index row
-    // canonical for both. Without it, a differently-cased re-run of the SAME business mints a second,
-    // permanent, unmergeable obligado (§5). Proven by deletion: strip planVenue's normalization and
-    // the id-equality / stored-value assertions below go red.
+    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
+    // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
+    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable obligado
+    // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
+    // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
+    // assertions below go red.
     const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" })).find(
       (a) => a.kind === "ensure-tenant",
     );

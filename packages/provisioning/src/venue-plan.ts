@@ -74,11 +74,14 @@ export function planVenue(request: VenueRequest): VenueAction[] {
   // trimmed-but-not-uppercased country ("es") and never touches taxId casing, and the CLI trims
   // taxId but never uppercases it (its `assertCountry` already upper-cases country, now belt-and-
   // suspenders). Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
-  // `es`/`ES` (or a taxId casing/spacing difference) for the same business mint a second, permanent,
-  // unmergeable obligado — a re-run meant to add a shop would silently start a second SIF/hash chain.
-  // Canonicalizing both makes the id AND the unique-index row match across casings, so applyVenue's
-  // `on conflict (country, tax_id) do nothing` reuses the one obligado. No data to preserve (pre-
-  // production, no backfill); ISO-3166 alpha-2 is upper-case by convention.
+  // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
+  // same business mint a second, permanent, unmergeable obligado — a re-run meant to add a shop would
+  // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
+  // differences; INTERNAL whitespace is deliberately left alone (a taxId's inner content is not ours
+  // to alter), so `"B123 45678"` stays a distinct identity. Canonicalizing makes the id AND the
+  // unique-index row match across case/surrounding-space variants, so applyVenue's `on conflict
+  // (country, tax_id) do nothing` reuses the one obligado. No data to preserve (pre-production, no
+  // backfill); ISO-3166 alpha-2 is upper-case by convention.
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
   const locales = request.location.invoiceLocales;

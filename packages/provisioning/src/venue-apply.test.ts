@@ -128,9 +128,10 @@ describe("applyVenue", () => {
     expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado, not two
   });
 
-  it("collapses country/taxId casing variants to ONE obligado on re-run (no duplicate, no PK error, §5)", async () => {
-    // The fiscal footgun: es/ES (or a taxId casing/spacing difference) for the SAME business must
-    // never mint two permanent, unmergeable obligados (§5). planVenue canonicalizes, so both runs
+  it("collapses country/taxId case + surrounding-whitespace variants to ONE obligado on re-run (no duplicate, no PK error, §5)", async () => {
+    // The fiscal footgun: es/ES (or a taxId differing only in letter case or leading/trailing
+    // whitespace) for the SAME business must never mint two permanent, unmergeable obligados (§5).
+    // Internal whitespace is NOT normalized (a distinct identity). planVenue canonicalizes, so both runs
     // carry the SAME derived id AND the SAME (country, tax_id) unique-index row → the second run's
     // `on conflict (country, tax_id) do nothing` fires. Proven by DELETION: strip planVenue's
     // normalization and the second run inserts a distinct row (different id AND different unique-index

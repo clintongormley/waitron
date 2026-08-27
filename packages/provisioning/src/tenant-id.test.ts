@@ -19,16 +19,20 @@ describe("obligadoTenantId", () => {
     expect(obligadoTenantId("ES", "X")).not.toBe(obligadoTenantId("E", "SX"));
   });
 
-  it("is casing- and whitespace-invariant — es/ES and stray spacing collapse to ONE id (§5)", () => {
-    // The fiscal footgun this backstops: `es`/`ES` (or a taxId casing/spacing difference) for the
-    // same business must derive the SAME obligado, or a differently-cased re-run mints a second,
-    // permanent, unmergeable obligado. The functional fix is in planVenue; this makes the primitive
-    // self-normalize so ANY caller (e.g. provisionVenue's double-provision guard, which recomputes
-    // the id from the raw request) gets the canonical id.
+  it("is invariant to case and to leading/trailing whitespace — es/ES and surrounding spaces give ONE id (§5)", () => {
+    // The fiscal footgun this backstops: `es`/`ES` (or a taxId differing only in letter case or in
+    // leading/trailing whitespace) for the same business must derive the SAME obligado, or such a
+    // re-run mints a second, permanent, unmergeable obligado. `.trim().toUpperCase()` collapses case
+    // and SURROUNDING whitespace only — internal whitespace is left intact (a taxId's inner content
+    // is not ours to alter), asserted below. The functional fix is in planVenue; this makes the
+    // primitive self-normalize so ANY caller (e.g. provisionVenue's double-provision guard, which
+    // recomputes the id from the raw request) gets the canonical id.
     const canonical = obligadoTenantId("ES", "B12345678");
     expect(obligadoTenantId("es", "b12345678")).toBe(canonical);
-    expect(obligadoTenantId(" ES ", " B12345678 ")).toBe(canonical);
+    expect(obligadoTenantId(" ES ", " B12345678 ")).toBe(canonical); // surrounding whitespace
     expect(obligadoTenantId("Es", "b12345678")).toBe(canonical); // mixed field casings too
+    // Internal whitespace is NOT normalized: a space inside the taxId is a DISTINCT identity.
+    expect(obligadoTenantId("ES", "B123 45678")).not.toBe(canonical);
   });
 
   it("leaves an ALREADY-canonical derivation UNCHANGED — normalization must not shift existing ids", () => {
