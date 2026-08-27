@@ -900,5 +900,25 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "setup.already_provisioned": { tenantId: string };
+    /**
+     * A setup-mode provisioning request carried a field whose VALUE is not usable — currently the
+     * AEAT certificate seal (onboarding slice 2b): a `certKind` that is neither `"sello"` nor
+     * `"representante"`, or a `pfxBase64` that is empty or not valid base64. Refused BEFORE the seal
+     * runs, so `putCredential`'s own `validatePayload` never sees the payload and no row is written.
+     *
+     * `field` carries the offending field NAME only — `"certKind"` or `"pfxBase64"` — and NEVER the
+     * value behind it: a PFX blob and its passphrase are exactly the kind of secret a caller can
+     * mis-send, and echoing the value would land it straight in an error's params. The same no-leak,
+     * echo-the-name discipline `management.request_invalid` and `placement.invalid` follow for their
+     * own request-shape faults.
+     *
+     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
+     * `setup.cert_hostnames_empty` and `setup.already_provisioned` name), never the throwing file;
+     * `server.*` is reserved for facts about the process itself, and a malformed setup request is a
+     * fact about the REQUEST, the rule `tenant.not_found`'s note above gives. A request-shape fault
+     * → HTTP 400 by whichever route surface 2b wires the setup POST endpoints into, matching
+     * `management.request_invalid`. Never renamed once shipped.
+     */
+    "setup.request_invalid": { field: string };
   }
 }
