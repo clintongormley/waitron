@@ -3,9 +3,18 @@ import { AppError } from "@waitron/shared";
 import type { DeploymentMode } from "@waitron/db";
 import "./errors.js"; // makes `node.read_only` reachable (the code is constructed below)
 
-/** GET/HEAD/OPTIONS are the read verbs the dashboard uses; everything else is a write on this surface
- * (a method survey across report-api/me-api/catalogue-api/schedule-api found no read behind a non-GET
- * verb — C2a design §5). OPTIONS is a CORS preflight and carries no body. */
+/** This gate blocks every non-GET HTTP verb — the write verbs the dashboard (management/catalogue/report/
+ * recipe/schedule/purchasing/workforce/me) uses; a survey of that DASHBOARD read surface found no read
+ * behind a non-GET verb (C2a design §5). OPTIONS is a CORS preflight and carries no body.
+ *
+ * IMPORTANT — this is NOT "no write behind any GET on the whole mounted surface". Decision 5 mounts the
+ * full trading surface (till/device/print) too, and a few OPERATIONAL GET handlers DO write — notably
+ * `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking UPDATE. Those paths are inert on a
+ * mirror only because their backing tables (`print_agents`/`print_jobs`, `devices`, …) are not in the 17
+ * synced tables and are not provisioned on a mirror, so the caller 401s before the write — the read-only
+ * guarantee for them rests on that, not on this method gate. A later slice that syncs or provisions those
+ * tables (kitchen-sync, promotion) MUST revisit this gate (allow-list the write-GETs, or don't mount those
+ * groups on a mirror). The dashboard read surface this mirror actually serves is fully covered. */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**

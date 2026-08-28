@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
-import { withTenant, type Database } from "@waitron/db";
+import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
 import { readManagementSessionId, setManagementCookie } from "./management-session.js";
 
 /** Fixed, stable ids so the seed is idempotent (upsert on a known PK) and the middleware can name the
@@ -53,10 +53,24 @@ export async function ensureMirrorViewer(db: Database, tenantId: string): Promis
  * next request's own gate would otherwise throw `management_session.expired` before it could bump. A
  * one-minute cadence covers that with 30x headroom while removing the per-request write amplification —
  * a live dashboard polls many times a second, and an unthrottled write here would double every gated
- * request's `management_sessions` writes (once here, once in `resolveManagementSession`).
+ * request's `management_sessions` writes (once here, once in `resolveManagementSession`). All ambient
+ * traffic shares the single `MIRROR_VIEWER_SESSION_ID` row, so its `resolveManagementSession` bumps
+ * serialize on one row — accepted for the single-tenant DR-mirror posture (decision 4), not a bug.
+ *
+ * `getMode` is read PER REQUEST, exactly like the read-only gate, so promotion is a genuine flag-flip:
+ * the moment the holder flips to `primary`, this middleware STOPS injecting the ambient admin viewer and
+ * stops the keepalive, so a promoted node requires REAL auth. Without this guard, a promoted node would
+ * open its write routes (the gate flips) while still auto-logging-in an admin — an
+ * unauthenticated-admin-write bypass. On a live mirror the guard is always true (`getMode() === "mirror"`).
  */
-export function mirrorSession(db: Database, tenantId: string, secure: boolean): MiddlewareHandler {
+export function mirrorSession(
+  db: Database,
+  tenantId: string,
+  secure: boolean,
+  getMode: () => DeploymentMode,
+): MiddlewareHandler {
   return async (c, next) => {
+    if (getMode() !== "mirror") return next();
     await withTenant(db, tenantId, (tx) =>
       tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
                      where id = ${MIRROR_VIEWER_SESSION_ID}

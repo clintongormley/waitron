@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTenant, type Database } from "@waitron/db";
+import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { resolveManagementSession, verifyPin } from "@waitron/identity";
@@ -118,9 +118,16 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
       ),
     );
 
-  const driveOnce = (db: Database, tenantId: string): Promise<Response> => {
+  const driveOnce = async (
+    db: Database,
+    tenantId: string,
+    mode: DeploymentMode = "mirror",
+  ): Promise<Response> => {
     const app = new Hono();
-    app.use("*", mirrorSession(db, tenantId, false));
+    app.use(
+      "*",
+      mirrorSession(db, tenantId, false, () => mode),
+    );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing");
   };
@@ -166,7 +173,10 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     await withAppUserDb(async (db) => {
       await ensureMirrorViewer(db, tenantId);
       const app = new Hono();
-      app.use("*", mirrorSession(db, tenantId, false));
+      app.use(
+        "*",
+        mirrorSession(db, tenantId, false, () => "mirror"),
+      );
       app.get("/thing", (c) => c.text("ok"));
       const res = await app.request("/thing", {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}` },
@@ -175,6 +185,28 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
       // The request already carries the ambient session, so the middleware sets no new cookie — a real
       // (or the ambient) session is never clobbered on a subsequent request.
       expect(res.headers.get("set-cookie")).toBeNull();
+    });
+  });
+
+  it("mirrorSession is a no-op once promoted (getMode() === 'primary'): no cookie, no keepalive write", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      // Simulate the promote flag-flip: the holder now reads 'primary'. The ambient admin viewer must be
+      // dropped (real auth applies) — otherwise a promoted node's open write routes would still auto-login
+      // an admin. Backdate so an UNGUARDED middleware WOULD write (proving the guard, not the throttle, is
+      // what stops it).
+      await backdateLastSeen(db, tenantId);
+      const before = await readLastSeen(db, tenantId);
+
+      const res = await driveOnce(db, tenantId, "primary");
+
+      expect(res.status).toBe(200);
+      // No ambient cookie injected on a promoted node...
+      expect(res.headers.get("set-cookie")).toBeNull();
+      // ...and no keepalive write, even though last_seen_at is stale. Proven by deletion: dropping the
+      // `getMode() !== "mirror"` guard makes this inject the cookie and refresh last_seen_at, reddening both.
+      const after = await readLastSeen(db, tenantId);
+      expect(after).toBe(before);
     });
   });
 });

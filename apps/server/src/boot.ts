@@ -637,13 +637,26 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
   // Registered BEFORE the mounts below so Hono wraps them; `/health` (registered before this branch) is
   // deliberately not wrapped — it is a GET and must answer in every mode. A primary installs neither.
+  // BOTH middlewares read `modeHolder.current` per request, so promotion is a genuine flag-flip: when the
+  // holder flips to 'primary', the gate opens writes AND the ambient viewer stops (real auth applies) —
+  // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
+  // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
+  // it, matching the loadMirrorConfig/loadKeyRing discipline in this branch.
   if (isMirror) {
     app.use(
       "*",
       readOnlyGate(() => modeHolder.current),
     );
-    await ensureMirrorViewer(db, config.till.tenantId);
-    app.use("*", mirrorSession(db, config.till.tenantId, config.tls !== undefined));
+    try {
+      await ensureMirrorViewer(db, config.till.tenantId);
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+    app.use(
+      "*",
+      mirrorSession(db, config.till.tenantId, config.tls !== undefined, () => modeHolder.current),
+    );
   }
 
   const reconciler = new StripeReconciler({
@@ -851,24 +864,28 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // unchanged (boot.test.ts sets none). Torn down in close() below.
   const syncConfig = loadSyncConfig(env);
   // The mirror's link to its primary through B's tunnel (C2a design §7): the box CA + hostname
-  // `tunnelHttpClient` validates the box's TLS leaf against. Loaded here beside `loadSyncConfig`; a
-  // mirror REQUIRES it (loud if absent). `loadMirrorConfig` reads the CA file inside the loader, so a
-  // bad path throws a raw ENOENT — wrapped in the same db-cleanup guard the `loadKeyRing` load above
-  // uses, so the throw closes the pool rather than leaking it (only `db` is open here — the sync and
-  // retention pools below are not yet). A primary ignores it (isMirror is false everywhere it feeds).
+  // `tunnelHttpClient` validates the box's TLS leaf against; a mirror REQUIRES it (loud if absent).
+  // Loaded ONLY on a mirror: `loadMirrorConfig` reads the CA file inside the loader (a bad path throws a
+  // raw ENOENT; a partial WAITRON_MIRROR_BOX_* pair throws server.config_invalid), so gating the load on
+  // `isMirror` keeps a stray mirror var from ever blocking a PRIMARY's boot — a primary must always be
+  // able to trade (§5) and the mirror config is meaningless on it. Wrapped in the same db-cleanup guard
+  // the `loadKeyRing` load above uses, so the throw closes the pool rather than leaking it (only `db` is
+  // open here — the sync and retention pools below are not yet).
   let mirrorConfig: MirrorConfig | undefined;
-  try {
-    mirrorConfig = loadMirrorConfig(env);
-  } catch (error) {
-    await db.close();
-    throw error;
-  }
-  if (isMirror && mirrorConfig === undefined) {
-    await db.close();
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MIRROR_BOX_CA_FILE",
-      reason: "mirror_requires_box_ca_and_hostname",
-    });
+  if (isMirror) {
+    try {
+      mirrorConfig = loadMirrorConfig(env);
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+    if (mirrorConfig === undefined) {
+      await db.close();
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_MIRROR_BOX_CA_FILE",
+        reason: "mirror_requires_box_ca_and_hostname",
+      });
+    }
   }
   const syncController = new AbortController();
   let syncDb: Database | undefined;
@@ -1054,6 +1071,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to the primary
     // path — its real "work" is the pull worker above (§7). Running the drain/reconcile duties on a
     // mirror would contact AEAT/Stripe for a host that files and settles nothing. A primary runs them.
+    // NOTE: because a mirror's pass has no duties, `/health` reflects only process liveness, NOT
+    // replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad token) still
+    // reports healthy; those surface as `sync.pull_failed` log lines. Real replication-lag monitoring
+    // belongs to the hosting slice (like real per-user auth), out of scope for the C2a stand-in.
     pass: isMirror
       ? () => Promise.resolve({ nextDueAt: null, duties: [] })
       : (at) =>

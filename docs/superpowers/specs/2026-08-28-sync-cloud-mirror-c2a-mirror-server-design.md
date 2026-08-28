@@ -146,12 +146,23 @@ A Hono middleware installed at the top of the mirror's app, before any route:
   (decision 1). C2a wires the holder to boot's single read; the refresh trigger is the promote
   action's job (§10).
 
-**Why method-based.** On the dashboard surface, non-GET is a faithful proxy for "write": the read
+**Why method-based.** On the DASHBOARD surface, non-GET is a faithful proxy for "write": the read
 routes are `GET` (`report-api` is GET-only; the `/session/me` + schedule reads are GET), and every
 mutation is `POST`/`PUT`/`PATCH`/`DELETE` (a method survey across `report-api`/`me-api`/`catalogue-api`/
 `schedule-api` at design time found no read behind a non-GET verb). Any `POST`-shaped *read* discovered
 during implementation gets an explicit allowlist entry, pinned by the method-gate matrix (§12) — **not**
 assumed away (CLAUDE.md §1).
+
+**The gate blocks HTTP-verb writes, not "every write behind every GET on the whole mounted surface"
+(CLAUDE.md §1 — scope the claim to what was surveyed).** Decision 5 mounts the full trading surface
+(till/device/print), and a handful of *operational* GET handlers do write — notably
+`GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking `UPDATE`. These are **inert on a
+mirror only because their backing tables** (`print_agents`/`print_jobs`, `devices`, …) **are not in the
+17 synced tables and are not provisioned on a mirror**, so the caller `401`s before the write — the
+read-only guarantee for *those* paths rests on that, not on the method gate. A later slice that syncs or
+provisions those tables (kitchen-sync, or promotion) **must revisit the gate** — allow-list the
+write-GETs, or stop mounting those operational groups on a mirror. The gate comment carries the same
+caveat so it does not read as a whole-surface guarantee.
 
 **What it deliberately does not block.** Internal, non-HTTP writes inside a `GET` handler's own
 transaction still run — notably `resolveManagementSession` bumping `last_seen_at`
@@ -187,8 +198,15 @@ with. Decision 4 serves it unauthenticated by giving every request an **ambient 
   never sees a login screen and the existing gates resolve a real, live session. The session's
   `last_seen_at` is bumped by `resolveManagementSession` on each request (the sliding window,
   [management-sessions.ts:8,21](../../../packages/identity/src/schema/management-sessions.ts)); the
-  boot seed sets it live, and the middleware **re-ensures** a live session if it has expired during an
-  idle spell — the exact keepalive shape (bump vs re-seed) is pinned by the implementing test.
+  boot seed sets it live, and the middleware runs a **throttled keepalive** (writes only when
+  `last_seen_at` is ≥ 1 minute stale — the `device-session.ts` pattern) so an idle mirror's first request
+  after the 30-minute `IDLE_TIMEOUT_MS` is still refreshed before its gate checks expiry, WITHOUT a
+  per-request write (`resolveManagementSession` already bumps on every gated request).
+- **The middleware is holder-gated, exactly like the read-only gate.** It reads the same
+  `deployment.mode` holder per request and does nothing (no cookie, no keepalive) unless the mode is
+  `mirror`. This is what makes promotion safe (§10): a flip to `primary` opens the write routes AND drops
+  the ambient admin login in the same instant, with no window where writes are open while an admin is
+  still auto-logged-in.
 - **The viewer is visibly a mirror artifact** — a fixed display name (e.g. `"mirror viewer"`) so its
   appearance in a staff list reads as what it is. It is mirror-local and cannot reach the primary
   (persons is not synced), so it introduces no cross-node identity.
@@ -276,9 +294,12 @@ trading node; it simply refuses writes at the HTTP layer.
 Decision 1 requires that a mirror can become a primary **without a restart**. C2a makes that
 **possible** without building the button:
 
-- **What a flag-flip already achieves:** the §5 gate reads a refreshable holder, so
-  `UPDATE deployment SET mode='primary'` + a refresh **opens every write route** live — the whole HTTP
-  layer promotes with no re-mount (decision 5's payoff).
+- **What a flag-flip already achieves:** BOTH holder-gated middlewares read the refreshable holder per
+  request, so `UPDATE deployment SET mode='primary'` + a refresh flips them together: the §5 gate
+  **opens every write route** live, AND the ambient viewer session (§6) **stops** auto-logging-in the
+  admin, so the promoted node requires real auth. This pairing is load-bearing — if only the gate were
+  holder-gated, promotion would open the write routes *while* the ambient admin login was still active,
+  an unauthenticated-admin-write bypass. Both flip in the same instant, no re-mount (decision 5's payoff).
 - **What promotion still needs (the deferred slice's job):** start the primary-only workers (§8) —
   the fiscal drain/reconcile, the sync source, retention, and (for the box role) the tunnel client —
   and stop pulling from the now-defunct primary. None of this is startable per-request; it is the
