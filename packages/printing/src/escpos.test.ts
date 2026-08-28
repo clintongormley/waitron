@@ -215,6 +215,24 @@ describe("esc() ESC/POS builder", () => {
     ]);
   });
 
+  it("qr rejects an out-of-range moduleSize but accepts the [1, 16] Fn167 boundaries", () => {
+    // moduleSize is the Fn167 dot count, valid range 1-16. Out-of-range values were previously masked
+    // with `& 0xff` into a malformed parameter byte (e.g. -1 → 0xFF), so the guard must throw first.
+    expect(() => esc().qr("x", { moduleSize: 0 })).toThrow(RangeError);
+    expect(() => esc().qr("x", { moduleSize: 17 })).toThrow(RangeError);
+    expect(() => esc().qr("x", { moduleSize: -1 })).toThrow(RangeError);
+    expect(() => esc().qr("x", { moduleSize: 1.5 })).toThrow(RangeError);
+    // The valid boundaries still emit the right Fn167 module-size byte, which sits at index 16
+    // (Fn165 occupies indices 0-8; Fn167's first 7 bytes are indices 9-15).
+    expect(esc().qr("x", { moduleSize: 1 }).bytes()[16]).toBe(0x01);
+    expect(esc().qr("x", { moduleSize: 16 }).bytes()[16]).toBe(0x10);
+  });
+
+  it("qr rejects a text whose store-data length would overflow the 16-bit pL/pH field", () => {
+    // storeLen = data bytes + 3; 0x10000 Latin-1 bytes → 0x10003, above the 0xFFFF pL/pH maximum.
+    expect(() => esc().qr("a".repeat(0x10000))).toThrow(RangeError);
+  });
+
   it("qrRaster packs a 2x2 matrix into a GS v 0 raster bit image (MSB first, bit set = dark)", () => {
     // Diagonal [[dark,·],[·,dark]] at moduleSize 1: 2px wide → 1 byte/row (xL=0x01), 2 rows (yL=0x02).
     // Row 0 = 1000_0000 (0x80), row 1 = 0100_0000 (0x40).
@@ -311,5 +329,19 @@ describe("esc() ESC/POS builder", () => {
       0xfc,
       0xfc, // six identical rows: 1111_1100
     ]);
+  });
+
+  it("qrRaster rejects an empty or non-square matrix", () => {
+    // An empty or ragged matrix would emit a GS v 0 header whose dimensions do not match its rows
+    // (an empty matrix yields a width/height-0 header — a malformed payload).
+    expect(() => esc().qrRaster([])).toThrow(RangeError);
+    expect(() => esc().qrRaster([[true, false], [true]])).toThrow(RangeError);
+  });
+
+  it("qrRaster rejects a non-positive or non-integer moduleSize", () => {
+    // moduleSize <= 0 makes the module→pixel division invalid and can emit a 0-sized bit image.
+    expect(() => esc().qrRaster([[true]], { moduleSize: 0 })).toThrow(RangeError);
+    expect(() => esc().qrRaster([[true]], { moduleSize: -1 })).toThrow(RangeError);
+    expect(() => esc().qrRaster([[true]], { moduleSize: 1.5 })).toThrow(RangeError);
   });
 });
