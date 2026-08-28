@@ -41,9 +41,9 @@
  * `apps/server` → `apps/till` dependency would be backwards — but they are the same small, pure logic
  * the screen uses, kept in lock-step deliberately.
  *
- * NO emphasis/bold (the `@waitron/printing` builder exposes `init`/`text`/`line`/`feed`/`cut`/`qr`,
- * verified against packages/printing/src/escpos.ts — there is no bold verb), so the layout uses only
- * those verbs, with `twoColumn` giving a label-left / value-right column feel. Exact column fit and QR
+ * NO emphasis/bold — the `@waitron/printing` builder has no bold/emphasis verb (verified against
+ * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feed`/`cut`, with
+ * `twoColumn` giving a label-left / value-right column feel. Exact column fit and QR
  * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
  */
@@ -132,8 +132,8 @@ const FEED_BEFORE_CUT = 3;
  */
 /**
  * Cache the `Intl.NumberFormat` per locale, mirroring the sibling `apps/till/src/i18n/format.ts`.
- * `formatMoney` runs ~12\u00d7 per receipt (every line, VAT row and total) \u2014 all at the SAME invoice
- * locale \u2014 and building a formatter is the expensive part; the instances are immutable and safe to
+ * `formatMoney` runs ~12x per receipt (every line, VAT row and total) - all at the SAME invoice
+ * locale - and building a formatter is the expensive part; the instances are immutable and safe to
  * reuse. Keyed by locale (the only thing that varies), so a mixed-locale process stays correct.
  */
 const formatters = new Map<string, Intl.NumberFormat>();

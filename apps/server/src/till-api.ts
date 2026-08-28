@@ -989,7 +989,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // operator's "print it again" lever on the ticket screen. SESSION-GUARDED (an operational action, like
   // the kitchen reprint above). The `:id` is the till's WORKING-ORDER id — the id the till holds after a
   // sale (`#store.id`, the client-minted key it sent on `POST /api/sales`); `reprintSale` reads the
-  // ALREADY-FILED sale back by it (`readSettledTicket`, keyed on the same id) and re-enqueues PAPER only,
+  // ALREADY-FILED sale back by it (`readSettledTicket` reads ANY invoice filed under this id — incl. a
+  // Mode-I one filed at placement, a genuine legal document with `change` "0.00"; the name predates that
+  // case and the reprint UI only surfaces post-collect, so reprinting a placed order is route-only, not a
+  // defect) and re-enqueues PAPER only,
   // filing NOTHING (§4). It IGNORES the location's `receipt_print_mode` (a reprint is always available,
   // §0), so it works even under `on_request`/`never`, and never opens the drawer. An id naming no filed
   // sale (unknown/open/foreign), or a till with no active printer, is a 200 NO-OP — the kitchen-reprint

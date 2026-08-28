@@ -305,7 +305,9 @@ export class PrintersScreen extends LitElement {
         // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
         // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
         // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
-        // permissions map to {manager, admin}, so every user who reaches this screen holds both.
+        // `printer.manage` and `schedule.manage` sit in the MANAGER set (packages/identity/src/permissions.ts;
+        // admin holds ALL), so the two map to the identical {manager, admin} and every user who reaches
+        // this screen holds both.
         this.api.listTills(),
         this.api.getLocations(),
       ]);
