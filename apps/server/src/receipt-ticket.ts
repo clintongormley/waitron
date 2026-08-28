@@ -120,14 +120,20 @@ const FEED_BEFORE_CUT = 3;
  * Ported from `apps/till/src/i18n/format.ts` (deliberately not imported: no `apps/server` → `apps/till`
  * dependency). `Number(value)` is safe only here: at money scale (≤ ~12 integer digits, 2 decimals) the
  * value is well within IEEE-754 double precision, so the display conversion is lossless; it must NOT be
- * used to round or compute. NOTE: `Intl.NumberFormat("es-ES", …)` places a NON-BREAKING space (U+00A0,
- * or a narrow no-break space U+202F on some ICU builds) between the amount and the €, not an ASCII
- * space — callers/tests comparing the output must account for that.
+ * used to round or compute.
+ *
+ * `Intl.NumberFormat("es-ES", …)` places a NON-BREAKING space (U+00A0, or a narrow no-break space
+ * U+202F on some ICU builds) between the amount and the €, not an ASCII space. That separator is
+ * NORMALISED to an ASCII space here: the ESC/POS builder Latin-1-encodes each character to its low
+ * byte, so U+00A0 → 0xA0 and U+202F → 0x2F (a `/`) — the latter printing a customer total as
+ * `20,90/€`-garble. The digits and comma are ASCII and always fine; only the separator needed fixing.
+ * The `€` glyph itself is left UNTOUCHED (its byte, 0xAC, is a code-page/hardware decision deferred to
+ * the failover/hardware pass — design §5). `receipt-ticket.test.ts` pins that the separator is 0x20.
  */
 function formatMoney(value: string, locale: string): string {
-  return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(
-    Number(value),
-  );
+  return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" })
+    .format(Number(value))
+    .replace(/[\u00a0\u202f]/g, " ");
 }
 
 /**

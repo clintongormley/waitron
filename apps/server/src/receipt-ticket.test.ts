@@ -213,4 +213,23 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     });
     expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
   });
+
+  it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {
+    // `Intl.NumberFormat("es-ES", …)` separates the amount and the € with a NON-BREAKING space —
+    // U+00A0, or a narrow no-break space U+202F on some ICU builds. The Latin-1 ESC/POS encoder maps
+    // each character to its low byte, so U+00A0 → 0xA0 and U+202F → 0x2F (a `/`), the latter printing a
+    // customer total as `20,90/€`-garble. `formatMoney` normalises that separator to an ASCII space, so
+    // the printed total reads `20,90 €` on any ICU build. Proven by DELETION: drop the `.replace(...)`
+    // in `formatMoney` and this test goes RED (`20,90/…` or `20,90 …`).
+    const s = decodeTicket(
+      formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES" }),
+    );
+    // No non-break space survives to the decoded text (neither the wide NBSP nor the narrow one — the
+    // narrow one is what mangles to `/`, so its raw form is already gone; the wide one decodes 1:1).
+    expect(s).not.toMatch(/[\u00a0\u202f]/u);
+    // The character right after the TOTAL amount is a plain ASCII space (0x20), never `/` or U+00A0.
+    const idx = s.indexOf("20,90");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(s[idx + "20,90".length]).toBe(" ");
+  });
 });

@@ -40,6 +40,7 @@ import {
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
+import { enqueueSaleReceipt } from "./receipt-print.js";
 
 /**
  * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
@@ -577,7 +578,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
   // reader), in this same transaction.
-  return {
+  const ticket: TillSaleResult = {
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -588,6 +589,13 @@ async function fileImmediateSale(
     change,
     qr: fiscal.verificationUrl ?? "",
   };
+
+  // Print-on-sale (design §3c), POST-filing and INSERT-only: auto-enqueue the customer receipt to the
+  // till's printer and, for cash, append the drawer kick + record the open. NOTHING here can block or
+  // fail the sale (CLAUDE.md §5) — see `receipt-print.ts`'s header. This is the shared filing tail, so
+  // walk-up, retrieved pay and Mode-T collect all print through this one call.
+  await enqueueSaleReceipt(tx, cfg, ticket, tender, saleId, operatorId);
+  return ticket;
 }
 
 /**
@@ -1496,7 +1504,14 @@ export async function collectOrder(
 
         // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
         // collect, not a replay, so not the "0.00" default).
-        return readSettledTicket(deps.backend, tx, cfg, req.id, change);
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id, change);
+        // Print-on-sale (design §3c), POST-settlement and INSERT-only — the Mode-I sibling of the
+        // `fileImmediateSale` call. Only this FRESH collect prints; the idempotent-replay path above
+        // (already `settled`) returns its ticket WITHOUT re-printing, so a lost-response retry never
+        // enqueues a second receipt. `sale.id` is the just-settled invoice's id; NOTHING here can block
+        // the sale (CLAUDE.md §5) — see `receipt-print.ts`.
+        await enqueueSaleReceipt(tx, cfg, ticket, req.tender, sale.id, operatorId);
+        return ticket;
       }
 
       // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
