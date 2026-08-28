@@ -43,6 +43,13 @@
       "when": 1786492800005,
       "tag": "0005_sync_peers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786492800006,
+      "tag": "0006_enrol_table_service",
+      "breakpoints": true
     }
   ]
 }

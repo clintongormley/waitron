@@ -12,12 +12,15 @@ import { getTableColumns, type Table } from "drizzle-orm";
 import {
   catalogues,
   categories,
+  diningTables,
+  floorZones,
   products,
   saleLines,
   saleSettlements,
   saleSubstitutions,
   saleVoids,
   sales,
+  tableServiceStatuses,
   tenders,
   workingOrderLines,
   workingOrders,
@@ -33,7 +36,7 @@ import type { EnrolledTable } from "./registry.js";
  * The Drizzle schema object for every enrolled table, keyed by physical table name. The column list
  * for a watermark upsert's `DO UPDATE SET` is derived from these at build time via
  * `getTableColumns`, so it can never drift from the schema the way a hand-maintained array would
- * (CLAUDE.md §2). Covers all fourteen so apply-sql.test.ts can assert completeness against ENROLLED.
+ * (CLAUDE.md §2). Covers all seventeen so apply-sql.test.ts can assert completeness against ENROLLED.
  */
 export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   sales,
@@ -50,6 +53,9 @@ export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   payment_policy: paymentPolicy,
   working_orders: workingOrders,
   working_order_lines: workingOrderLines,
+  dining_tables: diningTables,
+  floor_zones: floorZones,
+  table_service_statuses: tableServiceStatuses,
 };
 
 /** The physical DB-column names of an enrolled table, in schema-definition order. */

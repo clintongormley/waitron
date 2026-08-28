@@ -1,8 +1,12 @@
-// The enrolment registry for the commercial-lane sync outbox: the fourteen tenant-scoped, non-fiscal
-// tables a capture trigger is attached to (packages/sync/drizzle/0000_sync_outbox.sql) and an apply
-// mode is registered for. This is the audit surface for "what crosses the wire" — the fiscal lane is
-// deliberately absent (spec §1). Every row here matches spec §2 and the migration's triggers exactly;
-// registry.test.ts pins that agreement.
+// The enrolment registry for the commercial-lane sync outbox: the seventeen tenant-scoped, non-fiscal
+// tables an apply mode is registered for. This is the audit surface for "what crosses the wire" — the
+// fiscal lane is deliberately absent (spec §1). The fourteen slice-1 rows each carry a capture trigger
+// in packages/sync/drizzle/0000_sync_outbox.sql and match spec §2 and those triggers exactly; the three
+// C1 table-service rows (dining_tables, floor_zones, table_service_statuses) carry their capture triggers
+// in packages/sync/drizzle/0006_enrol_table_service.sql and add no grants (the tables already hold
+// SELECT/INSERT/UPDATE — 0044/0048/0052; spec
+// docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). registry.test.ts pins
+// both agreements.
 
 /** insert-only → `ON CONFLICT DO NOTHING`; watermark-upsert → `ON CONFLICT DO UPDATE SET …`. */
 export type SyncMode = "insert-only" | "watermark-upsert";
@@ -36,14 +40,20 @@ export interface EnrolledTable {
   lane: SyncLane;
 }
 
-// fkRank levels (0 = FK roots). The FK graph of spec §2:
-//   working_orders → {working_order_lines, payments, sales};
-//   sales → {sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids};
-//   payments → payment_refunds; catalogues → categories → products; payment_policy standalone.
-// Level 0: working_orders, catalogues, payment_policy.
-// Level 1: categories, sales, payments, working_order_lines.
-// Level 2: products, sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids,
-//          payment_refunds.
+// fkRank levels (0 = FK roots). The FK graph of spec §2 + the C1 table-service closure:
+//   floor_zones/table_service_statuses → dining_tables (zone_id/status_id, both nullable);
+//   dining_tables → working_orders (working_orders.delivery_table_id, the C1 gate edge);
+//   working_orders → {working_order_lines, payments, sales}; sales → {sale_lines, tenders,
+//   sale_settlements, sale_substitutions, sale_voids}; payments → payment_refunds;
+//   catalogues → categories → products; payment_policy standalone.
+// The dining_tables.tab_id → working_orders back-edge is a nullable pointer set by a later UPDATE and
+// is deliberately NOT ranked (a static rank cannot encode the dining_tables ↔ working_orders cycle;
+// runtime correctness rests on seq-ascending apply, not fkRank — see spec §5).
+// Level 0: floor_zones, table_service_statuses, catalogues, payment_policy.
+// Level 1: dining_tables, categories.
+// Level 2: working_orders, products.
+// Level 3: working_order_lines, sales, payments.
+// Level 4: sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids, payment_refunds.
 export const ENROLLED: readonly EnrolledTable[] = [
   // Group A — append-only → insert-only apply. Captured AFTER INSERT (spec §2).
   {
@@ -52,7 +62,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 1,
+    fkRank: 3,
     lane: "ordered",
   },
   {
@@ -61,7 +71,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "ordered",
   },
   {
@@ -70,7 +80,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "ordered",
   },
   {
@@ -79,7 +89,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "ordered",
   },
   {
@@ -88,7 +98,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "ordered",
   },
   {
@@ -97,7 +107,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "ordered",
   },
   // payment_refunds is captured AFTER INSERT ONLY (append-only trail), so insert-only apply is
@@ -110,7 +120,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
-    fkRank: 2,
+    fkRank: 4,
     lane: "fast",
   },
 
@@ -149,7 +159,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
-    fkRank: 1,
+    fkRank: 3,
     lane: "fast",
   },
   {
@@ -171,7 +181,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
-    fkRank: 0,
+    fkRank: 2,
     lane: "ordered",
   },
   {
@@ -180,6 +190,42 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
+    fkRank: 3,
+    lane: "ordered",
+  },
+
+  // Group D — mutable, NO watermark column, NO delete (deactivate via `active`) → ordered lane. The
+  // table-service floor closure that working_orders.delivery_table_id depends on (C1 — spec
+  // docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). Captured AFTER INSERT
+  // OR UPDATE; they hold SELECT/INSERT/UPDATE but NOT DELETE (0044/0048/0052), so no delete is captured
+  // or applied. watermarkColumn null (no updated_at) → unconditional upsert, non-regression from the
+  // seq cursor, exactly like working_orders. dining_tables outranks working_orders (delivery_table_id
+  // FK); the reverse dining_tables.tab_id → working_orders edge is a nullable back-pointer set by a
+  // LATER update, deliberately excluded from the fkRank hint (a static rank cannot encode the cycle).
+  {
+    table: "floor_zones",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+  },
+  {
+    table: "table_service_statuses",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+  },
+  {
+    table: "dining_tables",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
     fkRank: 1,
     lane: "ordered",
   },
