@@ -157,6 +157,37 @@ async function catalogueCount(admin: Database): Promise<number> {
   return Number(r.rows[0]!.v);
 }
 
+/** Capture the booted server's structured log lines into `sink` for the window until the returned
+ * `restore` is called. `startServer` builds its logger internally (createLogger -> process.stdout.write,
+ * boot.ts) with NO injection seam — and this is a TEST-ONLY task, so a production logger-injection param
+ * is out of bounds — so tapping `process.stdout.write` is the only way to observe a sync-WORKER-scoped
+ * signal (`sync.pull_failed`) rather than a main-loop one. The logger's sink reads `process.stdout.write`
+ * on every call, so the tap set here is used by a logger built before it; each event is one write of one
+ * JSON line, and every write is forwarded on so vitest's own output is untouched. `restore` is
+ * idempotent. */
+function captureStdout(sink: string[]): () => void {
+  const original = process.stdout.write.bind(process.stdout);
+  let restored = false;
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]): boolean => {
+    if (typeof chunk === "string") sink.push(chunk);
+    return (original as (...a: unknown[]) => boolean)(chunk, ...rest);
+  }) as typeof process.stdout.write;
+  return () => {
+    if (restored) return;
+    restored = true;
+    process.stdout.write = original;
+  };
+}
+
+/** Parse one captured line as a structured log event, or null for a non-JSON write (vitest's own). */
+function parseLogEvent(line: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /** The mirror's (subscriber=this node, origin=primary, ordered) cursor as text, or null if it never
  * advanced (no row) — the cursor-advance assertion, and the deletion control's "never applied" proof. */
 async function orderedCursor(admin: Database): Promise<string | null> {
@@ -359,40 +390,64 @@ describe("mirror-mode headline e2e — pull through the tunnel, apply, serve rea
     // The single deletion on the PULL/TUNNEL path (CLAUDE.md §4). This boot is BYTE-IDENTICAL to the
     // positive one above except WAITRON_MIRROR_BOX_HOSTNAME = "wrong.test" instead of "box.test". The
     // box leaf carries SAN=box.test only, so tunnelHttpClient's checkServerIdentity (servername drives
-    // BOTH SNI and the identity check — tunnel-http.ts) refuses the box on EVERY pull; the pull throws
-    // before any row is fetched, the worker backs off, and the mirror's own database stays empty.
+    // BOTH SNI and the identity check — tunnel-http.ts:14-15) refuses the box on EVERY pull with
+    // ERR_TLS_CERT_ALTNAME_INVALID; the pull throws before any row is fetched, the worker backs off, and
+    // the mirror's own database stays empty.
     //
-    // Why this is a real probe, not a slow one (CLAUDE.md §1 "say what the FAILING case would print"):
-    // the positive test just proved the IDENTICAL tunnel/relay/box/seed delivers both catalogues and
-    // advances the cursor. Were the tunnel path NOT load-bearing (the hostname ignored), this boot would
-    // print catalogueCount 2, a non-null cursor and two rows on the GET — visibly different output. It
-    // prints count 0, a null cursor and an empty GET. The positive is the other-direction control that
-    // makes this absence meaningful.
+    // Why this refusal is DETERMINISTIC, not a timing race a longer wait would win (CLAUDE.md §1): the
+    // hostname mismatch fails Node's certificate identity check on the FIRST byte of every handshake —
+    // there is no state in which "wrong.test" ever validates against a "box.test" SAN. The receipt is a
+    // sync-WORKER-scoped log signal: `sync.pull_failed` for the primary origin, captured below. That is
+    // emitted by runSyncPull (pull.ts) alone — NOT the mirror's idle main-loop pass, which is a trivial
+    // empty stub on a mirror (boot.ts:1056) whose lastPassAt would advance even if the pull worker never
+    // ran — so its presence proves the pull ATTEMPTED and was refused. The positive test is the
+    // other-direction control: the IDENTICAL tunnel/relay/box/seed there delivers both catalogues, and no
+    // `sync.pull_failed` fires.
     const port = await freePort();
-    const server = await bootMirror(wrongMirror, "wrong.test", port);
     const base = `http://127.0.0.1:${port}`;
+    const logLines: string[] = [];
+    // Tap stdout from BEFORE the boot so the worker's first refused pull is captured too; restored in the
+    // finally even if boot throws (idempotent). Every write is still forwarded, so vitest output is intact.
+    const restore = captureStdout(logLines);
+    let server: StartedServer;
     try {
-      // The server booted and its pass loop turned over — it had real running time on the same live
-      // tunnel, so the absence below is a refused pull, not a server that never started.
-      expect(await waitFor(() => server.health.lastPassAt != null, 20_000)).toBe(true);
-
+      server = await bootMirror(wrongMirror, "wrong.test", port);
+    } catch (error) {
+      restore();
+      throw error;
+    }
+    try {
       // Over a budget many multiples of the positive's first-pull convergence, nothing ever appears.
       const appeared = await waitFor(
         async () => (await catalogueCount(wrongMirror.admin)) > 0,
         4_000,
       );
+      restore(); // the worker has had several refused attempts by now; stop tapping stdout
       expect(appeared).toBe(false);
+
+      // THE RECEIPT (sync-worker-scoped): the pull worker attempted a pull to the primary and the tunnel
+      // handshake was refused. Distinct from the main-loop pass — this only fires from runSyncPull.
+      const pullFailures = logLines
+        .map(parseLogEvent)
+        .filter((e) => e?.event === "sync.pull_failed" && e.originId === PRIMARY_SYNC_NODE);
+      expect(pullFailures.length).toBeGreaterThan(0);
+
+      // THE VERDICT: nothing applied, and the (subscriber, origin, ordered) cursor never advanced.
       expect(await catalogueCount(wrongMirror.admin)).toBe(0);
       expect(await orderedCursor(wrongMirror.admin)).toBeNull();
 
       // End-to-end: nothing pulled -> nothing served. The read-only dashboard resolves through the
-      // ambient viewer (200, no login) but returns an EMPTY catalogue.
+      // ambient viewer (200, no login) but returns an EMPTY catalogue. Assert the ambient cookie is
+      // present before splitting it, exactly as the positive test does — a future ambient-session
+      // regression then fails on a clear expect, not a raw TypeError.
       const primer = await fetch(`${base}/management-api/catalogues`);
+      expect(primer.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
       const cookie = primer.headers.get("set-cookie")!.split(";")[0]!;
       const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
       expect(read.status).toBe(200);
       expect(await read.json()).toEqual([]);
     } finally {
+      restore();
       await server.close();
     }
   }, 90_000);
