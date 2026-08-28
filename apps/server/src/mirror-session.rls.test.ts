@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { resolveManagementSession } from "@waitron/identity";
+import { resolveManagementSession, verifyPin } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import {
   ensureMirrorViewer,
@@ -53,7 +53,13 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     await withAppUserDb(async (db) => {
       await ensureMirrorViewer(db, tenantId);
       const person = await withTenant(db, tenantId, (tx) =>
-        tx.execute(sql`select role, display_name, length(pin_hash) > 0 as has_pin
+        tx.execute<{
+          role: string;
+          display_name: string;
+          has_pin: boolean;
+          pin_hash: string;
+          password_hash: string | null;
+        }>(sql`select role, display_name, length(pin_hash) > 0 as has_pin, pin_hash, password_hash
                        from persons where id = ${MIRROR_VIEWER_PERSON_ID}`),
       );
       // admin holds every permission, so every gated dashboard read passes authorizeManager; the pin
@@ -63,6 +69,17 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
         display_name: "mirror viewer",
         has_pin: true,
       });
+
+      // THE "viewer can never authenticate" PROPERTY, runtime-tested against the row read BACK from the
+      // DB — not merely `length > 0`. Reading is not verification (CLAUDE.md §1): a change to the
+      // sentinel format, to `verifySecret`'s parsing, or a later write path setting `password_hash` on
+      // this row would silently make the viewer loggable-in, and only this assertion would catch it.
+      // Both PIN and password login must fail closed: `verifyPin` rejects the stored sentinel for any
+      // PIN, and `password_hash IS NULL` means `loginManager` has nothing to verify.
+      const stored = person.rows[0]!;
+      expect(verifyPin("0000", stored.pin_hash)).toBe(false);
+      expect(verifyPin("", stored.pin_hash)).toBe(false);
+      expect(stored.password_hash).toBeNull();
 
       const resolved = await withTenant(db, tenantId, (tx) =>
         resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID),
