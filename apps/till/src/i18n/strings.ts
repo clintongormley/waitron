@@ -85,6 +85,11 @@ export const en = {
   // the tab screen does, Task 7). A per-order/per-course action, so it lives on the rail card like the
   // collect handover, not on the cross-order kanban board.
   "station.fire_course": "Start course",
+  // The per-order REPRINT action on the rail card (KDS-4 §3d) — re-send this order's current kitchen
+  // tickets after a paper jam / lost print. Shown on the station display only in OPERATOR (session) mode:
+  // the reprint route is session-guarded, so an enrolled DEVICE display (no session) hides it. A
+  // per-order card-foot action beside the collect handover, like `station.collect`.
+  "station.reprint": "Reprint",
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
@@ -111,6 +116,11 @@ export const en = {
   "expo.fire": "Fire",
   "expo.ready": "Course ready",
   "expo.away": "Away",
+  // The per-order REPRINT action on an expo card (KDS-4 §3d) — re-send this order's current kitchen
+  // tickets after a paper jam / lost print. The expo/pass ALWAYS runs in a logged-in session, so this is
+  // shown on every card (unlike the station display, which hides it in device mode). Same verb as
+  // `station.reprint`, kept in its own screen namespace like the other KDS action keys.
+  "expo.reprint": "Reprint",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal (sub-project 7 Task 9)
   "card.collecting": "Tap or insert card…",
@@ -294,6 +304,7 @@ export const es: Record<StringKey, string> = {
   "station.bump_ticket": "Avanzar comanda",
   "station.collect": "Entregar",
   "station.fire_course": "Empezar curso",
+  "station.reprint": "Reimprimir",
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
@@ -309,6 +320,7 @@ export const es: Record<StringKey, string> = {
   "expo.fire": "Marchar",
   "expo.ready": "Curso listo",
   "expo.away": "En camino",
+  "expo.reprint": "Reimprimir",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
   "card.cancel": "Cancelar",

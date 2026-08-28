@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -228,6 +229,26 @@ export class TillExpoScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
       }
+
+      /* The per-order REPRINT action (KDS-4 §3d) — a full-width SECONDARY wt-button at the card foot, under
+         the per-course levers. wt-button hosts as inline-block; display:block lets it span the card width.
+         Secondary (not primary) because reprint is a recover-from-a-jam utility, not a coursing step — its
+         a11y-correct colour pairing lives inside wt-button, so no chrome is hardcoded here. */
+      wt-button.reprint {
+        display: block;
+      }
+
+      /* The reprint ERROR banner — the SAME danger-on-surface pairing the app + station screen use
+         (a11y-safe in both themes), never behind muted text. Shown when a reprint call rejects, so the
+         operator sees the ticket did NOT reprint rather than a silent no-op. */
+      .error {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
 
@@ -241,6 +262,14 @@ export class TillExpoScreen extends LitElement {
 
   /** This node's open orders, grouped into courses across stations (reloaded after every lever). */
   @state() private orders: ExpoOrder[] = [];
+  /**
+   * The raw error CODE of a rejected reprint (KDS-4 §3d), surfaced via {@link codeMessage} in the banner
+   * (never the raw code) — or `undefined` for none. UNLIKE the fire/ready/away levers, a reprint is NOT
+   * run through {@link #act}: it changes no order state, so a reload reconciles nothing and a silent
+   * swallow would leave the expediter no signal that the ticket did not reprint. So it takes a try/catch →
+   * localised banner shape instead. Cleared on the next reprint attempt.
+   */
+  @state() private reprintErrorCode?: string;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -272,6 +301,23 @@ export class TillExpoScreen extends LitElement {
     await this.#reload();
   }
 
+  /**
+   * Reprint an order's current kitchen tickets (KDS-4 §3d). DELIBERATELY not run through {@link #act}: a
+   * reprint changes no order state, so there is nothing to reload/reconcile, and a swallow would hide a
+   * failure the expediter needs to see (the ticket did not come out). So it surfaces a localised
+   * {@link reprintErrorCode} banner on rejection (via {@link codeMessage}, never the raw wire code) and
+   * clears it on the next attempt — the enrol path's shape, not the degrade-gracefully lever shape. The
+   * expo/pass always runs in a session (R-K), so this is offered on every card with no mode guard.
+   */
+  async #reprint(orderId: string): Promise<void> {
+    this.reprintErrorCode = undefined;
+    try {
+      await this.api.reprintOrder(orderId);
+    } catch (error) {
+      this.reprintErrorCode = (error as { code?: string }).code ?? "server.internal";
+    }
+  }
+
   /** Return to the counter (basket-preserving, handled by the app — mirrors the station/schedule/floor
    *  screens). */
   #back(): void {
@@ -287,6 +333,11 @@ export class TillExpoScreen extends LitElement {
             ${t("expo.back")}
           </wt-button>
         </header>
+        ${
+          this.reprintErrorCode
+            ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
+            : nothing
+        }
         ${this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
     `;
@@ -313,7 +364,25 @@ export class TillExpoScreen extends LitElement {
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>
       ${this.#visibleCourses(order).map((course) => this.#courseSection(order, course))}
+      ${this.#reprintAction(order)}
     </article>`;
+  }
+
+  /** The per-order reprint button (KDS-4 §3d) — a full-width secondary `wt-button` at the card foot, under
+   *  the per-course levers. The expo/pass ALWAYS has a session (R-K), so it is shown on every card (no mode
+   *  guard, unlike the station display). Its accessible name is the slotted "Reprint" text; that suffices
+   *  here (a "Reprint" button is self-explanatory and the order context comes from the card heading, #N), so
+   *  no `aria-label` is added and no differentiated per-order name is needed — the light/dark axe sweeps
+   *  pass with the button present. The click runs {@link #reprint}. */
+  #reprintAction(order: ExpoOrder): TemplateResult {
+    return html`<wt-button
+      class="reprint"
+      data-reprint=${order.orderId}
+      variant="secondary"
+      @click=${() => void this.#reprint(order.orderId)}
+    >
+      ${t("expo.reprint")}
+    </wt-button>`;
   }
 
   /** An order's courses to SHOW, oldest coursing first: fully-away (dispatched) courses drop off, the

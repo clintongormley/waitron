@@ -41,6 +41,11 @@ import {
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import {
+  attachPrinterToStation,
+  detachPrinterFromStation,
+  listStationPrinters,
+} from "./station-printers.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireAgent } from "./print-agent-session.js";
@@ -107,6 +112,9 @@ const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feed(
  *    `printer.invalid_config` (a transport short of its required fields, 422 Unprocessable — the config
  *    is well-formed JSON but semantically invalid), `agent.not_found` (an absent agent id on revoke, or
  *    a printer bound to an unknown agent — the composite FK mapped friendly, 404).
+ *  - Station ↔ printer mapping (KDS-4 §3e): `station.not_found` (an absent/deactivated station on
+ *    attach, 404 — the KDS-1 code, param `{ stationId }`) and `printer.not_found` (an absent/inactive
+ *    printer on attach, 404, reused from above). Detach/list never live-check, so they throw neither.
  *  - The management-gate codes, mirroring `device-api.ts`: `management_session.*` (401),
  *    `person.suspended`/`authorization.not_permitted` (403), plus `management.request_invalid` (400)
  *    from the body/enum screens and `shared.invalid_id` (400) from the path-id screen.
@@ -119,6 +127,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.not_found": 404,
   "printer.invalid_config": 422,
   "agent.not_found": 404,
+  "station.not_found": 404,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -486,6 +495,65 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printJobs.createdAt))
           .limit(RECENT_JOBS_LIMIT),
       );
+      return c.json(rows);
+    }),
+  );
+
+  // ── Attach a printer to a station (printer.manage) ───────────────────────────────────────────────
+  // KDS-4 §3a/§3e — record that a fire at `:sid` prints at `:pid`. Station-centric (the mapping is
+  // symmetric; attach/detach stay on the station route). Both ids are `requireUuidParam`-screened to a
+  // clean `shared.invalid_id` (400) before any query — un-screened a non-uuid would `22P02` the `uuid`
+  // column → an opaque 500. `attachPrinterToStation` live-checks BOTH ends (`station.not_found` /
+  // `printer.not_found`, 404) and is idempotent (ON CONFLICT DO NOTHING), so re-attaching a pair is a
+  // 204 no-op. Runs through the shared `gated` helper so `printer.manage` is enforced identically.
+  app.post("/management-api/stations/:sid/printers/:pid", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const stationId = requireUuidParam(c.req.param("sid"), "StationId");
+      const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
+      await gated(sessionId, (tx) =>
+        attachPrinterToStation(tx, deps.cfg, { stationId, printerId }),
+      );
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Detach a printer from a station (printer.manage) ─────────────────────────────────────────────
+  // The symmetric counterpart to attach. `detachPrinterFromStation` is a PURE idempotent DELETE — it
+  // does NOT live-check either end (a mapping to a since-retired station/printer must stay detachable),
+  // so it throws no domain code and detaching an absent pair is a 204 no-op. Same id screens + `gated`.
+  app.delete("/management-api/stations/:sid/printers/:pid", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const stationId = requireUuidParam(c.req.param("sid"), "StationId");
+      const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
+      await gated(sessionId, (tx) =>
+        detachPrinterFromStation(tx, deps.cfg, { stationId, printerId }),
+      );
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── List a station's printers (printer.manage) ───────────────────────────────────────────────────
+  // The station-centric read: which printers a station prints to (the config editor's per-station view).
+  // `:sid` is `requireUuidParam`-screened first. `listStationPrinters` scopes by RLS + `cfg.tenantId`.
+  app.get("/management-api/stations/:sid/printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const stationId = requireUuidParam(c.req.param("sid"), "StationId");
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { stationId }));
+      return c.json(rows);
+    }),
+  );
+
+  // ── List a printer's stations (printer.manage) ───────────────────────────────────────────────────
+  // The R-J mirror (design §5): which stations a printer serves — what the dashboard printer-editor's
+  // stations multi-select reads to show a printer's current mapping. Same verb, filtered on `printerId`.
+  app.get("/management-api/printers/:pid/stations", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { printerId }));
       return c.json(rows);
     }),
   );

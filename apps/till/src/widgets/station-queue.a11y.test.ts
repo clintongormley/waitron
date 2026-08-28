@@ -152,4 +152,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
+
+  it("the reprint rail (per-order Reprint wt-button on each card, KDS-4) has no violations", async () => {
+    // showReprint on → a secondary reprint wt-button at every card foot (beside the settled order's
+    // collect button), so axe sweeps the reprint control's colour pairing + accessible name in both themes.
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups, stationId: "st-1", view: "rail", showReprint: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

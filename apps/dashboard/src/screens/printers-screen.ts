@@ -18,6 +18,7 @@ import type {
   Printer,
   PrinterInput,
   PrinterPatch,
+  Station,
 } from "../api/client.js";
 
 /** A printer the row editor holds in local, editable state — a defensive copy of the loaded {@link Printer}
@@ -172,6 +173,22 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .stations {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-3);
+      }
+      .stations-title {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+      }
+      .stations-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -183,6 +200,12 @@ export class PrintersScreen extends LitElement {
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: EditablePrinter[] = [];
   @state() private jobs: PrintJobRow[] = [];
+
+  // The venue's live kitchen stations (for the per-printer "stations this printer serves" toggles), and
+  // a printerId → attached-stationId[] map, both (re)loaded alongside the lists above and after every
+  // mutation. A printer with no id key reads as "no stations attached".
+  @state() private stations: Station[] = [];
+  @state() private printerStations: Record<string, string[]> = {};
 
   // The generate-agent-code form's label, and the one-time code held ONLY here (never re-fetchable).
   @state() private newAgentLabel = "";
@@ -224,18 +247,39 @@ export class PrintersScreen extends LitElement {
     if (agent) agent.value = this.newAgentId;
   }
 
-  /** (Re)load the agents, printers and jobs. Called on connect and after every mutation. A rejection
-   * anywhere becomes the `errorKey` banner rather than an unhandled rejection. Disarms any armed revoke
-   * (the armed row may no longer exist) and maps each printer to its editable row. */
+  /** (Re)load the agents, printers, jobs and kitchen stations, plus each printer's attached-station set.
+   * Called on connect and after every mutation. A rejection anywhere becomes the `errorKey` banner rather
+   * than an unhandled rejection. Disarms any armed revoke (the armed row may no longer exist) and maps
+   * each printer to its editable row. The per-printer station reads run as a second `Promise.all` after
+   * the lists (each needs a printer id from the first phase); an empty printer list makes it a no-op. */
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
     try {
-      const [agents, printers, jobs] = await Promise.all([
+      const [agents, printers, jobs, stations] = await Promise.all([
         this.api.listAgents(),
         this.api.listPrinters(),
         this.api.listRecentJobs(),
+        // The station↔printer mapping section needs the full station list for its toggles.
+        // `listStations()` (GET /management-api/stations) is `till.configure`-gated, whereas the mapping
+        // WRITES are `printer.manage`-gated — but that mismatch is unreachable: both permissions map to
+        // exactly {manager, admin} (packages/identity/src/permissions.ts), so every user who can reach
+        // this screen holds both. If the role→permission map ever grants `printer.manage` WITHOUT
+        // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
+        // Copilot on the KDS-4 PR).
+        this.api.listStations(),
       ]);
+      // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
+      // a later reorder/filter the way a positional array-zip would. (Still one call per printer — the
+      // N+1 is a tracked follow-up, out of scope here; only the zip fragility is being removed.)
+      const printerStations: Record<string, string[]> = Object.fromEntries(
+        await Promise.all(
+          printers.map(
+            async (p: Printer) =>
+              [p.id, (await this.api.listPrinterStations(p.id)).map((sp) => sp.stationId)] as const,
+          ),
+        ),
+      );
       this.agents = agents;
       this.printers = printers.map((p: Printer) => ({
         id: p.id,
@@ -250,6 +294,8 @@ export class PrintersScreen extends LitElement {
         active: p.active,
       }));
       this.jobs = jobs;
+      this.stations = stations;
+      this.printerStations = printerStations;
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -438,6 +484,18 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(() => this.api.testPrint(id));
   }
 
+  /** Attach (`checked`) or detach (`!checked`) the station `stationId` on the printer `printerId`, then
+   * reload so the toggle set reflects the server. Attach is idempotent server-side and detach is a pure
+   * idempotent delete, so a toggle never errors on a stale check; a real rejection (a since-retired
+   * station/printer on attach) becomes the `errorKey` banner via `#mutate`. */
+  async #toggleStation(printerId: string, stationId: string, checked: boolean): Promise<void> {
+    await this.#mutate(() =>
+      checked
+        ? this.api.attachPrinterToStation(stationId, printerId)
+        : this.api.detachPrinterFromStation(stationId, printerId),
+    );
+  }
+
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
 
   /** Resolve a printer id to its display name; an id no longer in the list falls back to the raw id. */
@@ -606,6 +664,31 @@ export class PrintersScreen extends LitElement {
             @click=${() => void this.#deactivatePrinter(p.id)}
             >${t("action.deactivate")}</wt-button
           >
+        </div>
+        <div class="stations" role="group" aria-labelledby=${`stations-title-${p.id}`}>
+          <span class="stations-title" id=${`stations-title-${p.id}`}
+            >${t("printers.stations_title")}</span
+          >
+          ${
+            this.stations.length === 0
+              ? html`<p class="empty" data-test="no-stations-${p.id}">
+                  ${t("printers.no_stations")}
+                </p>`
+              : html`<div class="stations-list">
+                  ${this.stations.map((s) => {
+                    const attached = (this.printerStations[p.id] ?? []).includes(s.id);
+                    return html`<wt-switch
+                      label=${s.name}
+                      data-test="station-toggle-${p.id}-${s.id}"
+                      .checked=${attached}
+                      @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                        e.stopPropagation();
+                        void this.#toggleStation(p.id, s.id, e.detail.checked);
+                      }}
+                    ></wt-switch>`;
+                  })}
+                </div>`
+          }
         </div>
       </wt-card>
     </li>`;

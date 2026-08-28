@@ -65,6 +65,7 @@ import {
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import {
   clearSessionCookie,
   isUuid,
@@ -946,6 +947,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
       await markCollected({ db: deps.db }, deps.cfg, id);
+      return c.body(null, 200);
+    }),
+  );
+
+  // Reprint an order's current kitchen tickets (KDS-4 §3d) — the operator's "a jam ate the paper, print
+  // it again" lever, surfaced on the station display + expo. SESSION-GUARDED: an OPERATIONAL floor action
+  // a logged-in operator takes, gated by the session (not a permission), like the fire/bump verbs.
+  // `reprintOrderTickets` re-queries the order's currently-fired `ticket_items` and re-enqueues the WHOLE
+  // current ticket through the SAME never-block outbox path a fire uses (design §3d/§4) — so a
+  // broken/absent printer can never make this hang, and it touches no fiscal record. An order with no
+  // fired items (unknown/never-fired, or all-held) enqueues nothing and is a 200 NO-OP — no new error
+  // code (design §6). The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404,
+  // the honest "no such order") rather than the `22P02` opaque 500 a malformed value would raise in the
+  // uuid column. Returns 200 with an empty body; the display re-reads its queue.
+  app.post("/api/orders/:id/reprint", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await reprintOrderTickets(tx, deps.cfg, id);
+      });
       return c.body(null, 200);
     }),
   );

@@ -175,6 +175,16 @@ export class TillStationScreen extends LitElement {
   @state() private enrolErrorCode?: string;
   /** Reentry guard for enrolment — one in-flight `enrolDevice` at a time (a double-tap is a no-op). */
   @state() private enrolling = false;
+  /**
+   * The raw error CODE of a rejected reprint (KDS-4 §3d), surfaced via {@link codeMessage} in the operator
+   * banner (never the raw code) — or `undefined` for none. UNLIKE the advance/collect/fire levers, a
+   * reprint is swallow-and-reloaded by nobody: it changes no order state, so a reload reconciles nothing
+   * and a silent failure would leave the operator no feedback that the ticket did not reprint. So it takes
+   * the enrol path's shape — try/catch → localised banner — not the degrade-gracefully `#advance` swallow.
+   * Only ever set in operator mode ({@link #onReprintOrder} guards device mode), so the banner is
+   * operator-only without a separate gate. Cleared on the next reprint attempt.
+   */
+  @state() private reprintErrorCode?: string;
   /** Whether {@link initialDeviceStation} has been adopted (a one-shot — see {@link #loadDevice}). Not
    * reactive: it gates a fetch, never the render. */
   #initialConsumed = false;
@@ -409,6 +419,29 @@ export class TillStationScreen extends LitElement {
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
   }
 
+  /**
+   * A reprint-order from the widget (KDS-4 §3d) — re-send this order's current kitchen tickets. Handle it
+   * HERE and stop it (the app owns the counter's own default-station widget, so it must not double-handle
+   * this screen's). NOT run through {@link #advance}: reprint changes no order state, so there is nothing to
+   * reload/reconcile, and a swallow would hide a failure the operator needs to see (the ticket did not come
+   * out). Instead it takes the enrol path's shape — try/catch → a localised {@link reprintErrorCode} banner
+   * (via {@link codeMessage}, never the raw wire code). DEVICE mode has no reprint route (session-guarded,
+   * the R-K guard): {@link showReprint} is off there so the button never renders, and this guards anyway
+   * (belt-and-braces, like {@link #onMarkCollected}/{@link #onFireCourse}) so a stray composed event never
+   * reaches the session verb a device holds no cookie for.
+   */
+  async #onReprintOrder(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.deviceMode) return;
+    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    this.reprintErrorCode = undefined;
+    try {
+      await this.api.reprintOrder(orderId);
+    } catch (error) {
+      this.reprintErrorCode = (error as { code?: string }).code ?? "server.internal";
+    }
+  }
+
   override render() {
     return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
   }
@@ -454,6 +487,7 @@ export class TillStationScreen extends LitElement {
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
+        @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
       >
         <header class="head">
           <h1 class="title">${t("station.title")}</h1>
@@ -480,6 +514,11 @@ export class TillStationScreen extends LitElement {
             }
           </div>
         </header>
+        ${
+          this.reprintErrorCode
+            ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
+            : nothing
+        }
         ${opts.body}
       </section>
     `;
@@ -535,8 +574,12 @@ export class TillStationScreen extends LitElement {
   }
 
   /** The active/bound station's queue widget, shared by both paths. `advanceOnly` hides the collect/fire
-   * controls (device mode, §3d); the operator path passes `false` and keeps them. The other five props
-   * are identical on both paths, so this is the one place they are threaded to the widget. */
+   * controls (device mode, §3d); the operator path passes `false` and keeps them. `showReprint` is its
+   * inverse — the per-order reprint (KDS-4 §3d) shows in OPERATOR mode only (`!advanceOnly`), since the
+   * reprint route is session-guarded and a device holds no session (the R-K guard). This is the ONLY
+   * caller of the widget in the station screen, so setting `showReprint` here cannot leak reprint into the
+   * counter/app widget instances (which never mount through this method). The other props are identical on
+   * both paths, so this is the one place they are threaded to the widget. */
   #queue(advanceOnly: boolean): TemplateResult {
     return html`<till-station-queue
       .groups=${this.groups}
@@ -545,6 +588,7 @@ export class TillStationScreen extends LitElement {
       .fireControl=${this.fireControl}
       .stationId=${this.activeStationId}
       .advanceOnly=${advanceOnly}
+      .showReprint=${!advanceOnly}
     ></till-station-queue>`;
   }
 

@@ -274,6 +274,53 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
   });
 
+  it("rail: showReprint renders a per-order reprint button on every card; off by default", async () => {
+    // Default (showReprint unset) — the counter/app widget instances embed it WITHOUT reprint.
+    const off = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+    });
+    expect(off.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+
+    // showReprint on — one reprint button per order (both a placed and a settled order get it: reprint is
+    // status-independent, unlike collect).
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+      showReprint: true,
+    });
+    const one = el.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]');
+    expect(one).not.toBeNull();
+    expect(one!.textContent).toContain(t("station.reprint"));
+    expect(el.shadowRoot!.querySelector('[data-reprint="wo-2"]')).not.toBeNull();
+  });
+
+  it("kanban: no per-order reprint button even with showReprint (it is a rail-card action)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups, // kanban cells cut across orders — no per-order card to host a reprint
+      stationId: "st-1",
+      showReprint: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+  });
+
+  it("rail: tapping the reprint button emits reprint-order { orderId }, composed and bubbling", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      stationId: "st-1",
+      showReprint: true,
+    });
+    let captured: CustomEvent | undefined;
+    el.addEventListener("reprint-order", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    expect(captured!.detail).toEqual({ orderId: "wo-1" });
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
   it("age-colours each ticket by how long its oldest line has waited (fresh / warm / hot)", async () => {
     // `now` is injected so the buckets are deterministic. groupA queued at 10:00Z, groupB at 10:05Z.
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → hot, B: 7 min → warm

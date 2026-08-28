@@ -385,6 +385,21 @@ Either is acceptable; **neither being present is not**, and "the callers only pa
 property of the callers rather than of the code — precisely the §1 defect class, since these
 parameters are typed plain `string`.
 
+**A `sql` scalar subquery that correlates to the OUTER query's table breaks silently when that table
+is the `.from()` BASE rather than a join.** Drizzle renders a `` `${table.column}` `` interpolation
+inside a `` sql`…` `` template as the BARE quoted column (`"id"`), not `` `table."id"` ``. When the
+outer table is JOINED, Drizzle aliases it, so the bare name still resolves outward; when it is the
+base `.from()` table there is no alias, and inside a correlated subquery whose own FROM names another
+table with that column, the bare `"id"` binds to the SUBQUERY's table — no error, just a wrong answer
+(a NULL, an empty match). Paid for on `feat/kds-4-kitchen-printing` (#152): the `dining_tables`
+table-label scalar subquery was copied from `listExpoQueue` (where `working_orders` is JOINED) into
+`enqueueKitchenTickets` (where `working_orders` is the base `.from()`); `` `${workingOrders.id}` ``
+rendered as `"id"` and bound to `dining_tables.id`, so `dt.tab_id = dt.id` returned a null label.
+Diagnosed with `query.toSQL()`, fixed by writing the outer columns as qualified literals
+(`working_orders.tenant_id`/`id`/`delivery_table_id`), test-pinned. Copying a correlated subquery:
+check whether the outer table is joined or base, and READ THE EMITTED SQL with `.toSQL()` — the two
+render differently and only one is right.
+
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 

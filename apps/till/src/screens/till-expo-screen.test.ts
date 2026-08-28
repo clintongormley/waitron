@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
 import type { ExpoOrder, TillApi } from "../api/client.js";
@@ -158,6 +159,7 @@ function stubApi(queue: ExpoOrder[] = [threeCourseOrder], overrides: Record<stri
     fireCourse: vi.fn().mockResolvedValue(undefined),
     bumpCourseReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
+    reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -305,6 +307,57 @@ describe("till-expo-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
     await flush(el);
     expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
+  });
+
+  // --- Reprint (KDS-4 §3d) — always shown, since the pass always has a session ----------------
+
+  it("shows a per-order Reprint button on every card (the pass always has a session)", async () => {
+    const el = await mount({ api: stubApi([threeCourseOrder, firedNotReadyOrder]) });
+    // One reprint control per order, keyed by orderId (not the display number).
+    const one = orderCard(el, 5)!.querySelector<HTMLElement>('[data-reprint="wo-1"]');
+    expect(one).not.toBeNull();
+    expect(one!.textContent).toContain(t("expo.reprint"));
+    expect(orderCard(el, 6)!.querySelector('[data-reprint="wo-2"]')).not.toBeNull();
+  });
+
+  it("clicking Reprint calls reprintOrder(orderId) with that order's id", async () => {
+    const api = stubApi();
+    const el = await mount({ api });
+    orderCard(el, 5)!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    // The actual call + arg, not merely "a handler fired".
+    expect(api.reprintOrder).toHaveBeenCalledWith("wo-1");
+    // Reprint changes no state, so it never re-reads the queue (only the connect read ran).
+    expect(api.getExpoQueue).toHaveBeenCalledOnce();
+  });
+
+  it("a rejected Reprint surfaces the localised banner, never the raw code (negative control)", async () => {
+    // A mapped code → its SPECIFIC localised sentence, proving the banner never shows the wire code.
+    const api = stubApi(undefined, {
+      reprintOrder: vi.fn().mockRejectedValue({ code: "session.required" }),
+    });
+    const el = await mount({ api });
+    orderCard(el, 5)!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    // The default locale is es-ES: the banner shows the translated sentence, not the wire code.
+    expect(alert!.textContent).toContain(codeMessage("session.required", "es-ES"));
+    expect(alert!.textContent).not.toContain("session.required");
+  });
+
+  it("a codeless Reprint rejection (a fetch network throw) falls back to the generic banner", async () => {
+    // A rejection with no `code` (e.g. fetch itself throwing before the client wraps it) degrades to
+    // `server.internal` — the generic sentence — never an empty banner or a raw throw.
+    const api = stubApi(undefined, {
+      reprintOrder: vi.fn().mockRejectedValue(new Error("network down")),
+    });
+    const el = await mount({ api });
+    orderCard(el, 5)!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("server.internal", "es-ES"));
   });
 
   // --- Age colouring --------------------------------------------------------------------------

@@ -25,6 +25,7 @@ export { deviceKind, devicePairingCodes, devices } from "./schema/devices.js";
 export { printAgentPairingCodes, printAgents } from "./schema/print-agents.js";
 export { printTicketScope, printTransport, printers } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
+export { stationPrinters } from "./schema/station-printers.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
 export {

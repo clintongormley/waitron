@@ -17,6 +17,7 @@ export * from "./devices.js";
 export * from "./print-agents.js";
 export * from "./printers.js";
 export * from "./print-jobs.js";
+export * from "./station-printers.js";
 export * from "./catalogue.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";

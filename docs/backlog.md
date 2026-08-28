@@ -68,7 +68,7 @@ follow.
    intra-community/import boxes (32–39), plus the two pre-filing caveats a human must clear.
 4. **Printing + hardware surface** — the **printing subsystem is built** (agents/printers/outbox/
    runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed). Remaining on the
-   track: `cloud_poll` transports (fast-follow), KDS-4 kitchen printing, counter receipt + cash-drawer
+   track: `cloud_poll` transports (fast-follow), counter receipt + cash-drawer
    printing, cash-drawer authorization, the expo device kind. Real deli hardware need; mechanical.
 5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
    PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
@@ -112,7 +112,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 9 | Deployment | distribution & client-topology design (#86) | **cloud trial on-ramp (#5)** + agent/appliance/reroute (#8) |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill** (fiscal) |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo; device identity-1 | KDS-4 kitchen printing (#4); expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 | expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
 | 14 | Bookings | Bookings-1 specced + planned | **build it** (part of #7) |
 | 15 | Online ordering | — | not started (Later phase) |
@@ -227,9 +227,20 @@ still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans
   `network_tcp` transports, an ESC/POS builder, central dashboard management. **Printing never blocks
   a fire/sale** (outbox INSERT only). `cloud_poll` transport is a fast-follow (below); robustness
   follow-ups in *Debt*.
-- **KDS-4 kitchen printing** (`kds-4-kitchen-printing*`) — `station_printers` m2m + print-on-fire (an
-  outbox INSERT, never blocking) + a kitchen-ticket formatter; a group printer gets one deduped
-  consolidated ticket per fire. Thin layer on the subsystem + KDS-1.
+- **KDS-4 kitchen printing** (`kds-4-kitchen-printing*`) — **BUILT**: `station_printers` station→printer
+  m2m + print-on-fire (an outbox INSERT, never blocking) + a deduped consolidated group ticket per fire
+  + reprint + the dashboard station↔printer mapping UI. Thin layer on the subsystem + KDS-1. Follow-ups:
+  **device-mode reprint** — the reprint route is `requireSession`, so an enrolled device-mode KDS station
+  display can't reprint (button hidden per design); a future `POST /api/device/orders/:id/reprint`
+  (behind `requireDevice`, scoped to the device's bound station) would close it — the kitchen station
+  most likely to hit a paper jam is exactly a device-mode display. **Mirrored station-side read** —
+  spec §5's read-only "printers serving this station" view on the station-config screen isn't built; the
+  backing route `GET /management-api/stations/:sid/printers` already exists, only a
+  `DashboardApi.listStationPrinters(stationId)` + a read-only UI line are missing. **Reprint
+  timestamp** — reprint stamps the reprint wall-clock time (`enqueueKitchenTickets` sets
+  `firedAt = new Date()`), not the original `ticket_items.fired_at`, so a paper-jam reprint's header
+  reads a fresh time and any kitchen waiting-time gauge reads short; threading `fired_at` through the
+  reprint query (per station/round) would make it true — a small product decision for the owner.
 - **Counter receipt + cash-drawer** (`counter-receipt-drawer-printing*`) — per-till
   `receipt_printer_id`, per-location `receipt_print_mode`, an ESC/POS `qr()`, a faithful
   `formatReceipt` (re-renders every art. 7.1 / arts. 20–21 element of the *filed* record — fiscal
