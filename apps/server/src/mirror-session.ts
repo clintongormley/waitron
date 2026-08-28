@@ -45,12 +45,22 @@ export async function ensureMirrorViewer(db: Database, tenantId: string): Promis
  * live session. The keepalive is an internal SQL write inside the request; it is NOT an HTTP write, so
  * the read-only gate (which gates the HTTP verb) does not block it — the reason a read-only DB role was
  * rejected (§3).
+ *
+ * The keepalive is THROTTLED to at most one write per minute (the `device-session.ts` /
+ * `printing/agent.ts` / `sync/peers.ts` last-seen pattern), NOT written on every request:
+ * `resolveManagementSession` already bumps `last_seen_at` on every gated request within its 30-minute
+ * `IDLE_TIMEOUT_MS`, so the ONLY gap this middleware closes is an idle mirror (untouched > 30 min) whose
+ * next request's own gate would otherwise throw `management_session.expired` before it could bump. A
+ * one-minute cadence covers that with 30x headroom while removing the per-request write amplification —
+ * a live dashboard polls many times a second, and an unthrottled write here would double every gated
+ * request's `management_sessions` writes (once here, once in `resolveManagementSession`).
  */
 export function mirrorSession(db: Database, tenantId: string, secure: boolean): MiddlewareHandler {
   return async (c, next) => {
     await withTenant(db, tenantId, (tx) =>
       tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
-                     where id = ${MIRROR_VIEWER_SESSION_ID}`),
+                     where id = ${MIRROR_VIEWER_SESSION_ID}
+                       and (last_seen_at is null or last_seen_at < now() - interval '1 minute')`),
     );
     if (readManagementSessionId(c) === null) {
       setManagementCookie(c, MIRROR_VIEWER_SESSION_ID, secure);

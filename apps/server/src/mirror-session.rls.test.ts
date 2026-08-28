@@ -101,32 +101,64 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     });
   });
 
-  it("mirrorSession keeps the session live: a keepalive refreshes last_seen_at and sets the cookie", async () => {
+  const readLastSeen = (db: Database, tenantId: string): Promise<string> =>
+    withTenant(db, tenantId, (tx) =>
+      tx.execute<{ last_seen_at: string }>(
+        sql`select last_seen_at from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
+      ),
+    ).then((r) => r.rows[0]!.last_seen_at);
+
+  // Age the ambient session past the 1-minute throttle (and past the 30-minute IDLE_TIMEOUT_MS) so the
+  // next request's keepalive must fire. A fixed literal interval — never built from a variable.
+  const backdateLastSeen = (db: Database, tenantId: string): Promise<unknown> =>
+    withTenant(db, tenantId, (tx) =>
+      tx.execute(
+        sql`update management_sessions set last_seen_at = now() - interval '2 minutes'
+            where id = ${MIRROR_VIEWER_SESSION_ID}`,
+      ),
+    );
+
+  const driveOnce = (db: Database, tenantId: string): Promise<Response> => {
+    const app = new Hono();
+    app.use("*", mirrorSession(db, tenantId, false));
+    app.get("/thing", (c) => c.text("ok"));
+    return app.request("/thing");
+  };
+
+  it("mirrorSession refreshes a STALE session's last_seen_at (the idle-mirror keepalive) and sets the cookie", async () => {
     await withAppUserDb(async (db) => {
       await ensureMirrorViewer(db, tenantId);
-      const readLastSeen = async (): Promise<string> => {
-        const r = await withTenant(db, tenantId, (tx) =>
-          tx.execute<{ last_seen_at: string }>(
-            sql`select last_seen_at from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
-          ),
-        );
-        return r.rows[0]!.last_seen_at;
-      };
-      const before = await readLastSeen();
-      await new Promise((r) => setTimeout(r, 15));
+      // An idle mirror: last_seen_at is older than the 1-minute throttle (and, in reality, older than the
+      // 30-minute IDLE_TIMEOUT_MS that would 401 the next request). The keepalive must refresh it.
+      await backdateLastSeen(db, tenantId);
+      const before = await readLastSeen(db, tenantId);
 
-      const app = new Hono();
-      app.use("*", mirrorSession(db, tenantId, false));
-      app.get("/thing", (c) => c.text("ok"));
-      const res = await app.request("/thing");
+      const res = await driveOnce(db, tenantId);
 
       expect(res.status).toBe(200);
       // No cookie on the request → the middleware injects the ambient session's id.
       expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
       // Proven by deletion: dropping the keepalive `update` in mirrorSession leaves last_seen_at at the
-      // ensureMirrorViewer value, so `after` no longer advances past `before` and this reddens.
-      const after = await readLastSeen();
+      // backdated value, so `after` no longer advances past `before` and this reddens.
+      const after = await readLastSeen(db, tenantId);
       expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
+    });
+  });
+
+  it("mirrorSession SKIPS the write for a FRESH session (the throttle — no per-request amplification)", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId); // seeds last_seen_at = now(), well within the 1-minute throttle
+      const before = await readLastSeen(db, tenantId);
+
+      const res = await driveOnce(db, tenantId);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+      // The throttle guard (`last_seen_at < now() - interval '1 minute'`) matches no row, so last_seen_at
+      // is byte-for-byte unchanged — the amplification fix. Proven by deletion: dropping the throttle
+      // clause makes this write unconditionally and `after` advances, reddening this assertion.
+      const after = await readLastSeen(db, tenantId);
+      expect(after).toBe(before);
     });
   });
 
