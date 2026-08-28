@@ -1,7 +1,7 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
@@ -912,12 +912,19 @@ describe("loadMirrorConfig", () => {
   // TLS trust anchor + servername. Both vars required together (fail-closed, the
   // loadTunnelConfig/loadSyncConfig posture); an empty value is refused (the empty-string trap,
   // CLAUDE.md §3); neither set → undefined (a non-mirror sets neither).
+  // Track every temp dir writeCa creates and remove them in afterAll, so repeated local runs don't
+  // accumulate `mirror-ca-*` dirs under tmpdir (Copilot).
+  const caDirs: string[] = [];
   function writeCa(contents: string): string {
     const dir = mkdtempSync(join(tmpdir(), "mirror-ca-"));
+    caDirs.push(dir);
     const caPath = join(dir, "box-ca.pem");
     writeFileSync(caPath, contents);
     return caPath;
   }
+  afterAll(() => {
+    for (const dir of caDirs) rmSync(dir, { recursive: true, force: true });
+  });
 
   it("reads the box CA file + hostname when both are set", () => {
     const caPath = writeCa("-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n");
