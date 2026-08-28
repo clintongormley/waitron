@@ -42,5 +42,12 @@ declare module "@waitron/shared" {
      * pre-production has a numbering hole in production that nothing can fill.
      */
     "deployment.already_stamped": { stamped: string; requested: string };
+    /**
+     * `setDeploymentMode` found no `deployment` singleton row to update — the database was never
+     * stamped (`stampDeployment` must run first). Fails loud rather than a silent 0-row no-op, because
+     * this is a promotion primitive: a mis-sequenced provision/promote that "succeeded" while leaving
+     * the database in the wrong mode is exactly the kind of silent state a mirror must never reach.
+     */
+    "deployment.not_stamped": Record<string, never>;
   }
 }

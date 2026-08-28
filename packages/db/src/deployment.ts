@@ -93,5 +93,12 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * provisioning/owner connection, never the app pool. Requires the singleton row (stamp the environment
  * first) — a 0-row UPDATE is a silent no-op on an unstamped DB, which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
-  await db.execute(sql`update deployment set mode = ${mode} where id = 1`);
+  const result = await db.execute<{ id: number }>(
+    sql`update deployment set mode = ${mode} where id = 1 returning id`,
+  );
+  // Fail loud on a 0-row update: the singleton must already exist (stamp first). A silent no-op here
+  // would let a mis-sequenced promotion "succeed" while leaving the database in the wrong mode.
+  if (result.rows.length === 0) {
+    throw new AppError("deployment.not_stamped", {});
+  }
 }

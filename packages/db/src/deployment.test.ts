@@ -91,6 +91,17 @@ describeEachTarget("the deployment stamp", (target) => {
     expect(await readDeploymentMode(db)).toBe("primary");
   });
 
+  it("setDeploymentMode fails loud on an unstamped database (no silent 0-row no-op)", async () => {
+    // Fresh migrated DB: the deployment singleton row does not exist yet. setDeploymentMode is a
+    // promotion primitive, so a mis-sequenced call (before stampDeployment) must THROW, not silently
+    // succeed while leaving the database unpromoted. Proven by deletion: dropping the rows.length guard
+    // makes the UPDATE a 0-row no-op and captureError sees no error, reddening this.
+    const error = await captureError(() => setDeploymentMode(db, "mirror"));
+    expect(error).toMatchObject({ code: "deployment.not_stamped" });
+    // Nothing was written — still reads the unstamped default.
+    expect(await readDeploymentMode(db)).toBe("primary");
+  });
+
   it("the mode CHECK rejects any value outside primary/mirror", async () => {
     await stampDeployment(db, "preproduction");
     // Not `.rejects.toThrow(/deployment_mode_ck|23514/)`: drizzle-orm@0.45.2 wraps every failed
