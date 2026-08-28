@@ -3,9 +3,10 @@ import { AppError } from "@waitron/shared";
 import type { DeploymentMode } from "@waitron/db";
 import "./errors.js"; // makes `node.read_only` reachable (the code is constructed below)
 
-/** This gate blocks every non-GET HTTP verb — the write verbs the dashboard (management/catalogue/report/
- * recipe/schedule/purchasing/workforce/me) uses; a survey of that DASHBOARD read surface found no read
- * behind a non-GET verb (C2a design §5). OPTIONS is a CORS preflight and carries no body.
+/** This gate blocks every HTTP verb EXCEPT the safe reads GET/HEAD/OPTIONS — i.e. every write verb the
+ * dashboard (management/catalogue/report/recipe/schedule/purchasing/workforce/me) uses; a survey of that
+ * DASHBOARD read surface found no read behind a non-safe verb (C2a design §5). HEAD is a bodyless GET and
+ * OPTIONS is a CORS preflight — neither mutates, so both pass.
  *
  * IMPORTANT — this is NOT "no write behind any GET on the whole mounted surface". Decision 5 mounts the
  * full trading surface (till/device/print) too, and a few OPERATIONAL GET handlers DO write — notably

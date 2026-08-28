@@ -169,22 +169,47 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     });
   });
 
-  it("mirrorSession leaves a request's existing management cookie untouched", async () => {
+  const driveWithCookie = async (
+    db: Database,
+    tenantId: string,
+    cookie: string,
+  ): Promise<Response> => {
+    const app = new Hono();
+    app.use(
+      "*",
+      mirrorSession(db, tenantId, false, () => "mirror"),
+    );
+    app.get("/thing", (c) => c.text("ok"));
+    return app.request("/thing", { headers: { cookie } });
+  };
+
+  it("mirrorSession leaves the AMBIENT cookie untouched (no redundant Set-Cookie)", async () => {
     await withAppUserDb(async (db) => {
       await ensureMirrorViewer(db, tenantId);
-      const app = new Hono();
-      app.use(
-        "*",
-        mirrorSession(db, tenantId, false, () => "mirror"),
+      const res = await driveWithCookie(
+        db,
+        tenantId,
+        `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
       );
-      app.get("/thing", (c) => c.text("ok"));
-      const res = await app.request("/thing", {
-        headers: { cookie: `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}` },
-      });
       expect(res.status).toBe(200);
-      // The request already carries the ambient session, so the middleware sets no new cookie — a real
-      // (or the ambient) session is never clobbered on a subsequent request.
+      // The request already carries the ambient session id, so the middleware sets no new cookie.
       expect(res.headers.get("set-cookie")).toBeNull();
+    });
+  });
+
+  it("mirrorSession OVERWRITES a corrupted/forged non-ambient cookie with the ambient session", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      // A corrupted/non-UUID cookie (and, equally, a forged valid-UUID one) must not survive: left
+      // untouched it would fail requireManagementSession's shape check (or resolve to no row) and 401,
+      // breaking the unauthenticated dashboard posture. The middleware overwrites anything that is not
+      // already the ambient id. Proven by deletion: reverting the guard to `=== null` leaves the bad
+      // cookie in place and injects nothing, reddening the Set-Cookie assertion.
+      const res = await driveWithCookie(db, tenantId, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("set-cookie")).toContain(
+        `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
+      );
     });
   });
 

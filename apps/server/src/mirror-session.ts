@@ -76,7 +76,13 @@ export function mirrorSession(
                      where id = ${MIRROR_VIEWER_SESSION_ID}
                        and (last_seen_at is null or last_seen_at < now() - interval '1 minute')`),
     );
-    if (readManagementSessionId(c) === null) {
+    // Inject the ambient cookie whenever the request does NOT already carry it — absent, corrupted, a
+    // non-UUID, or a forged/foreign session id. A mirror is unauthenticated and holds only this one
+    // ambient session, so overwriting any non-ambient value keeps the dashboard reachable: a corrupted
+    // or forged cookie would otherwise fail `requireManagementSession`'s shape check (or resolve to no
+    // row) and 401, breaking the read-only posture. A request already carrying the ambient id is left
+    // untouched (no redundant Set-Cookie).
+    if (readManagementSessionId(c) !== MIRROR_VIEWER_SESSION_ID) {
       setManagementCookie(c, MIRROR_VIEWER_SESSION_ID, secure);
     }
     return next();
