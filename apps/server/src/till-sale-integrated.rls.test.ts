@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { Database } from "@waitron/db";
@@ -20,7 +20,8 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, drawerOpens, printJobs, withTenant } from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
 import {
   decimal,
   locationId as brandLocationId,
@@ -39,6 +40,7 @@ import type { OrderFlow, TillConfig } from "./till-config.js";
 import { createOpenOrder, listStationQueue, parkOrder, placeOrder } from "./working-order.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
+import { DRAWER_KICK } from "./receipt-print.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite (CLAUDE.md §4). The split flow's P3 writes (recordSale + associate +
@@ -244,6 +246,54 @@ async function registroCount(workingOrderId: string): Promise<number> {
     where s.working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
+}
+
+/** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
+ *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
+async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const { id } = await createPrinter(
+      tx,
+      { tenantId: cfg.tenantId, locationId: cfg.locationId },
+      { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    await tx.execute(sql`update tills set receipt_printer_id = ${id} where id = ${cfg.tillId}`);
+    return id;
+  });
+}
+
+/** The receipt payloads enqueued to `printerId` (bytea → Buffer via the customType). */
+async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buffer[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    return rows.map((r) => r.payload);
+  });
+}
+
+/** The count of `drawer_opens` rows for this tenant — an integrated card sale records NONE. */
+async function drawerOpenCount(cfg: TillConfig): Promise<number> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx.select().from(drawerOpens);
+    return rows.length;
+  });
+}
+
+/** True iff `needle` occurs as a contiguous subsequence of `haystack` (the receipt-print suite helper). */
+function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
+  if (needle.length === 0) return true;
+  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
 }
 
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
@@ -476,6 +526,45 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("auto-prints the customer receipt on an integrated card sale (no kick, no drawer), and a REPLAY does not double-print", async () => {
+    // The primary counter-card flow (Stripe Terminal, `/api/pay`) must auto-print like cash and manual
+    // card do — `finalizeCapture` (P3) enqueues the receipt POST-filing, INSERT-only on its own tx.
+    // Integrated is CARD-ONLY, so the receipt carries NO drawer kick and records NO `drawer_opens`. The
+    // never-block guarantee is the shared hook's (proven in `receipt-print.rls.test.ts`); here the proof
+    // is that filing lands (one registro) and a REPLAY enqueues NO second job.
+    const { cfg, cafe } = await setupVenue();
+    const printerId = await makeReceiptPrinter(cfg);
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { deps } = integratedDeps(cfg, app);
+      const id = randomUUID();
+      const req = { id, lines: [{ productId: cafe.id, quantity: "1" }] };
+
+      const first = await payWorkingOrderIntegrated(deps, cfg, req);
+      expect(first.outcome).toBe("captured");
+
+      // Exactly ONE receipt job, carrying the customer ticket (the legend) with NO drawer kick (card),
+      // and NO drawer_opens row.
+      const afterFirst = await printJobPayloads(cfg, printerId);
+      expect(afterFirst).toHaveLength(1);
+      const payload = new Uint8Array(afterFirst[0]!);
+      expect(Buffer.from(payload).toString("latin1")).toContain("VERI*FACTU");
+      expect(bytesInclude(payload, DRAWER_KICK)).toBe(false);
+      expect(await drawerOpenCount(cfg)).toBe(0);
+      expect(await registroCount(id)).toBe(1);
+
+      // Pay again with the SAME id → P1 sees the order `settled` and REPLAYS (the unhooked path): still
+      // exactly ONE registro AND ONE print job. A lost-response retry never double-prints the receipt.
+      const second = await payWorkingOrderIntegrated(deps, cfg, req);
+      expect(second.outcome).toBe("captured");
+      expect(await registroCount(id)).toBe(1);
+      expect(await printJobPayloads(cfg, printerId)).toHaveLength(1);
+      expect(await drawerOpenCount(cfg)).toBe(0);
     } finally {
       await app.close();
     }

@@ -836,6 +836,16 @@ export async function payWorkingOrderIntegrated(
 }
 
 /**
+ * The tender handed to {@link enqueueSaleReceipt} on the integrated (Stripe Terminal) paths — ALWAYS a
+ * card tender, because integrated pay is card-only. So every integrated receipt prints with NO drawer
+ * kick and NO `drawer_opens` row (the hook's kick/audit fire only on a `cash` tender). `amount` is not
+ * read by the receipt hook (it renders `ticket.total`/`change`, and only `tender.method` selects the
+ * cash-vs-card branch), so a fixed placeholder is honest here rather than re-deriving the charged total
+ * at four call sites.
+ */
+const INTEGRATED_CARD_TENDER: TillTender = { method: "card", amount: "0.00" };
+
+/**
  * File the immediate card sale for a captured/offline-accepted integrated payment, LINK that payment,
  * and settle the order — P3 (tx B) of {@link payWorkingOrderIntegrated}, in ONE transaction so the
  * sale, its tender/settlement, its chained fiscal record, the payment association and the
@@ -940,7 +950,7 @@ async function finalizeCapture(
           })
           .where(eq(workingOrders.id, req.id));
 
-        return {
+        const ticket: TillSaleResult = {
           invoiceNumber: await readInvoiceNumber(tx, saleId),
           issuedAt: fiscal.issuedAt.toISOString(),
           total: priced.total,
@@ -949,6 +959,14 @@ async function finalizeCapture(
           change: "0.00",
           qr: fiscal.verificationUrl ?? "",
         };
+        // Print-on-sale (design §3c) for the integrated (Stripe Terminal) card sale — the P3 sibling of
+        // `fileImmediateSale`'s enqueue, POST-filing and INSERT-only on THIS tx. Card → receipt, no kick,
+        // no drawer_opens. NOTHING here can block/fail the sale (CLAUDE.md §5 — see `receipt-print.ts`);
+        // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
+        // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
+        // winner's ticket is never re-printed — exactly one receipt per filed sale.
+        await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, saleId, operatorId);
+        return ticket;
       },
       { nodeId: cfg.nodeId },
     );
@@ -1103,18 +1121,21 @@ async function finalizeRecovery(
         })
         .where(eq(workingOrders.id, req.id));
 
-      return {
-        outcome: "captured",
-        ticket: {
-          invoiceNumber: await readInvoiceNumber(tx, saleId),
-          issuedAt: fiscal.issuedAt.toISOString(),
-          total: priced.total,
-          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-          lines: ticketLinesFrom(priced),
-          change: "0.00",
-          qr: fiscal.verificationUrl ?? "",
-        },
+      const ticket: TillSaleResult = {
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        lines: ticketLinesFrom(priced),
+        change: "0.00",
+        qr: fiscal.verificationUrl ?? "",
       };
+      // Print-on-sale (design §3c) for the RECOVERED integrated card sale — POST-filing, INSERT-only on
+      // this tx. Card → receipt, no kick. This is the fresh-file path; the FOR-UPDATE replay above (a
+      // concurrent winner) returns without reaching here, so a recovery never double-prints. Never-block
+      // as in `finalizeCapture` (`receipt-print.ts`).
+      await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, saleId, operatorId);
+      return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
   );
@@ -1208,7 +1229,16 @@ async function finalizeSettle(
 
         // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
         // `change` stays the "0.00" default.
-        return readSettledTicket(deps.backend, tx, cfg, req.id);
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+        // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE — the receipt
+        // prints at SETTLE, not at placement (the deferred invoice was filed at `placeOrder`, which is
+        // NOT hooked), so the customer gets exactly ONE receipt when they pay. Card → receipt, no kick;
+        // no operator is threaded (card never records a drawer open). The `already_settled` replay in the
+        // catch below stays UNHOOKED — a concurrent winner's ticket is never re-printed. Never-block as in
+        // `finalizeCapture` (`receipt-print.ts`); a settle files nothing new, so the fiscal record is
+        // byte-unchanged.
+        await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, outstanding.saleId);
+        return ticket;
       },
       { nodeId: cfg.nodeId },
     );
@@ -1337,10 +1367,13 @@ async function finalizeSettleRecovery(
         })
         .where(eq(workingOrders.id, req.id));
 
-      return {
-        outcome: "captured",
-        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-      };
+      const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+      // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE RECOVERY — the fresh
+      // settle path. Card → receipt, no kick, no operator (card never opens the drawer). The FOR-UPDATE
+      // replay above (a concurrent winner) returns without reaching here, so a recovery never
+      // double-prints. Never-block / byte-unchanged fiscal record as in `finalizeSettle`.
+      await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, outstanding.saleId);
+      return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
   );

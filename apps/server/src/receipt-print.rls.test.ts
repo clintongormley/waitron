@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-import { asAppUser, drawerOpens, locations, printJobs, tills, withTenant } from "@waitron/db";
+import {
+  asAppUser,
+  drawerOpens,
+  locations,
+  printJobs,
+  sales,
+  tills,
+  withTenant,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -163,16 +171,40 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
   return { cfg, each: available.find((p) => p.pricingUnit === "each")! };
 }
 
-/** Create a receipt printer (cloud_poll — the minimal shape, no agent) and return its id. `active:false`
- *  deactivates it, so a test can point a till at a DEACTIVATED printer. */
-async function makePrinter(cfg: TillConfig, { active = true } = {}): Promise<string> {
+/** Seed a print agent (raw insert — the `outbox.test.ts` shape) so a `network_tcp` printer has an agent
+ *  to belong to. The token hash is a fixture — the agent is never authenticated here. */
+async function seedAgent(cfg: TillConfig): Promise<string> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const { id } = await createPrinter(tx, printCfg(cfg), {
-      name: "Recibos",
-      transport: "cloud_poll",
-      pollId: `poll-${randomUUID()}`,
-    });
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into print_agents (tenant_id, location_id, name, token_hash)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos agent', 'scrypt$fixture') returning id`);
+    return rows[0]!.id;
+  });
+}
+
+/**
+ * Create a receipt printer and return its id. `transport: "network_tcp"` gives it an agent + host so the
+ * never-block transport spy (`NetworkTcpTransport.prototype.send`) actually covers ITS delivery path — a
+ * `cloud_poll` printer is driven by neither adapter, which would make the spy vacuous. `192.0.2.1` is
+ * TEST-NET-1 (RFC 5737, unroutable): if delivery ever ran inline it would route through the spied
+ * `send`, which the sale path must never reach. `active: false` deactivates it (for the inactive-printer
+ * test).
+ */
+async function makePrinter(
+  cfg: TillConfig,
+  { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
+): Promise<string> {
+  const agentId = transport === "network_tcp" ? await seedAgent(cfg) : undefined;
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const { id } = await createPrinter(
+      tx,
+      printCfg(cfg),
+      transport === "network_tcp"
+        ? { name: "Recibos", transport: "network_tcp", agentId: agentId!, host: "192.0.2.1" }
+        : { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
     if (!active) await deactivatePrinter(tx, printCfg(cfg), id);
     return id;
   });
@@ -240,6 +272,16 @@ async function registroCount(cfg: TillConfig): Promise<number> {
   });
 }
 
+/** The id of the tenant's single filed sale — each test provisions its own tenant, so there is exactly
+ *  one — for pinning the `drawer_opens.sale_id` back-reference the helper wires. */
+async function onlySaleId(cfg: TillConfig): Promise<string> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx.select({ id: sales.id }).from(sales);
+    return rows[0]!.id;
+  });
+}
+
 /** True iff `needle` occurs as a contiguous subsequence of `haystack` (the `receipt-ticket.test.ts` helper). */
 function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
   if (needle.length === 0) return true;
@@ -282,7 +324,9 @@ const deps = () => ({ db: suite.admin, backend, clock });
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
   it("auto + printer + CASH: enqueues ONE receipt+kick job, records the drawer open, never blocks filing", async () => {
     const { cfg, each } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    // A network_tcp printer, so the never-block spy below actually covers ITS delivery adapter (a
+    // cloud_poll printer uses neither NetworkTcp nor Usb, which would make the spy vacuous — MINOR 1).
+    const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     const result = await recordTillSale(
@@ -298,7 +342,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     // Filing succeeded and is UNAFFECTED by the print hook: the chained fiscal record exists.
     expect(result.total).toBe("3.00");
     expect(await registroCount(cfg)).toBe(1);
-    // NEVER-BLOCK: the sale path invoked no printer transport — the enqueue is a pure DB INSERT.
+    // NEVER-BLOCK: the sale path invoked NEITHER printer transport (the network_tcp printer's delivery
+    // adapter is `NetworkTcpTransport.send`) — the enqueue is a pure DB INSERT, delivery is the agent's.
     expect(netSend).not.toHaveBeenCalled();
     expect(usbSend).not.toHaveBeenCalled();
 
@@ -316,11 +361,12 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     // …and the kick is at the very END (receipt THEN kick, one job).
     expect([...payload.slice(-DRAWER_KICK.length)]).toEqual([...DRAWER_KICK]);
 
-    // The drawer open is audited: one `cash_sale` row for this sale, this till, this operator.
+    // The drawer open is audited: one `cash_sale` row for this sale, this till, this operator, with its
+    // `sale_id` back-reference PINNED to the actual filed sale (MINOR 2).
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR, tillId: cfg.tillId });
-    expect(opens[0]!.saleId).not.toBeNull();
+    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
   });
 
   it("auto + printer + CARD: enqueues the receipt with NO kick and records NO drawer open", async () => {
@@ -494,5 +540,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
+    // The `sale_id` back-reference is PINNED to the settled invoice's sale (MINOR 2).
+    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
   });
 });
