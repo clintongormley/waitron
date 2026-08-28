@@ -173,15 +173,23 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     db: Database,
     tenantId: string,
     cookie: string,
+    mode: DeploymentMode = "mirror",
   ): Promise<Response> => {
     const app = new Hono();
     app.use(
       "*",
-      mirrorSession(db, tenantId, false, () => "mirror"),
+      mirrorSession(db, tenantId, false, () => mode),
     );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing", { headers: { cookie } });
   };
+
+  const isEnded = (db: Database, tenantId: string): Promise<boolean> =>
+    withTenant(db, tenantId, (tx) =>
+      tx.execute<{ ended: boolean }>(
+        sql`select ended_at is not null as ended from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
+      ),
+    ).then((r) => r.rows[0]!.ended);
 
   it("mirrorSession leaves the AMBIENT cookie untouched (no redundant Set-Cookie)", async () => {
     await withAppUserDb(async (db) => {
@@ -213,25 +221,64 @@ describe("mirror ambient viewer session (real Postgres, as app_user under FORCE 
     });
   });
 
-  it("mirrorSession is a no-op once promoted (getMode() === 'primary'): no cookie, no keepalive write", async () => {
+  it("once promoted, a request WITHOUT the ambient cookie neither injects a cookie nor writes", async () => {
     await withAppUserDb(async (db) => {
       await ensureMirrorViewer(db, tenantId);
-      // Simulate the promote flag-flip: the holder now reads 'primary'. The ambient admin viewer must be
-      // dropped (real auth applies) — otherwise a promoted node's open write routes would still auto-login
-      // an admin. Backdate so an UNGUARDED middleware WOULD write (proving the guard, not the throttle, is
-      // what stops it).
+      // Promote (holder reads 'primary'). A fresh browser (no ambient cookie) gets nothing — real auth
+      // applies. Backdate so an UNGUARDED mirror middleware WOULD write, proving the mode guard stops it.
       await backdateLastSeen(db, tenantId);
       const before = await readLastSeen(db, tenantId);
 
       const res = await driveOnce(db, tenantId, "primary");
 
       expect(res.status).toBe(200);
-      // No ambient cookie injected on a promoted node...
       expect(res.headers.get("set-cookie")).toBeNull();
-      // ...and no keepalive write, even though last_seen_at is stale. Proven by deletion: dropping the
-      // `getMode() !== "mirror"` guard makes this inject the cookie and refresh last_seen_at, reddening both.
       const after = await readLastSeen(db, tenantId);
-      expect(after).toBe(before);
+      expect(after).toBe(before); // no keepalive write, even though last_seen_at is stale
+      expect(await isEnded(db, tenantId)).toBe(false); // an untouched session is left alone
+    });
+  });
+
+  it("once promoted, a request carrying the ambient cookie ENDS the session and CLEARS the cookie", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      // The security fix: a client holding a pre-promotion ambient cookie must NOT keep admin access once
+      // the write gate opens. Promotion drops it — ends the ambient session (resolveManagementSession then
+      // 401s it) and clears the cookie. Proven by deletion: removing the end+clear block leaves the session
+      // live (isEnded false) and sets no clearing cookie, so a promoted node still auto-logs-in an admin.
+      const res = await driveWithCookie(
+        db,
+        tenantId,
+        `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
+        "primary",
+      );
+      expect(res.status).toBe(200);
+      expect(await isEnded(db, tenantId)).toBe(true);
+      // The ambient session no longer resolves — a promoted node requires real auth.
+      await expect(
+        withTenant(db, tenantId, (tx) => resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID)),
+      ).rejects.toThrow();
+      // A clearing Set-Cookie is emitted (an expiry), so the browser stops presenting the ambient id.
+      expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+    });
+  });
+
+  it("on a mirror, the keepalive REVIVES a session whose ended_at was stamped (even if last_seen_at is fresh)", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId); // fresh last_seen_at
+      // Defensively stamp ended_at while last_seen_at stays fresh — the throttle-only WHERE would skip the
+      // write and leave the session dead. The `or ended_at is not null` clause must revive it.
+      await withTenant(db, tenantId, (tx) =>
+        tx.execute(
+          sql`update management_sessions set ended_at = now() where id = ${MIRROR_VIEWER_SESSION_ID}`,
+        ),
+      );
+      expect(await isEnded(db, tenantId)).toBe(true);
+
+      const res = await driveOnce(db, tenantId); // mirror mode
+      expect(res.status).toBe(200);
+      // Proven by deletion: dropping `or ended_at is not null` leaves ended_at set and this reddens.
+      expect(await isEnded(db, tenantId)).toBe(false);
     });
   });
 });

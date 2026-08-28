@@ -1,7 +1,11 @@
 import type { MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
 import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
-import { readManagementSessionId, setManagementCookie } from "./management-session.js";
+import {
+  clearManagementCookie,
+  readManagementSessionId,
+  setManagementCookie,
+} from "./management-session.js";
 
 /** Fixed, stable ids so the seed is idempotent (upsert on a known PK) and the middleware can name the
  * ambient session without a lookup. Valid v4-shaped UUIDs; arbitrary but MUST never change (the seed
@@ -58,10 +62,12 @@ export async function ensureMirrorViewer(db: Database, tenantId: string): Promis
  * serialize on one row — accepted for the single-tenant DR-mirror posture (decision 4), not a bug.
  *
  * `getMode` is read PER REQUEST, exactly like the read-only gate, so promotion is a genuine flag-flip:
- * the moment the holder flips to `primary`, this middleware STOPS injecting the ambient admin viewer and
- * stops the keepalive, so a promoted node requires REAL auth. Without this guard, a promoted node would
- * open its write routes (the gate flips) while still auto-logging-in an admin — an
- * unauthenticated-admin-write bypass. On a live mirror the guard is always true (`getMode() === "mirror"`).
+ * the moment the holder flips to `primary`, a promoted node requires REAL auth. Merely not-injecting is
+ * not enough — a client holding a PRE-promotion ambient cookie would stay authenticated as admin the
+ * instant the gate opens writes. So on promotion this middleware actively DROPS the ambient admin: when
+ * the request still carries the ambient id it ENDS the ambient session (`resolveManagementSession` then
+ * 401s it) and clears the cookie. Without this, promotion would be an unauthenticated-admin-write bypass.
+ * A future re-mirror boot revives the ambient session via `ensureMirrorViewer`'s `ended_at = null` upsert.
  */
 export function mirrorSession(
   db: Database,
@@ -70,11 +76,27 @@ export function mirrorSession(
   getMode: () => DeploymentMode,
 ): MiddlewareHandler {
   return async (c, next) => {
-    if (getMode() !== "mirror") return next();
+    if (getMode() !== "mirror") {
+      // Promoted: drop the ambient admin. Only act when the request still presents the ambient id —
+      // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
+      if (readManagementSessionId(c) === MIRROR_VIEWER_SESSION_ID) {
+        await withTenant(db, tenantId, (tx) =>
+          tx.execute(sql`update management_sessions set ended_at = now()
+                         where id = ${MIRROR_VIEWER_SESSION_ID} and ended_at is null`),
+        );
+        clearManagementCookie(c);
+      }
+      return next();
+    }
+    // Throttled keepalive: refresh `last_seen_at` when it is stale, OR revive a session that was somehow
+    // ended (`ended_at is not null`). Clearing `ended_at` must NOT be gated behind the last_seen_at
+    // throttle alone — a stamped `ended_at` with a still-fresh `last_seen_at` would otherwise keep the
+    // session dead and 401 the next dashboard request.
     await withTenant(db, tenantId, (tx) =>
       tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
                      where id = ${MIRROR_VIEWER_SESSION_ID}
-                       and (last_seen_at is null or last_seen_at < now() - interval '1 minute')`),
+                       and (last_seen_at is null or last_seen_at < now() - interval '1 minute'
+                            or ended_at is not null)`),
     );
     // Inject the ambient cookie whenever the request does NOT already carry it — absent, corrupted, a
     // non-UUID, or a forged/foreign session id. A mirror is unauthenticated and holds only this one

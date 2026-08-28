@@ -203,10 +203,12 @@ with. Decision 4 serves it unauthenticated by giving every request an **ambient 
   after the 30-minute `IDLE_TIMEOUT_MS` is still refreshed before its gate checks expiry, WITHOUT a
   per-request write (`resolveManagementSession` already bumps on every gated request).
 - **The middleware is holder-gated, exactly like the read-only gate.** It reads the same
-  `deployment.mode` holder per request and does nothing (no cookie, no keepalive) unless the mode is
-  `mirror`. This is what makes promotion safe (§10): a flip to `primary` opens the write routes AND drops
-  the ambient admin login in the same instant, with no window where writes are open while an admin is
-  still auto-logged-in.
+  `deployment.mode` holder per request. On a mirror it injects/keeps the ambient session; on a flip to
+  `primary` it does more than stop injecting — a request still carrying the ambient cookie has its ambient
+  session **ended** (`ended_at` stamped, so `resolveManagementSession` 401s it) and the cookie **cleared**,
+  so an ambient login established before promotion cannot outlive it. This is what makes promotion safe
+  (§10): the write gate opens AND the ambient admin login is actively dropped in the same instant — no
+  window where writes are open while a pre-promotion admin cookie is still honoured.
 - **The viewer is visibly a mirror artifact** — a fixed display name (e.g. `"mirror viewer"`) so its
   appearance in a staff list reads as what it is. It is mirror-local and cannot reach the primary
   (persons is not synced), so it introduces no cross-node identity.
@@ -296,8 +298,9 @@ Decision 1 requires that a mirror can become a primary **without a restart**. C2
 
 - **What a flag-flip already achieves:** BOTH holder-gated middlewares read the refreshable holder per
   request, so `UPDATE deployment SET mode='primary'` + a refresh flips them together: the §5 gate
-  **opens every write route** live, AND the ambient viewer session (§6) **stops** auto-logging-in the
-  admin, so the promoted node requires real auth. This pairing is load-bearing — if only the gate were
+  **opens every write route** live, AND the ambient viewer session (§6) **ends any pre-promotion ambient
+  session and stops** auto-logging-in the admin, so the promoted node requires real auth. This pairing is
+  load-bearing — if only the gate were
   holder-gated, promotion would open the write routes *while* the ambient admin login was still active,
   an unauthenticated-admin-write bypass. Both flip in the same instant, no re-mount (decision 5's payoff).
 - **What promotion still needs (the deferred slice's job):** start the primary-only workers (§8) —
