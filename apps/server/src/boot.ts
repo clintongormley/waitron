@@ -628,8 +628,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
   // primary is today's flow. Read ONCE here into a refreshable holder so a later promotion
-  // (deployment.mode='primary') flips the read-only gate live, no restart (design §10). The pool is
-  // already open, so this DB read is free.
+  // (deployment.mode='primary' + a refresh of this holder) can flip the read-only gate live, no
+  // restart — the seam design §10 is "designed for, not built" in C2a (nothing refreshes it yet). The
+  // pool is already open, so this DB read is free.
   const modeHolder = { current: await readDeploymentMode(db) };
   const isMirror = modeHolder.current === "mirror";
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only

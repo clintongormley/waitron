@@ -49,7 +49,9 @@ export async function readDeploymentEnvironment(
 /**
  * Records which environment this database belongs to. Idempotent for the same value; a DIFFERENT
  * value is refused rather than overwritten, because the rows already written under the first one
- * cannot be moved (the design's §2).
+ * cannot be moved (the design's §2). This immutability is the ENVIRONMENT's alone: the same singleton
+ * row also carries `mode` (added 2026-08-28, cloud-mirror C2a), which IS mutable — `setDeploymentMode`
+ * below promotes a mirror to a primary in place (design §10), with no such "already stamped" guard.
  */
 export async function stampDeployment(
   db: Database,
