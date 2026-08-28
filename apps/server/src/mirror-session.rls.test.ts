@@ -1,0 +1,131 @@
+import { Hono } from "hono";
+import { sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "vitest";
+import { withTenant, type Database } from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { resolveManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "./management-session.js";
+import {
+  ensureMirrorViewer,
+  MIRROR_VIEWER_PERSON_ID,
+  MIRROR_VIEWER_SESSION_ID,
+  mirrorSession,
+} from "./mirror-session.js";
+
+// Real Postgres, not PGlite: the seed + keepalive write `persons` / `management_sessions`, both
+// tenant-scoped FORCE-RLS tables, as the NON-superuser `app_user`. A PGlite connection is superuser
+// and bypasses FORCE RLS (CLAUDE.md §4), so it would be a false pass — it could not show that
+// `app_user`'s 0001/0006 grants and the tenant-isolation policy actually admit these writes. The
+// mirror server (Task 5) hands `ensureMirrorViewer` / `mirrorSession` an app_user-authenticated pool,
+// so exercise them through one: `app_login` is a cluster LOGIN role that is a MEMBER of `app_user`
+// (apps/server/src/testing/global-setup.ts), inheriting its grants under FORCE RLS — the same
+// production shape the sibling RLS suites (sync-api.rls.test.ts) use.
+const suite = useTemplateDb({ template: "manifest" });
+
+// One shared tenant for the whole file. The viewer is a fixed-id SINGLETON (its PK is a constant), so
+// it belongs to whichever tenant first seeds it; a fresh tenant per test would make the second test's
+// `on conflict (id) do nothing` leave the person on tenant #1 and RLS-hide it from tenant #2. The
+// mirror is single-tenant, so one tenant is also the faithful shape. Data only — nothing to close, so
+// no teardown (useTemplateDb owns the clone).
+let tenantId: string;
+
+beforeAll(async () => {
+  tenantId = await seedTenant(suite.admin);
+});
+
+/**
+ * Runs `fn` with a fresh `app_login` (app_user member) pool, closed in a `finally` so the suite owns
+ * no database across tests — the house per-test `connectAs` pattern (guarded-teardowns only inspects
+ * `afterAll`/`afterEach`, so a `try/finally` closer here is in the clear).
+ */
+async function withAppUserDb<T>(fn: (db: Database) => Promise<T>): Promise<T> {
+  const db = await suite.pg.connectAs("app_login", "app_pw");
+  try {
+    return await fn(db);
+  } finally {
+    await db.close();
+  }
+}
+
+describe("mirror ambient viewer session (real Postgres, as app_user under FORCE RLS)", () => {
+  it("ensureMirrorViewer seeds an admin viewer + a live session that resolves", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      const person = await withTenant(db, tenantId, (tx) =>
+        tx.execute(sql`select role, display_name, length(pin_hash) > 0 as has_pin
+                       from persons where id = ${MIRROR_VIEWER_PERSON_ID}`),
+      );
+      // admin holds every permission, so every gated dashboard read passes authorizeManager; the pin
+      // hash is non-empty (the length>0 CHECK) yet unusable, so login can never resolve it.
+      expect(person.rows[0]).toMatchObject({
+        role: "admin",
+        display_name: "mirror viewer",
+        has_pin: true,
+      });
+
+      const resolved = await withTenant(db, tenantId, (tx) =>
+        resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID),
+      );
+      expect(resolved).toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
+    });
+  });
+
+  it("ensureMirrorViewer is idempotent (a second call does not throw or duplicate)", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      await ensureMirrorViewer(db, tenantId);
+      const n = await withTenant(db, tenantId, (tx) =>
+        tx.execute<{ c: string }>(
+          sql`select count(*)::text as c from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+        ),
+      );
+      expect(n.rows[0]?.c).toBe("1");
+    });
+  });
+
+  it("mirrorSession keeps the session live: a keepalive refreshes last_seen_at and sets the cookie", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      const readLastSeen = async (): Promise<string> => {
+        const r = await withTenant(db, tenantId, (tx) =>
+          tx.execute<{ last_seen_at: string }>(
+            sql`select last_seen_at from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
+          ),
+        );
+        return r.rows[0]!.last_seen_at;
+      };
+      const before = await readLastSeen();
+      await new Promise((r) => setTimeout(r, 15));
+
+      const app = new Hono();
+      app.use("*", mirrorSession(db, tenantId, false));
+      app.get("/thing", (c) => c.text("ok"));
+      const res = await app.request("/thing");
+
+      expect(res.status).toBe(200);
+      // No cookie on the request → the middleware injects the ambient session's id.
+      expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+      // Proven by deletion: dropping the keepalive `update` in mirrorSession leaves last_seen_at at the
+      // ensureMirrorViewer value, so `after` no longer advances past `before` and this reddens.
+      const after = await readLastSeen();
+      expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
+    });
+  });
+
+  it("mirrorSession leaves a request's existing management cookie untouched", async () => {
+    await withAppUserDb(async (db) => {
+      await ensureMirrorViewer(db, tenantId);
+      const app = new Hono();
+      app.use("*", mirrorSession(db, tenantId, false));
+      app.get("/thing", (c) => c.text("ok"));
+      const res = await app.request("/thing", {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}` },
+      });
+      expect(res.status).toBe(200);
+      // The request already carries the ambient session, so the middleware sets no new cookie — a real
+      // (or the ambient) session is never clobbered on a subsequent request.
+      expect(res.headers.get("set-cookie")).toBeNull();
+    });
+  });
+});
