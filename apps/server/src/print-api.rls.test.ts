@@ -377,3 +377,178 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage,
     expect(manager.status).toBe(204);
   });
 });
+
+/** Seed one till for `tenant` directly (owner SQL) — the target the receipt-printer route configures. */
+async function seedTill(tenant: Tenant, name: string): Promise<string> {
+  const row = await suite.admin.execute<{ id: string }>(sql`
+    insert into tills (tenant_id, location_id, name)
+    values (${tenant.tenantId}, ${tenant.locationId}, ${name}) returning id`);
+  return row.rows[0]!.id;
+}
+
+/** Read a till's currently-set receipt printer id (owner SQL, a distinct connection). */
+async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
+  const row = await suite.admin.execute<{ receipt_printer_id: string | null }>(
+    sql`select receipt_printer_id from tills where id = ${tillId}`,
+  );
+  return row.rows[0]!.receipt_printer_id;
+}
+
+/** Read a location's currently-set receipt print mode (owner SQL, a distinct connection). */
+async function locationPrintMode(locationId: string): Promise<string> {
+  const row = await suite.admin.execute<{ receipt_print_mode: string }>(
+    sql`select receipt_print_mode from locations where id = ${locationId}`,
+  );
+  return row.rows[0]!.receipt_print_mode;
+}
+
+describe("Receipt-printer + print-mode config routes over real Postgres (printer.manage, FORCE RLS)", () => {
+  it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
+    const app = mountApp(tenantA);
+    const agent = await enrolAgent(app, "Recibos agent");
+    const printerId = await createPrinter(app, agent.agentId, "Recibos");
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+
+    // Set it.
+    const set = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
+      cookie: managerCookie,
+      body: { printerId },
+    });
+    expect(set.status).toBe(204);
+    expect(await tillReceiptPrinterId(tillId)).toBe(printerId);
+
+    // Clear it (a till with no printer just doesn't print, §2).
+    const cleared = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
+      cookie: managerCookie,
+      body: { printerId: null },
+    });
+    expect(cleared.status).toBe(204);
+    expect(await tillReceiptPrinterId(tillId)).toBeNull();
+  });
+
+  it("404s a printer that is not one of the till's location's printers (never a 23503 → 500)", async () => {
+    const app = mountApp(tenantA);
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const res = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
+      cookie: managerCookie,
+      body: { printerId: randomUUID() },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await tillReceiptPrinterId(tillId)).toBeNull(); // unchanged
+  });
+
+  it("400s an unknown till and a malformed printerId body", async () => {
+    const app = mountApp(tenantA);
+    // Unknown till → management.request_invalid (there is no till.* code — retired at the node-id rekey).
+    const unknown = await send(
+      app,
+      "PATCH",
+      `/management-api/tills/${randomUUID()}/receipt-printer`,
+      {
+        cookie: managerCookie,
+        body: { printerId: null },
+      },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+
+    // A body with no printerId field at all → management.request_invalid naming the field.
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const noField = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
+      cookie: managerCookie,
+      body: {},
+    });
+    expect(noField.status).toBe(400);
+    expect(await noField.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+
+    // A non-uuid printerId → management.request_invalid (400, `requireBodyUuid`'s code), never a 22P02 → 500.
+    const badUuid = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
+      cookie: managerCookie,
+      body: { printerId: "not-a-uuid" },
+    });
+    expect(badUuid.status).toBe(400);
+    expect(await badUuid.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
+
+  it("sets a location's receipt print mode as a manager (persists)", async () => {
+    const app = mountApp(tenantA);
+    for (const mode of ["never", "on_request", "auto"] as const) {
+      const res = await send(
+        app,
+        "PATCH",
+        `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
+        { cookie: managerCookie, body: { mode } },
+      );
+      expect(res.status).toBe(204);
+      expect(await locationPrintMode(tenantA.locationId)).toBe(mode);
+    }
+  });
+
+  it("400s an unknown location and a bad print-mode value", async () => {
+    const app = mountApp(tenantA);
+    const unknown = await send(
+      app,
+      "PATCH",
+      `/management-api/locations/${randomUUID()}/receipt-print-mode`,
+      { cookie: managerCookie, body: { mode: "auto" } },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+
+    const badMode = await send(
+      app,
+      "PATCH",
+      `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
+      { cookie: managerCookie, body: { mode: "sometimes" } },
+    );
+    expect(badMode.status).toBe(400);
+    expect(await badMode.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
+
+  it("require printer.manage on BOTH config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
+    // Both config routes funnel through the SAME `gated` helper as the sibling printer/mapping routes, so
+    // the by-deletion proof recorded on the first gate block covers these too: deleting the
+    // `authorizeManager(...)` call from print-api.ts's `gated` flips every staff case below from 403 to a
+    // 2xx success, turning these assertions red; restoring it turns them green.
+    const app = mountApp(tenantA);
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const tillRoute = `/management-api/tills/${tillId}/receipt-printer`;
+    const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
+
+    // Unauthenticated → 401 on each route.
+    for (const route of [tillRoute, modeRoute]) {
+      const unauth = await send(app, "PATCH", route, { body: { printerId: null, mode: "auto" } });
+      expect(unauth.status).toBe(401);
+      expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+    }
+
+    // Staff session → 403 (the gate refuses it) on each route, BEFORE any write.
+    const staffTill = await send(app, "PATCH", tillRoute, {
+      cookie: staffCookie,
+      body: { printerId: null },
+    });
+    expect(staffTill.status).toBe(403);
+    expect(await staffTill.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    const staffMode = await send(app, "PATCH", modeRoute, {
+      cookie: staffCookie,
+      body: { mode: "never" },
+    });
+    expect(staffMode.status).toBe(403);
+    expect(await staffMode.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+
+    // Manager session → 204 (the gate admits it) on each route.
+    expect(
+      (await send(app, "PATCH", tillRoute, { cookie: managerCookie, body: { printerId: null } }))
+        .status,
+    ).toBe(204);
+    expect(
+      (await send(app, "PATCH", modeRoute, { cookie: managerCookie, body: { mode: "auto" } }))
+        .status,
+    ).toBe(204);
+  });
+});

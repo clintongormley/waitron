@@ -21,7 +21,7 @@ import {
   withTenant,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, TenantId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
@@ -40,7 +40,7 @@ import {
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
-import { enqueueSaleReceipt } from "./receipt-print.js";
+import { enqueueReceiptReprint, enqueueSaleReceipt } from "./receipt-print.js";
 
 /**
  * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
@@ -456,6 +456,43 @@ async function readSettledTicket(
     change,
     qr: filed.verificationUrl,
   };
+}
+
+/**
+ * MANUAL REPRINT of a filed sale's customer receipt (design §3d), keyed by the till's WORKING-ORDER id.
+ * `POST /api/sales/:id/reprint`'s `:id` is that working-order id — the id the till holds after a sale
+ * (`till-app.ts`'s `#store.id`, the client-minted idempotency key it sends on `POST /api/sales`); the
+ * `TillSaleResult` the till also holds carries no sale-ROW id, and `readSettledTicket` already keys the
+ * filed sale on the working-order id (`sales_working_order_id_key` makes that 1:1), so this reuses it
+ * rather than adding a sale-id reader. Reads the ALREADY-FILED record back and re-enqueues PAPER only —
+ * it FILES NOTHING (the fiscal record/huella/invoice number are untouched, §4) and never opens the drawer.
+ *
+ * An id that names no filed sale (an unknown, still-`open`, or foreign — RLS-hidden — order) is a 200
+ * NO-OP: there is nothing to reprint, mirroring the kitchen-reprint route (`reprintOrderTickets`) and
+ * guarding `readSettledTicket`'s "settled order has no sale" throw, which is corruption-only for its
+ * pay/collect callers (they hold a `for update` lock on a settled order) but reachable here from an
+ * arbitrary `:id`. A settled sale on a till with no active printer is likewise a no-op
+ * (`enqueueReceiptReprint` resolves no printer → enqueues nothing). Opens its OWN `withTenant`/`asAppUser`
+ * transaction (the sibling verbs' shape).
+ */
+export async function reprintSale(
+  deps: { db: Database; backend: FiscalBackend },
+  cfg: TillConfig,
+  workingOrderId: string,
+): Promise<void> {
+  await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    // Is there a filed sale for this working-order id? An unknown/open/foreign id names none → nothing
+    // to reprint. This existence check keeps `readSettledTicket`'s bare-Error "no sale" path unreachable
+    // here; a filed sale is immutable and never deleted, so once seen it is still there for the read below.
+    const [existing] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+    if (existing === undefined) return;
+    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+    await enqueueReceiptReprint(tx, cfg, ticket);
+  });
 }
 
 /**

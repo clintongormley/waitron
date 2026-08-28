@@ -20,8 +20,14 @@ import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
-import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
+import {
+  collectOrder,
+  payWorkingOrderIntegrated,
+  recordTillSale,
+  reprintSale,
+} from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
+import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
 import {
   clearPlacement,
   createTable,
@@ -238,6 +244,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // route is `table.not_found`, already mapped above.)
   "status.not_found": 404,
   "status.inactive": 409,
+  // Manual cash-drawer open (counter receipt/drawer §3d). `POST /api/drawer/open` on a till whose
+  // `receipt_printer_id` is unset has no printer to kick the drawer through — a configuration gap the
+  // operator fixes via the dashboard's printer picker, so a request-shape 400 (errors.ts spells out the
+  // 400 and the `drawer.*`-not-`printer.*`/`till.*` naming). Listed explicitly though 400 is the map's
+  // default, matching `placement.invalid`'s both-maps precedent and the rest of this table's 400 entries.
+  "drawer.no_printer": 400,
 };
 
 // The one error boundary every till route wraps its handler in — the shared `createErrorBoundary`
@@ -968,6 +980,49 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await reprintOrderTickets(tx, deps.cfg, id);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Reprint a FILED sale's customer receipt to the till's printer (counter receipt/drawer §3d) — the
+  // operator's "print it again" lever on the ticket screen. SESSION-GUARDED (an operational action, like
+  // the kitchen reprint above). The `:id` is the till's WORKING-ORDER id — the id the till holds after a
+  // sale (`#store.id`, the client-minted key it sent on `POST /api/sales`); `reprintSale` reads the
+  // ALREADY-FILED sale back by it (`readSettledTicket`, keyed on the same id) and re-enqueues PAPER only,
+  // filing NOTHING (§4). It IGNORES the location's `receipt_print_mode` (a reprint is always available,
+  // §0), so it works even under `on_request`/`never`, and never opens the drawer. An id naming no filed
+  // sale (unknown/open/foreign), or a till with no active printer, is a 200 NO-OP — the kitchen-reprint
+  // shape. The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404, the honest
+  // "no such order") rather than the `22P02` opaque 500 a malformed value would raise. Returns 200 empty.
+  app.post("/api/sales/:id/reprint", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id);
+      return c.body(null, 200);
+    }),
+  );
+
+  // Manually open the cash drawer (counter receipt/drawer §3d) — the operator's "open drawer" button, for
+  // a no-sale open (giving change, a cash count). SESSION-GUARDED and AUDITED: it records a
+  // `drawer_opens('manual')` row (who/when) beside a kick-only outbox job to the till's receipt printer
+  // (the drawer IS that printer's kick — deli-hardware §6). A till with NO receipt printer set has nothing
+  // to kick, refused `drawer.no_printer` (400, errors.ts) BEFORE any write — the resolve + throw is at
+  // this route layer (which imports errors.js), so `receipt-print.ts` stays throw-free. `resolveReceiptPrinter`
+  // takes the same `active = true` + `FOR SHARE` posture the sale hook uses, so an absent/inactive printer
+  // is the no-printer case. (The `cash.drawer` permission + supervisor override is the §8 fast-follow;
+  // this slice is session-gated + audited.) Returns 200 with an empty body.
+  app.post("/api/drawer/open", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const printer = await resolveReceiptPrinter(tx, deps.cfg);
+        if (printer === undefined) {
+          throw new AppError("drawer.no_printer", { tillId: deps.cfg.tillId });
+        }
+        await enqueueManualDrawerOpen(tx, deps.cfg, printer.id, personId);
       });
       return c.body(null, 200);
     }),
