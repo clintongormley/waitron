@@ -40,7 +40,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { DRAWER_KICK } from "./receipt-print.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
 
 // REAL Postgres, not PGlite: the manual reprint + drawer-open routes read a GENUINE chained fiscal
 // sale back and enqueue paper through the app role under RLS (CLAUDE.md §4 — PGlite runs every
@@ -251,18 +251,6 @@ async function saleCount(cfg: TillConfig): Promise<number> {
     await asAppUser(tx);
     return (await tx.select({ id: sales.id }).from(sales)).length;
   });
-}
-
-/** True iff `needle` occurs as a contiguous subsequence of `haystack` (the `receipt-ticket.test.ts` helper). */
-function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
-  if (needle.length === 0) return true;
-  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
 }
 
 /** Log in as `operatorId` (PIN "5555") through the HTTP surface and return the session cookie. */

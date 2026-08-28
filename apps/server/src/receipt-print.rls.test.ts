@@ -45,7 +45,7 @@ import type { TillConfig } from "./till-config.js";
 import { collectOrder, recordTillSale } from "./till-sale.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { DRAWER_KICK } from "./receipt-print.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
 
 // REAL Postgres, not PGlite: the point is the auto-print HOOK writing a `print_jobs` outbox row and a
 // `drawer_opens` audit row through the deployment role under RLS, atomically with a genuine chained
@@ -280,18 +280,6 @@ async function onlySaleId(cfg: TillConfig): Promise<string> {
     const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
   });
-}
-
-/** True iff `needle` occurs as a contiguous subsequence of `haystack` (the `receipt-ticket.test.ts` helper). */
-function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
-  if (needle.length === 0) return true;
-  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
 }
 
 beforeAll(() => {

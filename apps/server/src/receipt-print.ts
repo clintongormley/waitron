@@ -52,7 +52,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { getLayout } from "@waitron/layouts";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { TillConfig } from "./till-config.js";
-import type { TillSaleResult, TillTender } from "./till-sale.js";
+import type { TillSaleResult } from "./till-sale.js";
 
 /**
  * The cash-drawer pulse bytes (`ESC p 0 25 250`, Task 3's `esc().kick()`) appended after the receipt so
@@ -137,6 +137,28 @@ async function buildReceiptBytes(
 }
 
 /**
+ * Resolve BOTH inputs an enqueue path needs — the till's ACTIVE receipt printer and the built receipt
+ * bytes — or `undefined` when EITHER guard trips: no active printer (nothing to print to), or an
+ * unbuildable receipt (the structurally-unreachable missing-issuer degrade). Shared by the
+ * print-on-sale hook and the reprint so the resolve → build order and its two early-returns live in one
+ * place; each caller returns without enqueuing on `undefined`. `resolveReceiptPrinter` takes the
+ * FOR SHARE printer lock (header guard 1) and `buildReceiptBytes` degrades rather than throwing on the
+ * missing-issuer path (§5) — both preserved here.
+ */
+async function resolvePrinterAndReceipt(
+  tx: Transaction,
+  cfg: TillConfig,
+  ticket: TillSaleResult,
+): Promise<{ printer: { id: string }; receiptBytes: Uint8Array } | undefined> {
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined) return undefined;
+  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket);
+  /* v8 ignore next -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
+  if (receiptBytes === undefined) return undefined;
+  return { printer, receiptBytes };
+}
+
+/**
  * Auto-print the customer receipt for a just-filed counter sale, and — for a cash tender — append the
  * cash-drawer kick and record the drawer open (design §3c). Runs on the caller's `tx`, AFTER the sale is
  * filed/settled, so it commits atomically with the sale. Pure INSERTs; see the file header for the
@@ -159,7 +181,7 @@ export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: TillConfig,
   ticket: TillSaleResult,
-  tender: TillTender,
+  tenderMethod: "cash" | "card",
   saleId: string,
   operatorId?: string,
 ): Promise<void> {
@@ -173,20 +195,18 @@ export async function enqueueSaleReceipt(
   if (loc === undefined) return;
   if (loc.mode !== "auto") return;
 
-  // 2. The till's ACTIVE receipt printer (FOR SHARE-locked; header guard 1). No printer → nothing to enqueue.
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined) return;
-
-  // 3. The receipt bytes (issuer + trim + fiscal-locale rendering).
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket);
-  /* v8 ignore next -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
-  if (receiptBytes === undefined) return;
+  // 2/3. The till's ACTIVE receipt printer (FOR SHARE-locked; header guard 1) AND the receipt bytes
+  //       (issuer + trim + fiscal-locale rendering). No printer, or an unbuildable receipt → nothing to
+  //       enqueue.
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket);
+  if (resolved === undefined) return;
+  const { printer, receiptBytes } = resolved;
 
   // 4. Cash WITH a known operator → the drawer opens as the receipt prints: append the kick to the SAME
   //    payload and record the open. Card (no drawer) and the operator-less path (can't attribute the
   //    NOT-NULL `person_id`, header guard 2) both print the plain receipt with no kick and no audit row.
   let payload = receiptBytes;
-  if (tender.method === "cash" && operatorId !== undefined) {
+  if (tenderMethod === "cash" && operatorId !== undefined) {
     payload = withDrawerKick(receiptBytes);
     await tx.insert(drawerOpens).values({
       tenantId: cfg.tenantId,
@@ -218,12 +238,9 @@ export async function enqueueReceiptReprint(
   cfg: TillConfig,
   ticket: TillSaleResult,
 ): Promise<void> {
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined) return;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket);
-  /* v8 ignore next -- issuer row structurally always present (buildReceiptBytes); degrade, never throw */
-  if (receiptBytes === undefined) return;
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, receiptBytes);
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket);
+  if (resolved === undefined) return;
+  await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
 /**

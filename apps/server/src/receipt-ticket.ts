@@ -130,10 +130,21 @@ const FEED_BEFORE_CUT = 3;
  * The `€` glyph itself is left UNTOUCHED (its byte, 0xAC, is a code-page/hardware decision deferred to
  * the failover/hardware pass — design §5). `receipt-ticket.test.ts` pins that the separator is 0x20.
  */
+/**
+ * Cache the `Intl.NumberFormat` per locale, mirroring the sibling `apps/till/src/i18n/format.ts`.
+ * `formatMoney` runs ~12\u00d7 per receipt (every line, VAT row and total) \u2014 all at the SAME invoice
+ * locale \u2014 and building a formatter is the expensive part; the instances are immutable and safe to
+ * reuse. Keyed by locale (the only thing that varies), so a mixed-locale process stays correct.
+ */
+const formatters = new Map<string, Intl.NumberFormat>();
+
 function formatMoney(value: string, locale: string): string {
-  return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" })
-    .format(Number(value))
-    .replace(/[\u00a0\u202f]/g, " ");
+  let formatter = formatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" });
+    formatters.set(locale, formatter);
+  }
+  return formatter.format(Number(value)).replace(/[\u00a0\u202f]/g, " ");
 }
 
 /**

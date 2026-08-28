@@ -41,6 +41,7 @@ import { createOpenOrder, listStationQueue, parkOrder, placeOrder } from "./work
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import { DRAWER_KICK } from "./receipt-print.js";
+import { bytesInclude } from "./testing/decode-ticket.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite (CLAUDE.md §4). The split flow's P3 writes (recordSale + associate +
@@ -282,18 +283,6 @@ async function drawerOpenCount(cfg: TillConfig): Promise<number> {
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
   });
-}
-
-/** True iff `needle` occurs as a contiguous subsequence of `haystack` (the receipt-print suite helper). */
-function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
-  if (needle.length === 0) return true;
-  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
 }
 
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {

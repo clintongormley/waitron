@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 // `formatReceipt` is a PURE byte producer (design §3b) — no DB, no container, no fiscal state — so
@@ -60,18 +60,6 @@ const TRIM: ReceiptTrim = {
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return line.descriptions["es-ES"] ?? Object.values(line.descriptions)[0] ?? "";
-}
-
-/** True iff `needle` occurs as a contiguous subsequence of `haystack`. */
-function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
-  if (needle.length === 0) return true;
-  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
 }
 
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {

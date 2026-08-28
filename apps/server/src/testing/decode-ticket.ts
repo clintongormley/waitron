@@ -16,3 +16,20 @@
 export function decodeTicket(bytes: Uint8Array | Buffer): string {
   return Buffer.from(bytes).toString("latin1");
 }
+
+/**
+ * True iff `needle` occurs as a contiguous subsequence of `haystack`. The byte-exact counterpart to
+ * {@link decodeTicket}'s text search: the ESC/POS suites use it to assert a raw byte fragment (the
+ * drawer-kick pulse, a `qr()` command) is present in — or absent from — an enqueued payload, where a
+ * Latin-1 text decode would mangle the control bytes. An empty `needle` is vacuously present.
+ */
+export function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean {
+  if (needle.length === 0) return true;
+  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}

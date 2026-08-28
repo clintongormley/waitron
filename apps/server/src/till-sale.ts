@@ -631,7 +631,7 @@ async function fileImmediateSale(
   // till's printer and, for cash, append the drawer kick + record the open. NOTHING here can block or
   // fail the sale (CLAUDE.md §5) — see `receipt-print.ts`'s header. This is the shared filing tail, so
   // walk-up, retrieved pay and Mode-T collect all print through this one call.
-  await enqueueSaleReceipt(tx, cfg, ticket, tender, saleId, operatorId);
+  await enqueueSaleReceipt(tx, cfg, ticket, tender.method, saleId, operatorId);
   return ticket;
 }
 
@@ -873,16 +873,6 @@ export async function payWorkingOrderIntegrated(
 }
 
 /**
- * The tender handed to {@link enqueueSaleReceipt} on the integrated (Stripe Terminal) paths — ALWAYS a
- * card tender, because integrated pay is card-only. So every integrated receipt prints with NO drawer
- * kick and NO `drawer_opens` row (the hook's kick/audit fire only on a `cash` tender). `amount` is not
- * read by the receipt hook (it renders `ticket.total`/`change`, and only `tender.method` selects the
- * cash-vs-card branch), so a fixed placeholder is honest here rather than re-deriving the charged total
- * at four call sites.
- */
-const INTEGRATED_CARD_TENDER: TillTender = { method: "card", amount: "0.00" };
-
-/**
  * File the immediate card sale for a captured/offline-accepted integrated payment, LINK that payment,
  * and settle the order — P3 (tx B) of {@link payWorkingOrderIntegrated}, in ONE transaction so the
  * sale, its tender/settlement, its chained fiscal record, the payment association and the
@@ -1002,7 +992,7 @@ async function finalizeCapture(
         // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
         // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
         // winner's ticket is never re-printed — exactly one receipt per filed sale.
-        await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, saleId, operatorId);
+        await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
         return ticket;
       },
       { nodeId: cfg.nodeId },
@@ -1171,7 +1161,7 @@ async function finalizeRecovery(
       // this tx. Card → receipt, no kick. This is the fresh-file path; the FOR-UPDATE replay above (a
       // concurrent winner) returns without reaching here, so a recovery never double-prints. Never-block
       // as in `finalizeCapture` (`receipt-print.ts`).
-      await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, saleId, operatorId);
+      await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
       return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
@@ -1274,7 +1264,7 @@ async function finalizeSettle(
         // catch below stays UNHOOKED — a concurrent winner's ticket is never re-printed. Never-block as in
         // `finalizeCapture` (`receipt-print.ts`); a settle files nothing new, so the fiscal record is
         // byte-unchanged.
-        await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, outstanding.saleId);
+        await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
         return ticket;
       },
       { nodeId: cfg.nodeId },
@@ -1409,7 +1399,7 @@ async function finalizeSettleRecovery(
       // settle path. Card → receipt, no kick, no operator (card never opens the drawer). The FOR-UPDATE
       // replay above (a concurrent winner) returns without reaching here, so a recovery never
       // double-prints. Never-block / byte-unchanged fiscal record as in `finalizeSettle`.
-      await enqueueSaleReceipt(tx, cfg, ticket, INTEGRATED_CARD_TENDER, outstanding.saleId);
+      await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
       return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
@@ -1580,7 +1570,7 @@ export async function collectOrder(
         // (already `settled`) returns its ticket WITHOUT re-printing, so a lost-response retry never
         // enqueues a second receipt. `sale.id` is the just-settled invoice's id; NOTHING here can block
         // the sale (CLAUDE.md §5) — see `receipt-print.ts`.
-        await enqueueSaleReceipt(tx, cfg, ticket, req.tender, sale.id, operatorId);
+        await enqueueSaleReceipt(tx, cfg, ticket, req.tender.method, sale.id, operatorId);
         return ticket;
       }
 
