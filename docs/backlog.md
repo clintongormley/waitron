@@ -172,19 +172,29 @@ to be proven against a local stand-in cloud. Spec + plan:
   unbounded); ignore-`go`-before-`ack`; a registration/handshake timeout (a relay that accepts but never
   `ack`/`reject`/closes parks a pool slot until abort); and a `tunnelHttpClient` disposal seam for C's
   long-running subscriber. SNI-based multi-box routing is also T1's (the stand-in serves one box).
-- **C — cloud read-mirror** (deferred; builds on A+B — **next**). A "mirror mode" of `apps/server` that
-  pulls + applies into its own Postgres and serves the dashboard read-only, pointing `runSyncPull` at
-  B's `tunnelHttpClient`. **Owns the `dining_tables` FK-closure enrolment (the `fkRank` hard-gate)** —
-  the first slice to activate a real ordered-lane subscriber. Provable against a second local Postgres +
-  a reader on another port.
+- **C — cloud read-mirror.** Split (owner, 2026-08-27) into **C1 — the `dining_tables` FK-closure
+  enrolment — LANDED (#153)** and **C2 — the mirror-mode server — next**.
+  - **C1 LANDED (#153).** Enrolled the runtime-mutable FK closure — `dining_tables`, `floor_zones`,
+    `table_service_statuses` — into the commercial **ordered** lane (a new mutable / no-watermark /
+    no-delete registry shape), renumbered `fkRank` to place `dining_tables` above `working_orders`
+    while breaking the `dining_tables ↔ working_orders` cycle at the `tab_id` back-edge, added the
+    `0006` echo-gated capture triggers (no new grants), and a **proven-by-deletion** real-PG apply gate
+    (plus a settle-cascade test for the `0050` `working_orders → dining_tables` status-clear). This
+    closed the ordered-lane hard gate below. Spec + plan:
+    [c1-enrolment](superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md).
+  - **C2 — the mirror-mode server (next).** A third boot mode of `apps/server` that pulls through B's
+    `tunnelHttpClient`, applies into its own Postgres, and serves `apps/dashboard` **read-only, writes
+    refused** (no management-write-back in v1). **Provisioned once** with the box's matching config —
+    auto config-flow-down stays a deferred, separate slice. Its own spec → plan → build; provable
+    against a second local Postgres + a reader on another port.
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
-- **HARD GATE for the enrollment slice.** It must **enrol `dining_tables`** (correct `fkRank`) before
-  activating the `working_orders` subscriber, or a counter-delivery order (`delivery_table_id` FKs
-  the un-enrolled `dining_tables`) parks a `23503` and **holds the cursor below it**, stalling the
-  ordered lane. Likewise enrol `kitchen_stations` / `ticket_items` when the multi-node/cloud-mirror
-  kitchen-sync slice lands (both were built single-writer-per-row).
+- **HARD GATE — the `dining_tables` enrolment is DONE in C1 (#153).** The ordered lane no longer stalls
+  when a counter-delivery order (`delivery_table_id` FKs `dining_tables`) is applied — `dining_tables`
+  and its runtime-mutable parents are enrolled with the correct `fkRank`. **Still to do:** enrol
+  `kitchen_stations` / `ticket_items` when the multi-node/cloud-mirror kitchen-sync slice lands (both
+  were built single-writer-per-row).
 
 ### Reporting fiscal remainder (top-tier #3)
 
