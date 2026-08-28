@@ -120,7 +120,11 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s).toContain("12,10"); // line 1 gross
     expect(s).toContain("8,80"); // line 2 gross
     expect(s).toContain("10,00"); // base 21%
-    expect(s).toContain("2,10"); // IVA 21%
+    // IVA 21% cuota — pinned on the SAME rendered line as its label (lines are LF-separated). A bare
+    // `toContain("2,10")` would be satisfied by the "2,10" inside line-1 gross "12,10" (asserted above,
+    // a different/earlier line), so it would pass even with the 21% cuota suppressed; requiring the
+    // label and the amount on one line closes that hole while still failing if the cuota is removed.
+    expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
     expect(s).toContain("8,00"); // base 10%
     expect(s).toContain("0,80"); // IVA 10%
     expect(s).toContain("20,90"); // TOTAL

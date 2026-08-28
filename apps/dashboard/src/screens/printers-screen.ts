@@ -556,11 +556,16 @@ export class PrintersScreen extends LitElement {
 
   /** Set the receipt print mode on the location `locationId` holds, reflecting the pick locally (the
    * bump_mode precedent — no read route, so the segmented control tracks the operator's picks). A no-op
-   * reselect of the current mode still writes (idempotent server-side). A rejection becomes the
-   * `errorKey` banner. */
+   * reselect of the current mode still writes (idempotent server-side). The local pick is applied ONLY
+   * once the write RESOLVES, inside `#mutate`'s action (which then reloads, preserving it via `#load`'s
+   * `?? "auto"` seed): a rejection therefore leaves `printModes` untouched, so the segmented control
+   * keeps showing the PRIOR mode rather than the value that failed to save, and surfaces the `errorKey`
+   * banner — matching the receipt-printer picker, which reverts on failure via `updated()`. */
   async #setPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
-    this.printModes = { ...this.printModes, [locationId]: mode };
-    await this.#mutate(() => this.api.setReceiptPrintMode(locationId, mode));
+    await this.#mutate(async () => {
+      await this.api.setReceiptPrintMode(locationId, mode);
+      this.printModes = { ...this.printModes, [locationId]: mode };
+    });
   }
 
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
@@ -920,11 +925,15 @@ export class PrintersScreen extends LitElement {
   /** One till's receipt-printer picker (counter receipt/drawer §5) — a native <select> of the venue's
    * ACTIVE printers plus a "no printer" clear option. The <select> value is reconciled to the till's
    * PERSISTED `receiptPrinterId` in `updated()` (the native-select-before-options fix). NOTE the options
-   * are ALL active printers, not filtered by the till's location: the deli is single-location (every
-   * printer is in the till's location) and the client `Printer` shape carries no `locationId` to filter
-   * on (adding one is outside this slice's server scope) — and the server's PATCH route is the authority
-   * anyway, re-validating that the chosen printer is active in the till's OWN location (`printer.not_found`
-   * otherwise), so a wrong pick can never persist. */
+   * are ALL active printers, DELIBERATELY not filtered to the till's location: the deli is
+   * single-location (every printer is in the till's location), so a location filter would exclude
+   * nothing here. Client-side filtering is not blocked by any missing data — the `printers.location_id`
+   * column already exists in the DB (set at printer-insert time from `cfg.locationId`) and could be
+   * projected onto `@waitron/printing`'s `PrinterRow` and the dashboard `Printer` type (a small additive
+   * change; neither carries `locationId` today) — it is simply unnecessary for a single-location venue.
+   * Either way the server's PATCH route (`/management-api/tills/:id/receipt-printer`) is the authority:
+   * it re-validates that the chosen printer is ACTIVE and in the till's OWN location (`printer.not_found`
+   * otherwise), so a cross-location pick can never persist. */
   #renderTillPicker(till: Till): TemplateResult {
     const options = this.printers.filter((p) => p.active);
     return html`<li data-test="till-row-${till.id}">

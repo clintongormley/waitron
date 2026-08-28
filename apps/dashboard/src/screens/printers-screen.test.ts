@@ -906,6 +906,28 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("secondary");
   });
 
+  it("leaves the print-mode toggle on the PRIOR mode (not the failed value) and shows the banner when setReceiptPrintMode is rejected", async () => {
+    const api = stubApi({
+      setReceiptPrintMode: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // Default: auto is primary.
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
+
+    q(el, "[data-test=print-mode-loc-1-never]")!.click();
+    await flush(el);
+
+    // The write failed, so the local pick is NOT applied: the control still shows the prior mode
+    // (auto), never the "never" that failed to save.
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("secondary");
+    // ...and the failure is surfaced in the localised error banner (raw code never shown).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
+    expect(banner).not.toContain("management.request_invalid");
+  });
+
   it("shows the no-tills / no-locations placeholders when the venue has neither", async () => {
     const api = stubApi({
       listTills: vi.fn().mockResolvedValue([]),
