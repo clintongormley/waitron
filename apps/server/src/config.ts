@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
@@ -402,6 +403,41 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
     token,
     poolSize: positiveInt(env, "WAITRON_TUNNEL_POOL_SIZE", DEFAULT_TUNNEL_POOL_SIZE),
   };
+}
+
+export interface MirrorConfig {
+  /** The box's CA certificate PEM — the trust anchor `tunnelHttpClient` validates the box's TLS leaf
+   * against (`tunnel-http.ts`). Read from WAITRON_MIRROR_BOX_CA_FILE. */
+  ca: string;
+  /** The box hostname the cert is checked against (SNI + `checkServerIdentity`) — WAITRON_MIRROR_BOX_HOSTNAME. */
+  servername: string;
+}
+
+/**
+ * The mirror's link to its primary through B's tunnel: the box CA + box hostname `tunnelHttpClient`
+ * needs (§7). The pull PEERS (relay address + per-peer token) come from `loadSyncConfig`
+ * (WAITRON_SYNC_PEERS) — a mirror sets `url` to the RELAY and `token` to the sync peer token. Both
+ * vars required together (fail-closed, the `loadTunnelConfig`/`loadSyncConfig` posture); an empty value
+ * is refused — the empty-string trap (CLAUDE.md §3). Absent → `undefined` (a non-mirror sets neither).
+ * NOTE: this is C2a's ENV config; C2b moves it to DB-stored, wizard-entered config.
+ */
+export function loadMirrorConfig(env: Env): MirrorConfig | undefined {
+  const caFile = env.WAITRON_MIRROR_BOX_CA_FILE;
+  const hostname = env.WAITRON_MIRROR_BOX_HOSTNAME;
+  if (isUnset(caFile) && isUnset(hostname)) return undefined;
+  if (isUnset(caFile)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_MIRROR_BOX_CA_FILE",
+      reason: "required_with_mirror_hostname",
+    });
+  }
+  if (isUnset(hostname)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
+      reason: "required_with_mirror_ca",
+    });
+  }
+  return { ca: readFileSync(caFile, "utf8"), servername: hostname };
 }
 
 /**

@@ -1,9 +1,17 @@
-import { isAbsolute, resolve } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
-import { deploymentEnvironment, loadConfig, loadSyncConfig, loadTunnelConfig } from "./config.js";
+import {
+  deploymentEnvironment,
+  loadConfig,
+  loadMirrorConfig,
+  loadSyncConfig,
+  loadTunnelConfig,
+} from "./config.js";
 
 // Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
 // coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
@@ -894,6 +902,98 @@ describe("loadTunnelConfig", () => {
     expect(isAppError(error) && error.params).toEqual({
       variable: "WAITRON_TUNNEL_POOL_SIZE",
       reason: "not_a_positive_integer",
+    });
+  });
+});
+
+describe("loadMirrorConfig", () => {
+  // The mirror's box CA + hostname (the two tunnelHttpClient inputs, §7). The PULL peers (relay
+  // address + per-peer token) come from loadSyncConfig, not here — this loader only supplies the
+  // TLS trust anchor + servername. Both vars required together (fail-closed, the
+  // loadTunnelConfig/loadSyncConfig posture); an empty value is refused (the empty-string trap,
+  // CLAUDE.md §3); neither set → undefined (a non-mirror sets neither).
+  function writeCa(contents: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "mirror-ca-"));
+    const caPath = join(dir, "box-ca.pem");
+    writeFileSync(caPath, contents);
+    return caPath;
+  }
+
+  it("reads the box CA file + hostname when both are set", () => {
+    const caPath = writeCa("-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n");
+    const cfg = loadMirrorConfig({
+      WAITRON_MIRROR_BOX_CA_FILE: caPath,
+      WAITRON_MIRROR_BOX_HOSTNAME: "box.test",
+    });
+    expect(cfg).toEqual({
+      ca: expect.stringContaining("BEGIN CERTIFICATE"),
+      servername: "box.test",
+    });
+  });
+
+  it("is undefined when neither var is set (a non-mirror sets neither)", () => {
+    expect(loadMirrorConfig({})).toBeUndefined();
+  });
+
+  // A PARTIAL set fails closed, naming the MISSING variable — the same both-or-neither posture the
+  // TLS pair and loadTunnelConfig's box id/token take. Hostname set, CA file absent → the error
+  // names the CA file.
+  it("fails closed on a partial set (hostname without CA file), naming the CA file", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(loadMirrorConfig({ WAITRON_MIRROR_BOX_HOSTNAME: "box.test" })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MIRROR_BOX_CA_FILE",
+      reason: "required_with_mirror_hostname",
+    });
+  });
+
+  // Symmetric partial: CA file set, hostname absent → the error names the hostname.
+  it("fails closed on a partial set (CA file without hostname), naming the hostname", async () => {
+    const caPath = writeCa("x");
+    const error = await captureError(() =>
+      Promise.resolve(loadMirrorConfig({ WAITRON_MIRROR_BOX_CA_FILE: caPath })),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
+      reason: "required_with_mirror_ca",
+    });
+  });
+
+  // Empty string is unset (config.ts's own isUnset): WAITRON_MIRROR_BOX_HOSTNAME= beside a real CA
+  // file is a partial set, so an empty hostname is refused rather than reaching tunnelHttpClient as
+  // "" (the empty-string trap, CLAUDE.md §3).
+  it("refuses an empty hostname", async () => {
+    const caPath = writeCa("x");
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadMirrorConfig({ WAITRON_MIRROR_BOX_CA_FILE: caPath, WAITRON_MIRROR_BOX_HOSTNAME: "" }),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
+      reason: "required_with_mirror_ca",
+    });
+  });
+
+  // Symmetric empty-string case: WAITRON_MIRROR_BOX_CA_FILE= beside a real hostname is unset too, so
+  // the CA file is reported missing — never read as readFileSync("").
+  it("refuses an empty CA file path", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadMirrorConfig({
+          WAITRON_MIRROR_BOX_CA_FILE: "",
+          WAITRON_MIRROR_BOX_HOSTNAME: "box.test",
+        }),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MIRROR_BOX_CA_FILE",
+      reason: "required_with_mirror_hostname",
     });
   });
 });
