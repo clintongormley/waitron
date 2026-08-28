@@ -1001,6 +1001,44 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
+  /**
+   * Reprint the just-filed sale's receipt (counter receipt/drawer §5) — the ticket screen's "Reprint"
+   * button (`till-ticket-view` dispatches `reprint`; the view is presentational and holds no id). The
+   * WORKING-ORDER id is `this.#store.id`, which is STILL the just-filed sale's id at the ticket stage:
+   * `#onConfirmPayment`/`#onCollectCard`/`#onCollectOrder` set `this.result` + move to the `ticket`
+   * screen but NEVER clear `#store`, and {@link #onNewSale} is the one place that re-mints it (via
+   * `#store.clear()`) — so it names the sale the ticket is showing. NON-FISCAL: the server re-enqueues
+   * PAPER only and files nothing. A failure (incl. a till with no printer) is non-fatal — the ticket
+   * stays on screen and the operator retries — so it surfaces the generic `reprint.error` banner, never
+   * an unhandled rejection or the raw domain code (the `#onConfirmPayment` convention). Writes only
+   * reactive state, so no `isConnected` guard is needed (the app's DISCONNECT SAFETY note).
+   */
+  async #onReprint(): Promise<void> {
+    this.errorKey = undefined;
+    try {
+      await this.api.reprint(this.#store.id);
+    } catch {
+      this.errorKey = "reprint.error";
+    }
+  }
+
+  /**
+   * Open the cash drawer (counter receipt/drawer §5) — the ticket screen's "Abrir cajón" button
+   * (`till-ticket-view` dispatches `open-drawer`). Takes no id: the server resolves the till's printer
+   * from its own `cfg` and AUDITS the open (`drawer_opens('manual')`). A till with no receipt printer set
+   * rejects `{ code: "drawer.no_printer" }`, and a transient failure rejects too — both non-fatal, both
+   * surfaced as the generic `drawer.error` banner (never an unhandled rejection or the raw code, the
+   * `#onConfirmPayment` convention). Writes only reactive state, so no `isConnected` guard is needed.
+   */
+  async #onOpenDrawer(): Promise<void> {
+    this.errorKey = undefined;
+    try {
+      await this.api.openDrawer();
+    } catch {
+      this.errorKey = "drawer.error";
+    }
+  }
+
   /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
    * stage back to `"order"`, back to the counter. `cardOutcome` is cleared too — a new, unrelated
    * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. */
@@ -1301,6 +1339,8 @@ export class TillApp extends LitElement {
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
+        @reprint=${() => void this.#onReprint()}
+        @open-drawer=${() => void this.#onOpenDrawer()}
         @show-schedule=${() => this.#onShowSchedule()}
         @show-floor=${() => void this.#onShowFloor()}
         @floor-refresh=${() => void this.#refreshFloor()}

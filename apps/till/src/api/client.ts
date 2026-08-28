@@ -747,6 +747,36 @@ export class TillApi {
   }
 
   /**
+   * Reprint a FILED sale's customer receipt (counter receipt/drawer §3d/§5) → `POST /api/sales/:id/reprint`
+   * with an empty body — the ticket screen's "Reprint" lever. `workingOrderId` is the till's own
+   * working-order id (the client-minted key it sent on `POST /api/sales`, the id `recordSale` returns
+   * against and the till still holds at the ticket stage); the server reads the ALREADY-FILED sale back by
+   * it and re-enqueues PAPER only, filing NOTHING (§4 — the fiscal record is untouched) and IGNORING the
+   * location's `receipt_print_mode` (a reprint is always available, §0). NON-FISCAL and idempotent: an id
+   * naming no filed sale, or a till with no active printer, is a 200 NO-OP. The server answers an empty 200
+   * (`c.body(null, 200)`), so this resolves void; the empty `{}` body mirrors the sibling
+   * {@link reprintOrder}/{@link markCollected} order-level verbs (the route parses none).
+   */
+  async reprint(workingOrderId: string): Promise<void> {
+    await this.#request<void>(`/api/sales/${workingOrderId}/reprint`, "POST", {});
+  }
+
+  /**
+   * Manually open the cash drawer (counter receipt/drawer §3d/§5) → `POST /api/drawer/open` with an empty
+   * body — the ticket screen's "Abrir cajón" lever, for a no-sale open (giving change, a cash count).
+   * SESSION-gated and AUDITED server-side: it enqueues a kick-only outbox job to the till's receipt
+   * printer (the drawer IS that printer's kick) and records a `drawer_opens('manual')` row. It takes no
+   * id — the till's printer is resolved server-side from `cfg`. A till with NO receipt printer set has
+   * nothing to kick and rejects `{ code: "drawer.no_printer" }` (400); the caller surfaces that as its
+   * usual error banner, never an unhandled rejection. The server answers an empty 200 (`c.body(null,
+   * 200)`), so this resolves void; the empty `{}` body mirrors the empty-200 POST siblings (the route
+   * parses none).
+   */
+  async openDrawer(): Promise<void> {
+    await this.#request<void>("/api/drawer/open", "POST", {});
+  }
+
+  /**
    * Park a working order to pay later (park & retrieve, sub-project 7b) → `POST /api/working-orders`.
    * `id` is client-minted (the till mints the working-order uuid) so a lost-response retry is
    * idempotent against the primary key; `lines` carry no price — the server re-prices. Returns the

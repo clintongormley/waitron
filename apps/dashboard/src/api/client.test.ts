@@ -1877,4 +1877,62 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       credentials: "include",
     });
   });
+
+  // ── Receipt printer + print mode (counter receipt/drawer §5) ────────────────────────────────────
+  it("listTills GETs /management-api/tills and decodes the rows", async () => {
+    const tills = [
+      { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
+      { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(tills));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listTills()).toEqual(tills);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tills", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("setTillReceiptPrinter PATCHes the till's receipt-printer route with { printerId } (set + clear)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    // Set a printer.
+    await expect(api.setTillReceiptPrinter("t1", "p1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ printerId: "p1" }),
+    });
+    // Clear it — an explicit null in the body (a till with no printer just doesn't print).
+    await expect(api.setTillReceiptPrinter("t1", null)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ printerId: null }),
+    });
+  });
+
+  it("setTillReceiptPrinter rejects with { code } on a non-2xx (printer not in the till's location)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "printer.not_found" } }, false, 404));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setTillReceiptPrinter("t1", "p-foreign")).rejects.toMatchObject({
+      code: "printer.not_found",
+    });
+  });
+
+  it("setReceiptPrintMode PATCHes the location's print-mode route with { mode }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setReceiptPrintMode("loc-1", "on_request")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc-1/receipt-print-mode", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "on_request" }),
+    });
+  });
 });

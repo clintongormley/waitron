@@ -8,9 +8,10 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { jobStatusName, transportName } from "../i18n/domain.js";
+import { jobStatusName, printModeName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
+  LocationSummary,
   PrintAgentRow,
   PrintJobRow,
   PrintTicketScope,
@@ -18,8 +19,14 @@ import type {
   Printer,
   PrinterInput,
   PrinterPatch,
+  ReceiptPrintMode,
   Station,
+  Till,
 } from "../api/client.js";
+
+/** The three receipt print modes the per-location toggle offers, in render order — the `receipt_print_mode`
+ * pgEnum's members. `auto` leads (auto-print on every sale, the column default), then the two quieter modes. */
+const PRINT_MODES: readonly ReceiptPrintMode[] = ["auto", "on_request", "never"];
 
 /** A printer the row editor holds in local, editable state — a defensive copy of the loaded {@link Printer}
  * with the nullable connection columns flattened to STRINGS (`null` → `""`), so a `wt-input` can bind them
@@ -189,6 +196,11 @@ export class PrintersScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-3);
       }
+      .mode-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
     `,
   ];
 
@@ -206,6 +218,17 @@ export class PrintersScreen extends LitElement {
   // mutation. A printer with no id key reads as "no stations attached".
   @state() private stations: Station[] = [];
   @state() private printerStations: Record<string, string[]> = {};
+
+  // Counter receipt/drawer (§5): the venue's tills (the per-till receipt-printer picker's source) and its
+  // locations (the per-location print-mode toggle's list), both (re)loaded alongside the lists above.
+  @state() private tills: Till[] = [];
+  @state() private locations: LocationSummary[] = [];
+  // The per-location receipt print mode the toggle reflects — a locationId → mode map. FOLLOWS the KDS-1
+  // `bump_mode` precedent (kitchen-screen): `receipt_print_mode` has NO read route (only the tills route
+  // is server-side in this slice), so the toggle starts on the column default (`auto`) and reflects the
+  // OPERATOR's own picks. `#load` seeds an entry per location, preserving any pick already made, so a
+  // post-mutation reload does not reset the segmented control.
+  @state() private printModes: Record<string, ReceiptPrintMode> = {};
 
   // The generate-agent-code form's label, and the one-time code held ONLY here (never re-fetchable).
   @state() private newAgentLabel = "";
@@ -245,6 +268,17 @@ export class PrintersScreen extends LitElement {
     if (transport) transport.value = this.newTransport;
     const agent = this.#agentSelect.value;
     if (agent) agent.value = this.newAgentId;
+    // Reconcile each per-till receipt-printer <select> to the till's PERSISTED printer id (loaded from
+    // the tills route, or "" for none) — the same native-select-value-before-<option>-children fix the two
+    // create-form selects above use, applied to the dynamic per-till selects via a shadow-DOM query (the
+    // count varies per venue, so a fixed ref per select is not possible). After a set/clear mutation the
+    // reload updates `this.tills`, re-renders, and this pins each select to the new value.
+    for (const till of this.tills) {
+      const select = this.renderRoot.querySelector<HTMLSelectElement>(
+        `select[data-test="till-receipt-printer-${till.id}"]`,
+      );
+      if (select) select.value = till.receiptPrinterId ?? "";
+    }
   }
 
   /** (Re)load the agents, printers, jobs and kitchen stations, plus each printer's attached-station set.
@@ -256,7 +290,7 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null;
     this.armedRevokeId = null;
     try {
-      const [agents, printers, jobs, stations] = await Promise.all([
+      const [agents, printers, jobs, stations, tills, locations] = await Promise.all([
         this.api.listAgents(),
         this.api.listPrinters(),
         this.api.listRecentJobs(),
@@ -268,6 +302,12 @@ export class PrintersScreen extends LitElement {
         // `till.configure`, move this read to a `printer.manage`-gated stations endpoint (raised by
         // Copilot on the KDS-4 PR).
         this.api.listStations(),
+        // Counter receipt/drawer (§5): the tills (receipt-printer picker) + locations (print-mode toggle).
+        // `listTills()` is `printer.manage`-gated (this screen's own permission); `getLocations()` is
+        // `schedule.manage`-gated, the same unreachable-mismatch shape as `listStations()` above — both
+        // permissions map to {manager, admin}, so every user who reaches this screen holds both.
+        this.api.listTills(),
+        this.api.getLocations(),
       ]);
       // Pair each printer id with its OWN station set at fetch time, so the correlation cannot drift on
       // a later reorder/filter the way a positional array-zip would. (Still one call per printer — the
@@ -296,6 +336,14 @@ export class PrintersScreen extends LitElement {
       this.jobs = jobs;
       this.stations = stations;
       this.printerStations = printerStations;
+      this.tills = tills;
+      this.locations = locations;
+      // Seed one print-mode entry per location, PRESERVING any pick already made (the bump_mode
+      // precedent — no read route, so the toggle reflects the operator's picks, not the persisted value).
+      // A reload after a mode mutation therefore keeps the segmented control on the chosen mode.
+      this.printModes = Object.fromEntries(
+        locations.map((l) => [l.id, this.printModes[l.id] ?? "auto"]),
+      );
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -494,6 +542,25 @@ export class PrintersScreen extends LitElement {
         ? this.api.attachPrinterToStation(stationId, printerId)
         : this.api.detachPrinterFromStation(stationId, printerId),
     );
+  }
+
+  // ── Receipt printer + print mode (counter receipt/drawer §5) ─────────────────────────────────────
+
+  /** Set (or clear, with `null`) the receipt printer on the till `tillId` holds, then reload so the
+   * picker reflects the persisted value. A `""` from the "— no printer —" option is sent as a clearing
+   * `null`. A rejection (a printer not in the till's location → `printer.not_found`) becomes the
+   * `errorKey` banner via `#mutate`. */
+  async #setTillPrinter(tillId: string, value: string): Promise<void> {
+    await this.#mutate(() => this.api.setTillReceiptPrinter(tillId, value === "" ? null : value));
+  }
+
+  /** Set the receipt print mode on the location `locationId` holds, reflecting the pick locally (the
+   * bump_mode precedent — no read route, so the segmented control tracks the operator's picks). A no-op
+   * reselect of the current mode still writes (idempotent server-side). A rejection becomes the
+   * `errorKey` banner. */
+  async #setPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
+    this.printModes = { ...this.printModes, [locationId]: mode };
+    await this.#mutate(() => this.api.setReceiptPrintMode(locationId, mode));
   }
 
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
@@ -850,10 +917,105 @@ export class PrintersScreen extends LitElement {
     `;
   }
 
+  /** One till's receipt-printer picker (counter receipt/drawer §5) — a native <select> of the venue's
+   * ACTIVE printers plus a "no printer" clear option. The <select> value is reconciled to the till's
+   * PERSISTED `receiptPrinterId` in `updated()` (the native-select-before-options fix). NOTE the options
+   * are ALL active printers, not filtered by the till's location: the deli is single-location (every
+   * printer is in the till's location) and the client `Printer` shape carries no `locationId` to filter
+   * on (adding one is outside this slice's server scope) — and the server's PATCH route is the authority
+   * anyway, re-validating that the chosen printer is active in the till's OWN location (`printer.not_found`
+   * otherwise), so a wrong pick can never persist. */
+  #renderTillPicker(till: Till): TemplateResult {
+    const options = this.printers.filter((p) => p.active);
+    return html`<li data-test="till-row-${till.id}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label" data-test="till-label-${till.id}">${till.label}</span>
+          </div>
+          <label class="field"
+            >${t("printers.receipt_printer")}
+            <select
+              data-test="till-receipt-printer-${till.id}"
+              @change=${(e: Event) => {
+                e.stopPropagation();
+                void this.#setTillPrinter(till.id, (e.target as HTMLSelectElement).value);
+              }}
+            >
+              <option value="">${t("printers.receipt_no_printer")}</option>
+              ${options.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+            </select>
+          </label>
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
+  /** One mode button in a location's segmented print-mode control — the primary/secondary highlight +
+   * click-to-set idiom of the kitchen-screen's bump-mode option. */
+  #printModeOption(locationId: string, mode: ReceiptPrintMode): TemplateResult {
+    return html`<wt-button
+      variant=${(this.printModes[locationId] ?? "auto") === mode ? "primary" : "secondary"}
+      size="sm"
+      data-test="print-mode-${locationId}-${mode}"
+      @click=${() => void this.#setPrintMode(locationId, mode)}
+      >${printModeName(mode)}</wt-button
+    >`;
+  }
+
+  /** One location's receipt print-mode toggle (counter receipt/drawer §5) — a segmented auto/on_request/
+   * never control. Set-only (no read route this slice, the bump_mode precedent): it reflects the column
+   * default then the operator's picks. */
+  #renderPrintMode(loc: LocationSummary): TemplateResult {
+    return html`<li data-test="location-row-${loc.id}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label" data-test="location-name-${loc.id}">${loc.name}</span>
+          </div>
+          <div
+            class="mode-options"
+            role="group"
+            aria-label=${`${t("printers.print_mode")} ${loc.name}`}
+          >
+            ${PRINT_MODES.map((mode) => this.#printModeOption(loc.id, mode))}
+          </div>
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
+  #renderReceiptSection(): TemplateResult {
+    return html`
+      <section>
+        <h2 class="panel-title">${t("printers.receipt_title")}</h2>
+
+        <h3 class="panel-title">${t("printers.receipt_printer_title")}</h3>
+        ${
+          this.tills.length === 0
+            ? html`<p class="empty" data-test="no-tills">${t("printers.no_tills")}</p>`
+            : html`<ol>
+                ${this.tills.map((till) => this.#renderTillPicker(till))}
+              </ol>`
+        }
+
+        <h3 class="panel-title">${t("printers.print_mode_title")}</h3>
+        ${
+          this.locations.length === 0
+            ? html`<p class="empty" data-test="no-locations">${t("printers.no_locations")}</p>`
+            : html`<ol>
+                ${this.locations.map((loc) => this.#renderPrintMode(loc))}
+              </ol>`
+        }
+      </section>
+    `;
+  }
+
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("printers.title")}</h1>
-      ${this.#renderAgentsSection()} ${this.#renderPrintersSection()} ${this.#renderJobsSection()}
+      ${this.#renderAgentsSection()} ${this.#renderPrintersSection()}
+      ${this.#renderReceiptSection()} ${this.#renderJobsSection()}
       ${
         this.errorKey
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`

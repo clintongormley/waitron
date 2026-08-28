@@ -19,6 +19,9 @@ export const en = {
   "action.pay": "Pay",
   "action.confirm_payment": "Confirm payment",
   "action.new_sale": "New sale",
+  // Counter receipt/drawer (§5): the ticket screen's reprint-the-paper and open-the-cash-drawer levers.
+  "action.reprint": "Reprint",
+  "action.open_drawer": "Open drawer",
   "action.logout": "Log out",
   "action.remove": "Remove",
   "action.add": "Add",
@@ -232,6 +235,12 @@ export const en = {
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
   "sale.error": "Could not complete the sale, try again",
+  // Counter receipt/drawer (§5): a failed reprint or a failed drawer-open is NON-FATAL — the ticket
+  // stays on screen and the operator retries. `drawer.error` covers both a `drawer.no_printer` (no
+  // receipt printer set on this till) and a transient failure, staying generic like the sale/table
+  // errors (never the raw domain code), since the fix in either case is the same to the operator.
+  "reprint.error": "Could not reprint the receipt, try again",
+  "drawer.error": "Could not open the cash drawer, try again",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product was removed and dropped from the order",
   "held.stale": "That order is no longer available",
@@ -260,6 +269,8 @@ export const es: Record<StringKey, string> = {
   "action.pay": "Cobrar",
   "action.confirm_payment": "Confirmar cobro",
   "action.new_sale": "Nueva venta",
+  "action.reprint": "Reimprimir",
+  "action.open_drawer": "Abrir cajón",
   "action.logout": "Cerrar sesión",
   "action.remove": "Quitar",
   "action.add": "Añadir",
@@ -411,6 +422,8 @@ export const es: Record<StringKey, string> = {
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
+  "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
+  "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Se quitó un producto y se eliminó del pedido",
   "held.stale": "Ese pedido ya no está disponible",

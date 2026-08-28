@@ -506,6 +506,70 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     expect(await badMode.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
+  it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId } (printer set + unset)", async () => {
+    const app = mountApp(tenantA);
+    const agent = await enrolAgent(app, "Recibos agent 2");
+    const printerId = await createPrinter(app, agent.agentId, "Recibos 2");
+    const withPrinterName = `Caja ${randomUUID()}`;
+    const withoutPrinterName = `Caja ${randomUUID()}`;
+    const tillWith = await seedTill(tenantA, withPrinterName);
+    const tillWithout = await seedTill(tenantA, withoutPrinterName);
+
+    // Point one till at the printer via the existing config route; leave the other unset.
+    const set = await send(app, "PATCH", `/management-api/tills/${tillWith}/receipt-printer`, {
+      cookie: managerCookie,
+      body: { printerId },
+    });
+    expect(set.status).toBe(204);
+
+    const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{
+      id: string;
+      label: string;
+      locationId: string;
+      receiptPrinterId: string | null;
+    }>;
+    // Exact shape, both directions (a printer set, and null when unset — the picker's "none").
+    expect(rows.find((r) => r.id === tillWith)).toEqual({
+      id: tillWith,
+      label: withPrinterName,
+      locationId: tenantA.locationId,
+      receiptPrinterId: printerId,
+    });
+    expect(rows.find((r) => r.id === tillWithout)).toEqual({
+      id: tillWithout,
+      label: withoutPrinterName,
+      locationId: tenantA.locationId,
+      receiptPrinterId: null,
+    });
+  });
+
+  it("GET /management-api/tills is RLS-isolated: tenant A's list never carries tenant B's till", async () => {
+    const appA = mountApp(tenantA);
+    const foreignTill = await seedTill(tenantB, `Caja B ${randomUUID()}`);
+    const res = await send(appA, "GET", "/management-api/tills", { cookie: managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{ id: string }>;
+    expect(rows.some((r) => r.id === foreignTill)).toBe(false);
+  });
+
+  it("GET /management-api/tills requires printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion via the shared `gated`)", async () => {
+    // The list route funnels through the SAME `gated` helper as the sibling config/printer routes, so
+    // the by-deletion proof recorded on the first gate block covers it too: deleting the
+    // `authorizeManager(...)` call from print-api.ts's `gated` flips this staff case from 403 to 200,
+    // turning the assertion red; restoring it turns it green.
+    const app = mountApp(tenantA);
+    const unauth = await send(app, "GET", "/management-api/tills");
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+    const staff = await send(app, "GET", "/management-api/tills", { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const manager = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
+    expect(manager.status).toBe(200);
+  });
+
   it("require printer.manage on BOTH config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
     // Both config routes funnel through the SAME `gated` helper as the sibling printer/mapping routes, so
     // the by-deletion proof recorded on the first gate block covers these too: deleting the

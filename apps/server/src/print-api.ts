@@ -562,6 +562,36 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  // ── List this tenant's tills (printer.manage) ────────────────────────────────────────────────────
+  // Counter receipt/drawer §3d/§5 — the DATA SOURCE for the dashboard's per-till receipt-printer picker
+  // (it does not exist elsewhere). Returns each till as `{ id, label, locationId, receiptPrinterId }`:
+  // `label` projects `tills.name` (the till's display name — the column is `name`, the picker calls it a
+  // label), `locationId` is the till's location (so the picker can offer that location's printers), and
+  // `receiptPrinterId` the currently-set receipt printer (null = none) so the picker reflects the
+  // persisted value across a reload. Lives beside the sibling `PATCH …/tills/:id/receipt-printer`,
+  // funnelled through the SAME `gated` helper so `printer.manage` is enforced identically (the
+  // by-deletion proof on that helper covers this route too). Tenant-scoped by `gated`'s
+  // `withTenant` + `asAppUser` (RLS), with an explicit `tenant_id` predicate beside it — the same
+  // belt-and-braces the sibling till/location writes carry. Ordered by name for a stable list.
+  app.get("/management-api/tills", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            id: tills.id,
+            label: tills.name,
+            locationId: tills.locationId,
+            receiptPrinterId: tills.receiptPrinterId,
+          })
+          .from(tills)
+          .where(eq(tills.tenantId, deps.cfg.tenantId))
+          .orderBy(tills.name),
+      );
+      return c.json(rows);
+    }),
+  );
+
   // ── Set a till's receipt printer (printer.manage) ────────────────────────────────────────────────
   // Counter receipt/drawer §3d/§5 — the dashboard's per-till "receipt printer" picker. Points a till at
   // one of its OWN location's printers (which is also the cash-drawer kick — deli-hardware §6), or clears

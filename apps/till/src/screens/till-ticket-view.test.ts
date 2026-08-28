@@ -153,6 +153,47 @@ describe("till-ticket-view", () => {
     expect(captured!.composed).toBe(true);
   });
 
+  it("emits a composed, bubbling reprint event when Reprint is pressed (no API call from the view)", async () => {
+    // The view is PRESENTATIONAL: it dispatches the intent and never touches the API or the working-order
+    // id (till-app owns both). The event must bubble + compose so the app shell's `@reprint` catches it.
+    const { el } = await mount();
+    let captured: Event | undefined;
+    el.addEventListener("reprint", (e) => (captured = e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reprint]")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("emits a composed, bubbling open-drawer event when Abrir cajón is pressed", async () => {
+    const { el } = await mount();
+    let captured: Event | undefined;
+    el.addEventListener("open-drawer", (e) => (captured = e));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=open-drawer]")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("labels the reprint + open-drawer buttons in the operator-UI locale (es by default, en when switched)", async () => {
+    // UNLIKE the fiscal ticket body (invoice-locale Spanish constants), these two OPERATOR actions read
+    // the operator-UI `t()`, so they flip with the UI language — the i18n keys are English identifiers
+    // (`action.reprint`/`action.open_drawer`), the values are localised copy.
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
+      "Reimprimir",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")!.textContent).toContain(
+      "Abrir cajón",
+    );
+    setLocale("en");
+    const { el: enEl } = await mount();
+    expect(enEl.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain("Reprint");
+    expect(enEl.shadowRoot!.querySelector("[data-test=open-drawer]")!.textContent).toContain(
+      "Open drawer",
+    );
+  });
+
   it("renders the fiscal labels in the INVOICE locale (Spanish) even when the operator UI is English", async () => {
     // The receipt is a legal document issued in Spain: its labels are the invoice locale's, NOT the
     // operator's UI language. An English-speaking operator still hands over a Spanish ticket.
