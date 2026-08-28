@@ -102,6 +102,15 @@ declare module "@waitron/shared" {
      */
     "node.not_found": { id: string; tenantId: string };
     /**
+     * A write reached a node running as a read-only MIRROR. The mirror serves the dashboard read-only
+     * and pulls + applies a primary's rows; it refuses every non-GET at the HTTP layer (the read-only
+     * gate, `read-only-gate.ts`), because `deployment.mode = 'mirror'`. `node.*`, not `server.*`: it is a
+     * fact about the node's role in the topology, not about the process. No params — the refusal names no
+     * row, so a log line leaks nothing (the `sync.*`/`tunnel.*` discipline). Cleared by promotion
+     * (`deployment.mode = 'primary'`), read live so no restart is needed.
+     */
+    "node.read_only": Record<string, never>;
+    /**
      * `IdSistemaInformatico` is not a usable software identifier. AEAT caps it at two characters —
      * `packages/verifactu`'s `validate` encodes exactly that rule as `ID_SISTEMA_LENGTH`, and every
      * fixture in this repo uses `"WT"`.
