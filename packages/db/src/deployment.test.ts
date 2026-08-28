@@ -1,8 +1,13 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createPgliteDb, type Database } from "./client.js";
-import { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
-import { captureError } from "./testing/errors.js";
+import {
+  readDeploymentEnvironment,
+  readDeploymentMode,
+  setDeploymentMode,
+  stampDeployment,
+} from "./deployment.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 import { describeEachTarget } from "./testing/harness.js";
 
 // Deliberately outside describeEachTarget: every target's create() (testing/harness.ts)
@@ -16,6 +21,10 @@ import { describeEachTarget } from "./testing/harness.js";
 it("reads as unstamped when the table has not been created yet", async () => {
   const bare = await createPgliteDb();
   expect(await readDeploymentEnvironment(bare)).toBeNull();
+  // Same pre-migration handle: readDeploymentMode's `to_regclass` probe must see the table as
+  // absent and answer "primary" (an unstamped database is a primary) rather than throw, the exact
+  // state of a first-ever boot before the table-creating migration has run.
+  expect(await readDeploymentMode(bare)).toBe("primary");
   await bare.close();
 });
 
@@ -69,5 +78,45 @@ describeEachTarget("the deployment stamp", (target) => {
       db.execute(sql`insert into deployment (id, environment) values (2, 'preproduction')`),
     );
     expect(error).toBeDefined();
+  });
+
+  it("readDeploymentMode returns 'primary' by default and 'mirror' after setDeploymentMode", async () => {
+    // Fresh migrated DB, unstamped: an unstamped database is a primary.
+    expect(await readDeploymentMode(db)).toBe("primary");
+    await stampDeployment(db, "preproduction"); // creates the id=1 row
+    expect(await readDeploymentMode(db)).toBe("primary"); // default on the new row
+    await setDeploymentMode(db, "mirror");
+    expect(await readDeploymentMode(db)).toBe("mirror");
+    await setDeploymentMode(db, "primary"); // promotion is a legitimate reverse
+    expect(await readDeploymentMode(db)).toBe("primary");
+  });
+
+  it("the mode CHECK rejects any value outside primary/mirror", async () => {
+    await stampDeployment(db, "preproduction");
+    // Not `.rejects.toThrow(/deployment_mode_ck|23514/)`: drizzle-orm@0.45.2 wraps every failed
+    // query in a DrizzleQueryError whose own `.message` is `Failed query: <sql>` — the CHECK name
+    // and SQLSTATE live on `.cause`, which `toThrow` never reads (see tenancy.test.ts's
+    // `rejectsWithCauseMatching` / series.test.ts). Read the reason off the cause instead: 23514 is
+    // check_violation.
+    const error = await captureError(() =>
+      db.execute(sql`update deployment set mode = 'bogus' where id = 1`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/deployment_mode_ck/);
+  });
+
+  it("app_user may SELECT deployment but may NOT write it (the mode write is owner-only)", async () => {
+    // Read the ACL back both directions: the SELECT app_user should hold is present, and the
+    // INSERT/UPDATE it must NOT hold are absent (the mode write is an owner-role write — no new
+    // grant was added, so app_user's only privilege on deployment is 0010's table-wide SELECT).
+    // has_table_privilege reads pg_class.relacl regardless of the connected role, so this is the
+    // authoritative answer on the postgres target as much as on pglite.
+    const rows = await db.execute<{ sel: boolean; ins: boolean; upd: boolean }>(sql`
+      select
+        has_table_privilege('app_user', 'deployment', 'SELECT') as sel,
+        has_table_privilege('app_user', 'deployment', 'INSERT') as ins,
+        has_table_privilege('app_user', 'deployment', 'UPDATE') as upd
+    `);
+    expect(rows.rows[0]).toEqual({ sel: true, ins: false, upd: false });
   });
 });

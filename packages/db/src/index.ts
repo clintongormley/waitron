@@ -53,8 +53,13 @@ export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";
 export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
-export { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
-export type { DeploymentEnvironment } from "./deployment.js";
+export {
+  readDeploymentEnvironment,
+  readDeploymentMode,
+  setDeploymentMode,
+  stampDeployment,
+} from "./deployment.js";
+export type { DeploymentEnvironment, DeploymentMode } from "./deployment.js";
 export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
