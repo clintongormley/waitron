@@ -478,6 +478,13 @@ here is the cross-cutting or genuinely-decision-bearing work.
   `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by (tenant-via-RLS) + id;
   only *list* verbs scope by location. Unreachable today (single-location tenants); when multi-location
   lands, move the whole family at once.
+- **Hoist the receipt's ported money/date/label formatters into `packages/shared`** (from the
+  counter-receipt slice, #154). `formatReceipt` (`apps/server/src/receipt-ticket.ts`) hand-ports
+  `formatMoney`/`issueDate`/`lineName`/`LABEL`/`LEGEND` from `apps/till` because an
+  `apps/server → apps/till` dependency is forbidden — so the paper receipt is kept in lock-step with
+  the on-screen ticket by COPY, not by the type system. A fix to one silently skips the other (the
+  receipt already carries an NBSP-money normalization the screen lacks). Extract the shared, pure logic
+  into `packages/shared`, imported by both apps. Low-risk, low-urgency; small drift surface today.
 
 **Fiscal (deferred, each behind its own review):**
 
