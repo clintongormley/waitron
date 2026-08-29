@@ -32,6 +32,7 @@ import {
   type ServerConfig,
 } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
+import { createDeploymentHolders } from "./deployment-holders.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
 import {
@@ -639,19 +640,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (deployment.mode='primary' + a refresh of this holder) can flip the read-only gate live, no
   // restart — the seam design §10 is "designed for, not built" in C2a (nothing refreshes it yet). The
   // pool is already open, so this DB read is free.
-  const modeHolder = { current: await readDeploymentMode(db) };
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
-  // beside modeHolder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
+  // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, so a later promotion that flips
-  // this holder would start the duties on the next tick, no restart — but like modeHolder this seam is
-  // "designed for, not built": nothing refreshes it yet (the promote action is a later slice).
-  const singletonRoleHolder = { current: await readSingletonRole(db) };
-  const isMirror = modeHolder.current === "mirror";
+  // this holder would start the duties on the next tick, no restart — but like the mode holder this seam
+  // is "designed for, not built": nothing refreshes it yet (the promote action is a later slice).
+  const holders = createDeploymentHolders(
+    await readDeploymentMode(db),
+    await readSingletonRole(db),
+  );
+  const isMirror = holders.mode.current === "mirror";
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
   // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
   // Registered BEFORE the mounts below so Hono wraps them; `/health` (registered before this branch) is
   // deliberately not wrapped — it is a GET and must answer in every mode. A primary installs neither.
-  // BOTH middlewares read `modeHolder.current` per request, so promotion is a genuine flag-flip: when the
+  // BOTH middlewares read `holders.mode.current` per request, so promotion is a genuine flag-flip: when the
   // holder flips to 'primary', the gate opens writes AND the ambient viewer stops (real auth applies) —
   // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
   // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
@@ -659,7 +662,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (isMirror) {
     app.use(
       "*",
-      readOnlyGate(() => modeHolder.current),
+      readOnlyGate(() => holders.mode.current),
     );
     try {
       await ensureMirrorViewer(db, config.till.tenantId);
@@ -669,7 +672,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     }
     app.use(
       "*",
-      mirrorSession(db, config.till.tenantId, config.tls !== undefined, () => modeHolder.current),
+      mirrorSession(db, config.till.tenantId, config.tls !== undefined, () => holders.mode.current),
     );
   }
 
@@ -1138,7 +1141,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `/health` advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to
     // the singleton path. Running drain/reconcile on a non-singleton would contact AEAT/Stripe for a
     // host that must file and settle nothing (a mirror's real "work" is the pull worker above, §7).
-    // `singletonRoleHolder.current` is read PER PASS below, so a promotion that flips the holder to
+    // `holders.singletonRole.current` is read PER PASS below, so a promotion that flips the holder to
     // 'primary' starts these duties on the next tick, no restart.
     // NOTE: because a non-singleton's pass has no duties, `/health` reflects only process liveness,
     // NOT replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad
@@ -1146,7 +1149,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
     // for the C2a stand-in.
     pass: singletonPass(
-      () => singletonRoleHolder.current,
+      () => holders.singletonRole.current,
       (at) =>
         runPass(
           {
