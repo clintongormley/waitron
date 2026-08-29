@@ -79,7 +79,10 @@ describe("readChainHeight (real postgres)", () => {
   });
 
   it("returns the cadenas secuencia + actualizado_en once a chain row exists", async () => {
-    // Seed the chain head as OWNER: `app_user` holds SELECT on `cadenas`, not this arbitrary write.
+    // Seed the chain head as OWNER. `app_user` does hold SELECT/INSERT/UPDATE on `cadenas`
+    // (0001_registros_inmutables.sql:58), but the app never writes an arbitrary `secuencia` this way —
+    // it advances the head through `registerSif`'s locked upsert. Seeding as owner keeps that
+    // bypass out of the app role and out of RLS, and the READ below is what runs under the app role.
     await suite.admin.execute(sql`
       insert into cadenas (tenant_id, node_id, secuencia, actualizado_en)
       values (${tenantId}, ${nodeId}, 7, '2026-08-29T10:00:00Z')
