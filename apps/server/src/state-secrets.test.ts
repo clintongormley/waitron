@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat, symlink, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -54,6 +54,19 @@ describe("state-secrets", () => {
     );
     // The sibling path the traversal would have written to must not exist.
     await expect(readFile(join(dest, "..", "escape"), "utf8")).rejects.toThrow();
+  });
+
+  it("rejects a key whose parent is a symlink escaping destDir, writing nothing outside", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-symlink-"));
+    const outside = mkdtempSync(join(tmpdir(), "state-secrets-outside-"));
+    // Pre-existing `destDir/tls -> outside`: the key `tls/server.key` is lexically fine, but writing
+    // it would follow the symlink and land in `outside`. The symlink-aware guard must reject it.
+    await symlink(outside, join(dest, "tls"));
+    await expect(unpackBundleToDir({ "tls/server.key": "pwned\n" }, dest)).rejects.toThrow(
+      new AppError("recovery.bundle_invalid", { reason: "unsafe_path" }),
+    );
+    // Nothing was written into the outside dir the symlink pointed at.
+    expect(await readdir(outside)).toEqual([]);
   });
 
   it("unpacks a bundle to a dir with 0600 files and a tls/ subdir, round-tripping contents", async () => {

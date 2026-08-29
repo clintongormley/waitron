@@ -26,6 +26,13 @@ const SCRYPT = { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 }
 // Bounds an UNTRUSTED envelope's KDF cost so a hand-edited bundle cannot make decrypt allocate wildly.
 // The operator runs decrypt on their own bundle, so this is defence-in-depth, not a security boundary.
 const MAX_SCRYPT_N = 2 ** 20;
+// Bounds an UNTRUSTED envelope's ciphertext so a hostile bundle cannot make decrypt allocate a huge
+// Buffer (from `env.ct`) BEFORE the GCM auth failure. The bundle only ever holds 6 small secret files
+// (a JSON map of secrets.env + trading.env + 4 PEMs — well under a few KB), so 1 MiB is very generous.
+const MAX_PLAINTEXT_BYTES = 1024 * 1024;
+// The longest base64 STRING that can decode to MAX_PLAINTEXT_BYTES. Checked against env.ct.length
+// BEFORE any Buffer.from decode — decoding first would already have done the allocation we reject.
+const MAX_CT_BASE64_LENGTH = Math.ceil(MAX_PLAINTEXT_BYTES / 3) * 4;
 
 interface Envelope {
   v: number;
@@ -86,6 +93,11 @@ function parseEnvelope(envelopeJson: string): Envelope {
   ) {
     throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
   }
+  // Reject an over-large ciphertext on the base64 STRING length, BEFORE decryptBundle's
+  // `Buffer.from(env.ct, "base64")` allocates it — checking the decoded length would defeat the point.
+  if (e.ct.length > MAX_CT_BASE64_LENGTH) {
+    throw new AppError("recovery.bundle_invalid", { reason: "ct_too_large" });
+  }
   // Past the Number.isInteger guards N/r/p are known-numbers; name them once instead of re-casting.
   const N = kdf.N as number,
     r = kdf.r as number,
@@ -104,6 +116,13 @@ function parseEnvelope(envelopeJson: string): Envelope {
     // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync — which decryptBundle's try/catch turns
     // into our contract error. That try/catch, not this bound, is what guarantees no raw 500.
     128 * N * r > SCRYPT.maxmem ||
+    // Cap the base64 STRING length before decoding: salt/iv/tag decode to exactly 16/12/16 bytes
+    // (~24 base64 chars), so 64 is generous. Without this, a hostile huge salt/iv/tag string would
+    // allocate a large Buffer below just to be rejected by the exact-length check — same DoS shape
+    // as the ct cap. The === checks that follow remain the precise validation.
+    kdf.salt.length > 64 ||
+    e.iv.length > 64 ||
+    e.tag.length > 64 ||
     // Decoded byte lengths: a short/odd base64 salt/iv/tag passes the typeof check above but makes
     // scryptSync / createDecipheriv / setAuthTag throw a raw length error later.
     Buffer.from(kdf.salt, "base64").length !== 16 ||
@@ -142,5 +161,23 @@ export function decryptBundle(envelopeJson: string, passphrase: string): BundleF
     // GCM authentication failed: wrong passphrase OR tampered bundle — deliberately one code.
     throw new AppError("recovery.passphrase_invalid", {});
   }
-  return JSON.parse(plaintext.toString("utf8")) as BundleFiles;
+  // GCM auth proves the bundle is authentic, NOT that its plaintext is a string-map: someone who
+  // knows the passphrase can seal valid JSON that is an array or has non-string values, which would
+  // then throw a RAW error out of unpackBundleToDir's Object.entries/writeFileAtomic — the same
+  // contract-bypass class every other guard here closes. Validate the shape before returning it.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(plaintext.toString("utf8"));
+  } catch {
+    throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    !Object.values(parsed).every((v) => typeof v === "string")
+  ) {
+    throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
+  }
+  return parsed as BundleFiles;
 }
