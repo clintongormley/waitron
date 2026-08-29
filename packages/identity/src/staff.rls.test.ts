@@ -8,12 +8,13 @@ import type { PersonRoleValue } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
 import { listActivePersonsWithPermission } from "./staff.js";
 
-// REAL Postgres, not PGlite: `listActivePersonsWithPermission` runs the SELECT on persons as the
-// non-superuser deployment role `app_user` under FORCE ROW LEVEL SECURITY — the posture the drawer
-// route calls it in (`withTenant` + `asAppUser`). PGlite runs every connection as a superuser and
-// bypasses RLS (CLAUDE.md §4), so it could not prove the read is tenant-scoped for the real role.
-// `identity_rls_probe` is the cluster-wide non-superuser app_user member the package globalSetup
-// creates (see persons.rls.test.ts).
+// REAL Postgres, not PGlite: this exercises `listActivePersonsWithPermission`'s SELECT on persons
+// under RLS as a NON-SUPERUSER, tenant-scoped. It connects DIRECTLY as `identity_rls_probe` — a
+// cluster-wide login role globalSetup creates as a member of `app_user` (`inRole: "app_user"`,
+// testing/global-setup.ts) — rather than SET ROLE via `asAppUser`. A real member-of-`app_user`
+// login is subject to the SAME tenant-isolation policy the drawer route's production `withTenant` +
+// `asAppUser` posture runs under, so it proves the read is tenant-scoped; PGlite could not (every
+// connection a superuser, RLS bypassed — CLAUDE.md §4). Same probe pattern as persons.rls.test.ts.
 const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 const PIN = hashPin("1234");
