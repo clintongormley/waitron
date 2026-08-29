@@ -4,7 +4,11 @@
 -- `secondary` is sell-only. Two axes are needed because a local secondary in active-active is
 -- read-WRITE (it sells) yet holds no singletons — a state `mode` alone cannot express. Default 'primary'
 -- so every existing single-node deployment (mode='primary') stays a singleton-holder, unchanged —
--- pre-production, no backfill (CLAUDE.md §3/§5). Read by app_user through the table-wide SELECT 0010
+-- pre-production, no backfill (CLAUDE.md §3). This ADD COLUMN + deployment_role_valid_ck (below) assumes
+-- a FRESH build: the `deployment` row is inserted at runtime by `stampDeployment`, so the table is empty
+-- at migration time and the CHECK validates against zero rows. Migrating in place over a pre-existing
+-- `mirror` row (whose default backfill would be the forbidden (mirror, primary) pair) is out of scope —
+-- recreate, not migrate (CLAUDE.md §3). Read by app_user through the table-wide SELECT 0010
 -- already granted; the WRITE (demote-to-mirror, promote) is an OWNER-role write, no new grant (as `mode`).
 -- Selling never reads it (#33 — selling needs no role); only the fiscal pass does.
 ALTER TABLE "deployment" ADD COLUMN "singleton_role" text DEFAULT 'primary' NOT NULL;

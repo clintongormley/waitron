@@ -641,7 +641,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside modeHolder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, so a later promotion that flips
-  // this holder starts the duties on the next tick, no restart.
+  // this holder would start the duties on the next tick, no restart — but like modeHolder this seam is
+  // "designed for, not built": nothing refreshes it yet (the promote action is a later slice).
   const singletonRoleHolder = { current: await readSingletonRole(db) };
   const isMirror = modeHolder.current === "mirror";
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
