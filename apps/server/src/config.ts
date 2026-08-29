@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
@@ -405,39 +404,35 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
   };
 }
 
-export interface MirrorConfig {
-  /** The box's CA certificate PEM — the trust anchor `tunnelHttpClient` validates the box's TLS leaf
-   * against (`tunnel-http.ts`). Read from WAITRON_MIRROR_BOX_CA_FILE. */
-  ca: string;
-  /** The box hostname the cert is checked against (SNI + `checkServerIdentity`) — WAITRON_MIRROR_BOX_HOSTNAME. */
-  servername: string;
-}
-
 /**
- * The mirror's link to its primary through B's tunnel: the box CA + box hostname `tunnelHttpClient`
- * needs (§7). The pull PEERS (relay address + per-peer token) come from `loadSyncConfig`
- * (WAITRON_SYNC_PEERS) — a mirror sets `url` to the RELAY and `token` to the sync peer token. Both
- * vars required together (fail-closed, the `loadTunnelConfig`/`loadSyncConfig` posture); an empty value
- * is refused — the empty-string trap (CLAUDE.md §3). Absent → `undefined` (a non-mirror sets neither).
- * NOTE: this is C2a's ENV config; C2b moves it to DB-stored, wizard-entered config.
+ * The mirror's LOCAL pull config — the sync pool role + fast-lane tick. A mirror's CONNECTION to its
+ * primary (relay URL, box CA + hostname, per-peer token) no longer lives in env: C2b (spec §7) moved
+ * it to the DATABASE (`mirror_config`, written owner-role at adopt) and the vault
+ * (`sync.mirror_token`, sealed under the mirror's own box key), both read at mirror boot — this is the
+ * split C2a's env `loadMirrorConfig` + the mirror use of `WAITRON_SYNC_PEERS` anticipated. What stays
+ * in env is the mirror's OWN `sync_applier` pool (a `sync_tailer` + `app_user` member — `app_user` is
+ * never widened to reach `sync_cursor`, apply.ts / CLAUDE.md §3) from `WAITRON_SYNC_DATABASE_URL`, and
+ * the fast-lane tick. Everything peer-shaped is built at boot from the DB config, so `peers` is
+ * deliberately empty here (boot's mirror path never reads it). Unlike `loadSyncConfig`, this never
+ * returns `undefined`: a mirror MUST pull, so an absent `WAITRON_SYNC_DATABASE_URL` is a loud
+ * `server.config_missing` (fail-closed), not sync-off.
  */
-export function loadMirrorConfig(env: Env): MirrorConfig | undefined {
-  const caFile = env.WAITRON_MIRROR_BOX_CA_FILE;
-  const hostname = env.WAITRON_MIRROR_BOX_HOSTNAME;
-  if (isUnset(caFile) && isUnset(hostname)) return undefined;
-  if (isUnset(caFile)) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MIRROR_BOX_CA_FILE",
-      reason: "required_with_mirror_hostname",
-    });
-  }
-  if (isUnset(hostname)) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
-      reason: "required_with_mirror_ca",
-    });
-  }
-  return { ca: readFileSync(caFile, "utf8"), servername: hostname };
+export function loadMirrorSyncConfig(env: Env): SyncTransportConfig {
+  return {
+    databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
+    // A mirror's single peer (the relay + the vault token) is built at boot from `mirror_config` +
+    // `sync.mirror_token`, never from env — see boot.ts's mirror path.
+    peers: [],
+    fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
+    // Never read on a mirror (the retention sweep is `!isMirror`-gated in boot — a mirror holds no
+    // `sync_log` to prune), but the shared `SyncTransportConfig` shape requires it; defaulted so the
+    // type is honest rather than asserted.
+    retentionTickMs: positiveInt(
+      env,
+      "WAITRON_SYNC_RETENTION_TICK_MS",
+      DEFAULT_SYNC_RETENTION_TICK_MS,
+    ),
+  };
 }
 
 /**
