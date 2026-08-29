@@ -77,6 +77,25 @@ describe("setup-connect-screen", () => {
     });
   });
 
+  it("trims whitespace on primaryUrl/personId/totp but leaves the password verbatim", async () => {
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    const events = collect(host);
+    await fillValid(el, {
+      primaryUrl: "  https://waitron.local  ",
+      personId: "  op-1  ",
+      password: "  correct horse  ",
+      totp: "  123456  ",
+    });
+    q(el, "[data-test=connect]")!.click();
+    // A value that passed the trimmed non-empty check must not be sent verbatim: an untrimmed URL
+    // fails the primary's `new URL()`, an untrimmed personId misses the auth lookup (Copilot #162).
+    // The password keeps its surrounding whitespace — it can be an intentional part of a secret.
+    expect((events[0].detail as { body: unknown }).body).toEqual({
+      primaryUrl: "https://waitron.local",
+      credential: { personId: "op-1", password: "  correct horse  ", totp: "123456" },
+    });
+  });
+
   it("renders the password field as a password input (never a plaintext one)", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
     expect(q(el, "[data-test=password]")!.getAttribute("type")).toBe("password");

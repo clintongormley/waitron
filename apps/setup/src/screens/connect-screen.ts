@@ -96,10 +96,14 @@ export class SetupConnectScreen extends LitElement {
     this.showError = false;
 
     const totp = this.values.totp.trim();
+    // Trim the same fields the non-empty check trims (`primaryUrl`/`personId`/`totp`) so a value that
+    // passed validation with trailing whitespace is not sent verbatim — an untrimmed URL fails the
+    // primary's `new URL()` parse and an untrimmed personId misses the auth lookup, both confusing.
+    // `password` is left verbatim: whitespace can be intentional in a secret.
     const body: AdoptBody = {
-      primaryUrl: this.values.primaryUrl,
+      primaryUrl: this.values.primaryUrl.trim(),
       credential: {
-        personId: this.values.personId,
+        personId: this.values.personId.trim(),
         password: this.values.password,
         ...(totp === "" ? {} : { totp }),
       },
