@@ -1,6 +1,5 @@
 import {
-  readDeploymentMode,
-  readSingletonRole,
+  readDeploymentAxes,
   type Database,
   type DeploymentMode,
   type SingletonRole,
@@ -29,11 +28,17 @@ export function createDeploymentHolders(
  * Re-reads both axes from the database into the holders. The read runs on the app pool (`app_user` holds
  * SELECT on `deployment`, migration 0010); the promote action calls this AFTER its owner-role write so the
  * running gates and the fiscal pass observe the new state on their next tick (promotion runbook design §3b).
+ *
+ * Both axes come from a SINGLE `readDeploymentAxes` read (one MVCC snapshot), so the holders can never be
+ * assigned a torn `(mode, singleton_role)` pair — e.g. `(mirror, primary)` — that a concurrent promotion
+ * committing between two separate reads under READ COMMITTED could otherwise produce, and which
+ * `deployment_role_valid_ck` forbids from ever existing in a committed row.
  */
 export async function refreshDeploymentHolders(
   db: Database,
   holders: DeploymentHolders,
 ): Promise<void> {
-  holders.mode.current = await readDeploymentMode(db);
-  holders.singletonRole.current = await readSingletonRole(db);
+  const axes = await readDeploymentAxes(db);
+  holders.mode.current = axes.mode;
+  holders.singletonRole.current = axes.singletonRole;
 }
