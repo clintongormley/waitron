@@ -352,6 +352,22 @@ export const en = {
   "purchase.line_kind": "Kind",
   "purchase.add_line": "Add line",
   "purchase.remove_line": "Remove line",
+  // Business-overview home screen (the "today at a glance" post-login landing for non-staff roles)
+  "overview.title": "Today at a glance",
+  "overview.takings_title": "Takings today",
+  "overview.tender_total": "Tender total",
+  "overview.tips": "Tips",
+  "overview.gross_total": "Gross total",
+  "overview.counts_title": "Records today",
+  "overview.sales": "Sales",
+  "overview.corrections": "Corrections",
+  "overview.voids": "Voids",
+  "overview.tables_title": "Tables",
+  "overview.open_tables": "Open tables",
+  "overview.top_sellers_title": "Top sellers",
+  "overview.quantity": "Qty",
+  "overview.total": "Total",
+  "overview.empty_sellers": "No sales yet today",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -660,6 +676,21 @@ export const es: Record<StringKey, string> = {
   "purchase.line_kind": "Tipo",
   "purchase.add_line": "Añadir línea",
   "purchase.remove_line": "Eliminar línea",
+  "overview.title": "Hoy de un vistazo",
+  "overview.takings_title": "Recaudación de hoy",
+  "overview.tender_total": "Total cobrado",
+  "overview.tips": "Propinas",
+  "overview.gross_total": "Total bruto",
+  "overview.counts_title": "Registros de hoy",
+  "overview.sales": "Ventas",
+  "overview.corrections": "Rectificaciones",
+  "overview.voids": "Anulaciones",
+  "overview.tables_title": "Mesas",
+  "overview.open_tables": "Mesas abiertas",
+  "overview.top_sellers_title": "Más vendidos",
+  "overview.quantity": "Cant.",
+  "overview.total": "Total",
+  "overview.empty_sellers": "Aún no hay ventas hoy",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
