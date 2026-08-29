@@ -1948,3 +1948,85 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 });
+
+describe("DashboardApi — reporting (sales & takings)", () => {
+  it("getSalesOverview GETs the overview route and returns the parsed shape", async () => {
+    // Canned JSON mirroring `apps/server/src/report-api.ts`'s overview handler: money as decimal
+    // strings, counts, the open-tables tile and top sellers (frozen `descriptions` snapshot).
+    const overview = {
+      businessDay: "2026-08-29",
+      takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
+      counts: { sales: 37, corrections: 1, voids: 2 },
+      openTables: { open: 3, total: 12 },
+      topSellers: [
+        { descriptions: { es: "Café", en: "Coffee" }, quantity: "18.000", total: "36.00" },
+      ],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(overview));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getSalesOverview()).toEqual(overview);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overview", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("getDailyClose GETs the daily-close route with the businessDay query and returns the parsed shape", async () => {
+    // Canned JSON mirroring the daily-close handler: `{ businessDay, vat, cash, counts, topSellers }`,
+    // with per-till cash-up (`byMethod: {method, amount, tip}`, `cashTakings`) and VAT `{rate,base,tax}`.
+    const close = {
+      businessDay: "2026-08-28",
+      vat: {
+        byRate: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+        baseTotal: "100.00",
+        taxTotal: "21.00",
+        grossTotal: "121.00",
+      },
+      cash: {
+        byTill: [
+          {
+            tillId: "till-1",
+            byMethod: [
+              { method: "cash", amount: "80.00", tip: "5.00" },
+              { method: "card", amount: "41.00", tip: "0.00" },
+            ],
+            cashTakings: "80.00",
+          },
+        ],
+        tenderTotal: "121.00",
+        tipTotal: "5.00",
+      },
+      counts: { sales: 12, corrections: 0, voids: 1 },
+      topSellers: [{ descriptions: { es: "Tapa" }, quantity: "9.000", total: "45.00" }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(close));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getDailyClose("2026-08-28")).toEqual(close);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/reports/daily-close?businessDay=2026-08-28",
+      { method: "GET", credentials: "include" },
+    );
+  });
+
+  it("getSalesPeriod GETs the period route with from/to and returns the parsed shape", async () => {
+    // Canned JSON mirroring the period handler: `{ from, to, vat, topSellers }`.
+    const period = {
+      from: "2026-08-01",
+      to: "2026-08-28",
+      vat: {
+        byRate: [{ rate: "10.00", base: "500.00", tax: "50.00" }],
+        baseTotal: "500.00",
+        taxTotal: "50.00",
+        grossTotal: "550.00",
+      },
+      topSellers: [{ descriptions: { es: "Menú" }, quantity: "120.000", total: "1440.00" }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(period));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getSalesPeriod("2026-08-01", "2026-08-28")).toEqual(period);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/reports/period?from=2026-08-01&to=2026-08-28",
+      { method: "GET", credentials: "include" },
+    );
+  });
+});
