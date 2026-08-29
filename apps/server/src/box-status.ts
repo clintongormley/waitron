@@ -10,6 +10,7 @@ import {
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { SubscriberLag } from "@waitron/sync";
+import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
 import { checkTimeHealth, type TimeHealth } from "./time-health.js";
@@ -22,8 +23,8 @@ import type { Logger } from "./logger.js";
  * The box-status wire shape. `cert.available: false`, `replication.configured: false` and
  * `backup.configured: false` are the deliberate N/A placeholders — cert when no TLS path is
  * configured or the leaf is unreadable, replication when sync is off (Task 6 supplies the reader),
- * backup unconditionally until 4b fills it in. `chain` is passed through untouched; the "no records"
- * signal is `chain.height === 0`, never `chain.lastAt`.
+ * backup when scheduled backup is off (no reader wired). `chain` is passed through untouched; the "no
+ * records" signal is `chain.height === 0`, never `chain.lastAt`.
  */
 export type BoxStatus = {
   mode: DeploymentMode;
@@ -34,7 +35,7 @@ export type BoxStatus = {
   singletonRole: SingletonRole;
   replication:
     { configured: false } | { configured: true; worstLagSeq: string; subscribers: number };
-  backup: { configured: false };
+  backup: BackupStatus;
   duties: Record<string, unknown>;
 };
 
@@ -46,6 +47,7 @@ export type BoxStatusReaders = {
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
+  backup?: () => Promise<BackupStatus>;
   duties: () => Record<string, unknown>;
 };
 
@@ -82,6 +84,14 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     };
   }
 
+  // Backup mirrors replication's fail-loud posture, NOT cert's swallow: an absent reader means backup
+  // is off (`configured: false`), but a reader that FAULTS (a filesystem error reading the dump dir) is
+  // a real problem worth surfacing — never a silent fallback to "off".
+  let backup: BoxStatus["backup"] = { configured: false };
+  if (readers.backup !== undefined) {
+    backup = await readers.backup();
+  }
+
   return {
     mode,
     environment: readers.environment,
@@ -90,7 +100,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     chain,
     singletonRole,
     replication,
-    backup: { configured: false },
+    backup,
     duties: readers.duties(),
   };
 }
@@ -103,6 +113,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readReplicationLag: (() => Promise<SubscriberLag[]>) | undefined;
+  readBackup: (() => Promise<BackupStatus>) | undefined;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
 };
@@ -152,6 +163,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         chain: async () => chain,
         replicationLag: deps.readReplicationLag,
+        backup: deps.readBackup,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,
       });
