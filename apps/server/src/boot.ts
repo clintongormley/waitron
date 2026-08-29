@@ -75,6 +75,7 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
+import { mountBoxStatusApi } from "./box-status.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -1011,6 +1012,27 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       log("warn", "sync.retention_unconfigured", {});
     }
   }
+
+  // The operator box-status surface (onboarding slice 4a). Mounted AFTER the sync block so a later
+  // slice can hand it the sync-pool lag reader when sync is on; `readReplicationLag: undefined` here
+  // yields `replication.configured:false` (the free-tier single box, and today's wiring). GET-only, so
+  // the mirror read-only gate passes it; the ambient mirror viewer session makes
+  // `requireManagementSession` pass read-only on a mirror. `health` and `now` are the same bindings
+  // `healthApp(health, now)` used above; `config.tls?.certFile` is the served-leaf path (absent on a
+  // plain-HTTP boot → `cert.available:false`).
+  mountBoxStatusApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      environment: config.environment,
+      health,
+      now,
+      tlsCertPath: config.tls?.certFile,
+      readReplicationLag: undefined,
+    },
+    log,
+  );
 
   // The outbound cloud-mirror tunnel (sub-project B): enabled iff WAITRON_TUNNEL_RELAY_URL is set
   // (loadTunnelConfig). The box sits behind NAT with no inbound ports, so it dials OUT to the relay and
