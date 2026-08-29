@@ -11,6 +11,8 @@ import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
 import "../widgets/station-queue.js";
+// The multi-menu switcher shown above the grid — renders nothing for a single-menu location.
+import "../widgets/menu-switcher.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
 import "./till-allergen-screen.js";
@@ -22,6 +24,7 @@ import type {
   OrderFlow,
   StationQueueGroup,
   TillApi,
+  TillMenu,
   TillProduct,
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -117,8 +120,15 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   /** The shared working order every widget reads and mutates. Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
-  /** The sellable products, handed to the product grid (the only widget that needs them). */
+  /** ALL sellable products across the location's accessible menus. The product grid shows only the
+   * SELECTED menu's (see {@link #gridProducts}); the allergen lookup screen keeps the full set. */
   @property({ attribute: false }) products: TillProduct[] = [];
+  /** The location's accessible menus, handed to the menu switcher above the grid. With one menu (or none)
+   * the switcher renders nothing, so a single-menu location looks exactly as before. */
+  @property({ attribute: false }) menus: TillMenu[] = [];
+  /** The menu (catalogue) the grid currently shows — narrows {@link #gridProducts} and marks the active
+   * switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
+  @property() selectedMenuId = "";
   /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /**
@@ -218,6 +228,20 @@ export class TillCounterScreen extends LitElement {
     this.showAllergens = false;
   }
 
+  /** The products the GRID shows: only the selected menu's. Filtering here (never in the grid widget)
+   * keeps the switch to which tiles are visible — the basket is the store's, untouched by a menu switch.
+   * Removing this `.filter` shows every menu's products at once (the guard-by-deletion the app test pins).
+   * The allergen screen still reads the full {@link products}.
+   *
+   * With no menu selected (`selectedMenuId === ""` — pre-login, or a location with no catalogue at all)
+   * the grid shows everything rather than nothing: there is no menu to narrow by. A real single-menu
+   * location DOES select its one menu, and its products carry that `catalogueId`, so they match without
+   * relying on this fallback. */
+  #gridProducts(): TillProduct[] {
+    if (this.selectedMenuId === "") return this.products;
+    return this.products.filter((product) => product.catalogueId === this.selectedMenuId);
+  }
+
   /**
    * Map one layout entry to its element, handing over the shared store (and, for the grid, the
    * products). The switch is exhaustive over {@link WidgetType}, so adding a widget type without a
@@ -232,7 +256,7 @@ export class TillCounterScreen extends LitElement {
         // doc). The value is validated 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`).
         const columns = instance.config.columns;
         return html`<till-product-grid
-          .products=${this.products}
+          .products=${this.#gridProducts()}
           .store=${this.store}
           .columns=${typeof columns === "number" ? columns : undefined}
         ></till-product-grid>`;
@@ -308,6 +332,11 @@ export class TillCounterScreen extends LitElement {
               ></till-allergen-screen>`
             : html`<div class="body">
                 <div class="region region-main">
+                  <till-menu-switcher
+                    class="menu-switcher"
+                    .menus=${this.menus}
+                    .selectedId=${this.selectedMenuId}
+                  ></till-menu-switcher>
                   ${inRegion("main").map((widget) => this.#widget(widget))}
                 </div>
                 <div class="region region-aside">

@@ -4,6 +4,8 @@ import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import type { TillApi, TillProduct } from "./api/client.js";
 
+const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
+
 const products: TillProduct[] = [
   {
     id: "p1",
@@ -13,6 +15,8 @@ const products: TillProduct[] = [
     vatClass: "general",
     category: null,
     allergens: null,
+    catalogueId: "cat-default",
+    catalogueName: "Carta",
   },
 ];
 
@@ -26,7 +30,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
-    listProducts: vi.fn().mockResolvedValue(products),
+    listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products }),
     recordSale: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T).

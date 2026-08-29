@@ -25,6 +25,10 @@ import type {
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
+// The venue's default menu (catalogue) — every product fixture below is tagged with its id, so the
+// counter grid (which shows only the selected menu's products) renders them under the default selection.
+const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
+
 const cafe: TillProduct = {
   id: "cafe",
   descriptions: { "es-ES": "Café" },
@@ -33,6 +37,8 @@ const cafe: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
+  catalogueId: "cat-default",
+  catalogueName: "Carta",
 };
 
 const jamon: TillProduct = {
@@ -43,6 +49,8 @@ const jamon: TillProduct = {
   vatClass: "reduced",
   category: "charcutería",
   allergens: null,
+  catalogueId: "cat-default",
+  catalogueName: "Carta",
 };
 
 const heldSummary: HeldOrderSummary = {
@@ -193,7 +201,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueDefault: "es-ES",
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
-    listProducts: vi.fn().mockResolvedValue([cafe]),
+    listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe] }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
@@ -1263,7 +1271,7 @@ describe("till-app", () => {
 
   it("retrieve-order: an each quantity displays without trailing zeros; a weight keeps its decimals", async () => {
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue([cafe, jamon]),
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe, jamon] }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         id: "wo-1",
         orderNumber: 5,
@@ -3188,5 +3196,97 @@ describe("till-app", () => {
     resolveTill({ ...till, locale: "en" });
     await flush(el);
     expect(currentLocale()).toBe("es-ES"); // guard skipped setLocale on the detached app
+  });
+
+  // Multi-menu till: the switcher over the counter grid. A location may sell across several accessible
+  // menus; the grid shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
+  // (defaulting to the flagged menu at login), so a switcher pick re-filters the grid without touching
+  // the working order — an in-flight cart line survives.
+  describe("multi-menu switcher", () => {
+    const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
+    const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
+    const bocadillo: TillProduct = {
+      id: "bocadillo",
+      descriptions: { "es-ES": "Bocadillo" },
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      catalogueId: "cat-food",
+      catalogueName: "Comida",
+    };
+    const cerveza: TillProduct = {
+      id: "cerveza",
+      descriptions: { "es-ES": "Cerveza" },
+      pricingUnit: "each",
+      unitPrice: "2.50",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      catalogueId: "cat-drinks",
+      catalogueName: "Bebidas",
+    };
+    const twoMenuProducts = vi
+      .fn()
+      .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
+
+    /** The menu switcher inside the counter's main region. */
+    const switcher = (el: TillApp) =>
+      counter(el)!.shadowRoot!.querySelector<HTMLElement>(".region-main till-menu-switcher")!;
+    /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
+    const switcherButtons = (el: TillApp) => [
+      ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
+    ];
+    /** The product names the counter GRID is currently showing (its `wt-button.tile` labels). */
+    const gridNames = (el: TillApp) =>
+      [
+        ...counter(el)!
+          .shadowRoot!.querySelector("till-product-grid")!
+          .shadowRoot!.querySelectorAll(".name"),
+      ].map((n) => n.textContent);
+
+    it("shows the switcher and only the DEFAULT menu's products on the grid at login", async () => {
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      await toCounter(el);
+
+      // Both menus offered, default (Comida) first and marked pressed.
+      expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
+      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+      // The grid shows ONLY the default menu's product — the guard-by-deletion assertion: drop the
+      // screen's `#gridProducts` `.filter` (grid shows all products) and this fails on "Cerveza".
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+    });
+
+    it("re-filters the grid when a second menu is picked, and the in-flight cart line survives", async () => {
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+
+      // Ring the default menu's product into the working order (an in-flight cart line).
+      c.store.addProduct(bocadillo, "1");
+      await el.updateComplete;
+      expect(c.store.lineCount).toBe(1);
+
+      // Pick the second menu on the switcher — the real click → composed `menu-selected` → app.
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+
+      // The grid now shows ONLY the second menu's product; the switch marks Bebidas pressed.
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      // The cart is untouched — a menu switch changes which tiles are visible, never the basket.
+      expect(c.store.lineCount).toBe(1);
+      expect(c.store.lines[0]!.product.id).toBe("bocadillo");
+    });
+
+    it("with a SINGLE menu the switcher renders nothing and the grid shows every product (unchanged)", async () => {
+      // The default stubApi ships one menu (`defaultMenu`) with `cafe` on it — the pre-multi-menu shape.
+      const { el } = await mountApp();
+      await toCounter(el);
+
+      // The switcher element is present but renders no options — a single-menu venue looks as before.
+      expect(switcherButtons(el)).toHaveLength(0);
+      expect(gridNames(el)).toEqual(["Café"]);
+    });
   });
 });

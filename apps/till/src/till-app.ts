@@ -37,6 +37,7 @@ import type {
   TicketState,
   TillCourse,
   TillInfo,
+  TillMenu,
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
@@ -203,8 +204,16 @@ export class TillApp extends LitElement {
   @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
-  /** The sellable products, loaded at login and handed to the counter's product grid. */
+  /** ALL sellable products across the location's accessible menus, loaded at login. The counter/table
+   * screens are handed the DERIVED {@link #visibleProducts} (only the selected menu's), never this whole
+   * set — a menu switch re-filters this in place, it never re-fetches. */
   @state() private products: TillProduct[] = [];
+  /** The location's accessible menus (default first), loaded at login beside {@link products}. Drives the
+   * `<till-menu-switcher>`; with one menu the switcher renders nothing and the till looks as before. */
+  @state() private menus: TillMenu[] = [];
+  /** The menu (catalogue) the grid currently shows — set to the default menu at login, then to whatever
+   * the switcher's `menu-selected` picks. `""` before login / with no menus, which matches no product. */
+  @state() private selectedCatalogueId = "";
   /** The logged-in operator's display name, shown in the counter header. */
   @state() private operatorName = "";
   /** The logged-in operator's person id — threaded to the schedule screen so it can filter the
@@ -516,8 +525,12 @@ export class TillApp extends LitElement {
     // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
     // venue default, so a new operator with no choice keeps the venue's language.
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
-    const products = await this.api.listProducts();
+    const { menus, products } = await this.api.listProducts();
     this.products = products;
+    this.menus = menus;
+    // Show the location's default menu first (the server orders it first and flags `isDefault`), falling
+    // back to the first accessible menu, then "" (no menus — the grid shows nothing until one exists).
+    this.selectedCatalogueId = menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
     this.operatorName = displayName;
     this.operatorPersonId = personId;
     // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
@@ -575,6 +588,14 @@ export class TillApp extends LitElement {
    * station-queue widget (its whole-ticket bump is keyed by station). */
   #defaultStationId(): string | undefined {
     return this.stations.find((station) => station.isDefault)?.id;
+  }
+
+  /** The switcher picked a menu (`menu-selected`): show that menu's products. State-only — it changes
+   * `selectedCatalogueId`, which the screens thread into their grid filter, and NEVER touches the working
+   * order, so an in-flight cart line survives the switch. The screens keep the FULL {@link products} for
+   * name resolution (a tab spans menus) and allergen lookup; only their grid narrows. */
+  #onMenuSelected(event: CustomEvent<{ id: string }>): void {
+    this.selectedCatalogueId = event.detail.id;
   }
 
   /**
@@ -1421,6 +1442,7 @@ export class TillApp extends LitElement {
         @back-to-counter=${() => this.#onBackToCounter()}
         @logout=${() => void this.#onLogout()}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
         <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
@@ -1451,6 +1473,8 @@ export class TillApp extends LitElement {
           .api=${this.api}
           .store=${this.#store}
           .products=${this.products}
+          .menus=${this.menus}
+          .selectedMenuId=${this.selectedCatalogueId}
           .heldOrders=${this.heldOrders}
           .stationQueue=${this.stationQueue}
           .defaultStationId=${this.#defaultStationId()}
@@ -1492,6 +1516,8 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           .lines=${this.tabLines}
           .products=${this.products}
+          .menus=${this.menus}
+          .selectedMenuId=${this.selectedCatalogueId}
           .statuses=${this.statuses}
           .courses=${this.courses}
           .fireControl=${this.fireControl}

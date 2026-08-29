@@ -15,7 +15,15 @@ import { StoreChangeController } from "../state/store-controller.js";
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
-import type { TabLine, TableServiceStatus, TillCourse, TillProduct } from "../api/client.js";
+// The multi-menu switcher shown above the round grid — renders nothing for a single-menu location.
+import "../widgets/menu-switcher.js";
+import type {
+  TabLine,
+  TableServiceStatus,
+  TillCourse,
+  TillMenu,
+  TillProduct,
+} from "../api/client.js";
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
@@ -279,8 +287,16 @@ export class TillTableOrderScreen extends LitElement {
    * loaded via `getTabLines` and reloaded after each round/serve — and threads them in; the drawer,
    * total and badge render from these, never a re-price. */
   @property({ attribute: false }) lines: TabLine[] = [];
-  /** The sellable products, handed to the round product grid and used to resolve a line's name. */
+  /** ALL sellable products across the location's accessible menus. The round grid shows only the SELECTED
+   * menu's (see {@link #gridProducts}); a tab line's name is resolved against the FULL set ({@link #nameFor}),
+   * because a tab may span several menus and every line must still render its name whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
+  /** The location's accessible menus, handed to the menu switcher above the round grid. With one menu (or
+   * none) the switcher renders nothing, so a single-menu location looks exactly as before. */
+  @property({ attribute: false }) menus: TillMenu[] = [];
+  /** The menu (catalogue) the round grid currently shows — narrows {@link #gridProducts} and marks the
+   * active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`. */
+  @property() selectedMenuId = "";
   /** The table service statuses the Estado picker offers (the app derives + threads them). */
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's ACTIVE kitchen courses (KDS-2 §5b), from `GET /api/till` — the per-line course picker's
@@ -359,6 +375,18 @@ export class TillTableOrderScreen extends LitElement {
   /** The lines already served — the Servido section (no tick; the marker is set). */
   #served(): TabLine[] {
     return this.lines.filter((line) => line.servedAt !== null);
+  }
+
+  /** The products the round GRID shows: only the selected menu's. Filtering here (never in the grid
+   * widget) keeps the switch to which tiles are visible — the round store is untouched by a menu switch,
+   * so an in-flight round line survives it. Name resolution reads the FULL {@link products} (a tab spans
+   * menus). Removing this `.filter` shows every menu's products at once.
+   *
+   * With no menu selected (`selectedMenuId === ""`) the grid shows everything — there is no menu to
+   * narrow by (same fallback as the counter screen; a real single-menu location selects its one menu). */
+  #gridProducts(): TillProduct[] {
+    if (this.selectedMenuId === "") return this.products;
+    return this.products.filter((product) => product.catalogueId === this.selectedMenuId);
   }
 
   /** A line's display name from the catalogue, falling back to the raw id for a product deactivated
@@ -506,8 +534,13 @@ export class TillTableOrderScreen extends LitElement {
         </header>
         <div class="layout">
           <div class="grid-region">
+            <till-menu-switcher
+              class="menu-switcher"
+              .menus=${this.menus}
+              .selectedId=${this.selectedMenuId}
+            ></till-menu-switcher>
             <till-product-grid
-              .products=${this.products}
+              .products=${this.#gridProducts()}
               .store=${this.#roundStore}
             ></till-product-grid>
           </div>

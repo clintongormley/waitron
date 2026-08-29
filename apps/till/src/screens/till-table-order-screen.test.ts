@@ -367,4 +367,62 @@ describe("till-table-order-screen", () => {
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
   });
+
+  // Multi-menu: the round grid shows only the SELECTED menu's products, while a tab line's NAME still
+  // resolves against the full product set (a tab may span menus). The app owns the selection.
+  describe("multi-menu round grid", () => {
+    const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
+    const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
+    const bocadillo: TillProduct = {
+      ...cafe,
+      id: "bocadillo",
+      descriptions: { "es-ES": "Bocadillo" },
+      courseId: null,
+      catalogueId: "cat-food",
+      catalogueName: "Comida",
+    };
+    const cerveza: TillProduct = {
+      ...cafe,
+      id: "cerveza",
+      descriptions: { "es-ES": "Cerveza" },
+      courseId: null,
+      catalogueId: "cat-drinks",
+      catalogueName: "Bebidas",
+    };
+    const bothMenus = { menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] };
+
+    const gridNames = (el: TillTableOrderScreen) =>
+      [...grid(el).shadowRoot!.querySelectorAll(".name")].map((n) => n.textContent);
+    const switcherButtons = (el: TillTableOrderScreen) => [
+      ...el
+        .shadowRoot!.querySelector("till-menu-switcher")!
+        .shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
+    ];
+
+    it("filters the round grid to the selected menu; removing the filter shows every menu's products", async () => {
+      const { el } = await mount({ ...bothMenus, selectedMenuId: "cat-food" });
+      // Guard-by-deletion: drop `#gridProducts`'s `.filter` and this drops "Cerveza" in beside Bocadillo.
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+      expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
+
+      // Switching the selection (the app updates the prop) re-filters to the other menu.
+      el.selectedMenuId = "cat-drinks";
+      await el.updateComplete;
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+    });
+
+    it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {
+      // A cerveza (drinks menu) line on the tab while the FOOD menu is selected: the round grid hides
+      // cerveza, but the drawer must still name the line — name resolution reads the full products.
+      const cervezaLine: TabLine = { ...pendingLine, lineNo: 3, productId: "cerveza" };
+      const { el } = await mount({
+        ...bothMenus,
+        selectedMenuId: "cat-food",
+        lines: [cervezaLine],
+      });
+      await openDrawer(el);
+      expect(gridNames(el)).toEqual(["Bocadillo"]); // grid stays on the selected menu
+      expect(el.shadowRoot!.querySelector(".pending-line .name")!.textContent).toContain("Cerveza");
+    });
+  });
 });
