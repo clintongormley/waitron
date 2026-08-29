@@ -384,7 +384,13 @@ Collapse them when this moves from inventory to structure.
 
 ## 12. Explicitly out of scope for this note
 
-- **Pricing / packaging** into sellable tiers (free-local / connected / premium) — deferred.
+- **Pricing / packaging** into sellable tiers (free-local / connected / premium) — deferred. When this
+  pass happens, build a per-service **economics table**: our **cost-to-run** (the actual cloud cost —
+  storage/egress/compute/messaging/processor share per venue per month) against **what competitors
+  charge** for the equivalent (e.g. Square/Lightspeed/TheFork/Toast add-on prices). The **[B]
+  bulk-cost** services are exactly where this matters most — the margin *is* the product — and it
+  doubles as a reality check on the whole "cheaper in bulk" premise. A service where our cost-to-run
+  approaches the competitor price is a service to reconsider or renegotiate the supplier for.
 - **Prioritisation** — which to build first — deferred to a separate pass. Per house convention,
   ranking is by soundness / dependency / de-risking / reuse, not by any external deadline.
 

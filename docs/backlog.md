@@ -93,6 +93,16 @@ export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · on
 the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both reopen
 settled TS/KDS decisions, so specced-with-owner, never landed unattended).
 
+**Cloud services — parked for later review (north star, not yet ranked).** The
+[cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
+paid cloud offering we are building *towards* (the local-first-core + cloud model) and the decision
+rules for what belongs in cloud vs. the open-source ELv2 core (online-only-by-nature **or**
+bulk-cost economics; everything else is core, and we do not fight the community for a core feature).
+**Cloud features come later** — no Waitron-cloud infra exists yet (gates #5 and sync #2) — but the
+inventory records the target so on-prem work is built toward it (e.g. single-writer-per-row for sync,
+"make the box reachable" as one capability). **Review/prioritise into real slices when cloud work
+starts.**
+
 ---
 
 ## What's built (state per sub-project)
