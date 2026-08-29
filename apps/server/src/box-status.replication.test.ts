@@ -135,6 +135,7 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       tlsCertPath: undefined,
       readReplicationLag: () => lagFor(suite.admin),
       readMode: () => "primary",
+      readSingletonRole: () => "primary",
     },
     () => {},
   );
@@ -167,6 +168,7 @@ describe("GET /api/box/status replication summary (real postgres)", () => {
     const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
     expect(res.status).toBe(200);
     const body = await res.json();
+    expect(body.singletonRole).toBe("primary");
     expect(body.replication).toEqual({ configured: true, worstLagSeq: "7", subscribers: 2 });
   });
 });

@@ -1099,5 +1099,20 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /** The recovery-bundle download request carried no `passphrase` string (or an empty one). A
+     * client error — the operator must supply the passphrase the bundle will be encrypted under. */
+    "recovery.passphrase_required": Record<string, never>;
+    /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
+    "recovery.passphrase_too_short": { min: number };
+    /** Recovery-bundle decryption failed its GCM auth tag — a wrong passphrase OR a tampered
+     * bundle, deliberately indistinguishable (revealing which would help an attacker). */
+    "recovery.passphrase_invalid": Record<string, never>;
+    /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
+     * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
+    "recovery.bundle_invalid": { reason: string };
+    /** The box is missing one of its own persisted secret files, so a complete recovery bundle
+     * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
+     * fault, not a client error: the box has lost part of its own unrecoverable state. */
+    "recovery.state_incomplete": { missing: string };
   }
 }

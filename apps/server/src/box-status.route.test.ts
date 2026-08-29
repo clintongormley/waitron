@@ -111,6 +111,7 @@ function buildApp(
       tlsCertPath: opts.tlsCertPath,
       readReplicationLag: undefined,
       readMode: () => "primary",
+      readSingletonRole: () => "primary",
     },
     () => {},
   );
@@ -152,6 +153,7 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.mode).toBe("primary");
+    expect(body.singletonRole).toBe("primary");
     expect(body.environment).toBe("preproduction");
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
     expect(body.replication).toEqual({ configured: false }); // no lag reader
