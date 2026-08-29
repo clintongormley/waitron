@@ -37,7 +37,15 @@ export const catalogues = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [index("catalogues_tenant_id_idx").on(t.tenantId)],
+  (t) => [
+    index("catalogues_tenant_id_idx").on(t.tenantId),
+    // Composite target so a tenant-scoped join can carry a tenant-consistent (tenant_id, catalogue_id)
+    // FK — the same role `products_tenant_id_key` plays. Used by location_catalogues_catalogue_fk
+    // (schema/location-catalogues.ts): a membership row cannot reference another tenant's catalogue.
+    // `id` alone is already unique (it is the PK); this adds the composite so the FK can be
+    // tenant-consistent rather than merely referential.
+    unique("catalogues_tenant_id_key").on(t.tenantId, t.id),
+  ],
 ).enableRLS();
 
 /** Tenant-wide analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto

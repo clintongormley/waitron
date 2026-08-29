@@ -20,6 +20,7 @@ export * from "./print-jobs.js";
 export * from "./station-printers.js";
 export * from "./drawer-opens.js";
 export * from "./catalogue.js";
+export * from "./location-catalogues.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";
 export * from "./layouts.js";

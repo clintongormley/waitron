@@ -512,6 +512,20 @@
       "when": 1788051600000,
       "tag": "0072_mirror_config",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1788079139689,
+      "tag": "0073_location_catalogues",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1788079157678,
+      "tag": "0074_location_catalogues_rls",
+      "breakpoints": true
     }
   ]
 }
