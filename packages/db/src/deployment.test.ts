@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPgliteDb, type Database } from "./client.js";
 import {
+  readDeploymentAxes,
   readDeploymentEnvironment,
   readDeploymentMode,
   readSingletonRole,
@@ -177,5 +178,27 @@ describeEachTarget("the deployment stamp", (target) => {
   it("setSingletonRole fails loudly on an unstamped database", async () => {
     const error = await captureError(() => setSingletonRole(db, "secondary"));
     expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+  });
+
+  it("readDeploymentAxes returns both axes in one read", async () => {
+    // A (primary, secondary) sell-only-local-secondary node: a read-write primary holding no
+    // singletons. The single read must return exactly this pair — asserted with toEqual so a
+    // stray extra key or a wrong field fails.
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary");
+    expect(await readDeploymentAxes(db)).toEqual({ mode: "primary", singletonRole: "secondary" });
+  });
+
+  it("readDeploymentAxes reflects a mirror's co-set (mirror, secondary) pair", async () => {
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary");
+    await setDeploymentMode(db, "mirror");
+    expect(await readDeploymentAxes(db)).toEqual({ mode: "mirror", singletonRole: "secondary" });
+  });
+
+  it("readDeploymentAxes returns (primary, primary) on a freshly migrated, unstamped database", async () => {
+    // Unstamped: the singleton row does not exist. Each field falls back to 'primary', matching
+    // readDeploymentMode/readSingletonRole — an unstamped database is a sole primary.
+    expect(await readDeploymentAxes(db)).toEqual({ mode: "primary", singletonRole: "primary" });
   });
 });

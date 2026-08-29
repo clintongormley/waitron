@@ -1018,5 +1018,28 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "drawer.no_printer": { tillId: string };
+    /**
+     * A promote was requested without an operator attestation that the OLD node is physically
+     * neutralised (promotion runbook design §6). Software cannot verify a partitioned peer, so the promote
+     * action REFUSES to claim the singleton duties — two submitters under one NIF would race the AEAT
+     * flow-control budget (#33 §6). Thrown BEFORE any state change (before the point-of-no-return), so the
+     * node is left exactly as it was. No params: the refusal names nothing, and there is nothing non-secret
+     * to carry. `promotion.*` names the DOMAIN CONCEPT (a node promotion), never the throwing package —
+     * the rule `tenant.not_found`'s note above gives; `server.*` is reserved for facts about the process.
+     * Never renamed once shipped.
+     */
+    "promotion.fence_not_attested": Record<string, never>;
+    /**
+     * A local-secondary promote (promotion runbook design §5a) was called on a node that is a read-only
+     * MIRROR (`deployment.mode='mirror'`). A mirror holds no SIF and cannot become the submitter by a bare
+     * `singleton_role` flip — it needs the mirror→primary path (fresh-SIF mint from the pre-reserved
+     * identity, §5b), a later slice. Refused with THIS code BEFORE the write, giving a clean domain error
+     * rather than the raw `deployment_role_valid_ck` CHECK violation the `(mirror, primary)` write would
+     * otherwise raise (the CHECK is the backstop). `mode` is the node's own configured role, already in its
+     * config and not a secret — echoing it is what tells the operator which path to use, the same shape
+     * `deployment.environment_mismatch` follows. `promotion.*`, not `server.*`, for the reason
+     * `promotion.fence_not_attested` gives. Never renamed once shipped.
+     */
+    "promotion.not_a_local_secondary": { mode: string };
   }
 }

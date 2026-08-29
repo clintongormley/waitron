@@ -133,6 +133,34 @@ export async function readSingletonRole(db: Database): Promise<SingletonRole> {
   return rows.rows[0]?.singleton_role ?? "primary";
 }
 
+/**
+ * Reads both `deployment` axes — `mode` and `singleton_role` — in a SINGLE query, so the pair is
+ * taken from one MVCC snapshot and is always internally consistent. The single-axis readers above
+ * (`readDeploymentMode` + `readSingletonRole`) each run their own query, so under READ COMMITTED a
+ * concurrent promotion committing between the two reads can hand a caller a torn pair — e.g.
+ * `(mirror, primary)`, the exact combination `deployment_role_valid_ck` forbids (a read-only mirror
+ * cannot hold singletons) and which therefore never exists in any single committed row. This reader
+ * cannot observe that pair: one `select mode, singleton_role from deployment where id = 1` sees both
+ * columns as of the same snapshot. Same `to_regclass` existence probe (not a caught undefined-table
+ * error) the single-axis readers use and for the same transaction-poisoning reason; the same
+ * per-field `?? "primary"` fallback for an unstamped database (a sole primary).
+ */
+export async function readDeploymentAxes(
+  db: Database,
+): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
+  const present = await db.execute<{ exists: boolean }>(
+    sql`select to_regclass('public.deployment') is not null as exists`,
+  );
+  if (present.rows[0]?.exists !== true) return { mode: "primary", singletonRole: "primary" };
+  const rows = await db.execute<{ mode: DeploymentMode; singleton_role: SingletonRole }>(
+    sql`select mode, singleton_role from deployment where id = 1`,
+  );
+  return {
+    mode: rows.rows[0]?.mode ?? "primary",
+    singletonRole: rows.rows[0]?.singleton_role ?? "primary",
+  };
+}
+
 /** Sets this database's singleton-ownership role. An OWNER-role write (app_user holds no UPDATE on
  * deployment), like `setDeploymentMode`; fail-loud on a 0-row update (stamp the environment first).
  * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
