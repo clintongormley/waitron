@@ -152,6 +152,21 @@ declare module "@waitron/shared" {
      */
     "server.internal": Record<string, never>;
     /**
+     * A MIRROR node was asked to bind its HTTP listener to a NON-loopback host without the explicit
+     * `WAITRON_MIRROR_ALLOW_EXPOSED` opt-in. A mirror serves an UNAUTHENTICATED admin dashboard
+     * (`ensureMirrorViewer` seeds a full-admin viewer, `mirrorSession` auto-injects its cookie), so
+     * the ONLY thing keeping that surface off the network is the loopback default of
+     * `WAITRON_HTTP_HOST`. The boot FAILS CLOSED here (`assertMirrorBindSafe`, before `serve`) rather
+     * than expose it. `server.*` — a fact about the PROCESS refusing to bind, not about a sale,
+     * payment or credential; the guard is a property of THIS host's configuration.
+     *
+     * `host` is the operator's own `WAITRON_HTTP_HOST` value, echoed to name the unsafe bind — it is
+     * this host's own config, never attacker-supplied and never a secret, exactly as
+     * `server.config_missing`'s `variable` and `server.listen_failed`'s `port` are. Never renamed
+     * once shipped.
+     */
+    "server.mirror_bind_exposed": { host: string };
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *

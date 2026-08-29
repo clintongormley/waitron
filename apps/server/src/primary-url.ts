@@ -54,7 +54,14 @@ function invalid(): AppError {
 /**
  * True when `host` (a URL hostname, bracketed IPv6 accepted) is a loopback address: `localhost`, any
  * IPv4 in 127.0.0.0/8, or the IPv6 `::1`. Loopback is the one host the adopt policy allows over plain
- * http. Exported so the mirror-connect classifier (Task 3) shares one definition of loopback.
+ * http. Exported so the mirror-bind guard (`mirror-bind-guard.ts`) shares one definition of loopback.
+ *
+ * CONTRACT: the ideal input is a hostname already normalized by `new URL` (lowercased, no scheme, no
+ * port, IPv6 without its `[...]` brackets — though a bracketed literal is tolerated). It is
+ * deliberately FAIL-CLOSED for the mirror-bind caller, which feeds the RAW `WAITRON_HTTP_HOST` value:
+ * any form NOT recognized as loopback returns `false` (treated as non-loopback). So the caller may
+ * over-refuse an exotic loopback spelling but can NEVER wrongly accept a non-loopback host as
+ * loopback — the safe direction for a bind guard.
  */
 export function isLoopbackHost(host: string): boolean {
   const h = host.toLowerCase();

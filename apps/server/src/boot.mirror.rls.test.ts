@@ -326,6 +326,69 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
 
+  it("refuses a mirror boot binding a non-loopback host without the WAITRON_MIRROR_ALLOW_EXPOSED opt-in", async () => {
+    // The mirror serves its dashboard through an ambient full-admin viewer (the first test above proves
+    // that surface is UNAUTHENTICATED), so binding it to a routable host would expose admin with no auth.
+    // `assertMirrorBindSafe` (wired right after `isMirror` is read, before the ambient viewer is seeded)
+    // fails the boot CLOSED with `server.mirror_bind_exposed` naming the host — BEFORE the socket binds.
+    // The `mirror` clone (mirror_config seeded) is the subject; the guard fires ahead of the config read,
+    // so this refusal does not depend on that row. The throw closes `db` before propagating (no leak).
+    //
+    // Prove-by-deletion (verified 2026-08-29, then restored): with the `if (!isMirror) return` in
+    // `assertMirrorBindSafe` inverted to `if (isMirror) return` (i.e. the guard disabled), this boot
+    // proceeds to bind 0.0.0.0 and the opt-in case below stops being the only path that binds — this
+    // assertion then fails to catch a throw. Restored, it refuses here as asserted.
+    let caught: unknown;
+    try {
+      await startServer({
+        ...KEY_ENV,
+        DATABASE_URL: mirrorDatabaseUrl,
+        WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_SYNC_DATABASE_URL: mirrorSyncDatabaseUrl,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(isAppError(caught)).toBe(true);
+    expect(isAppError(caught) && caught.code).toBe("server.mirror_bind_exposed");
+    expect(isAppError(caught) && caught.params).toEqual({ host: "0.0.0.0" });
+  }, 60_000);
+
+  it("boots a mirror on a non-loopback host WITH the explicit opt-in (binds 0.0.0.0, guard silenced)", async () => {
+    // The opt-in is the operator's deliberate escape hatch: `WAITRON_MIRROR_ALLOW_EXPOSED=true` silences
+    // ONLY this stopgap guard — real per-user auth + TLS is still owed (the hosting slice). With it set,
+    // the same non-loopback bind the previous test refused now completes, and the mirror serves. Bound to
+    // 0.0.0.0 but reached over loopback, so the test never actually exposes anything off this host.
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: mirrorDatabaseUrl,
+      WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
+      WAITRON_HTTP_HOST: "0.0.0.0",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_SYNC_DATABASE_URL: mirrorSyncDatabaseUrl,
+      WAITRON_MIRROR_ALLOW_EXPOSED: "true",
+    });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      // The ambient viewer serves the dashboard exactly as the loopback boot does — the first GET primes
+      // the session cookie on its RESPONSE, the next request carries it and the gated read resolves 200.
+      // That the server bound and serves at all is the proof the opt-in silenced the guard.
+      const primer = await fetch(`${base}/management-api/catalogues`);
+      expect(primer.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+      const cookie = primer.headers.get("set-cookie")!.split(";")[0]!;
+      const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
+      expect(read.status).toBe(200);
+    } finally {
+      await server.close();
+    }
+    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
+  }, 60_000);
+
   it("refuses a mirror boot that has no mirror_config row (a mirror REQUIRES its DB connection config)", async () => {
     // A mirror's whole job is to pull through the tunnel, which needs the DB-stored connection config
     // (`mirror_config`); a deployment stamped 'mirror' with no such row is a misconfiguration, refused

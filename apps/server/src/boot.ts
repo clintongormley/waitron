@@ -92,6 +92,7 @@ import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
+import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
@@ -707,6 +708,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const axes = await readDeploymentAxes(db);
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
+  // FAIL CLOSED before we even seed the mirror's UNAUTHENTICATED admin surface: a mirror auto-logs a
+  // full-admin viewer in (`ensureMirrorViewer` + `mirrorSession` below), so the ONLY thing keeping it
+  // off the network is the loopback default of `config.httpHost`. Refuse a non-loopback bind under
+  // mirror mode unless the operator explicitly opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`); a primary is
+  // unaffected. Placed here (not at the `startListening` bind further down) so the refuse path opens
+  // no ambient viewer, no sync/tunnel workers and no retention pool — only `db` is live, closed the
+  // same way the `loadKeyRing` guard above does rather than leaking the pool.
+  try {
+    assertMirrorBindSafe(config, isMirror, env);
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
   // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
   // Registered BEFORE the mounts below so Hono wraps them; `/health` (registered before this branch) is
