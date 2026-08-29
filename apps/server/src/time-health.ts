@@ -6,10 +6,7 @@ import { execFile } from "node:child_process";
  * state. */
 export type TimeHealth = { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
 
-export type CommandRunner = (
-  cmd: string,
-  args: string[],
-) => Promise<{ stdout: string; code: number }>;
+export type CommandRunner = (cmd: string, args: string[]) => Promise<{ stdout: string }>;
 
 // The injected-runner tests cover every branch in `checkTimeHealth` below; the `?? defaultRun`
 // fallback and the default-parameter branch stay structurally uncovered by design — the real OS
@@ -25,7 +22,7 @@ const defaultRun: CommandRunner = (cmd, args) =>
         reject(error);
         return;
       }
-      resolve({ stdout, code: error ? ((error as { code?: number }).code ?? 1) : 0 });
+      resolve({ stdout });
     });
   });
 /* v8 ignore stop */

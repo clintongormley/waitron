@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { checkTimeHealth, type CommandRunner } from "./time-health.js";
 
 const runnerReturning =
-  (stdout: string, code = 0): CommandRunner =>
-  async () => ({ stdout, code });
+  (stdout: string): CommandRunner =>
+  async () => ({ stdout });
 const runnerThrowing = (): CommandRunner => async () => {
   const err = new Error("spawn timedatectl ENOENT") as NodeJS.ErrnoException;
   err.code = "ENOENT";

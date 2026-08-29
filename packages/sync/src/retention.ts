@@ -110,6 +110,11 @@ export async function pruneSyncLog(db: Database): Promise<PruneResult> {
  * `sync_cursor` carries no RLS, so it is always fully visible. Accepts a `Transaction` as well as a
  * `Database` so the box-status reader can pass the tenant-scoped `tx` from `withTenant` (both expose
  * the `execute` this uses).
+ *
+ * Correctness rests on a runtime invariant the types cannot see: the connection must authenticate as a
+ * role that can SELECT `sync_log` AND carry the intended tenant context (e.g. `sync_tailer` under
+ * `withTenant`); a bare/no-tenant call reads zero `sync_log` rows and reports a false-healthy lag 0.
+ * Pinned by the box-status durability guard in `retention.gate.test.ts`.
  */
 export async function lagFor(db: Database | Transaction): Promise<SubscriberLag[]> {
   const result = await db.execute<{

@@ -2,7 +2,6 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   asAppUser,
-  readDeploymentMode,
   withTenant,
   type Database,
   type DeploymentEnvironment,
@@ -93,6 +92,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readReplicationLag: (() => Promise<SubscriberLag[]>) | undefined;
+  readMode: () => DeploymentMode;
 };
 
 /**
@@ -131,14 +131,12 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         });
         return readChainHeight(tx, deps.cfg.nodeId);
       });
+      const certPath = deps.tlsCertPath;
       const status = await collectBoxStatus({
-        mode: () => readDeploymentMode(deps.db),
+        mode: () => Promise.resolve(deps.readMode()),
         environment: deps.environment,
         time: () => checkTimeHealth(),
-        cert:
-          deps.tlsCertPath === undefined
-            ? undefined
-            : () => readCertExpiry(deps.tlsCertPath as string, deps.now()),
+        cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         chain: async () => chain,
         replicationLag: deps.readReplicationLag,
         duties: () =>
