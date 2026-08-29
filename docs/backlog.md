@@ -44,8 +44,10 @@ follow.
 > endpoint — stamp demo/live + `applyVenue` in-process, seal the AEAT cert for live, persist
 > `trading.env`, restart into trading) LANDED #142, both 2026-08-27; **slice 2c (the `apps/setup`
 > Vite+Lit wizard driving 2b's endpoint) LANDED #146** and **slice 3 (discovery + CA-serving) LANDED
-> #143** — the free-tier onboarding path (slices 1–3) is now complete; **next → slice 4** (backup /
-> status / break-glass). NB 2b is **venue-only** (deviation R1): it stamps +
+> #143** — the free-tier onboarding path (slices 1–3) is now complete. **Slice 4 (backup / status /
+> break-glass) is split 4a/4b/4c: 4a (box-status API + time-health) LANDED #159** (2026-08-29);
+> **next → 4b** (backup/recovery incl. the cold-restore/fresh-chain path #158's runbook formalised).
+> NB 2b is **venue-only** (deviation R1): it stamps +
 > `applyVenue`s into the already-migrated setup DB and does NOT run the full `instance` role-splitting —
 > deferred to the appliance-image slice (the DB/roles pre-exist; dev works on the superuser). Rationale:
 > it is the one deployment path that needs
@@ -372,7 +374,8 @@ question (below).
   via a new `WAITRON_SETUP_APP_DIR` (`mountSetup` serves the built bundle at `/`, else the inline
   placeholder; trading path untouched); own-shard `test-setup` CI browser lane. The AEAT PFX rides the
   provision body **only for a live provision** (client-gated on `mode === "live"` — a **Critical** review
-  catch: never seal a cert onto a demo/preproduction tenant). **next → slice 4** (backup/status/break-glass).
+  catch: never seal a cert onto a demo/preproduction tenant). **Slice 4 split 4a/4b/4c; 4a (box-status
+  API + time-health) LANDED #159** (2026-08-29).
   **Slice 3 discovery + CA-serving — LANDED #143** (built independent of
   2c, on top of 2a's cert): in-process `multicast-dns` advertises `waitron.local` in **both** modes
   (crash-safe — a no-multicast-route box still boots; the responder is acquired LAST in each boot branch
@@ -381,8 +384,26 @@ question (below).
   IP-QR fallback; `BOX_HOSTNAME`/`caCertPath` single-source the hostname + CA path; **`setup-api.ts`
   untouched**. The **automated per-device "is the CA trusted?" check is deferred to a browser-behaviour
   spike** — spec §17/§18's "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and
-  unverified, so the trust page instructs + offers the download/QR but does not assert trust state. Then
-  **4** backup/status/break-glass. Slices 5–7
+  unverified, so the trust page instructs + offers the download/QR but does not assert trust state. **Slice
+  4 (backup/status/break-glass) is split 4a/4b/4c. 4a — box-status API + time-health — LANDED #159**
+  (2026-08-29): `GET /api/box/status` (mode/time/cert/chain/replication/duties, gated `till.configure`,
+  reuses `readDeploymentMode`/`healthSnapshot`/`lagFor`, no new code/permission/dep) + `time-health.ts`
+  (`timedatectl` probe, degrades to `unavailable`/no-warn off-systemd AND on a hung probe),
+  `cert-expiry.ts` (X509 leaf expiry), `chain-height.ts` (`cadenas.secuencia` under RLS). The replication
+  field runs `lagFor` **inside `withTenant`** on the `sync_tailer` pool — a bare call reads `sync_log`
+  under NULL tenant context → **false-healthy lag 0** (would let an operator discard un-replicated fiscal
+  records); pinned by a prove-by-deletion guard in `packages/sync/src/retention.gate.test.ts`, and
+  `lagFor(db: Database|Transaction)` widened for it. **4a follow-ups (do in 4b):** *(i)* an `apps/server`
+  integration test pinning the boot closure's `withTenant` wrapping through a real `sync_tailer` pool
+  (today only the semantic is guarded in `packages/sync` — the box-status test reads as owner, RLS-bypassed);
+  *(ii)* surface **`singleton_role`** (added by #158) alongside `mode` — box-status now shows only one of
+  the two role axes; *(iii)* keep `collectBoxStatus`'s `replicationLag` **fail-loud** (a lag-read fault
+  500s rather than a false-healthy `configured:false` fallback — deliberate); *(iv)* strengthen the
+  cert-expiry test with a fractional-day case. **next → 4b** (backup/recovery: recovery-bundle download
+  under an operator passphrase, scheduled `pg_dump` incl. `sync_log` + last-backup age, and — per the user
+  + #158's cold-restore runbook — **restore + a FRESH chain must let a no-hot-failover venue go live
+  unblocked**, month-end AEAT `consultar` reconciling the lost tail); then **4c** (loopback-only
+  break-glass admin reset; factory-reset design-only). Slices 5–7
   (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
   constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
   trading-healthy); a liveness/supervisor probe must gate on **`/setup-api/status`** (200), not
