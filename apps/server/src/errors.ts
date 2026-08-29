@@ -1041,5 +1041,56 @@ declare module "@waitron/shared" {
      * `promotion.fence_not_attested` gives. Never renamed once shipped.
      */
     "promotion.not_a_local_secondary": { mode: string };
+    /**
+     * A mirror could not be assembled because the PRIMARY it was pointed at has no stamped environment
+     * (sync cloud-mirror C2b — the read-only mirror pulls + applies a primary's rows, the topology
+     * `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
+     * whose `deployment` row carries no environment has never been provisioned, so there is nothing to
+     * mirror and the assemble is refused BEFORE any bundle fetch or apply. A primary-side PRECONDITION,
+     * so it is reported to the operator as HTTP 409 (the resource is not in a state that can serve the
+     * request) by the assemble route's local STATUS map in a later C2b task, not here — the same
+     * declare-here / status-in-route split every code in this file follows.
+     *
+     * NO params: the refusal names no row, so a log line leaks nothing — the same `sync.*`/`tunnel.*`
+     * no-leak discipline `node.read_only` follows, and there is nothing non-secret to carry beyond the
+     * code (the fix is to provision the primary first). `mirror.*` names the DOMAIN CONCEPT — a read-only
+     * mirror node — never the throwing package (`tenant.not_found`'s note above gives the rule); `server.*`
+     * is reserved for facts about the process itself, and "the primary is not provisioned" is a fact about
+     * the mirror-assembly precondition. Never renamed once shipped.
+     */
+    "mirror.not_provisioned": Record<string, never>;
+    /**
+     * A mirror could not fetch a bundle because the PRIMARY has no tunnel/relay configured (sync
+     * cloud-mirror C2b). The bundle endpoint the mirror pulls from reaches the primary through the
+     * outbound snitun tunnel / relay (the on-prem box always dials outbound); a primary with no relay
+     * endpoint has nowhere for the mirror to fetch from, so the bundle request is refused. A primary-side
+     * PRECONDITION on a well-formed request, reported to the operator as HTTP 400 by the bundle route's
+     * local STATUS map in a later C2b task, not here (the declare-here / status-in-route split).
+     *
+     * NO params: the refusal names no row, the same `sync.*`/`tunnel.*` no-leak discipline
+     * `mirror.not_provisioned`/`node.read_only` follow; the relay endpoint is infrastructure config, not
+     * echoed, and the fix is to configure the relay. `mirror.*` names the DOMAIN CONCEPT — a read-only
+     * mirror node — never the throwing package (`tenant.not_found`'s note gives the rule). Never renamed
+     * once shipped.
+     */
+    "mirror.no_relay": Record<string, never>;
+    /**
+     * A mirror could not FETCH or PARSE the bundle from the primary (sync cloud-mirror C2b) — the pull
+     * over the tunnel/relay failed (a network error, a non-2xx from the primary's bundle endpoint) or the
+     * bytes it returned were not a bundle the mirror could parse. This is a MIRROR-SIDE upstream failure,
+     * not a fault in the operator's request, so it is reported as HTTP 502 (the mirror is a gateway and
+     * its upstream — the primary — failed) by the assemble route's local STATUS map in a later C2b task,
+     * not here. Distinct from `mirror.no_relay` (the primary has no endpoint to fetch from at all) and
+     * `mirror.not_provisioned` (the primary exists but has nothing to mirror): this is the fetch/parse of
+     * a configured, provisioned primary FAILING in flight.
+     *
+     * NO params: the refusal names no row and never echoes the upstream error's `.message` (which can
+     * embed a URL or connection detail — the same no-leak discipline `server.shutdown_failed` and
+     * `node.read_only` follow for their own caught values); the structured cause is logged, not put on the
+     * wire, so there is nothing non-secret to carry. `mirror.*` names the DOMAIN CONCEPT — a read-only
+     * mirror node — never the throwing package (`tenant.not_found`'s note gives the rule). Never renamed
+     * once shipped.
+     */
+    "mirror.bundle_fetch_failed": Record<string, never>;
   }
 }
