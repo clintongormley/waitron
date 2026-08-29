@@ -220,7 +220,9 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(source.status).toBe(404);
 
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
-      // worker, not fiscal duties). Proves the isMirror pass arrow executed.
+      // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
+      // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
+      // its trivial empty pass rather than drain/reconcile — that empty pass is what this proves ran.
       await poll(() => server.health.lastPassAt ?? undefined);
       expect(server.health.lastPassAt).not.toBeNull();
     } finally {

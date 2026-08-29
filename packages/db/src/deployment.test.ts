@@ -155,6 +155,18 @@ describeEachTarget("the deployment stamp", (target) => {
     expect(await readSingletonRole(db)).toBe("secondary");
   });
 
+  it("setDeploymentMode('primary') leaves an already-'secondary' singleton_role untouched", async () => {
+    // Backs the setDeploymentMode doc comment's claim (deployment.ts): flipping mode to 'primary'
+    // does NOT co-set singleton_role, unlike the 'mirror' direction proven above. This is the
+    // (primary, secondary) sell-only-local-secondary transition — a read-write node holding no
+    // singletons — which the 'mirror' co-set test does not exercise.
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary"); // a (primary, secondary) sell-only node
+    await setDeploymentMode(db, "primary");
+    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readSingletonRole(db)).toBe("secondary"); // NOT reset by the mode write
+  });
+
   it("refuses singleton_role='primary' on a mirror (deployment_role_valid_ck)", async () => {
     await stampDeployment(db, "preproduction");
     await setDeploymentMode(db, "mirror");
