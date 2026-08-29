@@ -1,10 +1,13 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { isAppError } from "@waitron/shared";
 import { createPgliteDb, type Database } from "./client.js";
 import {
   readDeploymentEnvironment,
   readDeploymentMode,
+  readSingletonRole,
   setDeploymentMode,
+  setSingletonRole,
   stampDeployment,
 } from "./deployment.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
@@ -25,6 +28,9 @@ it("reads as unstamped when the table has not been created yet", async () => {
   // absent and answer "primary" (an unstamped database is a primary) rather than throw, the exact
   // state of a first-ever boot before the table-creating migration has run.
   expect(await readDeploymentMode(bare)).toBe("primary");
+  // Same pre-migration handle: readSingletonRole must see the table as absent and answer "primary"
+  // (an unstamped database is a sole primary) rather than throw.
+  expect(await readSingletonRole(bare)).toBe("primary");
   await bare.close();
 });
 
@@ -129,5 +135,35 @@ describeEachTarget("the deployment stamp", (target) => {
         has_table_privilege('app_user', 'deployment', 'UPDATE') as upd
     `);
     expect(rows.rows[0]).toEqual({ sel: true, ins: false, upd: false });
+  });
+
+  it("reads singleton_role as 'primary' on a freshly stamped database", async () => {
+    await stampDeployment(db, "preproduction");
+    expect(await readSingletonRole(db)).toBe("primary");
+  });
+
+  it("reads back a singleton_role that was set to 'secondary'", async () => {
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary");
+    expect(await readSingletonRole(db)).toBe("secondary");
+  });
+
+  it("demoting to mirror co-sets singleton_role to 'secondary'", async () => {
+    await stampDeployment(db, "preproduction");
+    await setDeploymentMode(db, "mirror");
+    expect(await readDeploymentMode(db)).toBe("mirror");
+    expect(await readSingletonRole(db)).toBe("secondary");
+  });
+
+  it("refuses singleton_role='primary' on a mirror (deployment_role_valid_ck)", async () => {
+    await stampDeployment(db, "preproduction");
+    await setDeploymentMode(db, "mirror");
+    const error = await captureError(() => setSingletonRole(db, "primary"));
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+  });
+
+  it("setSingletonRole fails loudly on an unstamped database", async () => {
+    const error = await captureError(() => setSingletonRole(db, "secondary"));
+    expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
   });
 });

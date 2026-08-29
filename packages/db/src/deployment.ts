@@ -93,11 +93,54 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * provisioning/owner connection, never the app pool. Requires the singleton row (stamp the environment
  * first) — a 0-row UPDATE is a silent no-op on an unstamped DB, which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
-  const result = await db.execute<{ id: number }>(
-    sql`update deployment set mode = ${mode} where id = 1 returning id`,
-  );
+  // A read-only mirror holds no singleton duties, so flipping mode to 'mirror' co-sets
+  // singleton_role='secondary' in the SAME update — the (mirror, primary) pair deployment_role_valid_ck
+  // forbids is never even transiently written. Flipping mode to 'primary' leaves singleton_role
+  // untouched: a primary may be the singleton-holder OR a sell-only local secondary (design §2), and
+  // which one is the promote action's call, not this setter's.
+  const result =
+    mode === "mirror"
+      ? await db.execute<{ id: number }>(
+          sql`update deployment set mode = ${mode}, singleton_role = 'secondary' where id = 1 returning id`,
+        )
+      : await db.execute<{ id: number }>(
+          sql`update deployment set mode = ${mode} where id = 1 returning id`,
+        );
   // Fail loud on a 0-row update: the singleton must already exist (stamp first). A silent no-op here
   // would let a mis-sequenced promotion "succeed" while leaving the database in the wrong mode.
+  if (result.rows.length === 0) {
+    throw new AppError("deployment.not_stamped", {});
+  }
+}
+
+/** The singleton-ownership axis (promotion runbook design §2), orthogonal to `mode`: a `primary` holds
+ * the venue's singleton duties (the AEAT submitter + payment reconciler — #33 §7); a `secondary` sells
+ * but holds none. Narrowed to the two-value union for the same reason `DeploymentMode` is: an
+ * unrepresentable value is a `tsc` error, not a runtime CHECK violation. */
+export type SingletonRole = "primary" | "secondary";
+
+/** Whether this database holds the singleton duties, or `"primary"` when nothing has been stamped — an
+ * unstamped database is a sole primary. Same `to_regclass` probe (not a caught undefined-table error)
+ * `readDeploymentMode` uses, for the same transaction-poisoning reason. */
+export async function readSingletonRole(db: Database): Promise<SingletonRole> {
+  const present = await db.execute<{ exists: boolean }>(
+    sql`select to_regclass('public.deployment') is not null as exists`,
+  );
+  if (present.rows[0]?.exists !== true) return "primary";
+  const rows = await db.execute<{ singleton_role: SingletonRole }>(
+    sql`select singleton_role from deployment where id = 1`,
+  );
+  return rows.rows[0]?.singleton_role ?? "primary";
+}
+
+/** Sets this database's singleton-ownership role. An OWNER-role write (app_user holds no UPDATE on
+ * deployment), like `setDeploymentMode`; fail-loud on a 0-row update (stamp the environment first).
+ * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
+ * read-only mirror cannot hold singletons; a promotion flips the mode first (the promote action's job). */
+export async function setSingletonRole(db: Database, role: SingletonRole): Promise<void> {
+  const result = await db.execute<{ id: number }>(
+    sql`update deployment set singleton_role = ${role} where id = 1 returning id`,
+  );
   if (result.rows.length === 0) {
     throw new AppError("deployment.not_stamped", {});
   }
