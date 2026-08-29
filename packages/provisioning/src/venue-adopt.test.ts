@@ -1,0 +1,126 @@
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { adoptVenue, type AdoptResult, type AdoptVenueRows } from "./venue-adopt.js";
+
+// PGlite's default connection is a SUPERUSER, so it BYPASSES row-level security (ENABLE and FORCE
+// alike). That is acceptable here: `adoptVenue`'s inserts run in-test as superuser, and this suite
+// exercises the wiring, FK order, idempotency and the designated-id assertion. The role-split apply
+// path — the non-superuser OWNER inserting these parent rows under the tenant GUC — is proven by a
+// LATER task's real-Postgres e2e (the container end-to-end that runs adopt over the owner
+// connection), the same split `venue-apply.test.ts` documents for `applyVenue`.
+//
+// CORE → IDENTITY → FISCAL, the manifest order (`venue-apply.test.ts:19-21`): the FISCAL set is what
+// creates `registro_sif`/`cadenas`/`contadores_instalacion`, which the sibling no-sif suite asserts
+// stay empty; loading it here keeps the two suites' schemas identical.
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+});
+
+/**
+ * A minimal mirror bundle: tenant + 1 location + 1 node + 1 till + 2 invoice_series, every id
+ * explicit (the primary's real ids, which the mirror inserts VERBATIM). Keys are camelCase to match
+ * Drizzle's `$inferInsert` mapping — Task 5's bundle assembler produces these rows via `select()`,
+ * so the key shape already matches. Each row supplies exactly the NOT NULL columns without a schema
+ * default; the defaulted fiscal/address/mode columns are omitted deliberately.
+ */
+function makeRows(): { rows: AdoptVenueRows; designated: AdoptResult } {
+  const tenantId = randomUUID();
+  const locationId = randomUUID();
+  const nodeId = randomUUID();
+  const tillId = randomUUID();
+  const seriesId = randomUUID();
+  const rectificativeSeriesId = randomUUID();
+
+  const rows: AdoptVenueRows = {
+    // A unique tax_id per fixture — this suite shares one PGlite database across its tests, and
+    // `tenants` is UNIQUE on (country, tax_id); the real mirror inserts exactly one primary tenant
+    // into a fresh DB, so this collision is a shared-DB test artifact, not an adopt concern.
+    tenant: {
+      id: tenantId,
+      country: "ES",
+      taxId: `B${randomUUID().slice(0, 8)}`,
+      legalName: "Primary SL",
+    },
+    locations: [
+      {
+        id: locationId,
+        tenantId,
+        name: "Mostrador",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "venta en establecimiento",
+      },
+    ],
+    nodes: [{ id: nodeId, tenantId, locationId, name: "Node 1" }],
+    tills: [{ id: tillId, tenantId, locationId, name: "Caja 1" }],
+    invoiceSeries: [
+      { id: seriesId, tenantId, nodeId, code: "A" },
+      { id: rectificativeSeriesId, tenantId, nodeId, code: "R", purpose: "rectificative" },
+    ],
+  };
+
+  const designated: AdoptResult = { tenantId, locationId, tillId, nodeId, seriesId };
+  return { rows, designated };
+}
+
+describe("adoptVenue", () => {
+  it("inserts every parent row verbatim and returns the designated ids", async () => {
+    const { rows, designated } = makeRows();
+
+    const result = await adoptVenue(rows, designated, { db: suite.db });
+    expect(result).toEqual(designated);
+
+    // Parents exist with the EXACT ids the bundle named.
+    const t = await suite.db.execute(sql`select id from tenants where id = ${designated.tenantId}`);
+    expect(t.rows).toHaveLength(1);
+    const l = await suite.db.execute(
+      sql`select id from locations where id = ${designated.locationId}`,
+    );
+    expect(l.rows).toHaveLength(1);
+    const n = await suite.db.execute(sql`select id from nodes where id = ${designated.nodeId}`);
+    expect(n.rows).toHaveLength(1);
+    const till = await suite.db.execute(sql`select id from tills where id = ${designated.tillId}`);
+    expect(till.rows).toHaveLength(1);
+
+    // Both series carried (≥2), and the designated series is one of them.
+    const s = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from invoice_series where tenant_id = ${designated.tenantId}`,
+    );
+    expect(s.rows[0].n).toBe(2);
+    const one = await suite.db.execute(
+      sql`select id from invoice_series where id = ${designated.seriesId}`,
+    );
+    expect(one.rows).toHaveLength(1);
+  });
+
+  it("is idempotent — a second adopt inserts no duplicates", async () => {
+    const { rows, designated } = makeRows();
+
+    await adoptVenue(rows, designated, { db: suite.db });
+    await adoptVenue(rows, designated, { db: suite.db }); // ON CONFLICT (id) DO NOTHING
+
+    const l = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from locations where tenant_id = ${designated.tenantId}`,
+    );
+    expect(l.rows[0].n).toBe(1);
+    const s = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from invoice_series where tenant_id = ${designated.tenantId}`,
+    );
+    expect(s.rows[0].n).toBe(2);
+  });
+
+  it("throws provisioning.adopt_incomplete when the bundle omits a designated id", async () => {
+    const { rows, designated } = makeRows();
+    // The bundle's series rows do not contain the designated seriesId — a malformed bundle.
+    const bogusDesignated: AdoptResult = { ...designated, seriesId: randomUUID() };
+
+    await expect(adoptVenue(rows, bogusDesignated, { db: suite.db })).rejects.toMatchObject({
+      code: "provisioning.adopt_incomplete",
+      params: { missing: "series" },
+    });
+  });
+});
