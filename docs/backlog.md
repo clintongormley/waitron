@@ -441,10 +441,14 @@ fence-then-claim-submitter attestation gate. **Next: its implementation plan →
 workers at runtime yet.
 
 - **Promotion + fencing tooling and the till-side failover list** — the promotion-runbook *design* is done
-  (its own spec, above); **next is its implementation plan + build**. The rest of the tooling is still
-  gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol (§9.1) and the
-  till-failover detail (§9.5). Boot-time role resolution, continuous conflict-detection, the "one primary"
-  invariant.
+  (its own spec, above), and its **foundation slice is planned**
+  ([singleton-role plan](superpowers/plans/2026-08-29-promotion-foundation-singleton-role.md)): the
+  `deployment.singleton_role` axis + gating the fiscal pass on it (the dependency-free first slice; later
+  slices — promote endpoint/auth, per-target orchestration, cold restore — need the break-glass /
+  reserved-SIF / backup foundations that don't exist yet). **Next: build slice F1.** The rest of the
+  tooling is still gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol
+  (§9.1) and the till-failover detail (§9.5). Boot-time role resolution, continuous conflict-detection,
+  the "one primary" invariant.
 - **Split-brain** — largely worked through by the 2026-08-29 spec: server-level fencing (physical +
   membership, §3.5), per-tab single-writer ownership with transfer-not-share (§8), and the bounded worst
   case (a detectable/refundable double-bill, never a forked chain, §8.4). Remaining cross-cutting seams
