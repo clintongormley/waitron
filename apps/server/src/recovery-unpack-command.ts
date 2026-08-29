@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
-import { decryptBundle } from "./recovery-bundle.js";
+import { decryptBundle, type BundleFiles } from "./recovery-bundle.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 
 type Env = Record<string, string | undefined>;
@@ -39,7 +39,7 @@ export async function runRecoveryUnpack(deps: {
     deps.out(`cannot read bundle file: ${envelopePath}`);
     return 1;
   }
-  let files;
+  let files: BundleFiles;
   try {
     files = decryptBundle(envelopeJson, passphrase);
     await unpackBundleToDir(files, destDir);
