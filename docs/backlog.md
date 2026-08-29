@@ -479,22 +479,6 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
-- **Testcontainers leak on interrupted test runs → local pre-push flakiness (build a reaper).**
-  `TESTCONTAINERS_RYUK_DISABLED=true` is mandatory locally (Ryuk hangs, CLAUDE.md §4), which disables the
-  automatic reaper. Diagnosed 2026-08-29: **clean** vitest exits self-reap (`startSharedContainer`'s
-  `container.stop()` in `globalTeardown` removes the container + anon volume — verified 0 leaks after a
-  clean `pnpm -r test:coverage`), but **interrupted** runs (Ctrl-C, a timeout SIGTERM, a crash) skip
-  teardown and leak a running container + its anonymous volume. Un-reaped, these pile up (found 173
-  volumes / 23GB, 13 containers, 40GB images) and bloat the Docker daemon, adding the ambient load that
-  tips the heavy parallel `pnpm -r … test:coverage` over its 60s PGlite `beforeAll` timeout + the
-  `freePort→bind` race (EADDRINUSE) — the cause of three `--no-verify` pushes in the C2a session, all of
-  which CI (dedicated runners) passed cleanly. A one-off `docker rm -f -v` of orphaned
-  `org.testcontainers` containers + `docker volume prune -f` + `docker builder prune -f` reclaimed ~27GB
-  and made the exact failing command pass 1381/1381. **Build:** a lightweight reaper (compensating for
-  disabled Ryuk) — remove orphaned `org.testcontainers` containers + their anon volumes at the START of
-  the pre-push hook's test phase (safe: nothing is running then), plus a manual `pnpm reap`/make target
-  and a CLAUDE.md §4 note. NEVER prune images or the named dev volumes (`waitron-dev-db`, devcontainer
-  postgres/redis, VS Code volumes). Its own test-infra branch.
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
   ten route files (recipe/catalogue/me/workforce/management/schedule/purchasing/device/print/till-locale)
