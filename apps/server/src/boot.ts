@@ -33,6 +33,8 @@ import {
 } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
+import { promoteLocalSecondaryToPrimary } from "./promote.js";
+import type { FenceAttestation, PromotionResult } from "./promote.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
 import {
@@ -95,6 +97,13 @@ import "./errors.js";
 
 export interface StartedServer {
   health: HealthState;
+  /**
+   * Promote a local secondary to primary in-process (promotion runbook design §5a) — flips
+   * `singleton_role` to 'primary' and refreshes the fiscal-pass holder with no restart. Present only in
+   * trading mode; a setup box omits it. IN-PROCESS ONLY: no network endpoint / break-glass auth yet (Slice
+   * 2). Requires a fence attestation or it refuses (`promotion.fence_not_attested`).
+   */
+  promoteLocalSecondaryToPrimary?: (attestation: FenceAttestation) => Promise<PromotionResult>;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
   close(): Promise<void>;
 }
@@ -325,6 +334,7 @@ function makeStartedServer(
   log: Logger,
   teardown: BootTeardown,
   mdns: MdnsResponder,
+  promote?: (attestation: FenceAttestation) => Promise<PromotionResult>,
 ): StartedServer {
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
   // teardown (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than
@@ -337,6 +347,7 @@ function makeStartedServer(
   let closed = false;
   return {
     health,
+    ...(promote === undefined ? {} : { promoteLocalSecondaryToPrimary: promote }),
     close: async () => {
       if (closed) return;
       closed = true;
@@ -1273,5 +1284,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       },
     },
     mdns,
+    async (attestation) => {
+      // Owner-role write: open a short-lived owner pool from the migrations URL (the stamp-probe pattern,
+      // boot.ts:431) rather than holding one open — a trading box keeps only the app pool. See the plan's
+      // "Known limitations" #2: the REAL runtime admin connection is deferred with instance provisioning
+      // (boot.ts:529); this URL is the superuser in dev/CI where the promote is exercised.
+      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      try {
+        return await promoteLocalSecondaryToPrimary(
+          { appDb: db, ownerDb, holders, log },
+          attestation,
+        );
+      } finally {
+        await ownerDb.close();
+      }
+    },
   );
 }
