@@ -113,6 +113,27 @@ describe("adoptVenue", () => {
     expect(s.rows[0].n).toBe(2);
   });
 
+  it("revives an ISO-string created_at (the JSON round-trip shape) into a Date the insert accepts", async () => {
+    // A real mirror bundle crosses HTTP as JSON (`assembleMirrorBundle` selects full rows including the
+    // `created_at` timestamp(mode:"date") column on `tenants`/`nodes`; the endpoint `c.json`s them and
+    // `fetchMirrorBundle` `response.json()`s them back), so `createdAt` arrives as an ISO STRING, not a
+    // Date. Without `reviveRow` Drizzle's date-mode insert calls `.toISOString()` on that string and
+    // throws `TypeError: value.toISOString is not a function` — the bug the headline adopt e2e surfaced,
+    // invisible to the hand-built fixtures above (they omit `createdAt`). This pins the revive: the same
+    // adopt succeeds and stores the exact instant. Deletion-proof: make `reviveRow` return its row
+    // unchanged and this test throws the TypeError.
+    const { rows, designated } = makeRows();
+    const stamp = "2026-01-02T03:04:05.000Z";
+    rows.tenant.createdAt = stamp;
+    rows.nodes[0]!.createdAt = stamp;
+
+    await expect(adoptVenue(rows, designated, { db: suite.db })).resolves.toEqual(designated);
+    const t = await suite.db.execute<{ ts: string }>(
+      sql`select created_at::text as ts from tenants where id = ${designated.tenantId}`,
+    );
+    expect(new Date(t.rows[0]!.ts).toISOString()).toBe(stamp);
+  });
+
   it("throws provisioning.adopt_incomplete when the bundle omits a designated id", async () => {
     const { rows, designated } = makeRows();
     // The bundle's series rows do not contain the designated seriesId — a malformed bundle.

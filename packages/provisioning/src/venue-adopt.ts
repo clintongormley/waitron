@@ -48,6 +48,23 @@ export interface AdoptVenueDeps {
 type MissingLabel = "tenant" | "location" | "node" | "till" | "series";
 
 /**
+ * Revive a bundle row's `created_at` audit column back to a `Date` before insert. The rows reach a
+ * cloud mirror as JSON over HTTP (`assembleMirrorBundle`'s `select()` returns full rows, the endpoint
+ * `c.json`s them, and `fetchMirrorBundle` `response.json()`s them back), so any `timestamp(mode:"date")`
+ * column — `created_at` on `tenants` and `nodes` today, the only two on these five parent tables —
+ * arrives as an ISO STRING, and Drizzle's date-mode insert then calls `.toISOString()` on that string
+ * and throws `TypeError: value.toISOString is not a function`. Task 9's unit fixtures hand-built rows
+ * WITHOUT `createdAt`, so they never crossed JSON and never hit this; the headline adopt e2e (real HTTP
+ * round-trip) is what surfaced it. A shallow copy so the caller's row object is untouched.
+ */
+function reviveRow<T extends VenueRow>(row: T): T {
+  if (typeof row.createdAt === "string") {
+    return { ...row, createdAt: new Date(row.createdAt) };
+  }
+  return row;
+}
+
+/**
  * Provisions a cloud MIRROR by inserting the primary venue's parent rows — tenant, locations, nodes,
  * tills, invoice_series — with the primary's EXPLICIT ids, so the rows that later arrive by sync
  * resolve their foreign keys. One `withTenant` transaction, in FK order, each insert
@@ -73,30 +90,30 @@ export async function adoptVenue(
   return withTenant(deps.db, designated.tenantId, async (tx) => {
     await tx
       .insert(tenants)
-      .values(rows.tenant as typeof tenants.$inferInsert)
+      .values(reviveRow(rows.tenant) as typeof tenants.$inferInsert)
       .onConflictDoNothing({ target: tenants.id });
     for (const row of rows.locations) {
       await tx
         .insert(locations)
-        .values(row as typeof locations.$inferInsert)
+        .values(reviveRow(row) as typeof locations.$inferInsert)
         .onConflictDoNothing({ target: locations.id });
     }
     for (const row of rows.nodes) {
       await tx
         .insert(nodes)
-        .values(row as typeof nodes.$inferInsert)
+        .values(reviveRow(row) as typeof nodes.$inferInsert)
         .onConflictDoNothing({ target: nodes.id });
     }
     for (const row of rows.tills) {
       await tx
         .insert(tills)
-        .values(row as typeof tills.$inferInsert)
+        .values(reviveRow(row) as typeof tills.$inferInsert)
         .onConflictDoNothing({ target: tills.id });
     }
     for (const row of rows.invoiceSeries) {
       await tx
         .insert(invoiceSeries)
-        .values(row as typeof invoiceSeries.$inferInsert)
+        .values(reviveRow(row) as typeof invoiceSeries.$inferInsert)
         .onConflictDoNothing({ target: invoiceSeries.id });
     }
 
