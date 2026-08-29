@@ -13,15 +13,17 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * `update management_sessions set last_seen_at = now()` on a mirror's own GETs. That is intended: the gate
  * refuses a CLIENT'S write verb, not the server's own bookkeeping (`mirror-session.ts:49` spells this out).
  *
- * The operational groups that DID expose a write behind a GET — `GET /print-api/agent/jobs`, whose
- * `claimPrintJobs` runs a locking `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/
- * runtime.ts:145-179), and the device group — are no longer mounted under `mode='mirror'`: boot.ts wraps
- * both `mountDeviceApi`/`mountPrintApi` in `if (!isMirror)` (boot.ts:844). So on a mirror those write-GETs
- * are UNREACHABLE (404 — no route), not merely inert because their backing tables (`print_*`, `devices`)
- * are unprovisioned. This gate is unchanged; only the surface behind it shrank. A future slice that
- * RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET concern —
- * keep them gated by `if (!isMirror)`, or allow-list the write-GETs here. The dashboard read surface this
- * mirror serves stays fully covered. */
+ * The operational agent/device groups are no longer mounted under `mode='mirror'`: boot.ts wraps both
+ * `mountDeviceApi`/`mountPrintApi` in `if (!isMirror)` (boot.ts:844). That closes the one actual
+ * write-behind-a-GET on this surface — `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking
+ * `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/runtime.ts:145-179) that the verb
+ * gate cannot catch. (The device group's own writes are all non-safe verbs the gate already refuses; it is
+ * dropped from a mirror as part of the same operational surface, not because it hid a write behind a GET.)
+ * So on a mirror that print write-GET is UNREACHABLE (404 — no route), not merely inert because its backing
+ * tables (`print_*`) are unprovisioned. This gate is unchanged; only the surface behind it shrank. A future
+ * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
+ * concern — keep them gated by `if (!isMirror)`, or allow-list the write-GETs here. The dashboard read
+ * surface this mirror serves stays fully covered. */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**

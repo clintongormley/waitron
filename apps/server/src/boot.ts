@@ -836,16 +836,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   );
   // The operational agent/device groups — NOT mounted under mirror mode. Unlike the dashboard read
   // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
-  // all sit behind non-GET verbs the read-only gate refuses, these two groups each expose a WRITE
-  // BEHIND A GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE
-  // (packages/printing/src/runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-24
-  // flags exactly this) cannot catch a write on a GET, so the read-only guarantee for these operational
-  // groups rests on NOT mounting them on a mirror rather than on the verb — where before this guard
-  // existed it rested only on their backing tables (`print_*`, `devices`) being unprovisioned on a
-  // mirror. A mirror provisions none of those tables anyway, so it
-  // loses nothing by their absence; a primary mounts both. This guard skips route REGISTRATION only —
-  // every shared boot value (`till`, `secureCookies`) is built above and read by the sibling mounts, so
-  // nothing downstream depends on these mounts having run.
+  // all sit behind non-GET verbs the read-only gate refuses, the PRINT group exposes a WRITE BEHIND A
+  // GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE (packages/printing/src/
+  // runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-24 flags exactly this)
+  // cannot catch a write on a GET. The device group's own writes are all behind non-GET verbs the gate
+  // already refuses; it is dropped from a mirror as part of the same operational surface, not for a
+  // write-behind-a-GET. So the read-only guarantee for these operational groups rests on NOT mounting
+  // them on a mirror rather than on the verb — where before this guard existed it rested only on their
+  // backing tables (`print_*`, `devices`) being unprovisioned on a mirror. A mirror provisions none of
+  // those tables anyway, so it loses nothing by their absence; a primary mounts both. This guard skips
+  // route REGISTRATION only — every shared boot value (`till`, `secureCookies`) is built above and read
+  // by the sibling mounts, so nothing downstream depends on these mounts having run.
   if (!isMirror) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
     // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
