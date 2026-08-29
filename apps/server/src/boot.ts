@@ -1287,8 +1287,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     mdns,
     async (attestation) => {
-      // Owner-role write: open a short-lived owner pool from the migrations URL (the stamp-probe pattern,
-      // boot.ts:431) rather than holding one open — a trading box keeps only the app pool. See the plan's
+      // Owner-role write: open a short-lived owner pool from the migrations URL (the same open/close
+      // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box keeps
+      // only the app pool. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset this URL defaults to the app URL,
+      // so the write hits `app_user` (no UPDATE on `deployment`) and throws 42501 — fails CLOSED, never a
+      // silent no-op. See the plan's
       // "Known limitations" #2: the REAL runtime admin connection is deferred with instance provisioning
       // (boot.ts:529); this URL is the superuser in dev/CI where the promote is exercised.
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);

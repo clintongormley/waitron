@@ -66,7 +66,11 @@ export async function promoteLocalSecondaryToPrimary(
   }
 
   await setSingletonRole(deps.ownerDb, "primary"); // PONR: claims the submitter (§7)
-  await refreshDeploymentHolders(deps.appDb, deps.holders); // flip the running pass on its next tick
+  // Flip the running pass on its next tick. If THIS read throws after the write above committed (a transient
+  // app-pool blip), the caller sees an error while the process keeps the stale 'secondary' holder — so it
+  // won't drain yet. Self-healing (§3e): a re-run (its refresh #1 + the already-primary path re-syncs the
+  // holder) or a restart starts the drain, and fiscal submission is a delay-tolerant outbox.
+  await refreshDeploymentHolders(deps.appDb, deps.holders);
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
   return { alreadyPrimary: false };

@@ -66,11 +66,13 @@ them or claim them done.
    break-glass mint (C2b/hosting wizard).
 2. **The owner write uses `config.migrationsDatabaseUrl`.** That URL is the superuser in dev/CI (correct
    here) but **defaults to the app-role `databaseUrl`** when `WAITRON_MIGRATIONS_DATABASE_URL` is unset
-   ([config.ts:596](../../../apps/server/src/config.ts#L596)), and [boot.ts:529](../../../apps/server/src/boot.ts#L529)
+   ([config.ts:596](../../../apps/server/src/config.ts#L596)), and [boot.ts:541](../../../apps/server/src/boot.ts#L541)
    already records that the *real* runtime admin connection "must be that admin, not
-   `migrationsDatabaseUrl`; wiring it is deferred with the instance provisioning." Slice 1 uses it
-   because the booted e2e runs with a superuser migrations URL and it matches the existing stamp-probe
-   pattern ([boot.ts:431](../../../apps/server/src/boot.ts#L431)); wiring the real runtime admin
+   `migrationsDatabaseUrl`; wiring it is deferred with the instance provisioning." In that unset case the
+   write **fails CLOSED** — it hits `app_user` (which holds no UPDATE on `deployment`) and throws a raw pg
+   `42501`, never a silent no-op, so the promote refuses rather than falsely succeeding. Slice 1 uses this
+   URL because the booted e2e runs with a superuser migrations URL and it matches the existing stamp-probe
+   pattern ([boot.ts:443](../../../apps/server/src/boot.ts#L443)); wiring the real runtime admin
    connection is Slice 2.
 3. **The key-ring unseal (spec §5a step 2) is not performed.** A local secondary today boots with the
    credential key ring already loaded (`loadKeyRing`), so a flip to `primary` submits with the
@@ -761,7 +763,7 @@ gate lands, that slice gets its own spec→plan→build.
   A method-gate-exempt promote endpoint (the one hole in the read-only gate), authorized AND key-ring-unsealed
   by the single break-glass secret, plus the real runtime owner/admin DB connection (replacing Known
   Limitation #2). **Gated on:** the break-glass secret mint (C2b / hosting wizard) and the runtime admin
-  connection deferred at [boot.ts:529](../../../apps/server/src/boot.ts#L529).
+  connection deferred at [boot.ts:541](../../../apps/server/src/boot.ts#L541).
 
 - **Slice 3 — passive cloud mirror → primary (spec §5b).** Mount `mountSyncApi` always + request-time gate
   (§3a), a worker-lifecycle manager that STARTS the mode-gated workers live (§3c — the mirror runs none
