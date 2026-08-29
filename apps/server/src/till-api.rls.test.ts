@@ -337,15 +337,18 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
 
-    // 2. The operator sees the menu: GET /api/products returns the seeded catalogue. The sale lines
-    // are built FROM this response, exactly as the real till does (it never invents product ids).
+    // 2. The operator sees the menu: GET /api/products returns `{ menus, products }` for the seeded
+    // catalogue. The sale lines are built FROM `products`, exactly as the real till does (it never
+    // invents product ids).
     const productsRes = await app.request("/api/products", { headers: { cookie } });
     expect(productsRes.status).toBe(200);
-    const products = (await productsRes.json()) as {
-      id: string;
-      pricingUnit: "each" | "weight";
-      descriptions: Record<string, string>;
-    }[];
+    const { products } = (await productsRes.json()) as {
+      products: {
+        id: string;
+        pricingUnit: "each" | "weight";
+        descriptions: Record<string, string>;
+      }[];
+    };
     // The two seeded, sellable products come back — the reduced-rate weighed one and the
     // general-rate each one — so the basket below genuinely mixes VAT rates.
     expect(products.map((p) => p.descriptions[LOCALE]).sort()).toEqual([
