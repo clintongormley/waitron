@@ -294,8 +294,9 @@ the remaining consumers below are specced-and-planned only. Specs/plans under
   `authorize()` WITH one** — FP-2's `PUT/DELETE /api/tables/:id/placement` already calls
   `authorize(…"till.configure")` but with NO override — so the override dialog + the override hop are
   the foundation that **on-till config** (device-identity manager-on-till, FP-2 "Editar plano") and
-  future till void/refund reuse. With this landed the **counter-POS surface (sub-project 7) is fully
-  built** — nothing left to design on it.
+  future till void/refund reuse. The dashboard `drawer_open_policy` toggle is set-only too (no
+  read-back route this slice, the print-mode precedent) — since it gates cash access, a read-back
+  route is a reasonable follow-up.
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server
   Direct Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
