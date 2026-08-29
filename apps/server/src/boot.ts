@@ -1075,7 +1075,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
-      readMode: () => modeHolder.current,
+      readMode: () => holders.mode.current,
     },
     log,
   );
