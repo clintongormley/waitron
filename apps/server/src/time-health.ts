@@ -16,10 +16,14 @@ const defaultRun: CommandRunner = (cmd, args) =>
   new Promise((resolve, reject) => {
     execFile(cmd, args, { timeout: 2000 }, (error, stdout) => {
       // A non-zero EXIT (e.g. an unsynced state some builds signal by rc) still resolves with its
-      // stdout; only a SPAWN failure (ENOENT — the binary is absent) rejects, and we map that to
-      // "unavailable" below. `error.code` is a string on spawn failure, a number on non-zero exit.
-      if (error && typeof (error as NodeJS.ErrnoException).code === "string") {
-        reject(error);
+      // stdout, mapping to a real sync check below. Two failure shapes must instead reject so the
+      // caller's catch maps them to "unavailable" (honest "can't determine", never a false warn):
+      // a SPAWN failure (ENOENT — binary absent), where `error.code` is a string; and the `{ timeout }`
+      // KILL of a hung probe, where `error.code` is `null` but `error.killed` is true (empty stdout
+      // would otherwise read as "not synced" and cry wolf).
+      const err = error as (NodeJS.ErrnoException & { killed?: boolean }) | null;
+      if (err && (typeof err.code === "string" || err.killed)) {
+        reject(err);
         return;
       }
       resolve({ stdout });

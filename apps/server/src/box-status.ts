@@ -63,12 +63,14 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
   let replication: BoxStatus["replication"] = { configured: false };
   if (readers.replicationLag !== undefined) {
     // `lagFor` returns worst-first, so the head is the worst lag. bigint → string on the wire
-    // (never `Number()`); an empty subscriber list summarises as a zero worst-lag.
+    // (never `Number()`); an empty subscriber list summarises as a zero worst-lag. `lagFor` yields one
+    // row per `(subscriber, origin)` pair, so `subscribers` is a DISTINCT count of subscriber ids, not
+    // `lags.length` — a multi-origin future would otherwise over-count.
     const lags = await readers.replicationLag();
     replication = {
       configured: true,
       worstLagSeq: (lags[0]?.lag ?? 0n).toString(),
-      subscribers: lags.length,
+      subscribers: new Set(lags.map((l) => l.subscriberId)).size,
     };
   }
 

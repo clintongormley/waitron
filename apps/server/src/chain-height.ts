@@ -15,9 +15,12 @@ export type ChainHeight = { height: number; lastAt: string | null };
  * `node_id` predicate narrows it to this SIF's chain.
  */
 export async function readChainHeight(tx: Transaction, nodeId: string): Promise<ChainHeight> {
-  // Drizzle's node-postgres `.execute()` returns `actualizado_en` as a STRING, not a `Date` — verified
-  // 2026-08-29: this select yields `"2026-08-29 10:00:00+00"` (pg's space-separated timestamptz form,
-  // not ISO-8601). `new Date(...).toISOString()` normalises that into a proper ISO string.
+  // Drizzle's node-postgres `.execute()` returns `actualizado_en` as a STRING, not a `Date`. Probed
+  // 2026-08-29 against a real Postgres via this exact `@waitron/db` `.execute()` path: `select
+  // now()::timestamptz` returned `typeof === "string"`, value `"2026-08-29 15:54:40.437966+00"` (pg's
+  // space-separated timestamptz form, not ISO-8601 — node-postgres registers no OID-1184→Date parser
+  // for this query path). `new Date(...).toISOString()` normalises that into a proper ISO string, and
+  // stays correct even if a future driver hands back a `Date` instead.
   const result = await tx.execute<{ secuencia: number; actualizado_en: string }>(
     sql`select secuencia, actualizado_en from cadenas where node_id = ${nodeId}`,
   );
