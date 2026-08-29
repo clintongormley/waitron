@@ -53,8 +53,8 @@ hit — not a rough frontend.
 
 - **Onboarding 4b/4c** — 4b backup/recovery (incl. cold-restore/fresh-chain), then 4c loopback
   break-glass. *Open threads → Onboarding, cloud trial & distribution/failover.*
-- **Sync cloud-mirror C2b** — the operator flow (mirror-bundle + wizard primary/mirror choice +
-  adopt-existing-venue). *Open threads → Sync.*
+- **Sync cloud-mirror C2b — the operator flow — LANDED (#162)** (mirror-bundle + wizard primary/mirror
+  choice + adopt-existing-venue; four deferred follow-ups recorded under *Open threads → Sync*).
 - **Promotion — Slice 1 (local secondary → primary, in-process) LANDED (#160)** (owner chose to land it
   now, overriding the demo-first park). The **remaining** promote-action slices stay
   **PARKED**: gated on unbuilt foundations (break-glass mint, reserved-SIF, backup regime), the demo never
@@ -210,7 +210,7 @@ pre-push hook, shared-container test rollout, job-sharding).
 
 ## Open threads (detail)
 
-### Sync completion (Phase 0: C2b; rest parked below the demo)
+### Sync completion (Phase 0: C2b LANDED #162; rest parked below the demo)
 
 Mechanism is decided and slices 1–3 + ops have landed: cross-replication is **application-level** (an
 outbox — `sync_log` + a generic capture trigger, apply as the app role under `withTenant`), **not**
@@ -252,7 +252,7 @@ to be proven against a local stand-in cloud. Spec + plan:
   long-running subscriber. SNI-based multi-box routing is also T1's (the stand-in serves one box).
 - **C — cloud read-mirror.** Split (owner, 2026-08-27) into **C1 — the `dining_tables` FK-closure
   enrolment — LANDED (#153)** and **C2 — the mirror-mode server**, itself split (owner, 2026-08-28) into
-  **C2a — the runtime mechanism — LANDED (#155)** and **C2b — the operator flow — next**.
+  **C2a — the runtime mechanism — LANDED (#155)** and **C2b — the operator flow — LANDED (#162)**.
   - **C1 LANDED (#153).** Enrolled the runtime-mutable FK closure — `dining_tables`, `floor_zones`,
     `table_service_statuses` — into the commercial **ordered** lane (a new mutable / no-watermark /
     no-delete registry shape), renumbered `fkRank` to place `dining_tables` above `working_orders`
@@ -278,13 +278,27 @@ to be proven against a local stand-in cloud. Spec + plan:
     few operational GET handlers write (e.g. `GET /print-api/agent/jobs`'s `claimPrintJobs`), inert on a
     mirror today only because those tables are not synced; (3) the promote **action** itself + starting
     the primary-only workers on promotion.
-  - **C2b — the operator flow (next).** The primary emits a **"mirror bundle"** (its five identity ids +
-    CA + a minted per-peer sync token + relay coords); the setup wizard gains a **primary/mirror** choice
-    whose mirror path consumes the bundle, runs an **"adopt existing venue"** provisioning (insert
-    `tenants`/`locations`/`nodes`/`tills`/`invoice_series` with the primary's **explicit** ids, **no
-    `registerSif`** — re-registering a SIF mints a second unrecoverable hash chain), and moves the
-    connection config from C2a's env to DB-stored, wizard-entered config. Its own spec → plan → build;
-    provable against a second local Postgres + a reader on another port.
+  - **C2b — the operator flow. LANDED (#162).** The primary emits a **"mirror bundle"** from an
+    admin-gated `POST /management-api/mirror-bundle` (new `mirror.create` permission): the venue's five
+    identity ids + full parent rows + CA + relay coords + a freshly-minted per-peer sync token. The setup
+    wizard gains a **primary/mirror** role screen → connect-to-primary screen whose mirror path POSTs
+    `/setup-api/adopt`, runs **`adoptVenue`** (insert `tenants`/`locations`/`nodes`/`tills`/`invoice_series`
+    with the primary's **explicit** ids, **no `registerSif`** — re-registering forks the unrepairable hash
+    chain), seals the token in the mirror's **own** vault (`sync.mirror_token` purpose), writes a
+    `mirror_config` singleton, and restarts into C2a's mirror mode. Connection config moved from env to
+    DB+vault. Spec + plan:
+    [c2b-operator-flow](superpowers/specs/2026-08-29-sync-cloud-mirror-c2b-operator-flow-design.md).
+    **Deferred follow-ups (named, not dropped):** (1) a fully wizard-adopted mirror still needs
+    `WAITRON_SYNC_DATABASE_URL` from deploy-level env — `persistTrading` writes the app/migrations DB URLs
+    but not the sync-pool one, so the mirror boot fails closed (`server.config_missing`) without it
+    (pre-existing since C2a; the most material gap before an appliance mirror is usable end-to-end);
+    (2) blind SSRF on `/setup-api/adopt`'s operator-supplied `primaryUrl` — consistent with setup-api's
+    existing unauthenticated-LAN posture, harden before real hosting; (3) mirror fidelity — `adoptVenue`
+    nulls the two out-of-scope FK columns (`locations.catalogue_id`, `tills.receipt_printer_id`) because
+    those tables aren't present at adopt, so the mirror loses only the location→catalogue *pointer*
+    (dashboard unaffected — it reads catalogues directly; restoring it needs carrying catalogues in the
+    bundle or syncing `locations`); (4) the first-contact trust bootstrap for an untrusted-network primary
+    (v1 stand-in is localhost; deferred with the constraint recorded in the spec §9).
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
