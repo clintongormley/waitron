@@ -536,9 +536,13 @@ rejoin-as-secondary, and the no-hot-failover **cold restore from backup**). It d
 mechanism (mount-and-gate, start the primary-only workers without restarting the sale path), a new
 `deployment.singleton_role` axis (the singleton-ownership `role` #33 §8 needs, which `nodes.ts` deferred),
 a remote-first authenticated trigger with a local offline fallback + one break-glass secret, and the
-fence-then-claim-submitter attestation gate. **Next: its implementation plan → build.** NB C2a built the
-`deployment.mode` *seam* but **not** the promote action — nothing refreshes the mode holder or starts the
-workers at runtime yet.
+fence-then-claim-submitter attestation gate. **Its implementation plan is written, and the first slice —
+local secondary → primary, in-process — is in flight on `feat/promote-local-secondary`.** C2a built the
+`deployment.mode` *seam*; this slice adds the runtime **holder refresh** (`deployment-holders.ts`) and the
+in-process `promoteLocalSecondaryToPrimary` (`promote.ts`), so a fence-attested local-secondary promote
+flips `singleton_role` live and the fiscal drain/reconcile pass starts on the next tick with **no restart**
+(a real-PG e2e proves the tills answer throughout). Still deferred: the mirror→primary **mode** flip that
+opens the read-only gate live, and starting the mode-gated workers at runtime (later slices).
 
 - **Promotion + fencing tooling and the till-side failover list** — the promotion-runbook *design* is done
   (its own spec, above), and its **foundation slice LANDED (#158)**: the `deployment.singleton_role` axis
@@ -547,11 +551,19 @@ workers at runtime yet.
   future promotion flips it with no restart). Only the fiscal pass moved to the new axis; the read-only
   gate / sync source / retention / tunnel stay on `mode`. Fixes the active-active correctness bug (a local
   secondary would otherwise run the AEAT submitter); today's primary + C2a mirror are byte-identical.
-  **Next promotion slice → the promote *action*** (endpoint + break-glass auth + live start of the
-  mode-gated workers + fresh-SIF mint + fence attestation; cold restore later) — each **gated on unbuilt
-  foundations** (break-glass mint, reserved-SIF staging, backup regime; see spec §3f/§9). **Two
-  follow-ons from the #158 reviews, for that next slice:** a `(primary, secondary)` sell-only boot
-  integration assertion (the composition is unit-proven + db-tested but not e2e-proven), and revisiting
+  The promote *action* is being built slice by slice (plan:
+  `docs/superpowers/plans/2026-08-29-promote-action-slice-1-local-secondary.md`). **Slice 1 — local
+  secondary → primary, in-process — is in flight on `feat/promote-local-secondary`:** the fence-attestation
+  gate + the idempotent `promoteLocalSecondaryToPrimary` (owner-write `singleton_role`→primary + live holder
+  refresh; fiscal pass starts next tick, no restart), exposed as an in-process `StartedServer` method,
+  real-PG e2e proven. **Remaining slices, each gated on an unbuilt foundation:** Slice 2 — the authenticated
+  endpoint + break-glass auth + the real runtime admin connection (gated on the break-glass mint; the write
+  today uses `migrationsDatabaseUrl`, dev-correct only — see spec §4); Slice 3 — mirror→primary + the
+  worker-lifecycle manager (gated on reserved-SIF staging, §3f.1); Slice 4 — cold restore (gated on the
+  backup regime, §5d/§9); Slice 5 — rejoin-as-secondary + the conflict watcher (gated on the membership
+  wire-protocol, §9.1). **One follow-on from the #158 reviews remains** (the other — a `(primary,
+  secondary)` sell-only boot integration assertion — is **now e2e-proven** by Slice 1's
+  `boot.promote.test.ts`): revisiting
   whether a sell-only secondary should keep mounting the sync source / retention / tunnel (all on `mode`
   today — correct for this slice, but the active-active *serving* decision isn't built). The rest of the
   tooling is still gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol
