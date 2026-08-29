@@ -564,6 +564,14 @@ Same mechanism, differing only downstream (design Q8):
 The cloud never introduces a conflict-resolution rule — it is a read-only mirror of every owner's
 partition, exactly like a local peer's mirror half.
 
+> **Pointer (2026-08-29).** The "passive cloud tertiary" default above is **hardened into a rule** — the
+> cloud serves zero sales until a human promotes it. The "read-only downstream / never originates"
+> property also raises an open question: should the cloud instead be a **relay** that re-publishes each
+> owner's partition to other subscribers, keeping two locals converged through a LAN split (a "durability
+> ≠ convergence" gap otherwise)? See
+> [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+> §7.1 (the rule) and §5.1/§9 (the relay question). Text above left as written.
+
 ### Monitoring, lag, back-pressure, failure
 
 - **Lag** per subscriber = `origin max(sync_log.seq) − subscriber last_applied_seq`, tracked in a

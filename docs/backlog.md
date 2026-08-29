@@ -423,15 +423,28 @@ unattended**:
 ### SIF topology follow-ups (from #33)
 
 The [server-as-SIF + failover design](superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
-decided the topology; §14 defers the buildable pieces:
+decided the topology; §14 defers the buildable pieces. The
+[promotion, failover & node-lifecycle design](superpowers/specs/2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+(landed 2026-08-29) is the **first pass over that deferred ground**: it decides node role-resolution on
+boot/return, physical + membership fencing, per-tab ownership/failover, disposal (durability ≠
+convergence), backups + node seeding, AEAT `consultar` recovery, and cloud-failover sizing. Its §9 lists
+seven still-open items; **the ordered promotion runbook (§9 item 2) is the flagged next design pass** —
+what a human's "make this primary" actually executes (claim the singletons, inject/rotate the key ring,
+enable capture/origination on a formerly-passive mirror, start the primary-only workers, resize). NB the
+C2a mirror-mode server built the *seam* (a `deployment.mode` flag + read-only gate) but **not** the
+promote action — nothing refreshes the mode holder or starts the workers at runtime yet (see the
+cloud-mirror C2a notes).
 
-- **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
-  continuous conflict-detection, the "one primary" invariant.
-- **Split-brain needs its own cross-cutting design** — under a partition two nodes can both act as
-  primary, giving two outboxes and a double-serve + double-sell risk; the "every till and agent picks
-  the single first-reachable node from one shared list" convergence is necessary but **not sufficient**.
-  Spans selling, the fiscal chain (new-chain-on-partition is the existing safety valve), payments
-  (`resolvePending`) and printing alike — **examine in detail, not scoped to printing** (owner request
+- **Promotion + fencing tooling and the till-side failover list** — the *design* is done (2026-08-29
+  spec); the *tooling* is still gated on that spec's §9 open items — chiefly the promotion runbook
+  (§9.2), the membership/rejoin wire-protocol (§9.1), and the till-failover detail (§9.5). Boot-time
+  role resolution, continuous conflict-detection, the "one primary" invariant.
+- **Split-brain** — largely worked through by the 2026-08-29 spec: server-level fencing (physical +
+  membership, §3.5), per-tab single-writer ownership with transfer-not-share (§8), and the bounded worst
+  case (a detectable/refundable double-bill, never a forked chain, §8.4). Remaining cross-cutting seams
+  it names open: the promoted-node (Server 2) side while partitioned (§9.4) and cloud-relay-vs-sink
+  (§9.3). Still spans selling, the fiscal chain (new-chain-on-partition is the existing safety valve),
+  payments (`resolvePending`) and printing — **examine in detail, not scoped to printing** (owner request
   2026-08-26, raised by [failover-printing design §7](superpowers/specs/2026-08-26-failover-printing-design.md)).
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
   it runs.

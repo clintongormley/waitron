@@ -1,8 +1,8 @@
 # Promotion, failover, and node lifecycle
 
 **Date:** 2026-08-29
-**Status:** DRAFT — captures the decisions from the 2026-08-29 design conversation and its review
-round. Not yet approved. Extends the areas [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
+**Status:** APPROVED — landed 2026-08-29. Captures the decisions from the 2026-08-29 design conversation
+and its review round. Extends the areas [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
 (hereafter **#33**) §14 and [`2026-08-02-app-level-sync-design.md`](2026-08-02-app-level-sync-design.md)
 (hereafter **sync**) §15 both deferred as "promotion/fencing tooling and the till-side failover list".
 **Decides:** how a node resolves its role on boot/return, how promotion fences the old node, when a
@@ -156,8 +156,8 @@ discarding it before that. Dropping a node from *serving* must never be wired to
 its tail.
 
 The list-propagation and rejoin *wire-protocol* is **open — §9**. This refines #33 §8's "fencing is
-optional hygiene" into "promotion physically fences and actively evicts"; add a dated pointer at land
-time.
+optional hygiene" into "promotion physically fences and actively evicts"; dated pointer added to #33 §8
+at land (2026-08-29).
 
 ---
 
@@ -173,7 +173,7 @@ plainly so no future reader inherits the wrong bound:
   theft, dead disk) or administratively (an admin junks the box). The administrative case is guardable
   (§5); the physical case is narrowed by §5.2 and bounded by the residual in §5.1.
 
-Add a dated pointer to #33 §3 at land time.
+Dated pointer added to #33 §3 at land (2026-08-29).
 
 ---
 
@@ -510,17 +510,17 @@ whose worst case is a detectable double-bill, never a corrupted chain.
   list) — the first document to work that ground. §9 lists what remains.
 - **Corrects** #33 §3's durability-tail bound (unbounded under partition, §4) and the one-way-
   replication misconception (§1–§2). **Refines** #33 §8's "fencing is optional hygiene" into
-  "promotion physically fences the old node and actively evicts it from serving" (§3.5). Add dated
-  pointers to #33 at land time; leave its
-  text as written (`CLAUDE.md` §6).
+  "promotion physically fences the old node and actively evicts it from serving" (§3.5). Dated pointers
+  added to #33 §3 and §8 at land (2026-08-29); their text is left as written (`CLAUDE.md` §6).
 - **Hardens** sync §9's "passive cloud tertiary" into a rule (§7.1); prefers restore-from-backup over
   sync §7's live-peer snapshot / native-decoding backfill (§6.2); and adds the **cloud-relay** question
-  against sync §9's sink-only cloud (§5.1, §9).
+  against sync §9's sink-only cloud (§5.1, §9). Dated pointer added to sync §9 at land (2026-08-29).
 - **Depends on** sync's ownership map, idempotent apply, and environment handshake; #33's role model,
   boot resolution, and cloud topologies; cloud-storage §5's restore promise, §6a's installation-number
   allocator, and §9's cloud-ingest role; and `packages/verifactu`'s `consultar` client (§5.2).
-- **Does not touch** `docs/backlog.md` or `docs/compliance/*` — those updates belong to the landing
-  flow if and when this design is approved.
+- **`docs/backlog.md`** — the *SIF topology follow-ups* section was updated at land (2026-08-29) to
+  point here and mark the promotion runbook (§9 item 2) as the flagged next design pass. **Does not
+  touch** `docs/compliance/*`.
 
 ---
 

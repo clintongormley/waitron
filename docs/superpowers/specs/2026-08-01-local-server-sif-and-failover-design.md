@@ -124,6 +124,13 @@ returns); but if a server is physically destroyed with, say, thirty seconds of u
 on it, those thirty seconds are gone. That is a tuning knob (replication interval), not a correctness
 question.
 
+> **Pointer (2026-08-29).** This "thirty seconds… a tuning knob" bound holds **only while replication is
+> flowing.** Under a network partition an isolated-but-selling node's un-replicated tail is *unbounded* —
+> it grows for the whole partition. Not a chain-correctness issue (those are the node's own records on its
+> own chain), but it changes what "safe to discard a box" means. See
+> [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+> §4 (and §5 for the disposal guard). Text above left as written.
+
 ---
 
 ## 4. The database: partitioned ownership, fully cross-replicated
@@ -326,6 +333,14 @@ for, and a dedicated local witness is hardware a deli does not want. Human-as-ar
 deliberate, correct choice, consistent with the manual-switch-as-safety finding. Fencing the old box
 becomes optional hygiene rather than a required safety step, because self-demotion plus continuous
 conflict-detection already handle a returning primary.
+
+> **Pointer (2026-08-29).** "Fencing… optional hygiene" is **refined into a required promotion step** for
+> the hard case (a partition where both boxes stay functional, which self-demotion cannot cross).
+> Promotion *physically fences* the old node (power-off *or* demote-to-sell-only, at the box) **and**
+> actively evicts it from the serving list — while eviction from *serving* is not eviction from
+> *replication* (an evicted/sell-only node stays a source until its tail drains). See
+> [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
+> §3.5. Text above left as written.
 
 **A botched dual-designation is recoverable, not fatal.** The fiscal side is protected by new-chain +
 series isolation + AEAT's `3000` dedup (§3). The one genuinely conflicting shared state is **config**
