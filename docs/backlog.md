@@ -474,9 +474,10 @@ Provisioning/build*).
     an `apps/server` test pinning box-status's boot closure `withTenant`-wrapping through a real
     `sync_tailer` pool; *(ii)* surface **`singleton_role`** (#158) alongside `mode` in box-status;
     *(iii)* keep `collectBoxStatus`'s `replicationLag` **fail-loud**; *(iv)* a fractional-day
-    cert-expiry test case. (Along the way, `error-boundary` now keys log severity off the resolved
-    status, so an `AppError` mapped to a 5xx — e.g. the recovery route's `recovery.state_incomplete`
-    server fault — logs at `error`, not `warn`.)
+    cert-expiry test case. (The recovery route maps `recovery.state_incomplete` to HTTP **500** — a
+    box that lost its own secret files is a server fault — but per the `error-boundary` convention an
+    `AppError` is logged at `warn` regardless of the mapped status; only an unexpected non-`AppError`
+    takes the `error`/opaque-500 branch.)
   - **4b-ii — scheduled DB backup.** Scheduled `pg_dump` (incl. `sync_log`) + last-backup age wired
     into box-status's `backup` field. Decisions: **`pg_dump`, not WAL/continuous archiving** (too
     much overhead, owner call); and the backup role must **bypass RLS** or a FORCE-RLS table dumps
