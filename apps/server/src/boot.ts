@@ -3,13 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
-import {
-  createPostgresDb,
-  readDeploymentMode,
-  readSingletonRole,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { createPostgresDb, readDeploymentAxes, withTenant, type Database } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import {
@@ -658,10 +652,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
   // holder: after writing singleton_role='primary' it refreshes both holders, so the fiscal pass starts on
   // the next tick with no restart (promotion runbook design §3b/§3c).
-  const holders = createDeploymentHolders(
-    await readDeploymentMode(db),
-    await readSingletonRole(db),
-  );
+  // Both axes from ONE read (a single MVCC snapshot), so the initial holder pair is never torn — the
+  // same single-snapshot guarantee `refreshDeploymentHolders` relies on: two separate reads under READ
+  // COMMITTED could straddle a concurrent promotion and yield an impossible `(mirror, primary)` pair.
+  const axes = await readDeploymentAxes(db);
+  const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
   // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
