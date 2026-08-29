@@ -66,6 +66,9 @@ export const PERMISSIONS = [
   // policy no permission is consulted; under 'gated' the drawer route requires this. Codes/permissions
   // are never renamed once shipped.
   "cash.drawer",
+  // Minting a cloud-mirror bundle (sync cloud-mirror C2b) — hands out a data-access sync token, so
+  // admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
+  "mirror.create",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

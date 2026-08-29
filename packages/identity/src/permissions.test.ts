@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERMISSIONS, roleHasPermission } from "./permissions.js";
+import { PERMISSIONS, type Permission, roleHasPermission } from "./permissions.js";
 
 describe("roleHasPermission", () => {
   it("gives staff no privileged permission", () => {
@@ -15,10 +15,15 @@ describe("roleHasPermission", () => {
   it("adds staff management for a manager", () => {
     expect(roleHasPermission("manager", "person.manage")).toBe(true);
     expect(roleHasPermission("manager", "sale.void")).toBe(true);
-    // The manager set is SUPERVISOR ∪ {person.manage} = the whole catalog, so pin every row: a
-    // regressed MANAGER that dropped the ...SUPERVISOR spread would otherwise pass on the two
-    // specific assertions above while silently losing sale.refund/discount/rectify.
-    for (const p of PERMISSIONS) expect(roleHasPermission("manager", p)).toBe(true);
+    // The manager set is SUPERVISOR ∪ {the management write gates} = the whole catalog EXCEPT the
+    // admin-only permissions, so pin every row it should hold: a regressed MANAGER that dropped the
+    // ...SUPERVISOR spread would otherwise pass on the two specific assertions above while silently
+    // losing sale.refund/discount/rectify. mirror.create is admin-only (hands out a data-access sync
+    // token) and is asserted false for manager in its own test below.
+    const ADMIN_ONLY: ReadonlySet<Permission> = new Set(["mirror.create"]);
+    for (const p of PERMISSIONS) {
+      expect(roleHasPermission("manager", p)).toBe(!ADMIN_ONLY.has(p));
+    }
   });
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
@@ -114,5 +119,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "printer.manage")).toBe(true);
     expect(roleHasPermission("staff", "printer.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "printer.manage")).toBe(false);
+  });
+  it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
+    // Minting a cloud-mirror bundle hands out a data-access sync token, so it is admin-only — reached via
+    // ALL and NEVER placed in the SUPERVISOR/MANAGER sets. Not even a manager holds it (least privilege —
+    // handing out a data-access token is a tenant-owner capability, distinct from the other management
+    // write gates).
+    expect(PERMISSIONS).toContain("mirror.create");
+    expect(roleHasPermission("admin", "mirror.create")).toBe(true);
+    expect(roleHasPermission("manager", "mirror.create")).toBe(false);
+    expect(roleHasPermission("supervisor", "mirror.create")).toBe(false);
+    expect(roleHasPermission("staff", "mirror.create")).toBe(false);
   });
 });
