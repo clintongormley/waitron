@@ -70,7 +70,9 @@ demo or behind-the-scenes".
 1. **A believable demo restaurant (seed).** Today `dev:setup` seeds **2 products, 0 tables** — a real
    till, an empty shop. Seed a realistic menu (with images), a floor plan with zones + tables, staff
    with roles, and back-dated sales so the reports screen isn't blank. Default the demo to **English**
-   (or a flag). *Tiny cost, transforms every screen — do first.* NEW.
+   (or a flag). **Cheapest path first: if a one-off Square catalogue import is easy (spike it — see
+   Tier C #9), seed the menu from a real Square export; accuracy doesn't matter, it's demo dressing.
+   Else hand-author.** *Tiny cost, transforms every screen — do first.* NEW.
 2. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
    is fully built but has **no dashboard surface**, and login lands on the staff-admin table. Wire it
    to new dashboard routes + a reporting screen, and replace the landing with a business overview
@@ -84,14 +86,22 @@ demo or behind-the-scenes".
    **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
    one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
    planned (`2026-08-17-table-service-ts5-*`).
+5. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
+   centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
+   One venue-wide layout today (only CSS stacking on narrow screens); no phone/handheld/till device
+   kinds (`device_kind` enum = `kds_station` only). Needs new device kinds + a device→layout
+   association + a layout-editor dimension, rendering the existing table-order flow on a handheld.
+   **Pairs with modifiers (#7)** — a waiter taking "burger, no onions" at the table needs them. The
+   biggest Tier-A item; sequence it after the quick wins. MISSING.
 
 **Tier B — an owner will ask; product-defining:**
 
-5. **Reservations (Bookings-1).** Staff-entered, day-list; specced + planned
+6. **Reservations (Bookings-1).** Staff-entered, day-list; specced + planned
    (`2026-08-17-bookings-1*`). MISSING today (only a "Reserved" floor *status* exists). Supervised.
-6. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
-   (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. NEW.
-7. **Menu-management depth.** Multiple `catalogues` + a switcher already exist; missing the pieces that
+7. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
+   (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. **Pairs
+   with tableside ordering (#5).** NEW.
+8. **Menu-management depth.** Multiple `catalogues` + a switcher already exist; missing the pieces that
    make it an owner story: a **draft/published** state (only an `active` bool today),
    **time-of-day / seasonal scheduling**, and the **assign-menu-to-location route**
    (`assignCatalogueToLocation` exists but is exposed by no route, so which menu a till sells is fixed
@@ -99,12 +109,11 @@ demo or behind-the-scenes".
 
 **Tier C — valuable, but defer past a first demo or behind-the-scenes:**
 
-8. **Tableside / handheld ordering + per-device layouts.** One venue-wide layout today (only CSS
-   stacking on narrow screens); no phone/handheld/till device kinds (`device_kind` enum = `kds_station`
-   only). Needs new device kinds + a device→layout association + the layout-editor dimension. *Pull up
-   to Tier A/B if handheld ordering is part of the demo story — owner call.*
-9. **Import a menu from Square (and generic CSV).** MISSING; a strong switching-cost story for an owner
-   leaving Square. Greenfield + external API.
+9. **Square (and generic CSV) menu import — as a product feature.** The full dashboard flow (auth to a
+   Square account, map its catalogue, ongoing re-import) — a strong switching-cost story for an owner
+   leaving Square. A **one-off** version of this is also the cheapest route to the demo seed (#1), so
+   spike the import path early even though the polished feature is Tier C. MISSING; greenfield +
+   external API.
 10. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
     permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a
     large backend change. Demoable on the fixed roles for now.
@@ -171,13 +180,13 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #4** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 | expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
-| 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #5** |
+| 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #6** |
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images | **ordering modifiers (demo Tier B #6) + menu draft/schedule/assign (Tier B #7)**; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images | **ordering modifiers (demo Tier B #7) + menu draft/schedule/assign (Tier B #8)**; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked, post-demo); AI forecast deferred |
 
