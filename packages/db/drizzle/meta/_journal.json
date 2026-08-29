@@ -498,6 +498,13 @@
       "when": 1787998621148,
       "tag": "0070_next_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1788011128654,
+      "tag": "0071_deployment_singleton_role",
+      "breakpoints": true
     }
   ]
 }

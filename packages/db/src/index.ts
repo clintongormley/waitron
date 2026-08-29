@@ -56,10 +56,12 @@ export type { IncidentSeverity } from "./schema/incidents.js";
 export {
   readDeploymentEnvironment,
   readDeploymentMode,
+  readSingletonRole,
   setDeploymentMode,
+  setSingletonRole,
   stampDeployment,
 } from "./deployment.js";
-export type { DeploymentEnvironment, DeploymentMode } from "./deployment.js";
+export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./deployment.js";
 export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";

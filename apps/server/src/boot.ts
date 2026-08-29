@@ -3,7 +3,12 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
-import { createPostgresDb, readDeploymentMode, type Database } from "@waitron/db";
+import {
+  createPostgresDb,
+  readDeploymentMode,
+  readSingletonRole,
+  type Database,
+} from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import {
@@ -39,6 +44,7 @@ import {
 import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
+import { singletonPass } from "./singleton-pass.js";
 import {
   cardClientResolver,
   cardDeviceClientResolver,
@@ -632,6 +638,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // restart — the seam design §10 is "designed for, not built" in C2a (nothing refreshes it yet). The
   // pool is already open, so this DB read is free.
   const modeHolder = { current: await readDeploymentMode(db) };
+  // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
+  // beside modeHolder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
+  // duties; only a 'primary' drains/reconciles. Read PER PASS below, so a later promotion that flips
+  // this holder would start the duties on the next tick, no restart — but like modeHolder this seam is
+  // "designed for, not built": nothing refreshes it yet (the promote action is a later slice).
+  const singletonRoleHolder = { current: await readSingletonRole(db) };
   const isMirror = modeHolder.current === "mirror";
   // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
   // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
@@ -1067,77 +1079,84 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   const controller = new AbortController();
   const loop = runLoop({
-    // A mirror runs no fiscal/settlement duties (C2a design §8): a trivial empty pass keeps `/health`
-    // advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to the primary
-    // path — its real "work" is the pull worker above (§7). Running the drain/reconcile duties on a
-    // mirror would contact AEAT/Stripe for a host that files and settles nothing. A primary runs them.
-    // NOTE: because a mirror's pass has no duties, `/health` reflects only process liveness, NOT
-    // replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad token) still
-    // reports healthy; those surface as `sync.pull_failed` log lines. Real replication-lag monitoring
-    // belongs to the hosting slice (like real per-user auth), out of scope for the C2a stand-in.
-    pass: isMirror
-      ? () => Promise.resolve({ nextDueAt: null, duties: [] })
-      : (at) =>
-          runPass(
-            {
-              // Per pass, not once at boot: `closeAll` below must release exactly the transports THIS
-              // pass built. Each holds a TLS connection pool keyed to one tenant's client certificate,
-              // and nothing closed them before — they accumulated for the process lifetime.
-              drain: async (at2) => {
-                const resolver = aeatClientResolver(
+    // The fiscal/settlement duties (drain/reconcile) run ONLY when this node holds the singletons
+    // (`singleton_role = 'primary'`) — see `singletonPass` (promotion runbook design §2/§3c; #33 §7).
+    // A NON-singleton node gets a trivial empty pass: that covers BOTH a read-only mirror AND a
+    // sell-only local secondary (mode=`primary`, singleton_role=`secondary`). The empty pass keeps
+    // `/health` advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to
+    // the singleton path. Running drain/reconcile on a non-singleton would contact AEAT/Stripe for a
+    // host that must file and settle nothing (a mirror's real "work" is the pull worker above, §7).
+    // `singletonRoleHolder.current` is read PER PASS below, so a promotion that flips the holder to
+    // 'primary' starts these duties on the next tick, no restart.
+    // NOTE: because a non-singleton's pass has no duties, `/health` reflects only process liveness,
+    // NOT replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad
+    // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
+    // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
+    // for the C2a stand-in.
+    pass: singletonPass(
+      () => singletonRoleHolder.current,
+      (at) =>
+        runPass(
+          {
+            // Per pass, not once at boot: `closeAll` below must release exactly the transports THIS
+            // pass built. Each holds a TLS connection pool keyed to one tenant's client certificate,
+            // and nothing closed them before — they accumulated for the process lifetime.
+            drain: async (at2) => {
+              const resolver = aeatClientResolver(
+                {
+                  db,
+                  ring,
+                  endpointFor: aeatEndpointFor(config.environment),
+                  // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
+                  // private trust root) is optional, so `mtlsFetch` already has the exact shape
+                  // `fetchFor` wants when called with one argument. A wrapper here would be one more
+                  // never-invoked closure.
+                  fetchFor: mtlsFetch,
+                },
+                log,
+              );
+              try {
+                return await drain(
                   {
                     db,
-                    ring,
-                    endpointFor: aeatEndpointFor(config.environment),
-                    // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
-                    // private trust root) is optional, so `mtlsFetch` already has the exact shape
-                    // `fetchFor` wants when called with one argument. A wrapper here would be one more
-                    // never-invoked closure.
-                    fetchFor: mtlsFetch,
-                  },
-                  log,
-                );
-                try {
-                  return await drain(
-                    {
-                      db,
-                      resolveClient: resolver.resolve,
-                      skipRetryMs: config.skipRetryMs,
-                      // Which deployment THIS host is — the same `WAITRON_ENV`-derived value
-                      // `config.environment` already is (`deployment-guard.ts` pins it against the
-                      // database at boot). `drain`'s guard (`@waitron/fiscal-verifactu`'s `claimBatch`)
-                      // refuses any due registro whose own `entorno` disagrees, or is unrecorded,
-                      // rather than ever submitting it to AEAT.
-                      environment: config.environment,
-                    },
-                    at2,
-                  );
-                } finally {
-                  await resolver.closeAll();
-                }
-              },
-              // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
-              // on the next pass rather than after a restart.
-              reconcile: async (at2) =>
-                runDue(
-                  {
-                    db,
-                    duties: [duty],
-                    horizonDays: config.scheduler.horizonDays,
-                    maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                    maxAttempts: config.scheduler.maxAttempts,
-                    backoffBaseMs: config.scheduler.backoffBaseMs,
-                    staleAfterMs: config.scheduler.staleAfterMs,
+                    resolveClient: resolver.resolve,
                     skipRetryMs: config.skipRetryMs,
+                    // Which deployment THIS host is — the same `WAITRON_ENV`-derived value
+                    // `config.environment` already is (`deployment-guard.ts` pins it against the
+                    // database at boot). `drain`'s guard (`@waitron/fiscal-verifactu`'s `claimBatch`)
+                    // refuses any due registro whose own `entorno` disagrees, or is unrecorded,
+                    // rather than ever submitting it to AEAT.
+                    environment: config.environment,
                   },
-                  await credentialTenants(db, "payments.stripe"),
                   at2,
-                ),
-              monotonicMs: () => performance.now(),
-              log,
+                );
+              } finally {
+                await resolver.closeAll();
+              }
             },
-            at,
-          ),
+            // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
+            // on the next pass rather than after a restart.
+            reconcile: async (at2) =>
+              runDue(
+                {
+                  db,
+                  duties: [duty],
+                  horizonDays: config.scheduler.horizonDays,
+                  maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                  maxAttempts: config.scheduler.maxAttempts,
+                  backoffBaseMs: config.scheduler.backoffBaseMs,
+                  staleAfterMs: config.scheduler.staleAfterMs,
+                  skipRetryMs: config.skipRetryMs,
+                },
+                await credentialTenants(db, "payments.stripe"),
+                at2,
+              ),
+            monotonicMs: () => performance.now(),
+            log,
+          },
+          at,
+        ),
+    ),
     now,
     sleep: realSleep,
     signal: controller.signal,
