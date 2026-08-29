@@ -108,7 +108,9 @@ the cloud would be an artificial gate the licence won't protect.
 - **Regional fiscal variants** — TicketBAI (Basque/Navarra), SII for larger clients. (Was cloud;
   moved here — fiscal features the community owns.)
 - **Clock sync (NTP)** — OS-level; just NTP, not a service. (Was listed as "trusted time sync";
-  removed. On "fiscal timestamping" see §4 note under the monitoring entry / §12.)
+  removed.) The regulation's only time rule is that the system clock stay within one minute of official
+  time — an NTP obligation, not a qualified-timestamp one; **no RFC-3161 TSA is required** (verified
+  against the AEAT developer FAQ — see §12).
 - **Basic single-venue analytics & dashboards** — the operational read-out; the *paid* boundary is the
   cloud analytics/reporting service (fast explorability + scheduled reports + benchmarking), not the
   numbers themselves.
@@ -169,7 +171,7 @@ provisioning/identity/attestation** demoted — identity is a core first-run key
 remote-access, at-scale provisioning is hardware fulfillment, attestation is speculative;
 **remote-config** and **fleet-health** folded into the multi-venue console and the monitoring service;
 **uptime monitoring** absorbed into the monitoring service; **trusted time sync** is just NTP/core and
-fiscal timestamping is unverified — see §12; **secrets/KMS** kept only as the AEAT cert-custody case
+fiscal timestamping is **not required** by the regulation (verified — see §12); **secrets/KMS** kept only as the AEAT cert-custody case
 above; **SSO** and **entitlement/feature-flags** moved to Internal plumbing.)*
 
 ### CLOUD — bulk-cost economics [B]
@@ -386,13 +388,26 @@ Collapse them when this moves from inventory to structure.
 - **Prioritisation** — which to build first — deferred to a separate pass. Per house convention,
   ranking is by soundness / dependency / de-risking / reuse, not by any external deadline.
 
-**Unverified claim to check before building on it:** whether Veri\*Factu (or the underlying
-anti-fraud/SIF regulation) requires a **qualified RFC-3161 timestamp** on invoice records. This note
-*assumes it does not* — the integrity mechanism is understood to be the hash-chain (`huella`) + AEAT
-submission, with the record's own timestamp sufficient — so "trusted/fiscal timestamping" was demoted
-to NTP/core. If a specific regulation actually mandates a qualified timestamp authority, revisit: a
-shared TSA relay would then be a legitimate **[B]** service. Do not assert either way without a cited
-source.
+**Resolved (2026-08-29): no qualified RFC-3161 timestamp is required.** Verified against the AEAT
+developer FAQ *"Preguntas frecuentes — Desarrolladores"* (dated 4 de diciembre de 2025). A full-text
+search of the 52-page document returns **zero** hits for `RFC 3161`, `sello de tiempo`, `marca de
+tiempo`, `autoridad de sellado`, or `TSA`. The only "Timestamp" mention recommends using one as a
+unique *installation number*, unrelated to record integrity. Concretely:
+
+- **Integrity mechanism** = the hash-chain, plus (in NO VERI\*FACTU mode) the record's own signature:
+  *"…para la modalidad NO VERI\*FACTU, incluyen (además del hash encadenado) la firma del registro por
+  parte del sistema emisor."* VERI\*FACTU mode relies on the hash-chain + AEAT submission.
+- **The record's timestamp is a plain self-recorded system datetime** — `art. 10.1.p) RRSIF`
+  (RD 1007/2023): *"…la fecha, hora, minuto y segundo de generación…"*.
+- **The only time requirement is clock accuracy** — `arts. 7.e) y 7.f)` OM HAC/1177/2024 (NO VERI\*FACTU
+  only): the system clock *"no difiere en más de un minuto de la hora oficial"*. That is an NTP-grade
+  obligation (keep within one minute of official time, e.g. Spain's ROA), **not** a requirement to
+  obtain a cryptographic timestamp token. Plus a chaining rule: a new record's system time must not be
+  more than a minute *earlier* than the previous record's, and records are generated in chronological
+  order.
+
+**Therefore "trusted/fiscal timestamping" is not a saleable cloud service — NTP clock-sync satisfies
+the regulation, and that is core.** The §4 demotion stands, now sourced rather than assumed.
 
 This note is the **complete inventory + decision rules**. Turning it into a roadmap or a tier sheet is
 a later, separate exercise.
