@@ -575,6 +575,18 @@ describe("startServer, against a real container as the deployment role", () => {
       expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
+
+      // The recovery-bundle download (slice 4b-i) is mounted on the same app (`mountRecoveryBundleApi`
+      // in `boot.ts`), gated by the SAME management session as box-status. An UNAUTHENTICATED
+      // `POST /api/box/recovery-bundle` answers 401 (`management_session.required`) rather than 404 — a
+      // 404 here would mean the mount never ran, a 200 that a secret download is ungated.
+      const recovery = await fetch(`http://127.0.0.1:${port}/api/box/recovery-bundle`, {
+        method: "POST",
+      });
+      expect(recovery.status).toBe(401);
+      expect((await recovery.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "management_session.required" },
+      });
     } finally {
       await server.close();
     }

@@ -83,6 +83,7 @@ import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { mountBoxStatusApi } from "./box-status.js";
+import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -1116,6 +1117,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // live promotion the same way, rather than issuing a fresh DB read of its own.
       readMode: () => holders.mode.current,
     },
+    log,
+  );
+
+  // The recovery-bundle download (slice 4b-i): the same management gate as box-status, packing the
+  // box's persisted secret files (config.stateDir) into a passphrase-encrypted bundle. Mounted in the
+  // trading branch only — a setup box has no provisioned identity to recover.
+  mountRecoveryBundleApi(
+    app,
+    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, now },
     log,
   );
 
