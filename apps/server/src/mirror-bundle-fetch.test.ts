@@ -104,6 +104,21 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(path).toBe("/management-api/mirror-bundle");
   });
 
+  it("re-runs the SSRF guard at the fetch boundary: a private/metadata URL throws before any fetch", async () => {
+    // Defense in depth — setup-api validates before this is reached, but the fetcher must be safe for any
+    // caller. A private/link-local literal is refused as `mirror.primary_url_invalid` (not the generic
+    // `mirror.bundle_fetch_failed`), and no network request is made.
+    for (const bad of [
+      "http://169.254.169.254/latest",
+      "https://10.0.0.5",
+      "ftp://x",
+      "not-a-url",
+    ]) {
+      const error = await fetchMirrorBundle(bad, CREDENTIAL).catch((e: unknown) => e);
+      expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
+    }
+  });
+
   it("maps a non-2xx response to mirror.bundle_fetch_failed", async () => {
     const app = new Hono();
     app.post("/management-api/mirror-bundle", (c: Context) =>

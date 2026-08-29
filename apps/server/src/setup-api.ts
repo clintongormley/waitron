@@ -11,6 +11,7 @@ import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
+import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -127,12 +128,17 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
  * UPSTREAM — the primary it was pointed at — failed to serve or return a parseable bundle, so it maps to
  * HTTP 502 (the mirror is a gateway; its upstream failed), the status `mirror.bundle_fetch_failed`'s own
  * doc comment in errors.ts assigns it. `setup.request_invalid` (a missing/mistyped `primaryUrl`/`credential`)
- * defaults to 400 anyway but is enumerated so this map is the surface's whole contract. `setup.not_ready`/
+ * and `mirror.primary_url_invalid` (a `primaryUrl` the SSRF guard refused) are both CLIENT faults that
+ * default to 400 anyway but are enumerated so this map is the surface's whole contract. `setup.not_ready`/
  * `setup.already_provisioning` are NOT here — like provision's, they are returned directly, outside the
  * boundary. A non-`AppError` fault is answered an opaque `server.internal` 500 under the log tag below.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
+  // A `primaryUrl` the SSRF guard refused — a CLIENT fault, so 400 (defaults to 400 too, enumerated so
+  // this map is the surface's whole contract, like `setup.request_invalid`). Distinct from the 502 below:
+  // that is a well-formed request whose UPSTREAM primary failed, this is a malformed request.
+  "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
 };
 
@@ -430,6 +436,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
         const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
         const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+        // SSRF guard — `/setup-api/adopt` is UNAUTHENTICATED, so an attacker who can reach a mirror in
+        // setup could otherwise point `primaryUrl` at the cloud metadata endpoint or an internal host and
+        // drive the box to POST its admin credential there. Refuse a scheme/host the policy disallows HERE,
+        // before `adopt` runs `fetchBundle` — no fetch is attempted for a rejected URL. Throws
+        // `mirror.primary_url_invalid` (400 via `ADOPT_STATUS`); the value is never echoed.
+        assertSafePrimaryUrl(primaryUrl);
         const cred = asObject(body.credential, "credential");
         const credential: AdoptCredential = {
           personId: asString(cred.personId, "credential.personId"),

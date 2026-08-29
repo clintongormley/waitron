@@ -11,6 +11,7 @@
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
+import { assertSafePrimaryUrl } from "./primary-url.js";
 import "./errors.js";
 
 /**
@@ -26,8 +27,13 @@ export async function fetchMirrorBundle(
   primaryUrl: string,
   credential: AdoptCredential,
 ): Promise<MirrorBundle> {
-  // Strip a trailing slash so `<origin>/` + the path never yields a double slash the primary won't route.
-  const url = `${primaryUrl.replace(/\/+$/, "")}/management-api/mirror-bundle`;
+  // Defense in depth: re-run the SSRF guard at the fetch boundary (setup-api validates before it reaches
+  // here, but this fetcher must be safe for any caller — it never builds a request from an unvalidated
+  // string). `assertSafePrimaryUrl` throws `mirror.primary_url_invalid` on a scheme/host the policy
+  // refuses, and returns the PARSED URL the request is built from — no raw-string concat of attacker input.
+  // Strip a trailing slash from the parsed href so `<origin>/` + the path never yields a double slash the
+  // primary won't route (the existing trailing-slash behaviour, now off the normalised href).
+  const url = `${assertSafePrimaryUrl(primaryUrl).href.replace(/\/+$/, "")}/management-api/mirror-bundle`;
 
   let response: Response;
   try {

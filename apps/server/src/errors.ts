@@ -1121,5 +1121,24 @@ declare module "@waitron/shared" {
      * failure surfaces as one clear boot-time cause and no silently-truncated fiscal backup can ship.
      * No params. */
     "backup.role_rls_fenced": Record<string, never>;
+    /**
+     * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
+     * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
+     * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a
+     * non-loopback host over plain http). `POST /setup-api/adopt` is UNAUTHENTICATED, so this validation
+     * is the choke point that stops an attacker driving the mirror to POST its admin credential at the
+     * cloud metadata endpoint or an internal host. A CLIENT fault — the operator's request is malformed —
+     * so it is reported as HTTP 400 by the adopt route's local STATUS map (`ADOPT_STATUS` in setup-api.ts),
+     * the declare-here / status-in-route split every code in this file follows. Distinct from
+     * `mirror.bundle_fetch_failed` (a well-formed request whose UPSTREAM primary then failed, a 502).
+     *
+     * NO params: the URL is attacker-controlled and is NEVER echoed — it can carry a credential in its
+     * userinfo or an internal host that a log line would leak — the same `sync.*`/`tunnel.*` no-leak
+     * discipline `mirror.bundle_fetch_failed`/`node.read_only` follow. `mirror.*` names the DOMAIN CONCEPT
+     * — a read-only mirror node — never the throwing package (`tenant.not_found`'s note gives the rule);
+     * `server.*` is reserved for facts about the process itself, and "the primary URL is invalid" is a
+     * fact about the adopt request, not the process. Never renamed once shipped.
+     */
+    "mirror.primary_url_invalid": Record<string, never>;
   }
 }

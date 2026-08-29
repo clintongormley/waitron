@@ -915,6 +915,37 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(adopt).not.toHaveBeenCalled();
   });
 
+  // SSRF guard: `/setup-api/adopt` is UNAUTHENTICATED, so an operator-supplied `primaryUrl` pointing at
+  // the cloud metadata endpoint, an internal host, or a non-http scheme must be refused HERE — before
+  // `adopt` runs `fetchBundle` — with 400 `mirror.primary_url_invalid` and NO fetch attempted. Proven by
+  // deletion: remove the `assertSafePrimaryUrl(primaryUrl)` call in setup-api.ts and these go red (the
+  // bad URL then reaches `adopt`).
+  it.each([
+    ["the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data"],
+    ["an https private literal IP", "https://10.0.0.5"],
+    ["a private literal IP over http", "http://192.168.1.1"],
+    ["a non-loopback host over plain http", "http://primary.example"],
+    ["a non-http scheme", "file:///etc/passwd"],
+    ["an unparseable primaryUrl", "not-a-url"],
+  ])(
+    "rejects %s with 400 mirror.primary_url_invalid and never reaches adopt",
+    async (_label, primaryUrl) => {
+      const app = new Hono();
+      const { deps, adopt, requestRestart } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const res = await postAdopt(app, { primaryUrl, credential: ADOPT_CREDENTIAL });
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe("mirror.primary_url_invalid");
+      // No fetch/adopt was driven, and the offending URL is never echoed back to the caller.
+      expect(adopt).not.toHaveBeenCalled();
+      expect(JSON.stringify(json)).not.toContain(primaryUrl);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    },
+  );
+
   it("accepts a credential carrying an optional totp and adopts (200)", async () => {
     const app = new Hono();
     const { deps, adopt, adoptRequests } = makeAdoptDeps();
