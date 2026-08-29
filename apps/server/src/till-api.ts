@@ -1100,20 +1100,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         /* v8 ignore next -- unreachable: the till's own location row always resolves under RLS */
         const policy = loc?.policy ?? "gated";
 
-        let authorizedBy: string;
-        let viaOverride: boolean;
-        if (policy === "open") {
-          authorizedBy = personId;
-          viaOverride = false;
-        } else {
-          const authz = await authorize(tx, {
-            sessionId,
-            permission: "cash.drawer",
-            override: parseDrawerOverride(body.override),
-          });
-          authorizedBy = authz.authorizedBy;
-          viaOverride = authz.viaOverride;
-        }
+        // `authorize()` returns `{ authorizedBy, viaOverride }` (plus `permission`), the same names the
+        // `'open'` branch supplies directly — so a ternary destructure covers both policies.
+        const { authorizedBy, viaOverride } =
+          policy === "open"
+            ? { authorizedBy: personId, viaOverride: false }
+            : await authorize(tx, {
+                sessionId,
+                permission: "cash.drawer",
+                override: parseDrawerOverride(body.override),
+              });
 
         const printer = await resolveReceiptPrinter(tx, deps.cfg);
         if (printer === undefined) {

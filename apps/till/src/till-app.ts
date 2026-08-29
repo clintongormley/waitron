@@ -1098,12 +1098,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Dismiss the override dialog without opening the drawer. */
-  #onOverrideCancel(): void {
-    this.#closeOverrideDialog();
-  }
-
-  /** Close the override dialog and clear its error. */
+  /** Close the override dialog and clear its error (also the cancel handler — cancel just dismisses). */
   #closeOverrideDialog(): void {
     this.overrideAuthorizers = undefined;
     this.overrideError = null;
@@ -1412,7 +1407,7 @@ export class TillApp extends LitElement {
         @reprint=${() => void this.#onReprint()}
         @open-drawer=${() => void this.#onOpenDrawer()}
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
-        @override-cancel=${() => this.#onOverrideCancel()}
+        @override-cancel=${() => this.#closeOverrideDialog()}
         @show-schedule=${() => this.#onShowSchedule()}
         @show-floor=${() => void this.#onShowFloor()}
         @floor-refresh=${() => void this.#refreshFloor()}
