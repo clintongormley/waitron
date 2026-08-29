@@ -23,7 +23,7 @@
 // triggers one.
 
 import { sql } from "drizzle-orm";
-import { type Database } from "@waitron/db";
+import { type Database, type Transaction } from "@waitron/db";
 
 export interface PruneResult {
   /** How many `sync_log` rows the prune deleted (0 when nothing is eligible or there are no
@@ -99,11 +99,19 @@ export async function pruneSyncLog(db: Database): Promise<PruneResult> {
 
 /**
  * Reports each `(subscriber, origin)` pair's lag — `origin max(seq) − last_applied_seq` — plus its
- * `alive` flag, worst-lagging first. Reads `sync_log`'s cross-tenant `max(seq)` per origin through the
- * `sync_retention` permissive policy. A drained/empty origin (no `sync_log` rows) reads lag 0 via the
+ * `alive` flag, worst-lagging first. A drained/empty origin (no `sync_log` rows) reads lag 0 via the
  * LEFT JOIN's `coalesce`, never negative. Reporting only — no threshold, no throw (§12 ops-policy).
+ *
+ * The `sync_log` visibility is the CALLER's: run as a `sync_retention` member the whole-log permissive
+ * policy makes the `max(seq)` cross-tenant (the retention sweep's path); run as a `sync_tailer` member
+ * INSIDE `withTenant(tenantId)` the per-tenant `sync_log_tenant_isolation` policy scopes it to that one
+ * tenant — complete on a single-venue box, which is how box-status's replication summary reads the lag
+ * (a bare `sync_tailer` call with no tenant context sees ZERO `sync_log` rows and would report lag 0).
+ * `sync_cursor` carries no RLS, so it is always fully visible. Accepts a `Transaction` as well as a
+ * `Database` so the box-status reader can pass the tenant-scoped `tx` from `withTenant` (both expose
+ * the `execute` this uses).
  */
-export async function lagFor(db: Database): Promise<SubscriberLag[]> {
+export async function lagFor(db: Database | Transaction): Promise<SubscriberLag[]> {
   const result = await db.execute<{
     subscriber_id: string;
     origin_id: string;
