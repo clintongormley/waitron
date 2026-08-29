@@ -976,5 +976,38 @@ declare module "@waitron/shared" {
      * a 4xx: the request is well-formed; the box simply cannot serve it yet). Never renamed once shipped.
      */
     "setup.not_ready": Record<string, never>;
+    /**
+     * A session-gated open-drawer request (`POST /api/drawer/open`, counter receipt/drawer printing
+     * design §5/§6) has no printer to kick the drawer through: `tills.receipt_printer_id` is unset for
+     * the requesting till. There is no ESC/POS device to send the kick command to, so the request is
+     * refused before any outbox enqueue — the same "nothing to work with" shape `sale.empty_basket`
+     * and the `setup.*` no-param guards use, except this one DOES have something non-secret to name.
+     *
+     * `tillId` names the MISCONFIGURED till, not a printer id — there is no printer id to echo, only
+     * the till that lacks one. Mirrors `station.no_default`'s `locationId`, which names the venue that
+     * lacks a default station rather than any station id, for exactly the same "the failure is an
+     * absence, so name the entity missing the resource" reason. `tillId` is the till's own id, already
+     * in its config (`till-config.ts`'s `TillConfig.tillId`), not a secret — the same non-leak
+     * discipline every id-echoing code in this file follows (`tenant.not_found`'s note).
+     *
+     * `drawer.*` names the DOMAIN CONCEPT — the physical cash drawer, kicked through a receipt
+     * printer — never the throwing package (`tenant.not_found`'s note above gives the rule). Not
+     * `printer.*`: that family is `printer.not_found` (an absent/inactive PRINTER id, reused unchanged
+     * from Slice A), a different fact from "this till has no printer configured at all". Not `till.*`
+     * either: that prefix was retired with the node-id rekey (`node.not_found`'s note above) and is not
+     * revived here. Not `server.*`: which till lacks a printer is a fact about the till's OWN
+     * configuration, not about this process (the rule `tenant.not_found`'s note gives).
+     *
+     * Mapped to HTTP 400 (binding spec, design §6) — a configuration gap the operator must fix via the
+     * dashboard's printer picker before a manual kick can work, not a state conflict on any record, so
+     * it takes the request-shape 400 `placement.invalid`/`setup.request_invalid` use rather than a 409.
+     * The route surface Task 6 wires `POST /api/drawer/open` into may list it explicitly in its own
+     * STATUS map (matching `placement.invalid`'s BOTH-maps precedent) or rely on `createErrorBoundary`'s
+     * `status[code] ?? 400` default (`error-boundary.ts`) — the mapping holds either way, and this file
+     * only DECLARES the code; the route layer owns the status, the same split every other code here
+     * follows. This task registers the code only; the throw site is Task 6, not this one. Never renamed
+     * once shipped.
+     */
+    "drawer.no_printer": { tillId: string };
   }
 }

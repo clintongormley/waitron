@@ -5,11 +5,13 @@ import { t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
+  LocationSummary,
   PrintAgentRow,
   PrintJobRow,
   Printer,
   Station,
   StationPrinter,
+  Till,
 } from "../api/client.js";
 import { PrintersScreen } from "./printers-screen.js";
 
@@ -86,6 +88,14 @@ const stations: Station[] = [
   { id: "s2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
+// Counter receipt/drawer (§5): two tills (one with a printer set, one without) + one location, for the
+// per-till receipt-printer picker + the per-location print-mode toggle.
+const tills: Till[] = [
+  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
+  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
+];
+const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
@@ -101,6 +111,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinterStations: vi.fn().mockResolvedValue([] as StationPrinter[]),
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
+    listTills: vi.fn().mockResolvedValue(tills),
+    getLocations: vi.fn().mockResolvedValue(locations),
+    setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
+    setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -800,6 +814,130 @@ describe("printers-screen", () => {
 
     expect(text(el, "[data-test=no-stations-p1]")).toBe(t("printers.no_stations", "es-ES"));
     expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
+  });
+
+  // ── Receipt printer picker + print-mode toggle (counter receipt/drawer §5) ───────────────────────
+
+  it("renders a receipt-printer picker per till, offering the ACTIVE printers + a 'no printer' option", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    const select = q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    const values = [...select.options].map((o) => o.value);
+    // The clear option ("") first, then only the ACTIVE printer p1 — the inactive p2 is not offered.
+    expect(values).toEqual(["", "p1"]);
+    expect(select.options[0]!.textContent).toContain(t("printers.receipt_no_printer", "es-ES"));
+  });
+
+  it("reflects each till's PERSISTED receipt printer in its select (set → the id, unset → the clear option)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // t1 has p1 set; t2 has none — the selects are reconciled to those values in updated().
+    expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).value).toBe("p1");
+    expect((q(el, "[data-test=till-receipt-printer-t2]") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("picking a printer calls setTillReceiptPrinter with the till + chosen printer id, then reloads", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
+
+    pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
+    await flush(el);
+    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
+    expect(api.listTills).toHaveBeenCalledTimes(1); // optimistic reload after the mutation
+  });
+
+  it("clearing the picker ('no printer') calls setTillReceiptPrinter with null", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    pickSelect(el, "[data-test=till-receipt-printer-t1]", "");
+    await flush(el);
+    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t1", null);
+  });
+
+  it("shows an error banner when setting a till's printer is rejected (printer.not_found)", async () => {
+    const api = stubApi({
+      setTillReceiptPrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
+    await flush(el);
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
+    expect(banner).not.toContain("printer.not_found");
+  });
+
+  it("renders a print-mode toggle per location and calls setReceiptPrintMode with the chosen mode", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
+
+    // The three-mode segmented control is present; pick "on_request".
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
+    expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull();
+    q(el, "[data-test=print-mode-loc-1-on_request]")!.click();
+    await flush(el);
+
+    expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "on_request");
+    expect(api.listTills).toHaveBeenCalledTimes(1); // reload after the mutation
+  });
+
+  it("reflects the picked print mode in the segmented control (primary variant), surviving the reload", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // Default: auto is primary.
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
+
+    q(el, "[data-test=print-mode-loc-1-never]")!.click();
+    await flush(el);
+    // The pick is reflected (the bump_mode precedent: local pick survives the reload, not reset to auto).
+    expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("secondary");
+  });
+
+  it("leaves the print-mode toggle on the PRIOR mode (not the failed value) and shows the banner when setReceiptPrintMode is rejected", async () => {
+    const api = stubApi({
+      setReceiptPrintMode: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // Default: auto is primary.
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
+
+    q(el, "[data-test=print-mode-loc-1-never]")!.click();
+    await flush(el);
+
+    // The write failed, so the local pick is NOT applied: the control still shows the prior mode
+    // (auto), never the "never" that failed to save.
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("secondary");
+    // ...and the failure is surfaced in the localised error banner (raw code never shown).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
+    expect(banner).not.toContain("management.request_invalid");
+  });
+
+  it("shows the no-tills / no-locations placeholders when the venue has neither", async () => {
+    const api = stubApi({
+      listTills: vi.fn().mockResolvedValue([]),
+      getLocations: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(text(el, "[data-test=no-tills]")).toBe(t("printers.no_tills", "es-ES"));
+    expect(text(el, "[data-test=no-locations]")).toBe(t("printers.no_locations", "es-ES"));
   });
 
   it("registers as a custom element", () => {

@@ -67,9 +67,10 @@ follow.
 3. **Reporting fiscal remainder** — rectificativas boxes (40/41), the prorrata rule (44),
    intra-community/import boxes (32–39), plus the two pre-filing caveats a human must clear.
 4. **Printing + hardware surface** — the **printing subsystem is built** (agents/printers/outbox/
-   runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed). Remaining on the
-   track: `cloud_poll` transports (fast-follow), counter receipt + cash-drawer
-   printing, cash-drawer authorization, the expo device kind. Real deli hardware need; mechanical.
+   runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed), and so are its
+   **kitchen** (KDS-4) and **counter-receipt + cash-drawer** consumers. Remaining on the track:
+   `cloud_poll` transports (fast-follow), cash-drawer authorization, the expo device kind. Real deli
+   hardware need; mechanical.
 5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
    PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
    **no cloud / deploy / hosting / domain infrastructure yet** (verified 2026-08-26 — no Dockerfile,
@@ -107,7 +108,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook (security) | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
 | 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys | mid-shift-suspension enforce, discount gate, till-refund enforce; **encrypt `totp_secret` at rest** |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
-| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors — operable end to end | receipt/drawer **printing** (top-tier #4) |
+| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing** — operable end to end | cash-drawer **authorization** (top-tier #4) |
 | 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **fiscal remainder (top-tier #3)** |
 | 9 | Deployment | distribution & client-topology design (#86) | **cloud trial on-ramp (#5)** + agent/appliance/reroute (#8) |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill** (fiscal) |
@@ -217,8 +218,9 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 
 ### Printing + hardware surface (top-tier #4)
 
-The **printing subsystem is built and security-reviewed** (2026-08-17..26); the consumers below are
-still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
+The **printing subsystem is built and security-reviewed** (2026-08-17..26), and its **kitchen**
+(KDS-4) and **counter-receipt + cash-drawer** consumers have landed; the remaining consumers below
+are specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
 
 - **Printing subsystem** (`printing-subsystem*`) — **BUILT** (`@waitron/printing` + `print-api`
   routes + the Impresoras dashboard): central-managed `printers` plus **print agents** (enrol/revoke
@@ -241,10 +243,23 @@ still specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans
   `firedAt = new Date()`), not the original `ticket_items.fired_at`, so a paper-jam reprint's header
   reads a fresh time and any kitchen waiting-time gauge reads short; threading `fired_at` through the
   reprint query (per station/round) would make it true — a small product decision for the owner.
-- **Counter receipt + cash-drawer** (`counter-receipt-drawer-printing*`) — per-till
-  `receipt_printer_id`, per-location `receipt_print_mode`, an ESC/POS `qr()`, a faithful
-  `formatReceipt` (re-renders every art. 7.1 / arts. 20–21 element of the *filed* record — fiscal
-  record untouched), server-side print-on-sale + a cash-drawer kick + an audited manual open.
+- **Counter receipt + cash-drawer** (`counter-receipt-drawer-printing*`) — **BUILT**: a per-till
+  `receipt_printer_id` (also the cash-drawer kick — one device, deli-hardware §6), a per-location
+  `receipt_print_mode` (`auto`/`on_request`/`never`), an ESC/POS `qr()`, and a faithful `formatReceipt`
+  that re-renders every art. 7.1 / arts. 20–21 element of the *filed* record from the `TillSaleResult`
+  — it writes only `print_jobs`/`drawer_opens`, never a `registros`/huella/alta table, and the fiscal
+  write path is byte-unchanged by the branch (§4, H2 grep-proven). Server-side **print-on-sale** (an
+  outbox INSERT that never blocks the sale) enqueues the receipt post-filing and, for **cash**, appends
+  the drawer kick + a `drawer_opens('cash_sale')` row; the **integrated (Stripe Terminal) card** paths
+  print a receipt with no kick. Plus a **manual reprint** (`POST /api/sales/:id/reprint` — paper only,
+  files nothing, ignores print-mode, no drawer) and a **manual drawer-open** (`POST /api/drawer/open` —
+  a `drawer_opens('manual')` row + kick, refused `drawer.no_printer` when the till has no printer), and
+  the dashboard's per-till printer picker + per-location print-mode toggle. Fast-follows: the
+  **`cash.drawer` permission + supervisor-override gate** (spec §8 — the manual open is session-gated
+  and audited today, not yet permission-gated; needs the till `authorize()` path — see **Cash-drawer
+  authorization** below) and the `cloud_poll` transports. Deferred UI niceties: the per-till picker
+  isn't location-filtered (all active printers, fine for the single-location deli); the print-mode
+  toggle is set-only (no read-back route this slice, the `bump_mode` precedent).
 - **Cash-drawer authorization** (`cash-drawer-authorization*`) — a per-location `drawer_open_policy`
   and the **first till-side `authorize()`-with-supervisor-override path** + a reusable supervisor-
   override dialog (which on-till config and future till void/refund reuse).

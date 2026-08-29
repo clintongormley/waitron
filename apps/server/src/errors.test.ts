@@ -1,5 +1,7 @@
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
+import { createErrorBoundary } from "./error-boundary.js";
 import "./errors.js";
 
 // One assertion per zone.* code (FP-1 Task 2): each is constructible via `new AppError(code, params)`
@@ -175,5 +177,51 @@ describe("the device error codes carry their declared params", () => {
     const error = new AppError("device.pairing_rate_limited", {});
     expect(error.code).toBe("device.pairing_rate_limited");
     expect(error.params).toEqual({});
+  });
+});
+
+// Counter receipt/drawer printing (Task 2). `drawer.no_printer` is the open-drawer refusal: a
+// session-gated `POST /api/drawer/open` (Task 6) asked to kick a till's cash drawer while
+// `tills.receipt_printer_id` is unset — there is no printer to send the kick through. As with every
+// block above, the first `it` only proves the code is REGISTERED with the right param SHAPE — the
+// construction typechecks solely because errors.ts's `declare module` augmentation is loaded (the
+// side-effect import above), so the fail-first signal for THAT assertion is `tsc --noEmit`, not the
+// runtime run (AppError does no runtime validation of the code). `tillId` names the misconfigured
+// till — not a printer id, since none exists to echo — the same "name the entity that lacks the
+// resource" shape `station.no_default`'s `locationId` uses for its own "nothing configured" refusal.
+//
+// The second `it` proves the binding spec's "→ 400" mapping (design §6) at the one layer this task
+// can reach without Task 6's route: `createErrorBoundary`'s own `status[cause.code] ?? 400` default,
+// exercised directly exactly as `error-boundary.test.ts` already does for `session.required` — a
+// code deliberately absent from the status map it is handed. Task 6's route may still list
+// `drawer.no_printer: 400` explicitly in its own STATUS map for readability (the house style
+// `placement.invalid`'s comment describes), but the mapping holds either way.
+describe("the drawer error code carries its declared params and maps to HTTP 400", () => {
+  it("constructs drawer.no_printer naming the misconfigured till, matching station.no_default's shape", () => {
+    const tillId = "99999999-9999-9999-9999-999999999999";
+    const error = new AppError("drawer.no_printer", { tillId });
+    expect(error.code).toBe("drawer.no_printer");
+    expect(error.params).toEqual({ tillId });
+  });
+
+  it("maps drawer.no_printer to HTTP 400 via the default a status map takes when the code is absent", async () => {
+    const tillId = "99999999-9999-9999-9999-999999999999";
+    // No entry for drawer.no_printer here — the same "deliberately absent" shape
+    // error-boundary.test.ts uses for session.required, so the assertion below exercises the `?? 400`
+    // fallback rather than an explicit map entry.
+    const status: Record<string, never> = {};
+    const boundary = createErrorBoundary(status, "drawer.failed");
+    const app = new Hono();
+    app.get("/boom", (c) =>
+      boundary(
+        c,
+        () => {},
+        () => Promise.reject(new AppError("drawer.no_printer", { tillId })),
+      ),
+    );
+
+    const res = await app.request("/boom");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "drawer.no_printer", params: { tillId } } });
   });
 });

@@ -470,6 +470,20 @@
       "when": 1787847140093,
       "tag": "0066_station_printers_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1787903418592,
+      "tag": "0067_heavy_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1787903451013,
+      "tag": "0068_receipt_printing_rls",
+      "breakpoints": true
     }
   ]
 }

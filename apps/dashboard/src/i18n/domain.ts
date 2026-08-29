@@ -168,6 +168,14 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
   failed: { en: "Failed", es: "Fallido" },
 };
 
+// The three receipt print modes (the `receipt_print_mode` pgEnum), the per-location toggle on the
+// Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
+const PRINT_MODE_NAMES: NameTable = {
+  auto: { en: "Automatic", es: "Automático" },
+  on_request: { en: "On request", es: "Bajo petición" },
+  never: { en: "Never", es: "Nunca" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -181,6 +189,11 @@ export function transportName(value: string, locale: string = currentLocale()): 
 /** A print-job status (queued / printing / done / failed) → its display name (raw-value fallback). */
 export function jobStatusName(value: string, locale: string = currentLocale()): string {
   return resolve(PRINT_JOB_STATUS_NAMES, value, locale);
+}
+
+/** A receipt print mode (auto / on_request / never) → its display name (raw-value fallback). */
+export function printModeName(value: string, locale: string = currentLocale()): string {
+  return resolve(PRINT_MODE_NAMES, value, locale);
 }
 
 /** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */

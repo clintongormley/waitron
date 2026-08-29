@@ -21,7 +21,7 @@ import {
   withTenant,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, TenantId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
@@ -40,6 +40,7 @@ import {
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
+import { enqueueReceiptReprint, enqueueSaleReceipt } from "./receipt-print.js";
 
 /**
  * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
@@ -458,6 +459,43 @@ async function readSettledTicket(
 }
 
 /**
+ * MANUAL REPRINT of a filed sale's customer receipt (design §3d), keyed by the till's WORKING-ORDER id.
+ * `POST /api/sales/:id/reprint`'s `:id` is that working-order id — the id the till holds after a sale
+ * (`till-app.ts`'s `#store.id`, the client-minted idempotency key it sends on `POST /api/sales`); the
+ * `TillSaleResult` the till also holds carries no sale-ROW id, and `readSettledTicket` already keys the
+ * filed sale on the working-order id (`sales_working_order_id_key` makes that 1:1), so this reuses it
+ * rather than adding a sale-id reader. Reads the ALREADY-FILED record back and re-enqueues PAPER only —
+ * it FILES NOTHING (the fiscal record/huella/invoice number are untouched, §4) and never opens the drawer.
+ *
+ * An id that names no filed sale (an unknown, still-`open`, or foreign — RLS-hidden — order) is a 200
+ * NO-OP: there is nothing to reprint, mirroring the kitchen-reprint route (`reprintOrderTickets`) and
+ * guarding `readSettledTicket`'s "settled order has no sale" throw, which is corruption-only for its
+ * pay/collect callers (they hold a `for update` lock on a settled order) but reachable here from an
+ * arbitrary `:id`. A settled sale on a till with no active printer is likewise a no-op
+ * (`enqueueReceiptReprint` resolves no printer → enqueues nothing). Opens its OWN `withTenant`/`asAppUser`
+ * transaction (the sibling verbs' shape).
+ */
+export async function reprintSale(
+  deps: { db: Database; backend: FiscalBackend },
+  cfg: TillConfig,
+  workingOrderId: string,
+): Promise<void> {
+  await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    // Is there a filed sale for this working-order id? An unknown/open/foreign id names none → nothing
+    // to reprint. This existence check keeps `readSettledTicket`'s bare-Error "no sale" path unreachable
+    // here; a filed sale is immutable and never deleted, so once seen it is still there for the read below.
+    const [existing] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+    if (existing === undefined) return;
+    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+    await enqueueReceiptReprint(tx, cfg, ticket);
+  });
+}
+
+/**
  * The amount to SETTLE a sale at and the CHANGE to hand back, per tender method — the one place both
  * the immediate file (`fileImmediateSale`) and the invoice-first collect (`collectOrder`) derive
  * these, so the coverage branches live and are proven in a single spot:
@@ -577,7 +615,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
   // reader), in this same transaction.
-  return {
+  const ticket: TillSaleResult = {
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -588,6 +626,13 @@ async function fileImmediateSale(
     change,
     qr: fiscal.verificationUrl ?? "",
   };
+
+  // Print-on-sale (design §3c), POST-filing and INSERT-only: auto-enqueue the customer receipt to the
+  // till's printer and, for cash, append the drawer kick + record the open. NOTHING here can block or
+  // fail the sale (CLAUDE.md §5) — see `receipt-print.ts`'s header. This is the shared filing tail, so
+  // walk-up, retrieved pay and Mode-T collect all print through this one call.
+  await enqueueSaleReceipt(tx, cfg, ticket, tender.method, saleId, operatorId);
+  return ticket;
 }
 
 /**
@@ -932,7 +977,7 @@ async function finalizeCapture(
           })
           .where(eq(workingOrders.id, req.id));
 
-        return {
+        const ticket: TillSaleResult = {
           invoiceNumber: await readInvoiceNumber(tx, saleId),
           issuedAt: fiscal.issuedAt.toISOString(),
           total: priced.total,
@@ -941,6 +986,14 @@ async function finalizeCapture(
           change: "0.00",
           qr: fiscal.verificationUrl ?? "",
         };
+        // Print-on-sale (design §3c) for the integrated (Stripe Terminal) card sale — the P3 sibling of
+        // `fileImmediateSale`'s enqueue, POST-filing and INSERT-only on THIS tx. Card → receipt, no kick,
+        // no drawer_opens. NOTHING here can block/fail the sale (CLAUDE.md §5 — see `receipt-print.ts`);
+        // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
+        // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
+        // winner's ticket is never re-printed — exactly one receipt per filed sale.
+        await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+        return ticket;
       },
       { nodeId: cfg.nodeId },
     );
@@ -1095,18 +1148,21 @@ async function finalizeRecovery(
         })
         .where(eq(workingOrders.id, req.id));
 
-      return {
-        outcome: "captured",
-        ticket: {
-          invoiceNumber: await readInvoiceNumber(tx, saleId),
-          issuedAt: fiscal.issuedAt.toISOString(),
-          total: priced.total,
-          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-          lines: ticketLinesFrom(priced),
-          change: "0.00",
-          qr: fiscal.verificationUrl ?? "",
-        },
+      const ticket: TillSaleResult = {
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        lines: ticketLinesFrom(priced),
+        change: "0.00",
+        qr: fiscal.verificationUrl ?? "",
       };
+      // Print-on-sale (design §3c) for the RECOVERED integrated card sale — POST-filing, INSERT-only on
+      // this tx. Card → receipt, no kick. This is the fresh-file path; the FOR-UPDATE replay above (a
+      // concurrent winner) returns without reaching here, so a recovery never double-prints. Never-block
+      // as in `finalizeCapture` (`receipt-print.ts`).
+      await enqueueSaleReceipt(tx, cfg, ticket, "card", saleId, operatorId);
+      return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
   );
@@ -1200,7 +1256,16 @@ async function finalizeSettle(
 
         // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
         // `change` stays the "0.00" default.
-        return readSettledTicket(deps.backend, tx, cfg, req.id);
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+        // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE — the receipt
+        // prints at SETTLE, not at placement (the deferred invoice was filed at `placeOrder`, which is
+        // NOT hooked), so the customer gets exactly ONE receipt when they pay. Card → receipt, no kick;
+        // no operator is threaded (card never records a drawer open). The `already_settled` replay in the
+        // catch below stays UNHOOKED — a concurrent winner's ticket is never re-printed. Never-block as in
+        // `finalizeCapture` (`receipt-print.ts`); a settle files nothing new, so the fiscal record is
+        // byte-unchanged.
+        await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
+        return ticket;
       },
       { nodeId: cfg.nodeId },
     );
@@ -1329,10 +1394,13 @@ async function finalizeSettleRecovery(
         })
         .where(eq(workingOrders.id, req.id));
 
-      return {
-        outcome: "captured",
-        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-      };
+      const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
+      // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE RECOVERY — the fresh
+      // settle path. Card → receipt, no kick, no operator (card never opens the drawer). The FOR-UPDATE
+      // replay above (a concurrent winner) returns without reaching here, so a recovery never
+      // double-prints. Never-block / byte-unchanged fiscal record as in `finalizeSettle`.
+      await enqueueSaleReceipt(tx, cfg, ticket, "card", outstanding.saleId);
+      return { outcome: "captured", ticket };
     },
     { nodeId: cfg.nodeId },
   );
@@ -1496,7 +1564,14 @@ export async function collectOrder(
 
         // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
         // collect, not a replay, so not the "0.00" default).
-        return readSettledTicket(deps.backend, tx, cfg, req.id, change);
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id, change);
+        // Print-on-sale (design §3c), POST-settlement and INSERT-only — the Mode-I sibling of the
+        // `fileImmediateSale` call. Only this FRESH collect prints; the idempotent-replay path above
+        // (already `settled`) returns its ticket WITHOUT re-printing, so a lost-response retry never
+        // enqueues a second receipt. `sale.id` is the just-settled invoice's id; NOTHING here can block
+        // the sale (CLAUDE.md §5) — see `receipt-print.ts`.
+        await enqueueSaleReceipt(tx, cfg, ticket, req.tender.method, sale.id, operatorId);
+        return ticket;
       }
 
       // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the

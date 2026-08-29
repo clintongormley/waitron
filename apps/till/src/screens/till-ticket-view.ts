@@ -199,6 +199,19 @@ export class TillTicketView extends LitElement {
         max-width: 22rem;
         margin: 0 auto;
       }
+
+      /* The receipt-hardware actions (reprint the paper, kick the drawer) — a row above New sale, each
+         a full-width secondary button on the same 22rem column as the ticket + New sale. */
+      .receipt-actions {
+        display: flex;
+        gap: var(--wt-space-3);
+        max-width: 22rem;
+        margin: 0 auto var(--wt-space-3);
+      }
+
+      .receipt-actions wt-button {
+        flex: 1;
+      }
     `,
   ];
 
@@ -224,6 +237,27 @@ export class TillTicketView extends LitElement {
   /** Announce that the operator wants to start the next sale. The parent (Task 19) swaps the screen. */
   #newSale(): void {
     this.dispatchEvent(new CustomEvent("new-sale", { bubbles: true, composed: true }));
+  }
+
+  /**
+   * Announce that the operator wants to REPRINT this filed sale's receipt (counter receipt/drawer §5) —
+   * the paper only; the on-screen ticket is unchanged. Presentational: the view dispatches the intent and
+   * `till-app` owns the API call and the working-order id (this view holds only the filed `result`, which
+   * carries no working-order id). Mirrors {@link #newSale}'s composed, bubbling CustomEvent so the app
+   * shell's `@reprint` handler catches it across the shadow boundary.
+   */
+  #reprint(): void {
+    this.dispatchEvent(new CustomEvent("reprint", { bubbles: true, composed: true }));
+  }
+
+  /**
+   * Announce that the operator wants to OPEN THE CASH DRAWER (counter receipt/drawer §5) — a no-sale kick
+   * (giving change, a cash count). Presentational, exactly like {@link #reprint}: the view dispatches the
+   * intent and `till-app` owns the API call; the server audits it and resolves the till's printer from its
+   * own config, so there is nothing for the view to pass.
+   */
+  #openDrawer(): void {
+    this.dispatchEvent(new CustomEvent("open-drawer", { bubbles: true, composed: true }));
   }
 
   override render() {
@@ -310,6 +344,27 @@ export class TillTicketView extends LitElement {
             : nothing
         }
       </article>
+
+      <div class="receipt-actions">
+        <wt-button
+          class="reprint"
+          variant="secondary"
+          size="lg"
+          data-test="reprint"
+          @click=${() => this.#reprint()}
+        >
+          ${t("action.reprint")}
+        </wt-button>
+        <wt-button
+          class="open-drawer"
+          variant="secondary"
+          size="lg"
+          data-test="open-drawer"
+          @click=${() => this.#openDrawer()}
+        >
+          ${t("action.open_drawer")}
+        </wt-button>
+      </div>
 
       <wt-button class="new-sale" variant="primary" size="lg" @click=${() => this.#newSale()}>
         ${t("action.new_sale")}

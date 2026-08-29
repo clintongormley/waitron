@@ -4,11 +4,13 @@ import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
+  LocationSummary,
   PrintAgentRow,
   PrintJobRow,
   Printer,
   Station,
   StationPrinter,
+  Till,
 } from "../api/client.js";
 
 /**
@@ -83,6 +85,14 @@ const stations: Station[] = [
   { id: "s2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
+// Two tills (one with a printer set, one without) + a location, so the receipt-printer picker + the
+// per-location print-mode toggle both render under axe (a labelled <select> each, a segmented control).
+const tills: Till[] = [
+  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
+  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
+];
+const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
+
 function stubApi(): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
@@ -100,6 +110,10 @@ function stubApi(): DashboardApi {
     ),
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
+    listTills: vi.fn().mockResolvedValue(tills),
+    getLocations: vi.fn().mockResolvedValue(locations),
+    setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
+    setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
 }
 

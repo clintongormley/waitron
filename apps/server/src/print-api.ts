@@ -17,10 +17,14 @@ import { and, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
+  locations,
   printAgents,
   printJobs,
+  printers,
   printTicketScope,
   printTransport,
+  receiptPrintMode,
+  tills,
   withTenant,
   type Database,
   type Transaction,
@@ -555,6 +559,120 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
       const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { printerId }));
       return c.json(rows);
+    }),
+  );
+
+  // ── List this tenant's tills (printer.manage) ────────────────────────────────────────────────────
+  // Counter receipt/drawer §3d/§5 — the DATA SOURCE for the dashboard's per-till receipt-printer picker
+  // (it does not exist elsewhere). Returns each till as `{ id, label, locationId, receiptPrinterId }`:
+  // `label` projects `tills.name` (the till's display name — the column is `name`, the picker calls it a
+  // label), `locationId` is the till's location (so the picker can offer that location's printers), and
+  // `receiptPrinterId` the currently-set receipt printer (null = none) so the picker reflects the
+  // persisted value across a reload. Lives beside the sibling `PATCH …/tills/:id/receipt-printer`,
+  // funnelled through the SAME `gated` helper so `printer.manage` is enforced identically (the
+  // by-deletion proof on that helper covers this route too). Tenant-scoped by `gated`'s
+  // `withTenant` + `asAppUser` (RLS), with an explicit `tenant_id` predicate beside it — the same
+  // belt-and-braces the sibling till/location writes carry. Ordered by name for a stable list.
+  app.get("/management-api/tills", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            id: tills.id,
+            label: tills.name,
+            locationId: tills.locationId,
+            receiptPrinterId: tills.receiptPrinterId,
+          })
+          .from(tills)
+          .where(eq(tills.tenantId, deps.cfg.tenantId))
+          .orderBy(tills.name),
+      );
+      return c.json(rows);
+    }),
+  );
+
+  // ── Set a till's receipt printer (printer.manage) ────────────────────────────────────────────────
+  // Counter receipt/drawer §3d/§5 — the dashboard's per-till "receipt printer" picker. Points a till at
+  // one of its OWN location's printers (which is also the cash-drawer kick — deli-hardware §6), or clears
+  // it (`printerId: null` — a till with no printer just doesn't print, §2). Lives beside the sibling
+  // printer routes here, funnelled through the SAME `gated` helper so `printer.manage` is enforced
+  // identically (the by-deletion proof on that helper covers this route too). `:id` is
+  // `requireUuidParam`-screened (`shared.invalid_id`, 400) before any query; a present `printerId` must
+  // be UUID-shaped (else a `22P02` → 500) via `requireBodyUuid`. A named printer is validated to be an
+  // ACTIVE printer in the till's OWN location (the picker's source) — absent/inactive/foreign/other-location
+  // → `printer.not_found` (404, reused from Slice A), which also keeps the composite FK from 23503-ing an
+  // opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
+  // (400) — there is no `till.*` code (retired at the node-id rekey, errors.ts), and naming a
+  // non-existent till in a config PATCH is a request-shape fault, the generic code these routes already use.
+  app.patch("/management-api/tills/:id/receipt-printer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const tillId = requireUuidParam(c.req.param("id"), "TillId");
+      const body = await readJsonBody<{ printerId?: unknown }>(c);
+      // REQUIRED field, either a printer uuid (set) or explicit null (clear). Absent → request_invalid.
+      if (!("printerId" in body)) {
+        throw new AppError("management.request_invalid", { field: "printerId" });
+      }
+      const printerId =
+        body.printerId === null ? null : requireBodyUuid(body.printerId, "printerId");
+      await gated(sessionId, async (tx) => {
+        // The till must exist in this tenant (RLS-scoped). Read its location so a named printer is
+        // validated against the till's OWN location — "from the location's printers" (§5).
+        const [till] = await tx
+          .select({ locationId: tills.locationId })
+          .from(tills)
+          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+        if (till === undefined) {
+          throw new AppError("management.request_invalid", { field: "tillId" });
+        }
+        if (printerId !== null) {
+          const [printer] = await tx
+            .select({ id: printers.id })
+            .from(printers)
+            .where(
+              and(
+                eq(printers.tenantId, deps.cfg.tenantId),
+                eq(printers.id, printerId),
+                eq(printers.locationId, till.locationId),
+                eq(printers.active, true),
+              ),
+            );
+          if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+        }
+        await tx
+          .update(tills)
+          .set({ receiptPrinterId: printerId })
+          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Set a location's receipt print mode (printer.manage) ─────────────────────────────────────────
+  // Counter receipt/drawer §3d/§5 — the dashboard's per-location print-mode toggle
+  // (`auto`/`on_request`/`never`, which the print-on-sale hook reads). Same `gated` / `printer.manage`
+  // gate + `requireUuidParam` id screen as the till route above. `mode` is screened to the
+  // `receipt_print_mode` enum's members (`management.request_invalid`, 400, before the enum column). An
+  // unknown/foreign (RLS-hidden) location is `management.request_invalid` (400) — there is no `location.*`
+  // code, the same request-shape treatment the unknown-till case above takes.
+  app.patch("/management-api/locations/:id/receipt-print-mode", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationRowId = requireUuidParam(c.req.param("id"), "LocationId");
+      const body = await readJsonBody<{ mode?: unknown }>(c);
+      const mode = requireEnum(body.mode, "mode", receiptPrintMode.enumValues);
+      await gated(sessionId, async (tx) => {
+        const updated = await tx
+          .update(locations)
+          .set({ receiptPrintMode: mode })
+          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .returning({ id: locations.id });
+        if (updated.length === 0) {
+          throw new AppError("management.request_invalid", { field: "locationId" });
+        }
+      });
+      return c.body(null, 204);
     }),
   );
 }

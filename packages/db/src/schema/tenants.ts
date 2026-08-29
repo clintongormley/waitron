@@ -40,6 +40,17 @@ export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
 export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen", "expo"]);
 
 /**
+ * The per-venue RECEIPT PRINT MODE (counter-receipt/drawer slice §2). `auto` (default): after a sale
+ * is filed, the server auto-enqueues the customer receipt to the calling till's `receipt_printer_id`.
+ * `on_request`: no auto-print — a manual reprint is always available. `never`: never auto-print.
+ * Governs ONLY the post-filing auto-enqueue; it touches no fiscal record, and a manual reprint works
+ * in every mode. A pgEnum on `locations`, matching `order_flow` / `bump_mode` / `fire_control`'s
+ * precedent on the same table (a per-venue config mode — one declaration yields both the union and
+ * the constraint).
+ */
+export const receiptPrintMode = pgEnum("receipt_print_mode", ["auto", "on_request", "never"]);
+
+/**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
@@ -122,6 +133,12 @@ export const locations = pgTable(
     // `bump_mode` / `order_flow` above default. Governs only which UI shows the affordance — the
     // `fireCourse` verb is unchanged by it.
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
+    // The per-venue receipt print mode (counter-receipt/drawer slice §2): `auto` (default) = auto-print
+    // the customer receipt after filing; `on_request` / `never` = skip the auto-enqueue. NOT NULL
+    // DEFAULT 'auto' so existing location fixtures stay inert-consistent, exactly as `order_flow` /
+    // `bump_mode` / `fire_control` above default. Read per-location by the print-on-sale hook (a later
+    // task); no read logic here.
+    receiptPrintMode: receiptPrintMode("receipt_print_mode").notNull().default("auto"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
     // each other; the cycle is harmless because every cross-module reference is a lazy
@@ -173,6 +190,13 @@ export const tills = pgTable(
       .notNull()
       .references(() => locations.id),
     name: text("name").notNull(),
+    // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
+    // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
+    // BARE uuid, NULLABLE (a till with no printer just doesn't print): the tenant-consistent
+    // (tenant_id, receipt_printer_id) → printers(tenant_id, id) composite FK is hand-written in the
+    // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
+    // the FK check on a NULL.
+    receiptPrinterId: uuid("receipt_printer_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [

@@ -30,6 +30,31 @@ const LF = 0x0a;
 const TEXT_ENCODING = "latin1";
 
 /**
+ * QR error-correction level → the ESC/POS `GS ( k <Function 169>` parameter byte. Level M (0x31,
+ * ~15 % recovery) is the default, mandated for the fiscal cotejo QR by Orden HAC/1177/2024 art.
+ * 21.1. Byte values verified against the Epson ESC/POS TM-printer reference (GS ( k Function 169,
+ * https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn169.html) and
+ * cross-checked against the escpos-coffee reference implementation
+ * (github.com/anastaciocintra/escpos-coffee, src/main/java/.../barcode/QRCode.java: M = 49).
+ */
+const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
+  L: 0x30,
+  M: 0x31,
+  Q: 0x32,
+  H: 0x33,
+};
+
+/**
+ * Default QR module size in printer dots. At ~203 dpi (≈ 8 dots/mm) a Veri*Factu cotejo-URL QR
+ * encodes to roughly version 6–9 (41–53 modules per side) at EC level M, so 6 dots/module prints a
+ * symbol of 41 × 6 / 8 ≈ 30.8 mm … 53 × 6 / 8 ≈ 39.8 mm — inside the mandated 30–40 mm band (Orden
+ * HAC/1177/2024 art. 21.1). The EXACT printed size depends on the QR version (content length) and is
+ * verified MANUALLY on the real printer (design §5); the byte tests pin only the deterministic
+ * command bytes, not the millimetres.
+ */
+const QR_DEFAULT_MODULE_SIZE = 6;
+
+/**
  * The chainable builder returned by {@link esc}. Accumulates raw bytes; `bytes()` snapshots them.
  * Kept a class (not a bare closure) so the fluent chain has a nameable return type consumers can
  * annotate.
@@ -75,6 +100,118 @@ export class EscBuilder {
    */
   kick(): this {
     this.parts.push(ESC, 0x70, 0x00, 0x19, 0xfa);
+    return this;
+  }
+
+  /**
+   * Native QR Code — the `GS ( k` two-dimensional-symbol command family (lead bytes 0x1D 0x28 0x6B,
+   * cn = 0x31 = QR Code; each operation picked by its `fn` byte). The PRINTER'S own QR engine encodes
+   * `text`, so this builder needs no QR-encoding library (see {@link qrRaster} for the dependency-free
+   * raster fallback). Emits, in the order the printer requires: select model 2, set module size, set
+   * error-correction level, store the data, print the symbol.
+   *
+   * `text` is stored verbatim as its Latin-1 bytes — the same single-byte convention {@link text}
+   * uses — which is exactly right for the ASCII Veri*Factu cotejo URL. Default EC level M is mandated
+   * for that fiscal QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per
+   * {@link QR_DEFAULT_MODULE_SIZE}.
+   *
+   * Byte layout verified against the Epson ESC/POS TM-printer reference (GS ( k Functions 165/167/
+   * 169/180/181, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn180.html
+   * et seq.) and the escpos-coffee reference implementation (github.com/anastaciocintra/escpos-coffee).
+   * A physical printer is verified MANUALLY (design §5); the guarantee here is deterministic bytes.
+   */
+  qr(text: string, opts: { ecLevel?: "L" | "M" | "Q" | "H"; moduleSize?: number } = {}): this {
+    const { ecLevel = "M", moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;
+    // Validate the sizing inputs BEFORE emitting any bytes — a programmer-input guard, not a domain
+    // error (so a plain thrown Error, no printer.* AppError code). moduleSize is the Fn167 dot count,
+    // valid range 1-16 (Epson GS ( k Function 167); an out-of-range value would otherwise be masked
+    // with `& 0xff` below into a malformed parameter byte, e.g. -1 → 0xFF.
+    if (!Number.isInteger(moduleSize) || moduleSize < 1 || moduleSize > 16) {
+      throw new RangeError(
+        `qr moduleSize must be an integer in [1, 16] (ESC/POS GS ( k Fn167), got ${moduleSize}`,
+      );
+    }
+    // Fn 180 store-data length = data bytes + 3 (the +3 covering cn, fn and m). It is packed into the
+    // 16-bit pL/pH field, so it cannot exceed 0xFFFF; beyond that the bytes below would truncate into
+    // a malformed length.
+    const data = Buffer.from(text, TEXT_ENCODING);
+    const storeLen = data.length + 3;
+    if (storeLen > 0xffff) {
+      throw new RangeError(
+        `qr store-data length (data bytes + 3 = ${storeLen}) exceeds the 16-bit pL/pH field maximum of ${0xffff}`,
+      );
+    }
+    // Fn 165 — select model: cn=0x31, fn=0x41, n1=0x32 (model 2), n2=0x00; length field pL=0x04.
+    this.parts.push(GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+    // Fn 167 — set module size: cn=0x31, fn=0x43, n=moduleSize dots (1-16); length pL=0x03.
+    this.parts.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, moduleSize & 0xff);
+    // Fn 169 — select EC level: cn=0x31, fn=0x45, n per QR_EC_LEVEL; length pL=0x03.
+    this.parts.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, QR_EC_LEVEL[ecLevel]);
+    // Fn 180 — store data: cn=0x31, fn=0x50, m=0x30; length field = (data bytes + 3), the +3 covering
+    // cn, fn and m. pL = low byte, pH = high byte.
+    this.parts.push(GS, 0x28, 0x6b, storeLen & 0xff, (storeLen >> 8) & 0xff, 0x31, 0x50, 0x30);
+    for (const b of data) this.parts.push(b);
+    // Fn 181 — print symbol: cn=0x31, fn=0x51, m=0x30; length pL=0x03.
+    this.parts.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30);
+    return this;
+  }
+
+  /**
+   * Raster fallback for printers whose firmware lacks the native `GS ( k` QR engine: packs an
+   * ALREADY-COMPUTED square boolean module matrix (`true` = dark module) into a `GS v 0` raster
+   * bit-image. It performs NO QR encoding — the caller supplies the matrix — so `@waitron/printing`
+   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). Not wired to a
+   * consumer in this slice; `formatReceipt` uses the native {@link qr}.
+   *
+   * `GS v 0 m xL xH yL yH d1…dk` (lead bytes 0x1D 0x76 0x30): m=0 (normal); xL/xH = bytes per row =
+   * ceil(pixelWidth / 8); yL/yH = pixel height. Each module expands to `moduleSize`×`moduleSize`
+   * pixels; rows are packed MSB-first, a set bit meaning a dark (printed) pixel, and the final byte of
+   * a row is zero-padded on the right. Verified against the ESC/POS `GS v 0` raster-bit-image
+   * specification (Epson TM-printer reference / escpos.readthedocs.io imaging).
+   */
+  qrRaster(modules: boolean[][], opts: { moduleSize?: number } = {}): this {
+    const { moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;
+    // Validate BEFORE emitting any bytes (a programmer-input guard, so a plain thrown Error).
+    // moduleSize <= 0 makes the module→pixel division below invalid and would emit a width/height-0
+    // GS v 0 header — a malformed payload.
+    if (!Number.isInteger(moduleSize) || moduleSize < 1) {
+      throw new RangeError(`qrRaster moduleSize must be an integer >= 1, got ${moduleSize}`);
+    }
+    const side = modules.length; // square: side × side modules
+    // The matrix must be non-empty and square; a ragged or empty matrix would emit a GS v 0 header
+    // whose declared dimensions do not match the packed data rows.
+    if (side === 0 || modules.some((row) => row.length !== side)) {
+      throw new RangeError(
+        `qrRaster modules must be a non-empty square matrix (every row length === row count ${side})`,
+      );
+    }
+    const pixelSide = side * moduleSize;
+    const widthBytes = Math.ceil(pixelSide / 8);
+    // GS v 0, m=0 (normal); width in bytes per row, then height in dots — each as low/high byte.
+    this.parts.push(
+      GS,
+      0x76,
+      0x30,
+      0x00,
+      widthBytes & 0xff,
+      (widthBytes >> 8) & 0xff,
+      pixelSide & 0xff,
+      (pixelSide >> 8) & 0xff,
+    );
+    for (let my = 0; my < side; my++) {
+      const row = modules[my];
+      for (let sy = 0; sy < moduleSize; sy++) {
+        // Each module row prints `moduleSize` identical pixel rows (vertical expansion).
+        for (let bx = 0; bx < widthBytes; bx++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const mx = Math.floor((bx * 8 + bit) / moduleSize); // pixel x → module x
+            if (mx < side && row[mx]) byte |= 0x80 >> bit; // dark module → set bit, MSB first
+          }
+          this.parts.push(byte);
+        }
+      }
+    }
     return this;
   }
 

@@ -47,6 +47,8 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
+export { drawerOpens } from "./schema/drawer-opens.js";
+export type { DrawerOpenReason } from "./schema/drawer-opens.js";
 export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";
 export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";

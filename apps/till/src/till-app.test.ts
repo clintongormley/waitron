@@ -208,6 +208,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
     placeOrder: vi.fn().mockResolvedValue(placedResult),
     collectOrder: vi.fn().mockResolvedValue(saleResult),
+    // Counter receipt/drawer (§5): the ticket screen's reprint + manual drawer-open levers. Default
+    // resolved; the failure tests override them to reject.
+    reprint: vi.fn().mockResolvedValue(undefined),
+    openDrawer: vi.fn().mockResolvedValue(undefined),
     // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T) + the per-line advance.
     listStations: vi.fn().mockResolvedValue([defaultStation]),
     getStationQueue: vi.fn().mockResolvedValue([]),
@@ -521,6 +525,92 @@ describe("till-app", () => {
     expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
     // The client basket's "Café" never reaches the receipt.
     expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
+  });
+
+  // ── Counter receipt/drawer (§5): the ticket screen's Reprint + Abrir cajón buttons ────────────────
+  // The view dispatches `reprint`/`open-drawer`; the app owns the API call and (for reprint) the
+  // working-order id. `#store.id` is STILL the just-filed sale's id at the ticket stage — nothing clears
+  // the store between recordSale and New sale — so reprint replays against the sale the ticket shows.
+
+  it("reprint (from the ticket view) calls TillApi.reprint with the just-filed sale's working-order id", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    const workingOrderId = c.store.id; // the STABLE id recordSale files against — the reprint target
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    // Sanity: the sale filed against this id, and the ticket is showing.
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      workingOrderId,
+    );
+    expect(ticket(el)).not.toBeNull();
+
+    // Press Reprint on the ticket view — the event bubbles to the app, which calls the API with the SAME id.
+    emit(ticket(el)!, "reprint");
+    await flush(el);
+    expect(currentApi.reprint).toHaveBeenCalledTimes(1);
+    expect(currentApi.reprint).toHaveBeenCalledWith(workingOrderId);
+    // A successful reprint stays on the ticket with no error banner (non-fiscal, non-fatal).
+    expect(ticket(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("open-drawer (from the ticket view) calls TillApi.openDrawer with no argument", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    expect(currentApi.openDrawer).toHaveBeenCalledTimes(1);
+    expect(currentApi.openDrawer).toHaveBeenCalledWith();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("open-drawer: a drawer.no_printer rejection surfaces the drawer.error banner, never an unhandled rejection", async () => {
+    // The till has no receipt printer set → the server rejects `{ code: "drawer.no_printer" }`. The app
+    // surfaces its usual non-fatal banner (generic copy, never the raw code) and stays on the ticket.
+    const { el } = await mountApp({
+      openDrawer: vi.fn().mockRejectedValue({ code: "drawer.no_printer" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner).not.toBeNull();
+    expect(banner!.textContent).toContain(t("drawer.error"));
+    // Non-fatal: the ticket is still on screen.
+    expect(ticket(el)).not.toBeNull();
+  });
+
+  it("reprint: a rejection surfaces the reprint.error banner, never an unhandled rejection", async () => {
+    const { el } = await mountApp({
+      reprint: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "reprint");
+    await flush(el);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner).not.toBeNull();
+    expect(banner!.textContent).toContain(t("reprint.error"));
+    expect(ticket(el)).not.toBeNull();
   });
 
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
