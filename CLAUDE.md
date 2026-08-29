@@ -512,6 +512,42 @@ the 180s `hookTimeout` in `apps/server/vitest.config.ts` fires — observed repe
 never in CI, which is why no config default papers over it. Docker contention on a full `pnpm test`
 shows up separately as `EADDRINUSE` and passes on retry.
 
+**Disabling Ryuk means nothing auto-reaps testcontainers, so INTERRUPTED runs leak — run `pnpm reap`
+(the pre-push hook does it for you).** A CLEAN vitest exit still self-reaps — `startSharedContainer`'s
+`globalTeardown` calls `container.stop()`, which removes the shared container AND its anonymous volume
+(verified 2026-08-29: 0 containers / 0 testcontainers volumes after a clean `pnpm -r test:coverage`).
+But an INTERRUPTED run — Ctrl-C, a `gtimeout`/Bash-timeout SIGTERM, a crash — skips `globalTeardown`
+and leaves a _running_ container + its anon volume behind, un-reaped (Ryuk is off). Un-cleared they
+accumulate (once seen: 173 volumes / 23GB, 13 containers, 40GB images) and bloat the Docker daemon
+enough that the parallel `pnpm -r test:coverage` flakes — a starved PGlite `beforeAll` past its 60s
+`DEFAULT_SETUP_TIMEOUT_MS` (`packages/db/src/testing/lifecycle.ts`), or a lost `freePort`→bind race
+(EADDRINUSE) — while CI (dedicated runner per shard) never sees it and an isolated re-run passes and
+proves nothing. This is what cost three `--no-verify` pushes in the C2a session. **The fix:**
+`scripts/reap-testcontainers.mjs` (run `pnpm reap`, or automatically at the start of `.husky/pre-push`)
+force-removes stale waitron testcontainers with their anon volumes (via `rm -f -v`). It is best-effort:
+it exits 0 with Docker absent or nothing to reap, and every `docker` call is try/caught so a mid-run
+failure never fails the push. **Two guards keep it from removing a container that is actually IN USE** —
+a running orphan and a running live container are otherwise indistinguishable:
+
+1. **Label.** It removes only containers carrying `com.waitron.reapable`, stamped by
+   `startPostgresContainer` (`packages/db/src/testing/postgres.ts`) — **never** the generic
+   `org.testcontainers` label, which is on every project's testcontainers (and every live one). So
+   another repo's containers on a shared daemon, and this repo's compose dev DB (not a testcontainer),
+   are out of scope. The label string is pinned by a real-container test in `postgres.test.ts` (boots a
+   container, proves its host port shows up under `docker ps --filter label=com.waitron.reapable`), so
+   drift between the harness label and the reaper filter fails a test.
+2. **Age.** Of those, it removes only ones older than `STALE_CONTAINER_MS` (2h). A younger container may
+   belong to a watch-mode vitest running RIGHT NOW in another terminal — its container lives for the
+   whole process — so it survives. Residual edge, accepted: a single watch session running past the
+   threshold on one container gets reaped and the dev restarts it.
+
+It never removes images, and there is no blanket `docker volume prune` (which would reach other
+projects' dangling volumes) — `rm -v` takes each removed container's own anon volume. The earlier
+version filtered on the bare `org.testcontainers` label and blanket-pruned; a fresh-context review
+caught that it would force-remove a concurrent watch session's live container (and other projects' on a
+shared daemon), which is why the label+age scoping exists. When cleaning up by hand, `docker volume
+inspect` a volume's name/labels before any `docker volume rm`.
+
 **A probe that needs a Unix SOCKET must run inside the container, not on this host.** Bind-mounting
 the socket directory out of a `postgres:18-alpine` container and connecting to it from macOS does not
 work: the socket is created inside Docker Desktop's VM, and `pg` got `connect ECONNREFUSED

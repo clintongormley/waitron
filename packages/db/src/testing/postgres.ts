@@ -97,7 +97,14 @@ export interface MigratedPostgresOptions {
  * built on top of both would make each suite depend on the thing it exists to check.
  */
 export async function startPostgresContainer(): Promise<StartedContainer> {
-  const container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
+  // `com.waitron.reapable` is the marker the stale-container reaper (scripts/reap-testcontainers.mjs)
+  // filters on: with `TESTCONTAINERS_RYUK_DISABLED=true` (CLAUDE.md §4) an interrupted run leaves this
+  // container un-reaped, and the reaper removes ONLY containers carrying this label — never the generic
+  // `org.testcontainers` label, which is on every project's containers including live ones. This string
+  // must match the reaper's `--filter label=…`; postgres.test.ts pins that it does.
+  const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
+    .withLabels({ "com.waitron.reapable": "true" })
+    .start();
   return {
     uri: container.getConnectionUri(),
     stop: async () => {
