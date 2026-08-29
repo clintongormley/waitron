@@ -116,6 +116,45 @@ export interface DevSetupResult {
   env: DevEnv;
 }
 
+/** The five fiscal ids `provisionVenue` returns, in the shape `buildDevEnv` maps to the env contract. */
+export interface DevVenueIds {
+  tenantId: string;
+  tillId: string;
+  nodeId: string;
+  seriesId: string;
+  locationId: string;
+}
+
+/**
+ * Assemble the server's `.env` contract from a run's varying inputs — the database url, the generated
+ * credentials key, the provisioned venue's ids, and the resolved seed locale. Pure (no I/O, no env
+ * reads), so the `seedLocale → WAITRON_TILL_LOCALE` mapping is proven for BOTH locales in a unit test
+ * without a container — the container-backed `devSetup` suite then proves this env is what reaches
+ * disk (CLAUDE.md §1/§4: the es-ES value must reach `.env` through the real flow, not only via
+ * `resolveSeedLocale`, and `devSetup` builds its env here).
+ */
+export function buildDevEnv(input: {
+  databaseUrl: string;
+  credentialsKey: string;
+  ids: DevVenueIds;
+  seedLocale: SeedLocale;
+}): DevEnv {
+  const { databaseUrl, credentialsKey, ids, seedLocale } = input;
+  return {
+    DATABASE_URL: databaseUrl,
+    WAITRON_ENV: "preproduction",
+    WAITRON_HTTP_PORT: "8080",
+    WAITRON_CREDENTIALS_KEY: credentialsKey,
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    WAITRON_TILL_TENANT_ID: ids.tenantId,
+    WAITRON_TILL_TILL_ID: ids.tillId,
+    WAITRON_TILL_NODE_ID: ids.nodeId,
+    WAITRON_TILL_SERIES_ID: ids.seriesId,
+    WAITRON_TILL_LOCATION_ID: ids.locationId,
+    WAITRON_TILL_LOCALE: seedLocale,
+  };
+}
+
 /** True once every env-contract key is present and non-empty in a parsed `.env`. */
 function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, string> & DevEnv {
   return ENV_KEYS.every((key) => {
@@ -340,19 +379,12 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     await db.close();
   }
 
-  const env: DevEnv = {
-    DATABASE_URL: databaseUrl,
-    WAITRON_ENV: "preproduction",
-    WAITRON_HTTP_PORT: "8080",
-    WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_TILL_TENANT_ID: ids.tenantId,
-    WAITRON_TILL_TILL_ID: ids.tillId,
-    WAITRON_TILL_NODE_ID: ids.nodeId,
-    WAITRON_TILL_SERIES_ID: ids.seriesId,
-    WAITRON_TILL_LOCATION_ID: ids.locationId,
-    WAITRON_TILL_LOCALE: seedLocale,
-  };
+  const env = buildDevEnv({
+    databaseUrl,
+    credentialsKey: randomBytes(32).toString("base64"),
+    ids,
+    seedLocale,
+  });
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
   return { reused: false, env };

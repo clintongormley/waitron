@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import {
   ADMIN_PIN,
+  buildDevEnv,
   devSetup,
   inspectVenues,
   parseEnvFile,
@@ -92,6 +93,38 @@ describe("the demo login PIN + seed locale", () => {
     process.env.WAITRON_SEED_LOCALE = "es-ES";
     expect(resolveSeedLocale()).toBe("es-ES");
   });
+});
+
+// The env-building step `devSetup` runs to assemble its `.env`. Proving BOTH locales here (pure, no
+// container) closes the gap the review flagged: the real-PG `devSetup` suite only ever exercises the
+// default en-GB path, so nothing else proves the es-ES `seedLocale` reaches `WAITRON_TILL_LOCALE` in
+// the written `.env`. `devSetup` builds its env via exactly this function (dev-setup.ts), and the
+// container suite proves that env is what reaches disk — so en-GB end-to-end there plus both locales
+// here covers the mapping for real (CLAUDE.md §1: the value must reach `.env` through the flow).
+describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
+  const ids = {
+    tenantId: "11111111-1111-1111-1111-111111111111",
+    tillId: "22222222-2222-2222-2222-222222222222",
+    nodeId: "33333333-3333-3333-3333-333333333333",
+    seriesId: "44444444-4444-4444-4444-444444444444",
+    locationId: "55555555-5555-5555-5555-555555555555",
+  };
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "sets WAITRON_TILL_LOCALE=%s and renders it into the .env text",
+    (seedLocale) => {
+      const env = buildDevEnv({
+        databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+        credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
+        ids,
+        seedLocale,
+      });
+      // The load-bearing mapping (dev-setup.ts): the resolved locale becomes WAITRON_TILL_LOCALE…
+      expect(env.WAITRON_TILL_LOCALE).toBe(seedLocale);
+      // …and survives the round-trip out to the written `.env` text and back.
+      expect(parseEnvFile(renderEnvFile(env)).WAITRON_TILL_LOCALE).toBe(seedLocale);
+    },
+  );
 });
 
 // Real Postgres, not PGlite: dev-setup migrates + provisions as the container superuser and its

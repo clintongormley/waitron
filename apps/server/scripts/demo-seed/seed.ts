@@ -60,7 +60,9 @@ export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays }: SeedDemoInput,
 ): Promise<void> {
-  const mediaDir = process.env.WAITRON_MEDIA_DIR ?? DEFAULT_MEDIA_ROOT;
+  // `||`, not `??`: an empty `WAITRON_MEDIA_DIR=""` is a valid-but-wrong value that must fall back to
+  // the default, not be used verbatim (CLAUDE.md §3, "an empty connection string is a valid string").
+  const mediaDir = process.env.WAITRON_MEDIA_DIR || DEFAULT_MEDIA_ROOT;
   const { tenantId, locationId } = venue;
 
   // One tenant/app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
