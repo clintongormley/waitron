@@ -71,7 +71,7 @@ demo or behind-the-scenes".
    till, an empty shop. Seed a realistic menu (with images), a floor plan with zones + tables, staff
    with roles, and back-dated sales so the reports screen isn't blank. Default the demo to **English**
    (or a flag). **Cheapest path first: if a one-off Square catalogue import is easy (spike it — see
-   Tier C #9), seed the menu from a real Square export; accuracy doesn't matter, it's demo dressing.
+   Tier C #10), seed the menu from a real Square export; accuracy doesn't matter, it's demo dressing.
    Else hand-author.** *Tiny cost, transforms every screen — do first.* NEW.
 2. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
    is fully built but has **no dashboard surface**, and login lands on the staff-admin table. Wire it
@@ -106,23 +106,30 @@ demo or behind-the-scenes".
    **time-of-day / seasonal scheduling**, and the **assign-menu-to-location route**
    (`assignCatalogueToLocation` exists but is exposed by no route, so which menu a till sells is fixed
    at provisioning). PARTIAL → complete.
+9. **Order timings — overdue / forgotten-order alerting** (owner-elevated 2026-08-29). The KDS
+   station queue **already ages every order** (colour buckets fresh <5 / warm <10 / hot ≥10 min +
+   minute label, `station-queue.ts:405-434`), so the base already demos. This adds the *feature*:
+   **owner-configurable thresholds** (5/10 are hardcoded), **active overdue/forgotten alerting +
+   escalation** (today it's passive colour — no alert when an order crosses a line or sits unbumped),
+   and a **manager/expo overview** of overdue orders across stations. PARTIAL → complete. Detail:
+   *Open threads → KDS operations*.
 
 **Tier C — valuable, but defer past a first demo or behind-the-scenes:**
 
-9. **Square (and generic CSV) menu import — as a product feature.** The full dashboard flow (auth to a
-   Square account, map its catalogue, ongoing re-import) — a strong switching-cost story for an owner
-   leaving Square. A **one-off** version of this is also the cheapest route to the demo seed (#1), so
-   spike the import path early even though the polished feature is Tier C. MISSING; greenfield +
-   external API.
-10. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
+10. **Square (and generic CSV) menu import — as a product feature.** The full dashboard flow (auth to a
+    Square account, map its catalogue, ongoing re-import) — a strong switching-cost story for an owner
+    leaving Square. A **one-off** version of this is also the cheapest route to the demo seed (#1), so
+    spike the import path early even though the polished feature is Tier C. MISSING; greenfield +
+    external API.
+11. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
     permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a
     large backend change. Demoable on the fixed roles for now.
-11. **Payment-provider config UI** (Stripe / SumUp / …). No dashboard UI today (provider is env-stamped
+12. **Payment-provider config UI** (Stripe / SumUp / …). No dashboard UI today (provider is env-stamped
     + sealed via the credentials CLI) and **no SumUp integration at all**; also gated on the unanswered
     SumUp offline question (*Debt → SumUp*). Behind-the-scenes for a demo.
-12. **AEAT cert / Veri*Factu management UI.** First-run only today (`apps/setup` cert screen);
+13. **AEAT cert / Veri*Factu management UI.** First-run only today (`apps/setup` cert screen);
     `cert-expiry.ts` monitors but there is no view/rotate/renew surface. Behind-the-scenes.
-13. **Hardware config profiles per device kind.** No profile abstraction exists; lowest demo value.
+14. **Hardware config profiles per device kind.** No profile abstraction exists; lowest demo value.
 
 ### Parked below the demo (de-prioritised 2026-08-29 — real, but not until there's something to show)
 
@@ -149,8 +156,8 @@ Formerly the numbered top tier; the demo needs none of it.
 accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering
 (SP15) · the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both
 reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish**
-(order-timing thresholds + overdue/forgotten alerts — the aging colour-code already ships; routing
-read-back/audit view + station kind; definable kitchen statuses — see *Open threads → KDS operations*).
+(routing read-back/audit view + station kind; definable kitchen statuses — the order-timing *feature*
+is demo Tier B #9, the aging colour-code already ships; see *Open threads → KDS operations*).
 
 **Cloud services — parked for later review (north star, not yet ranked).** The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
@@ -182,7 +189,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #4** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; order-timing thresholds/alerts + routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
 | 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #6** |
 | 15 | Online ordering | — | not started (Later phase) |
@@ -416,8 +423,8 @@ injectable clock), so the demo already SHOWS slow orders. **Missing to make it a
 owner-**configurable thresholds** (5/10 are hardcoded), **active overdue/forgotten alerting +
 escalation** (today it's passive colour — no alert when an order crosses a line or sits unbumped), and
 a **manager/expo overview** of overdue orders across stations (the dashboard has no "orders taking too
-long" view). Base aging demos today; the enhancement is a genuine owner-facing feature — **decide
-whether to elevate into the demo tiers.**
+long" view). Base aging demos today; the enhancement is **elevated to demo Tier B #9** (owner,
+2026-08-29).
 
 **Status config.** **Table/service statuses — BUILT** (TS-2 `service-status-screen`: full CRUD of
 label / colour / order / active). **Kitchen statuses — PARTIAL:** `bump_mode` (line/ticket) +
