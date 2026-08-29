@@ -29,6 +29,7 @@ export {
   MIN_PIN_LENGTH,
   assertPinLength,
   createPerson,
+  listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
   reactivatePerson,

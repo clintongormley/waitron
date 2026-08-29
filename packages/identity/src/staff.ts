@@ -6,7 +6,7 @@ import { persons } from "./schema/persons.js";
 import { authorizeManager } from "./manager-login.js";
 import { hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
-import type { PersonRoleValue } from "./permissions.js";
+import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
 
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
 export const MIN_PIN_LENGTH = 4;
@@ -161,6 +161,34 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
     .where(eq(persons.status, "active"))
     .orderBy(persons.displayName);
   return rows.map((r) => ({ personId: r.personId, displayName: r.displayName }));
+}
+
+/**
+ * The active persons whose ROLE holds `permission`, in the same `{ personId, displayName }` shape
+ * `listActiveStaff` returns. This is the roster a till surfaces when an operator must pick an
+ * authorizing supervisor for a privileged action under a gated policy (the cash-drawer override —
+ * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose role
+ * holds the action's permission.
+ *
+ * Like `listActiveStaff` it is tenant-scoped by RLS via the caller's transaction (opened under
+ * `withTenant`) and returns ONLY `{ personId, displayName }` — no PIN material, role or status: the
+ * caller shows the picker before the authorizing supervisor has entered a credential, so nothing
+ * unsafe to show may travel. The role→permission map stays authoritative in permissions.ts: this
+ * fetches every active person + their role and keeps those `roleHasPermission(role, permission)`
+ * accepts, so which roles hold a permission is decided in one place, never hardcoded here.
+ */
+export async function listActivePersonsWithPermission(
+  tx: Transaction,
+  permission: Permission,
+): Promise<StaffListEntry[]> {
+  const rows = await tx
+    .select({ personId: persons.id, displayName: persons.displayName, role: persons.role })
+    .from(persons)
+    .where(eq(persons.status, "active"))
+    .orderBy(persons.displayName);
+  return rows
+    .filter((r) => roleHasPermission(r.role as PersonRoleValue, permission))
+    .map((r) => ({ personId: r.personId, displayName: r.displayName }));
 }
 
 /** One row of the admin roster (Task 10). Carries the person's role and status plus credential

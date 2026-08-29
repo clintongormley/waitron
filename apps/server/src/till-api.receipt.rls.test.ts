@@ -746,3 +746,42 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     });
   });
 });
+
+describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTTP)", () => {
+  it("returns the active cash.drawer holders (supervisor + admin) to a logged-in operator, excluding staff, no secrets", async () => {
+    // Logged in as the STAFF operator (lacks cash.drawer): any logged-in operator may ask WHO could
+    // authorize their override, so the roster comes back regardless of the caller's own permission.
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, operatorId);
+
+    const res = await app.request("/api/drawer/authorizers", {
+      method: "GET",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    const authorizers = (await res.json()) as { personId: string; displayName: string }[];
+
+    // The venue's cash.drawer holders are the provisioned admin (Administradora) + the seeded
+    // supervisor (Responsable) — the staff operator (Cajera) is NOT one.
+    const ids = new Set(authorizers.map((a) => a.personId));
+    expect(ids.has(supervisorId)).toBe(true);
+    expect(ids.has(operatorId)).toBe(false);
+    expect(authorizers).toHaveLength(2); // admin + supervisor, no staff
+    // Same no-secrets shape as GET /api/staff: id + name only, no PIN material, role or status.
+    expect(Object.keys(authorizers[0]!)).toEqual(["personId", "displayName"]);
+    expect(JSON.stringify(authorizers)).not.toContain("scrypt$");
+  });
+
+  it("requires a session (401 session.required without one)", async () => {
+    const { cfg } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const res = await app.request("/api/drawer/authorizers", { method: "GET" });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "session.required" },
+    });
+  });
+});

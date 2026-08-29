@@ -7,6 +7,7 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   endSession,
+  listActivePersonsWithPermission,
   listActiveStaff,
   loginWithPin,
   roleHasPermission,
@@ -1035,6 +1036,25 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id);
       return c.body(null, 200);
+    }),
+  );
+
+  // The eligible authorizers for a gated privileged action — the active persons whose role holds
+  // `cash.drawer` (cash-drawer-authorization §5). SESSION-GUARDED, not permission-gated: ANY logged-in
+  // operator may call it (they are about to request a supervisor override and need the picker of who
+  // could authorize it), so `requireSession` runs FIRST and no `authorize` gate follows. Runs under
+  // `withTenant` + `asAppUser` (RLS scopes it to this till's tenant), returning the SAME no-secrets
+  // `{ personId, displayName }` shape as `GET /api/staff` — no PIN material, role or status: the till
+  // shows this picker BEFORE the supervisor has entered their credential. The client sends the chosen
+  // `{ personId, pin }` only on the authenticated `POST /api/drawer/open` override request.
+  app.get("/api/drawer/authorizers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const authorizers = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listActivePersonsWithPermission(tx, "cash.drawer");
+      });
+      return c.json(authorizers);
     }),
   );
 
