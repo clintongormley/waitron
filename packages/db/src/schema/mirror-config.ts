@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
  * table into any `drizzle/meta/*.json` snapshot. Adding it to the schema barrel would make
  * drizzle-kit aware of a table its snapshot chain has never recorded, and the next plain
  * (non-`--custom`) `drizzle-kit generate` could then emit a second `CREATE TABLE "mirror_config"`
- * that fails against any database that already ran 0071. The accessors are exported from the
+ * that fails against any database that already ran 0072. The accessors are exported from the
  * package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
  */
 export const mirrorConfig = pgTable(
