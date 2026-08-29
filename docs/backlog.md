@@ -32,75 +32,121 @@ records, never-reused invoice numbers.
 
 ---
 
-## Priorities (reprioritised 2026-08-26)
+## Priorities (reprioritised 2026-08-29)
 
-One ranked list. **1–5 are the owner-chosen top tier** (2026-08-26); **6–8 are next**; smaller items
-follow.
+**North star: a working frontend to demo to a restaurant owner** (owner decision, 2026-08-29) —
+runnable on a dev laptop, on-prem, or cloud; **the demo needs none of the cloud sync,
+primary/secondary failover, or appliance-hardware track.** Rank by what a restaurant owner will
+notice, not by infra completeness. The prior soundness-first ordering still governs the *infra* work
+(below, under *Parked*) — it is just parked beneath the demo until there is something to show.
 
-> **Elevated 2026-08-26 (owner): appliance onboarding — free tier (in-repo, no cloud/hardware) — is
-> the current *build* focus, ahead of the numbered tier below.** Slices **1a (serve the built SPAs,
-> #137) and 1b (setup-mode boot, #139) both LANDED 2026-08-26**. **Slice 2 was split into 2a/2b/2c;
-> 2a (self-signed CA/leaf + persisted box secrets) LANDED #141 and 2b (the `/setup-api/provision`
-> endpoint — stamp demo/live + `applyVenue` in-process, seal the AEAT cert for live, persist
-> `trading.env`, restart into trading) LANDED #142, both 2026-08-27; **slice 2c (the `apps/setup`
-> Vite+Lit wizard driving 2b's endpoint) LANDED #146** and **slice 3 (discovery + CA-serving) LANDED
-> #143** — the free-tier onboarding path (slices 1–3) is now complete. **Slice 4 (backup / status /
-> break-glass) is split 4a/4b/4c: 4a (box-status API + time-health) LANDED #159** (2026-08-29);
-> **next → 4b** (backup/recovery incl. the cold-restore/fresh-chain path #158's runbook formalised).
-> NB 2b is **venue-only** (deviation R1): it stamps +
-> `applyVenue`s into the already-migrated setup DB and does NOT run the full `instance` role-splitting —
-> deferred to the appliance-image slice (the DB/roles pre-exist; dev works on the superuser). Rationale:
-> it is the one deployment path that needs
-> **neither cloud infrastructure nor final hardware** (in-repo, runs on any Node+Postgres host incl. a
-> laptop; pure app code) and it unblocks the appliance regardless — whereas the cloud trial (#5),
-> sync's cloud-mirror leg (#2), and the appliance *paid* tier all wait on a "Waitron cloud" that **does
-> not exist yet** (verified 2026-08-26: no Dockerfile / deploy job / hosting / domain; `apps/server`
-> has no container or `start`). #1 (engage a fiscal advisor) is a parallel *human* task, not a
-> competing build. The appliance's firmware / OS-image / paid-tier slices (5–7) stay under #8. Spec:
-> [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md).
+**The demo is closer than it looks** (frontend maturity + run path verified 2026-08-29):
+`pnpm dev:setup && pnpm dev` boots a real till + dashboard on real Postgres — cash + manual-card
+sales, live fiscal chaining, **no hardware, no cloud, no AEAT cert** (till PIN 5555 / dashboard 1234).
+~25 fleshed-out screens on one enforced design system. Already built and demo-ready: counter +
+table-service ordering, KDS fire/expo, payment, **menu editing with images**, floor-plan editor,
+**layout designer**, rostering, recipes, purchases, **printer** and **device** enrolment, **staff
+CRUD**, and the **server onboarding wizard**. What is missing is a bounded set of gaps an owner will
+hit — not a rough frontend.
 
-1. **Engage a fiscal advisor.** Long lead time and it gates fiscal decisions, so start now. The task
-   is not just "engage someone": first re-read the whole question list against the current
-   (server-as-SIF + cloud) architecture, drop/rewrite what it invalidated, add the questions those
-   designs raise, *then* engage. Q14 (precuenta) is still open. See *The advisor gap*.
-2. **Sync completion** — cloud-mirror peer + multi-tenant transport + the deferred fiscal-lane
-   (H2). Most-reused infra; needs a fresh design pass; the fiscal-lane is the riskiest, owner-gated
-   piece. See *Open threads → Sync*.
-3. **Reporting fiscal remainder** — rectificativas boxes (40/41), the prorrata rule (44),
-   intra-community/import boxes (32–39), plus the two pre-filing caveats a human must clear.
-4. **Printing + hardware surface** — the **printing subsystem is built** (agents/printers/outbox/
-   runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed), and so are its
-   **kitchen** (KDS-4), **counter-receipt + cash-drawer**, and **cash-drawer authorization**
-   consumers. Remaining on the track: `cloud_poll` transports (fast-follow), the expo device kind.
-   Real deli hardware need; mechanical.
-5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
-   PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
-   **no cloud / deploy / hosting / domain infrastructure yet** (verified 2026-08-26 — no Dockerfile,
-   no deploy job, `apps/server` has no container or `start`), so it is gated on standing up
-   first-time Waitron-cloud infra (host + deploy + DNS + TLS + demo-tenant provisioning), plus
-   signup/billing for a self-serve version. Buildable in preproduction *once that exists*; that cloud
-   infra is shared with sync's cloud-mirror (#2) and the appliance paid tier.
-6. **Recipes → stock → procurement** (sub-projects 18→20) — the linchpin greenfield chain: nested
-   sub-recipes, plate costing, stock depletion per sale, then inventory + suppliers/POs/goods-in/
-   3-way reconcile/reorder.
-7. **Table-service completion** — TS-5 split-bill (the one fiscal TS slice, supervised/owner-gated),
-   Bookings-1, device-scoped fire/collect routes, the expo device kind, the cloud-poll printing
-   transports (Star/Epson).
-8. **Distribution / deployment / failover remainder** — identity-config flow-down, the on-device
-   agent, the appliance image + AP-mode onboarding, the reroute; SIF promotion/fencing + till-side
-   failover.
+### Phase 0 — tie off the two self-contained in-flight threads, then pivot (owner, 2026-08-29)
 
-**Later / smaller:** SumUp card provider · D3 payroll export (integrate-not-build) · accounting
-export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering (SP15) ·
-the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both reopen
-settled TS/KDS decisions, so specced-with-owner, never landed unattended).
+- **Onboarding 4b/4c** — 4b backup/recovery (incl. cold-restore/fresh-chain), then 4c loopback
+  break-glass. *Open threads → Onboarding, cloud trial & distribution/failover.*
+- **Sync cloud-mirror C2b** — the operator flow (mirror-bundle + wizard primary/mirror choice +
+  adopt-existing-venue). *Open threads → Sync.*
+- **Promotion — PARKED at the landed #158 foundation.** The promote-*action* is gated on unbuilt
+  foundations (break-glass mint, reserved-SIF, backup regime) and the demo never touches it, so it is
+  **not** finished now. Design is landed; resume post-demo. *Open threads → SIF topology.*
+
+### Phase 1 — the demo build (ranked)
+
+Ranked by owner-impact ÷ cost; each carries its BUILT / PARTIAL / MISSING status inline (verified
+2026-08-29). Tiers A/B/C = "an owner notices in five minutes / an owner will ask / defer past a first
+demo or behind-the-scenes".
+
+**Tier A — an owner notices these missing in the first five minutes:**
+
+1. **A believable demo restaurant (seed).** Today `dev:setup` seeds **2 products, 0 tables** — a real
+   till, an empty shop. Seed a realistic menu (with images), a floor plan with zones + tables, staff
+   with roles, and back-dated sales so the reports screen isn't blank. Default the demo to **English**
+   (or a flag). *Tiny cost, transforms every screen — do first.* NEW.
+2. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
+   is fully built but has **no dashboard surface**, and login lands on the staff-admin table. Wire it
+   to new dashboard routes + a reporting screen, and replace the landing with a business overview
+   (takings, covers, open tables, top sellers). *Backend built → biggest value-for-cost.* NEW frontend.
+3. **Admin-site professionalization.** (a) The dashboard's **flat row of 14 tabs**
+   (`dashboard-app.ts:374`) becomes a grouped **sidebar** — also the enabler for every new admin screen
+   below without the top bar overflowing; (b) **email + password login**, dropping the prepopulated
+   roster dropdown (`login-screen.ts:177`) the owner flagged as wrong (password auth already exists;
+   needs an email field on persons + a login-screen change). NEW.
+4. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
+   **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
+   one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
+   planned (`2026-08-17-table-service-ts5-*`).
+
+**Tier B — an owner will ask; product-defining:**
+
+5. **Reservations (Bookings-1).** Staff-entered, day-list; specced + planned
+   (`2026-08-17-bookings-1*`). MISSING today (only a "Reserved" floor *status* exists). Supervised.
+6. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
+   (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. NEW.
+7. **Menu-management depth.** Multiple `catalogues` + a switcher already exist; missing the pieces that
+   make it an owner story: a **draft/published** state (only an `active` bool today),
+   **time-of-day / seasonal scheduling**, and the **assign-menu-to-location route**
+   (`assignCatalogueToLocation` exists but is exposed by no route, so which menu a till sells is fixed
+   at provisioning). PARTIAL → complete.
+
+**Tier C — valuable, but defer past a first demo or behind-the-scenes:**
+
+8. **Tableside / handheld ordering + per-device layouts.** One venue-wide layout today (only CSS
+   stacking on narrow screens); no phone/handheld/till device kinds (`device_kind` enum = `kds_station`
+   only). Needs new device kinds + a device→layout association + the layout-editor dimension. *Pull up
+   to Tier A/B if handheld ordering is part of the demo story — owner call.*
+9. **Import a menu from Square (and generic CSV).** MISSING; a strong switching-cost story for an owner
+   leaving Square. Greenfield + external API.
+10. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
+    permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a
+    large backend change. Demoable on the fixed roles for now.
+11. **Payment-provider config UI** (Stripe / SumUp / …). No dashboard UI today (provider is env-stamped
+    + sealed via the credentials CLI) and **no SumUp integration at all**; also gated on the unanswered
+    SumUp offline question (*Debt → SumUp*). Behind-the-scenes for a demo.
+12. **AEAT cert / Veri*Factu management UI.** First-run only today (`apps/setup` cert screen);
+    `cert-expiry.ts` monitors but there is no view/rotate/renew surface. Behind-the-scenes.
+13. **Hardware config profiles per device kind.** No profile abstraction exists; lowest demo value.
+
+### Parked below the demo (de-prioritised 2026-08-29 — real, but not until there's something to show)
+
+Formerly the numbered top tier; the demo needs none of it.
+
+- **Engage a fiscal advisor** — a parallel *human* task (long lead time), not a build; still worth
+  starting, blocks nothing in the demo. See *The advisor gap*.
+- **Sync completion beyond C2b** — fiscal-lane / hash-chain sync (H2, owner-gated), multi-tenant
+  transport. See *Open threads → Sync*.
+- **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
+  intra-community 32–39) + two pre-filing caveats. **Distinct from the demo sales screen (Tier A #2):**
+  AEAT filing completeness (asesor-gated), not an owner takings view. See *Open threads → Reporting
+  fiscal remainder*.
+- **Printing cloud-poll transports + expo device kind** — the subsystem, KDS, receipt + cash-drawer
+  are all built; a single-printer demo needs none of the rest. See *Open threads → Printing*.
+- **Cloud trial on-ramp** — gated on Waitron-cloud infra that **does not exist yet**; the demo runs in
+  dev. See *Open threads → Onboarding, cloud trial & distribution/failover*.
+- **Recipes → stock → procurement (depth)** — recipe-authoring is built; plate costing / stock
+  depletion / suppliers/POs is post-demo product depth. See *Open threads → Recipes*.
+- **Distribution / deployment / failover remainder** — appliance image, on-device agent, reroute,
+  SIF promotion/fencing + till-side failover. See *Open threads → SIF topology*.
+
+**Later / smaller:** SumUp card provider (gated, *Debt*) · D3 payroll export (integrate-not-build) ·
+accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering
+(SP15) · the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both
+reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended).
 
 **Cloud services — parked for later review (north star, not yet ranked).** The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid cloud offering we are building *towards* (the local-first-core + cloud model) and the decision
 rules for what belongs in cloud vs. the open-source ELv2 core (online-only-by-nature **or**
 bulk-cost economics; everything else is core, and we do not fight the community for a core feature).
-**Cloud features come later** — no Waitron-cloud infra exists yet (gates #5 and sync #2) — but the
+**Cloud features come later** — no Waitron-cloud infra exists yet (gates the cloud trial + sync) — but the
 inventory records the target so on-prem work is built toward it (e.g. single-writer-per-row for sync,
 "make the box reachable" as one capability). **Review/prioritise into real slices when cloud work
 starts.**
@@ -121,19 +167,19 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys | mid-shift-suspension enforce, discount gate, till-refund enforce; **encrypt `totp_secret` at rest** |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **fiscal remainder (top-tier #3)** |
-| 9 | Deployment | distribution & client-topology design (#86) | **cloud trial on-ramp (#5)** + agent/appliance/reroute (#8) |
-| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill** (fiscal) |
+| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **backend built but UNWIRED to the dashboard → demo Tier A #2**; fiscal filing remainder parked |
+| 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
+| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #4** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
 | 12 | KDS | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 | expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
-| 14 | Bookings | Bookings-1 specced + planned | **build it** (part of #7) |
+| 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #5** |
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI | **nested sub-recipes, plate costing, stock depletion (#6)** |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images | **ordering modifiers (demo Tier B #6) + menu draft/schedule/assign (Tier B #7)**; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
-| 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | **suppliers/POs/goods-in/stock/3-way reconcile/reorder (#6)**; AI forecast deferred |
+| 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked, post-demo); AI forecast deferred |
 
 **Cross-cutting infra:** sync/replication (outbox + transport + payments fast lane + per-peer
 `sync_peers` auth + retention — see *Open threads → Sync*) · SIF topology (`#33`, `node_id` re-key — see *SIF
@@ -145,7 +191,7 @@ pre-push hook, shared-container test rollout, job-sharding).
 
 ## Open threads (detail)
 
-### Sync completion (top-tier #2)
+### Sync completion (Phase 0: C2b; rest parked below the demo)
 
 Mechanism is decided and slices 1–3 + ops have landed: cross-replication is **application-level** (an
 outbox — `sync_log` + a generic capture trigger, apply as the app role under `withTenant`), **not**
@@ -229,7 +275,7 @@ to be proven against a local stand-in cloud. Spec + plan:
   `kitchen_stations` / `ticket_items` when the multi-node/cloud-mirror kitchen-sync slice lands (both
   were built single-writer-per-row).
 
-### Reporting fiscal remainder (top-tier #3)
+### Reporting fiscal remainder (parked below the demo)
 
 Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-desglose-and-modelo303-spec.md).
 
@@ -248,7 +294,7 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 - **Duplicate-invoice-key decision:** `(tenant_id, supplier_tax_id, supplier_invoice_number)` is
   unique-forever today — asesor to confirm per-year vs forever.
 
-### Printing + hardware surface (top-tier #4)
+### Printing + hardware surface (built; remainder parked below the demo)
 
 The **printing subsystem is built and security-reviewed** (2026-08-17..26), and its **kitchen**
 (KDS-4), **counter-receipt + cash-drawer**, and **cash-drawer authorization** consumers have landed;
@@ -329,96 +375,62 @@ the remaining consumers below are specced-and-planned only. Specs/plans under
 - **Expo device kind** (`expo-device-kind*`) — an `expo_pass` device so the KDS-3 pass screen runs
   always-on, joining KDS-3 to device-identity.
 
-### Cloud trial on-ramp + distribution/failover (top-tier #5, then #8)
+### Onboarding, cloud trial & distribution/failover (Phase 0: onboarding 4b/4c; rest parked)
 
 Distribution & client-topology design landed (#86,
-[spec](superpowers/specs/2026-08-15-distribution-and-client-topology-design.md)). Direction:
-cloud-hosted is a **first-class mode**; production uses **Postgres everywhere** (PGlite demoted to
-dev/test/demo, revising architecture §4). Production-cloud-primary is gated on the asesor hosting
-question (below).
+[spec](superpowers/specs/2026-08-15-distribution-and-client-topology-design.md)): cloud-hosted is a
+**first-class mode**; production uses **Postgres everywhere** (PGlite demoted to dev/test/demo).
 
-- **Cloud trial on-ramp (build first)** — today's same-origin PWA pointed at a cloud instance;
-  preproduction, shared demo tenant; the zero-hardware trial.
-- **Identity-config flow-down** (own spec) — `sessions` and the whole `identity` package are outside
-  the sync set, so a failover **logs the user out today**. Identity *config* (persons + credentials)
-  must flow to a secondary read-only the way catalogue does; the *session* must **not** replicate
-  (write-amplification + single-writer conflict). Re-establishment: PIN-re-prompt v1 → portable
-  signed token later.
-- The **on-device agent** (own spec/spike) — the enabler for a till to host a print agent, the majority
-  (single-box) venue's only box-death printing path (see *Failover printing*); but it **requires a native
-  app**, so it is **parked behind the go-native decision** (a per-OS call, distribution §2); the
-  **appliance image + AP-mode onboarding** — now designed
-  ([spec](superpowers/specs/2026-08-26-appliance-onboarding-design.md) +
-  [1a plan](superpowers/plans/2026-08-26-onboarding-slice1a-serve-spas.md)): the browser-based
-  first-run flow (network → discovery → HTTPS → secrets → admin → tenant), a free self-signed / paid
-  real-cert tier split, a demo/live fiscal fork orthogonal to it, plus backup/break-glass and an
-  optional boot passphrase. Free-tier build order (all in-repo, no cloud/hardware): **1a serve the
-  built SPAs — LANDED #137** (`spa-api.ts` + boot wiring; `WAITRON_{TILL,DASHBOARD}_APP_DIR`; till at
-  `/`, dashboard at `/manage`); **1b setup-mode boot — LANDED #139** (`config.till` optional;
-  `setup-api.ts` = `/setup-api/status` + placeholder; `startServer` branches setup vs trading with the
-  trading path byte-equivalent; `dev:onboard`); **slice 2 split 2a/2b/2c — 2a LANDED #141** (first
-  setup boot mints a self-signed CA + `waitron.local`/IP leaf into a persisted state dir
-  `WAITRON_STATE_DIR`, serves the setup surface over HTTPS from it, and generates+persists the vault
-  master key in `secrets.env` (the sync node-token mint was retired by #144) — idempotent, atomic writes, `0600`; operator
-  `WAITRON_TLS_*` overrides the served cert but the box still generates its secrets; decided:
-  persist-config-then-restart transition, `apps/setup` Vite+Lit wizard); **2b LANDED #142** — the
-  `POST /setup-api/provision` endpoint: an in-process orchestrator (`provisionVenue` = `stampDeployment`
-  demo/live + the landed `applyVenue` → tenant/location/till/node/**SIF/series**), a double-provision
-  guard + a synchronous one-shot latch (no duplicate hash chain on a re-POST), the AEAT cert validated
-  **before** the mint + sealed into `fiscal.aeat` for a live ES-common venue, admin PIN/password hashed
-  at the boundary, `trading.env` persisted (`writeTradingEnv`, 0600 atomic) then a `requestRestart`
-  (SIGTERM → supervisor → trading mode); dev launcher sources `secrets.env`/`trading.env`. **Venue-only
-  (R1)** — full `instance` role-split deferred (see Debt). **slice 2c — the `apps/setup` Vite+Lit
-  wizard — LANDED #146**: a 6-screen in-memory wizard (mode → admin → venue → cert [live+ES-common
-  only] → review → provisioning/done) driving 2b's `POST /setup-api/provision`; served in setup mode
-  via a new `WAITRON_SETUP_APP_DIR` (`mountSetup` serves the built bundle at `/`, else the inline
-  placeholder; trading path untouched); own-shard `test-setup` CI browser lane. The AEAT PFX rides the
-  provision body **only for a live provision** (client-gated on `mode === "live"` — a **Critical** review
-  catch: never seal a cert onto a demo/preproduction tenant). **Slice 4 split 4a/4b/4c; 4a (box-status
-  API + time-health) LANDED #159** (2026-08-29).
-  **Slice 3 discovery + CA-serving — LANDED #143** (built independent of
-  2c, on top of 2a's cert): in-process `multicast-dns` advertises `waitron.local` in **both** modes
-  (crash-safe — a no-multicast-route box still boots; the responder is acquired LAST in each boot branch
-  so no failure path leaks the UDP socket); a new `discovery-api.ts` serves `GET /setup-api/ca.crt` (the
-  CA 2a minted) + `GET /setup-api/discovery` + a server-rendered `GET /setup/trust` per-OS page with an
-  IP-QR fallback; `BOX_HOSTNAME`/`caCertPath` single-source the hostname + CA path; **`setup-api.ts`
-  untouched**. The **automated per-device "is the CA trusted?" check is deferred to a browser-behaviour
-  spike** — spec §17/§18's "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and
-  unverified, so the trust page instructs + offers the download/QR but does not assert trust state. **Slice
-  4 (backup/status/break-glass) is split 4a/4b/4c. 4a — box-status API + time-health — LANDED #159**
-  (2026-08-29): `GET /api/box/status` (mode/time/cert/chain/replication/duties, gated `till.configure`,
-  reuses `readDeploymentMode`/`healthSnapshot`/`lagFor`, no new code/permission/dep) + `time-health.ts`
-  (`timedatectl` probe, degrades to `unavailable`/no-warn off-systemd AND on a hung probe),
-  `cert-expiry.ts` (X509 leaf expiry), `chain-height.ts` (`cadenas.secuencia` under RLS). The replication
-  field runs `lagFor` **inside `withTenant`** on the `sync_tailer` pool — a bare call reads `sync_log`
-  under NULL tenant context → **false-healthy lag 0** (would let an operator discard un-replicated fiscal
-  records); pinned by a prove-by-deletion guard in `packages/sync/src/retention.gate.test.ts`, and
-  `lagFor(db: Database|Transaction)` widened for it. **4a follow-ups (do in 4b):** *(i)* an `apps/server`
-  integration test pinning the boot closure's `withTenant` wrapping through a real `sync_tailer` pool
-  (today only the semantic is guarded in `packages/sync` — the box-status test reads as owner, RLS-bypassed);
-  *(ii)* surface **`singleton_role`** (added by #158) alongside `mode` — box-status now shows only one of
-  the two role axes; *(iii)* keep `collectBoxStatus`'s `replicationLag` **fail-loud** (a lag-read fault
-  500s rather than a false-healthy `configured:false` fallback — deliberate); *(iv)* strengthen the
-  cert-expiry test with a fractional-day case. **next → 4b** (backup/recovery: recovery-bundle download
-  under an operator passphrase, scheduled `pg_dump` incl. `sync_log` + last-backup age, and — per the user
-  + #158's cold-restore runbook — **restore + a FRESH chain must let a no-hot-failover venue go live
-  unblocked**, month-end AEAT `consultar` reconciling the lost tail); then **4c** (loopback-only
-  break-glass admin reset; factory-reset design-only). Slices 5–7
-  (AP-mode firmware, OS image, paid real-cert/remote) stay firmware/OS/paid. **1b deployment
-  constraint (for slices 5–6):** a setup box's `/health` returns **503** by design (no duty loop → not
-  trading-healthy); a liveness/supervisor probe must gate on **`/setup-api/status`** (200), not
-  `/health`, or it restart-loops an unprovisioned box. *Notes:* SPAs are served as bundles only —
-  **installable** PWAs (service worker + manifest) are a later slice; and a pre-existing
-  `readOrderFlow`/`buildCardProvider` boot-throw pool-leak in `boot.ts` (a boot that throws after the
-  app pool opens doesn't close it; moot in prod — process exits) is a candidate cleanup — slice 3 (#143)
-  acquires its mDNS responder LAST so it adds **no** socket leak there, but a generalized top-level boot
-  teardown that would also close this `db` leak remains deferred (Copilot raised it on #143). **Other
-  slice-3 debt:** two QR libraries now coexist — `qrcode` (`apps/server`) vs `apps/till`'s fiscal-pinned
-  `qrcode-generator` — worth unifying into `packages/shared` later. And the
-  **reroute** itself (the till reaches any live server — selling is active-active — keeping a stable
-  local origin in front).
+**Onboarding free-tier — slices 1–3 + 4a LANDED** (#137/#139/#141/#142/#143/#146/#159): the browser
+first-run flow — serve the built SPAs → setup-mode boot → self-signed CA + persisted box secrets →
+`POST /setup-api/provision` (demo/live fork, AEAT cert sealed for live only) → discovery + trust page
+→ box-status/time-health. Spec:
+[appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md). **Slice 2b is
+venue-only (R1)** — the full `instance` role-split is deferred to the appliance image (see *Debt →
+Provisioning/build*).
 
-### Recipes → stock → procurement (next #6)
+**Phase 0 remainder — onboarding 4b then 4c:**
+
+- **4b — backup / recovery.** Recovery-bundle download under an operator passphrase, scheduled
+  `pg_dump` (incl. `sync_log`) + last-backup age, and — per the owner + #158's cold-restore runbook —
+  **restore + a FRESH chain must let a no-hot-failover venue go live unblocked**, month-end AEAT
+  `consultar` reconciling the lost tail. Folds in the **4a follow-ups**: *(i)* an `apps/server`
+  integration test pinning box-status's boot closure `withTenant`-wrapping through a real
+  `sync_tailer` pool (today only the `packages/sync` semantic is guarded); *(ii)* surface
+  **`singleton_role`** (#158) alongside `mode` in box-status; *(iii)* keep `collectBoxStatus`'s
+  `replicationLag` **fail-loud**; *(iv)* a fractional-day cert-expiry test case.
+- **4c — break-glass.** Loopback-only admin reset; factory-reset design-only.
+
+**Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid
+real-cert):**
+
+- **A setup box's `/health` returns 503 by design** (no duty loop → not trading-healthy); a
+  liveness/supervisor probe must gate on **`/setup-api/status`** (200), or it restart-loops an
+  unprovisioned box.
+- **The per-device "is the CA trusted?" check is deferred to a browser-behaviour spike** — spec
+  §17/§18's "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and unverified;
+  the trust page instructs + offers the download/QR but does not assert trust state.
+
+**Parked below the demo (distribution / failover):**
+
+- **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
+  tenant. Gated on Waitron-cloud infra that does not exist yet.
+- **Identity-config flow-down** (own spec) — `sessions` + the `identity` package are outside the sync
+  set, so a failover **logs the user out today**. Identity *config* must flow to a read-only secondary
+  the way catalogue does; the *session* must not replicate. Re-establishment: PIN-re-prompt v1 →
+  portable signed token later.
+- **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
+  venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
+  decision**.
+- **The reroute** — the till reaches any live server (selling is active-active) behind a stable local
+  origin.
+
+*Minor debt (from #143):* two QR libraries coexist — `qrcode` (`apps/server`) vs `apps/till`'s
+fiscal-pinned `qrcode-generator` — unify into `packages/shared` later; and a generalized top-level
+boot teardown for the pre-existing `readOrderFlow`/`buildCardProvider` boot-throw pool-leak in
+`boot.ts` (moot in prod — process exits) remains deferred.
+
+### Recipes → stock → procurement (post-demo depth)
 
 The **recipe/BOM is the linchpin**: it drives allergen derivation (done), plate costing, and
 sales → ingredient consumption → purchasing quantities. Backend allergen-inheritance and the
@@ -431,7 +443,7 @@ recipe-authoring UI are built.
   demand-forecast reorder is deferred** — build the deterministic system first. Received supplier
   invoices are already captured (`@waitron/purchasing`) and feed the accounting/modelo-303 side.
 
-### Table-service completion (next #7)
+### Table-service completion (TS-5 + Bookings-1 pulled into the demo; rest parked)
 
 The table-service core (TS-1..TS-4), the floor plan (FP-1/FP-2), and the KDS displays (KDS-1/2/3) are
 built. Remaining, greenfield + product-heavy → **specced with the owner, run supervised, never landed
@@ -513,7 +525,7 @@ workers at runtime yet.
 [compliance/asesor-questions.md](compliance/asesor-questions.md) have nowhere to go.
 [compliance/who-to-ask.md](compliance/who-to-ask.md) is blunt about the market: *"every candidate
 turned out to be a marketing page. Assume you will be educating whoever you hire."* — so engaging is
-itself a task with a lead time (hence top-tier #1).
+itself a task with a lead time (a parallel human task — worth starting, but blocks nothing in the demo).
 
 **The task is a re-read, then engage.** Two architectural shifts changed the question list:
 [#19] (cloud is a sync root, not a shared system of record) and #33 (server-as-SIF). Several older
@@ -659,32 +671,8 @@ here is the cross-cutting or genuinely-decision-bearing work.
   `tenants`) — wire it with the deferred appliance instance role-split. And a wizard-only box persists
   that owner connection as `trading.env`'s `DATABASE_URL`, so it runs its trading life on the owner role
   (not least-priv `app_user`) until that retrofit.
-- **Onboarding slice-2c follow-ups** (deferred from #146, none blocking; the fiscal surface was verified
-  solid by two heavyweight whole-branch reviews + deletion-proofs — cert single-chokepoint, 409s
-  no-retry, trading path untouched, secrets never leak). **✅ ALL LANDED: (h) #147, (i)+(l) #148, (j)+(k)+(m) #149, (n)+(o) #151.** **(h) ✅ LANDED #147 — FISCAL, pre-existing (#57):**
-  `tenant-id.ts` derives `obligadoTenantId` as a UUIDv5 over `country` + a newline + `taxId`, **not
-  case/whitespace normalized**, so `es` vs `ES` (or a `taxId` casing/spacing difference) for the same business derives a
-  **different** tenant id → could defeat `provisionVenue`'s double-provision guard across two separate
-  wizard sessions (§5 unrecoverable chain duplication). Fix at the **derivation choke point** (normalize
-  both `country` and `taxId`), covering the wizard **and** the `instance` CLI — a wizard-only patch was
-  deliberately NOT taken (false confidence); 2c's client already trims + ES-guards `country`, which
-  narrows but does not close it. (Landed as normalization at the `planVenue` choke point + an `obligadoTenantId` self-normalizing backstop — covering the wizard, the `instance` CLI, and `provision.ts`'s raw-request double-provision guard — with a casing-flip regression test.) **(i) ✅ LANDED #148 — server defence-in-depth:** the provision endpoint calls `sealAeat`
-  whenever `aeatCert` is present **without checking `mode`** (a `boot.test.ts` pins that a demo provision
-  carrying a cert seals it) — the box should refuse/ignore an AEAT cert when `mode !== "live"`. 2c's
-  client gates the cert on live mode (the Critical fix), closing the *reachable* path; this is the
-  server-side belt. (Landed as a symmetric gate — a cert is accepted iff `live + ES-common`, else refused `setup.request_invalid`/`aeatCert` before parse; + a live+cert full-boot seal test.) **(j) ✅ LANDED #149 —** a11y: the venue-screen server-routed banner + the client-validation banner could
-  co-render (two `role="alert"`); now a single alert region (client-validation takes precedence). **(k) ✅ LANDED #149 —** terminal failure states (`already_provisioning`/`already_provisioned`/
-  `deployment.already_stamped`) rendered a bare alert with no next-step; now a "Reload to open the till" / "Reload" action (the two fiscal 409s still offer no retry).
-  **(l) ✅ LANDED #148 —** `setup-api.ts`'s provision-error doc comment implied the client sees `setup.provision_failed`;
-  that's only the boundary's log *tag* — a crash sends `server.internal` (comment corrected). **(m) ✅ LANDED #149 —**
-  altitude: the venue→`cert`/`review` conditional was computed in `venue-screen` (read `draft.mode`); lifted
-  into the shell (a screen-agnostic `setup-advance` event; the shell's `#onAdvance` decides cert vs review),
-  matching `dashboard-app.ts`'s `#applyMe`. **(n) ✅ LANDED #151 —** hoist the shared `<select>` styling to
-  `packages/ui`. **Correction:** the "3rd verbatim copy" premise was wrong — `apps/dashboard` and `apps/setup`
-  were identical (form select, `width:100%`) but `apps/till` genuinely differs (touch tap-target: `min-height`,
-  no width). Hoisted the dashboard/setup version to `@waitron/ui` as `selectStyles`; till left as-is (documented). **(o) ✅ LANDED #151 —** the 14 raw `new CustomEvent(...)` dispatch
-  sites had no typed helper (a mistyped `screen` value compiled + silently misrouted); now `apps/setup/src/events.ts`
-  exports typed `dispatchSetup*` helpers (typed on the `Screen` union + `DeepPartial<ProvisionBody>`; event names centralised).
+- **Onboarding slice-2c follow-ups (h–o) — ALL LANDED** (#147–#151, 2026-08-27..28); deleted from
+  here as finished. Detail in those PR threads.
 
 **Payments:**
 
