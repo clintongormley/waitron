@@ -76,6 +76,10 @@ let mirrorDatabaseUrl: string;
 let mirrorSyncDatabaseUrl: string;
 let primaryDatabaseUrl: string;
 let primarySyncDatabaseUrl: string;
+// The `sync_retention` (sync_pruner) URL for the primary — the connection the retention sweep opens
+// and the C2b mirror-bundle endpoint reuses to mint peer tokens. Set on the primary control boot so
+// that endpoint mounts there (the mirror never opens one, so it never mounts — the primary-only proof).
+let primaryRetentionDatabaseUrl: string;
 // A peer enrolled on the PRIMARY clone (enrolPeer runs as the superuser admin — setup bypasses
 // grants). The control's /sync-api/hello probe presents this token, which the source resolves against
 // `sync_peers` through the sync_applier pool.
@@ -140,6 +144,7 @@ beforeAll(async () => {
   mirrorSyncDatabaseUrl = roleUrl(mirror.pg.uri, "sync_applier", "ap");
   primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
   primarySyncDatabaseUrl = roleUrl(primary.pg.uri, "sync_applier", "ap");
+  primaryRetentionDatabaseUrl = roleUrl(primary.pg.uri, "sync_pruner", "pp");
 }, 180_000);
 
 afterAll(async () => {
@@ -219,6 +224,18 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       const source = await fetch(`${base}/sync-api/hello`);
       expect(source.status).toBe(404);
 
+      // The C2b mirror-bundle endpoint is PRIMARY-only (a mirror emits no bundle), so it is never
+      // mounted here. A POST is caught by the read-only gate FIRST (node.read_only 403), which is the
+      // observable guarantee that a mirror never serves a bundle — the primary control below reaches its
+      // OWN auth screen (401) on the same request, the primary-only A/B (the mount itself is gated on the
+      // mirror having no `sync_retention` connection, which it never opens).
+      const bundle = await fetch(`${base}/management-api/mirror-bundle`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(bundle.status).toBe(403);
+      expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
       // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
@@ -246,6 +263,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_SYNC_PEERS: SYNC_PEERS,
       WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
+      // The retention sweep's own sync_retention connection — the one the C2b mirror-bundle endpoint
+      // reuses to mint peer tokens. Set here so that endpoint mounts on this primary (the mirror never
+      // opens one, so it never mounts there — the primary-only proof, alongside the sync source above).
+      WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
       // No WAITRON_MIRROR_* — a primary sets neither (loadMirrorConfig returns undefined).
     });
     const base = `http://127.0.0.1:${port}`;
@@ -258,6 +279,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "preproduction",
       });
+
+      // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a sync_retention connection):
+      // a body-less POST is screened as password.invalid (401) BEFORE any DB work — proof the route
+      // registered. On the mirror boot above the same request is a 403 (read-only gate), never a 401:
+      // the mirror never serves this route, the primary does (the primary-only A/B, CLAUDE.md §1).
+      const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
+      expect(bundle.status).toBe(401);
+      expect((await bundle.json()).error.code).toBe("password.invalid");
     } finally {
       await server.close();
     }

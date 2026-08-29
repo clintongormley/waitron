@@ -62,6 +62,7 @@ import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
+import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
@@ -1114,6 +1115,32 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
   } else if (!isMirror) {
     log("info", "tunnel.disabled", {});
+  }
+
+  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
+  // cloud mirror adopts (design §4). PRIMARY-only, and only when the retention sweep opened its
+  // `sync_retention` connection — the handler mints the peer token as that role via `enrolPeer`, so the
+  // endpoint exists exactly when the connection it needs does (a mirror never opens one, and a primary
+  // that configured no retention role cannot mint). `relayUrl` is this primary's own relay coordinates
+  // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses `mirror.no_relay`
+  // before minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
+  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
+  if (!isMirror && retentionDb !== undefined) {
+    mountMirrorBundleApi(
+      app,
+      {
+        appDb: db,
+        retentionDb,
+        stateDir: config.stateDir,
+        relayUrl:
+          tunnelConfig !== undefined
+            ? `${tunnelConfig.relayHost}:${tunnelConfig.relayPort}`
+            : undefined,
+        boxHostname: BOX_HOSTNAME,
+        designated: config.till,
+      },
+      log,
+    );
   }
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
