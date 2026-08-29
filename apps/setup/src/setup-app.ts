@@ -459,11 +459,18 @@ export class SetupApp extends LitElement {
   /**
    * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
    *
-   * - The two fiscal double-setup 409s (`setup.already_provisioned` / `deployment.already_stamped`)
-   *   and the concurrent-setup 409 (`setup.already_provisioning`) are TERMINAL — re-submitting is
-   *   meaningless or unrecoverable (CLAUDE.md §5), so they land on the `provisioning` screen with a
-   *   reload action and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload for
-   *   an already-set-up mirror opens the read-only DASHBOARD (a mirror serves no till).
+   * - The double-setup 409s (`setup.already_provisioned` / `deployment.already_stamped`) and the
+   *   concurrent-setup 409 (`setup.already_provisioning`) are TERMINAL — re-submitting is meaningless
+   *   or unrecoverable (CLAUDE.md §5), so they land on the `provisioning` screen with a reload action
+   *   and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload for an
+   *   already-set-up mirror opens the read-only DASHBOARD (a mirror serves no till). Of the three,
+   *   only two are reachable from an adopt today: `deployment.already_stamped` (the adopt path stamps
+   *   the environment — `adoptFromPrimary` → `stampDeployment`, `apps/server/src/adopt.ts`) and
+   *   `setup.already_provisioning` (the shared concurrent-setup guard). `setup.already_provisioned` is
+   *   thrown ONLY by `provisionVenue` (`apps/server/src/provision.ts:72`), which the adopt path never
+   *   calls (`adoptFromPrimary` → `adoptVenue`, which never throws it — grepped 2026-08-29); its case
+   *   below is DEFENSIVE parity with `#mapProvisionError`, not a live adopt outcome, and is kept so a
+   *   future adopt throw of it maps sensibly rather than falling through to the generic banner.
    * - Everything else — `mirror.bundle_fetch_failed`, `setup.request_invalid`, `setup.not_ready`,
    *   `server.internal`, an unrecognised code, and a code-LESS rejection (a bare `TypeError`/
    *   `SyntaxError` out of `#request` on a network drop or non-JSON body) — routes BACK to the

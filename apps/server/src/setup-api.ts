@@ -238,13 +238,17 @@ function directError(
 
 /**
  * Mount the UNAUTHENTICATED setup-mode routes on an existing Hono app — the whole surface the box
- * exposes while no venue is bound (design: slice 1b). Two routes:
+ * exposes while no venue is bound (design: slice 1b/2b, plus C2b's adopt). The routes:
  *
  *   - `GET /setup-api/status` → a small, STABLE JSON fact sheet
  *     `{ provisioned: false, environment, needs: ["venue"] }`. Slice 2's wizard reads this to learn
  *     what the box still needs, so the shape is a contract: `provisioned` is always `false` here (a
  *     provisioned box never mounts these routes), and `needs` lists the outstanding steps — today
  *     only `"venue"`.
+ *   - `POST /setup-api/provision` → the PRIMARY-box path (slice 2b): mints the venue on this box and
+ *     restarts it into trading mode. Gated on `deps.provision` being wired (`503 setup.not_ready`).
+ *   - `POST /setup-api/adopt` → the MIRROR-box path (C2b): fetches the primary's bundle server-side,
+ *     adopts the venue into this box, and restarts into mirror mode. Gated on `deps.adopt` the same way.
  *   - a root catch-all `GET *` → either the built setup wizard (via `mountSpa`, when `deps.setupAppDir`
  *     is configured — slice 2c) or, absent that, the inline `SETUP_PLACEHOLDER_HTML` shell
  *     (`text/html`, `no-cache`). Either way it is registered LAST, so it only answers paths nothing
@@ -449,8 +453,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   });
 
   // The root catch-all, registered LAST and matching everything, so it answers only the paths
-  // `/setup-api/status` and `/setup-api/provision` (above) and any earlier route (e.g. `/health`, or
-  // the setup branch's discovery/CA/trust routes registered before this mount) did not claim. When a
+  // `/setup-api/status`, `/setup-api/provision` and `/setup-api/adopt` (above) and any earlier route
+  // (e.g. `/health`, or the setup branch's discovery/CA/trust routes registered before this mount)
+  // did not claim. When a
   // built wizard dir is configured (slice 2c), serve it as that catch-all via `mountSpa` — basePath
   // "" = origin root, exactly like the till: the root "/" serves index.html and real files under the
   // dir serve their bytes, while a stray unmatched path 404s (mountSpa has no SPA history fallback —
