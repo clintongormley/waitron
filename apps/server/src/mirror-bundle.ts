@@ -67,6 +67,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     deps.appDb,
     deps.designated.tenantId,
     async (tx) => ({
+      // `[0]!` is safe: `designated.tenantId` is the primary till's provisioned tenant (`config.till`),
+      // and a provisioned till always has its tenant row (minted as its FK parent at provision), so the
+      // by-id lookup under that same tenant's RLS scope always returns exactly one row.
       tenant: (await tx.select().from(tenants).where(eq(tenants.id, deps.designated.tenantId)))[0]!,
       locations: await tx.select().from(locations), // RLS scopes each of these to the tenant
       nodes: await tx.select().from(nodes),

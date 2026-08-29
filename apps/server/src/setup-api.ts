@@ -271,11 +271,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   // The one-shot provisioning latch. CLOSURE-scoped (per `mountSetup`, i.e. per booted process — one
   // mount per boot), so it survives across requests to THIS box yet gives every test its own fresh
-  // latch. It is the inner ring of the double-provision guard: `applyVenue` mints a FRESH SIF/hash
-  // chain on every run and `provisionVenue`'s tenant-exists check is not atomic with `applyVenue`, so
-  // two concurrent provisions could each pass that check and start a second, unrecoverable chain
-  // (CLAUDE.md §5). The single setup process + this latch prevent the concurrent case; the
-  // tenant-exists check backstops a sequential re-POST.
+  // latch. It is SHARED with the adopt route below (a box is set up EITHER as a primary via provision
+  // OR as a mirror via adopt, never both), so a start of either action latches out a concurrent start
+  // of the other — the double-first-boot guard, expressed once. It is the inner ring of that guard:
+  // `applyVenue` mints a FRESH SIF/hash chain on every run and `provisionVenue`'s tenant-exists check
+  // is not atomic with `applyVenue`, so two concurrent provisions could each pass that check and start
+  // a second, unrecoverable chain (CLAUDE.md §5). The single setup process + this latch prevent the
+  // concurrent case; the tenant-exists check backstops a sequential re-POST.
   let provisioning = false;
 
   // POST /setup-api/provision — orchestrates the whole flow: demo/live fork → validate + hash →
@@ -455,14 +457,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // The root catch-all, registered LAST and matching everything, so it answers only the paths
   // `/setup-api/status`, `/setup-api/provision` and `/setup-api/adopt` (above) and any earlier route
   // (e.g. `/health`, or the setup branch's discovery/CA/trust routes registered before this mount)
-  // did not claim. When a
-  // built wizard dir is configured (slice 2c), serve it as that catch-all via `mountSpa` — basePath
-  // "" = origin root, exactly like the till: the root "/" serves index.html and real files under the
-  // dir serve their bytes, while a stray unmatched path 404s (mountSpa has no SPA history fallback —
-  // the wizard is an in-memory-state SPA, so a reload only ever lands on "/"). Absent a configured dir
-  // serve the inline placeholder shell (dev, and any box whose wizard bundle was not built in). Boot
-  // has already `assertBuiltApp`-checked a configured dir holds an `index.html`, so `mountSpa` here
-  // never becomes a catch-all that 404s the root itself.
+  // did not claim. When a built wizard dir is configured (slice 2c), serve it as that catch-all via
+  // `mountSpa` — basePath "" = origin root, exactly like the till: the root "/" serves index.html and
+  // real files under the dir serve their bytes, while a stray unmatched path 404s (mountSpa has no
+  // SPA history fallback — the wizard is an in-memory-state SPA, so a reload only ever lands on "/").
+  // Absent a configured dir serve the inline placeholder shell (dev, and any box whose wizard bundle
+  // was not built in). Boot has already `assertBuiltApp`-checked a configured dir holds an
+  // `index.html`, so `mountSpa` here never becomes a catch-all that 404s the root itself.
   if (deps.setupAppDir !== undefined) {
     mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
   } else {
