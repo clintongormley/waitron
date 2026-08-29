@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 
 /** Whether the system clock is NTP-synchronised. `source: "unavailable"` (never `warn: true`) on a host
  * without systemd's `timedatectl` — dev machines and macOS — so the probe never cries wolf where it
- * cannot know. The real appliance (systemd) gets the real answer. */
+ * cannot know. Where systemd's `timedatectl` is present (the appliance), it reports the real sync
+ * state. */
 export type TimeHealth = { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
 
 export type CommandRunner = (
@@ -10,8 +11,9 @@ export type CommandRunner = (
   args: string[],
 ) => Promise<{ stdout: string; code: number }>;
 
-// The real shell-out is environment-coupled: unit tests inject a runner instead (every branch above is
-// covered that way), so the OS spawn here is never exercised in vitest and is ignored for coverage.
+// The injected-runner tests cover every branch in `checkTimeHealth` below; the `?? defaultRun`
+// fallback and the default-parameter branch stay structurally uncovered by design — the real OS
+// shell-out here is environment-coupled and unreachable from a unit test, so it is v8-ignored.
 /* v8 ignore start */
 const defaultRun: CommandRunner = (cmd, args) =>
   new Promise((resolve, reject) => {
