@@ -330,6 +330,34 @@ beforeAll(async () => {
     });
   }
 
+  // A REAL trading venue is not freshly-provisioned: it assigns a menu to its location
+  // (`locations.catalogue_id`, catalogue.ts's `assignCatalogue`) and a receipt printer to its till
+  // (`tills.receipt_printer_id`, print-api.ts). Both are NULLABLE out-of-scope FK columns the mirror
+  // bundle carries VERBATIM, whose targets do NOT exist on the mirror at adopt time (`catalogues` is
+  // empty in setup mode — sync starts only after the reboot — and `printers` is NEVER synced), so a
+  // verbatim insert raises 23503 → an opaque `server.internal` 500 and rolls back: the Critical C2b
+  // bug. Set them here via the owner (superuser bypasses RLS) so the primary models a real venue; the
+  // mirror below asserts adoptVenue NULLED both. A `cloud_poll` printer needs only `poll_id`
+  // (`printers_transport_fields_ck`), so it is the cheapest valid printer row.
+  const primaryCatalogueId = (
+    await primary.admin.execute<{ id: string }>(
+      sql`select id from catalogues where tenant_id = ${designated.tenantId} order by name limit 1`,
+    )
+  ).rows[0]!.id;
+  await primary.admin.execute(
+    sql`update locations set catalogue_id = ${primaryCatalogueId} where id = ${designated.locationId}`,
+  );
+  const primaryPrinterId = (
+    await primary.admin.execute<{ id: string }>(
+      sql`insert into printers (tenant_id, location_id, name, transport, poll_id)
+          values (${designated.tenantId}, ${designated.locationId}, 'Impresora Caja', 'cloud_poll', 'poll-caja-1')
+          returning id`,
+    )
+  ).rows[0]!.id;
+  await primary.admin.execute(
+    sql`update tills set receipt_printer_id = ${primaryPrinterId} where id = ${designated.tillId}`,
+  );
+
   // The box's HTTPS sync-api behind the tunnel (mirror-e2e.rls.test.ts's shape): a leaf whose SAN is
   // `box.test` ONLY, so the mirror must authenticate the box hostname. Its CA PEM is BOTH the box
   // sync-api's trust root AND what the bundle advertises as `boxCaPem` (written to primaryStateDir's
@@ -463,6 +491,23 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     expect(await rowExists(mirror.admin, "nodes", designated.nodeId)).toBe(true);
     expect(await rowExists(mirror.admin, "tills", designated.tillId)).toBe(true);
     expect(await rowExists(mirror.admin, "invoice_series", designated.seriesId)).toBe(true);
+
+    // THE CRITICAL FK FIX + a fidelity note. The primary is a REAL trading venue: its location carries a
+    // `catalogue_id` and its till a `receipt_printer_id` (set in beforeAll). Both are out-of-scope FKs
+    // whose targets are absent on the mirror at adopt — `catalogues` is empty in setup mode and
+    // `printers` is never synced — so adoptVenue NULLS them (a verbatim copy would 23503 → 500, and the
+    // mirror could not be provisioned). The mirror's rows therefore land with NULL: the location loses
+    // its menu pointer (a v1 DR fidelity limitation, `locations` does not re-sync) and the till has no
+    // printer (a mirror never prints). This assertion is what makes the beforeAll assignment
+    // load-bearing — remove the strip in venue-adopt.ts and the adopt above 500s instead.
+    const mirrorLoc = await mirror.admin.execute<{ catalogueId: string | null }>(
+      sql`select catalogue_id as "catalogueId" from locations where id = ${designated.locationId}`,
+    );
+    expect(mirrorLoc.rows[0]!.catalogueId).toBeNull();
+    const mirrorTill = await mirror.admin.execute<{ receiptPrinterId: string | null }>(
+      sql`select receipt_printer_id as "receiptPrinterId" from tills where id = ${designated.tillId}`,
+    );
+    expect(mirrorTill.rows[0]!.receiptPrinterId).toBeNull();
 
     // THE KEY FISCAL ASSERTION: adopt forked NO second chain. `registro_sif` is empty on the mirror
     // (adoptVenue never calls registerSif — CLAUDE.md §5); the primary holds its own single row. The SIF

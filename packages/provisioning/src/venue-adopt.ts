@@ -76,6 +76,60 @@ function reviveRow(table: Table, row: VenueRow): VenueRow {
 }
 
 /**
+ * Per-parent-table map of FK columns that reference a table which is NOT present on a mirror at adopt
+ * time — the bundle carries only the FIVE parent tables, and a mirror serves READ-ONLY. Every column
+ * here is a NULLABLE FK ($inferInsert camelCase key), nulled by `stripOutOfScopeFks` before insert
+ * because a verbatim copy of the primary's non-null value raises a `23503` foreign-key violation. That
+ * is not an `AppError`, so the adopt boundary maps it to an opaque `server.internal` 500 and rolls the
+ * transaction back — the mirror cannot be provisioned. A freshly-provisioned venue leaves both NULL
+ * (which is why the fixtures/e2e passed before a real trading venue was modelled), but a real one sets
+ * them, so this is load-bearing for the actual deli target.
+ *
+ *   - `locations.catalogueId` → `catalogues` (FK `locations_catalogue_id_catalogues_id_fk`, migration
+ *     0028). `catalogues` IS one of the synced tables, but sync only starts AFTER the mirror reboots
+ *     into mirror mode; at adopt (setup mode) `catalogues` is EMPTY. And `locations` is NOT synced, so
+ *     once the catalogue rows do arrive by sync the pointer is never restored — the mirror's location
+ *     permanently loses its menu pointer. That is a v1 disaster-recovery FIDELITY limitation, not a
+ *     correctness fault: a mirror never sells, and no read-only dashboard path resolves a menu through
+ *     this column (see the C2b report). Carrying `catalogues` in the bundle to restore it is a future
+ *     owner decision, not this fix.
+ *   - `tills.receiptPrinterId` → `printers` (composite FK `tills_receipt_printer_fk`, migration 0068).
+ *     `printers` is NOT in the sync registry (`packages/sync/src/registry.ts`) — it NEVER arrives on a
+ *     mirror. A mirror has no printer; it prints nothing.
+ *
+ * A future parent-table FK to an out-of-scope table is a one-line addition here with its own reason.
+ */
+const OUT_OF_SCOPE_FK_COLUMNS = new Map<Table, readonly string[]>([
+  [locations, ["catalogueId"]],
+  [tills, ["receiptPrinterId"]],
+]);
+
+/**
+ * Null the out-of-scope FK columns (see `OUT_OF_SCOPE_FK_COLUMNS`) on a bundle row before insert. A
+ * shallow copy is made only if something is nulled, so a row that already carries NULL/omits the
+ * column (a freshly-provisioned venue) passes through untouched. Table lookup is by Drizzle table
+ * identity; a table with no out-of-scope FK (tenants/nodes/invoiceSeries) is a no-op.
+ */
+function stripOutOfScopeFks(table: Table, row: VenueRow): VenueRow {
+  const columns = OUT_OF_SCOPE_FK_COLUMNS.get(table);
+  if (columns === undefined) return row;
+  let copy: VenueRow | undefined;
+  for (const key of columns) {
+    if (row[key] != null) {
+      copy ??= { ...row };
+      copy[key] = null;
+    }
+  }
+  return copy ?? row;
+}
+
+/** Prepare a bundle row for insert: revive date-mode columns (JSON round-trip) AND null the
+ * out-of-scope FK columns. The two transforms touch disjoint columns, so order is immaterial. */
+function prepareRow(table: Table, row: VenueRow): VenueRow {
+  return stripOutOfScopeFks(table, reviveRow(table, row));
+}
+
+/**
  * Provisions a cloud MIRROR by inserting the primary venue's parent rows — tenant, locations, nodes,
  * tills, invoice_series — with the primary's EXPLICIT ids, so the rows that later arrive by sync
  * resolve their foreign keys. One `withTenant` transaction, in FK order, each insert
@@ -101,30 +155,30 @@ export async function adoptVenue(
   return withTenant(deps.db, designated.tenantId, async (tx) => {
     await tx
       .insert(tenants)
-      .values(reviveRow(tenants, rows.tenant) as typeof tenants.$inferInsert)
+      .values(prepareRow(tenants, rows.tenant) as typeof tenants.$inferInsert)
       .onConflictDoNothing({ target: tenants.id });
     for (const row of rows.locations) {
       await tx
         .insert(locations)
-        .values(reviveRow(locations, row) as typeof locations.$inferInsert)
+        .values(prepareRow(locations, row) as typeof locations.$inferInsert)
         .onConflictDoNothing({ target: locations.id });
     }
     for (const row of rows.nodes) {
       await tx
         .insert(nodes)
-        .values(reviveRow(nodes, row) as typeof nodes.$inferInsert)
+        .values(prepareRow(nodes, row) as typeof nodes.$inferInsert)
         .onConflictDoNothing({ target: nodes.id });
     }
     for (const row of rows.tills) {
       await tx
         .insert(tills)
-        .values(reviveRow(tills, row) as typeof tills.$inferInsert)
+        .values(prepareRow(tills, row) as typeof tills.$inferInsert)
         .onConflictDoNothing({ target: tills.id });
     }
     for (const row of rows.invoiceSeries) {
       await tx
         .insert(invoiceSeries)
-        .values(reviveRow(invoiceSeries, row) as typeof invoiceSeries.$inferInsert)
+        .values(prepareRow(invoiceSeries, row) as typeof invoiceSeries.$inferInsert)
         .onConflictDoNothing({ target: invoiceSeries.id });
     }
 

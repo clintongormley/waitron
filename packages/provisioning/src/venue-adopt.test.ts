@@ -153,6 +153,35 @@ describe("adoptVenue", () => {
     expect(s.rows[0].n).toBe(2);
   });
 
+  it("nulls the out-of-scope FK columns (locations.catalogue_id, tills.receipt_printer_id) even when the bundle carried non-null values", async () => {
+    // The Critical C2b fix. A REAL trading venue sets `locations.catalogue_id` (a menu, catalogue.ts's
+    // `assignCatalogue`) and `tills.receipt_printer_id` (a receipt printer, print-api.ts). Both are
+    // nullable FKs to tables that do NOT exist on a mirror at adopt time: `catalogues` is empty in setup
+    // mode (sync starts only after the reboot, and `locations` never re-syncs to restore the pointer),
+    // and `printers` is not synced AT ALL (packages/sync registry). A verbatim insert of the primary's
+    // non-null values raises 23503, which is not an AppError → the adopt boundary maps it to a 500 and
+    // rolls back, so the mirror cannot be provisioned. adoptVenue nulls both before insert.
+    //
+    // The bundle here carries FRESH random ids in both columns — ids of catalogue/printer rows that do
+    // NOT exist in this database, so a verbatim insert WOULD violate the FK. Deletion-proof of the fix:
+    // drop `stripOutOfScopeFks` (or the map entries) in venue-adopt.ts and this insert throws 23503
+    // instead of nulling — the exact production failure this pins.
+    const { rows, designated } = makeRows();
+    rows.locations[0]!.catalogueId = randomUUID();
+    rows.tills[0]!.receiptPrinterId = randomUUID();
+
+    await expect(adoptVenue(rows, designated, { db: suite.db })).resolves.toEqual(designated);
+
+    const loc = await suite.db.execute<{ catalogueId: string | null }>(
+      sql`select catalogue_id as "catalogueId" from locations where id = ${designated.locationId}`,
+    );
+    expect(loc.rows[0]!.catalogueId).toBeNull();
+    const till = await suite.db.execute<{ receiptPrinterId: string | null }>(
+      sql`select receipt_printer_id as "receiptPrinterId" from tills where id = ${designated.tillId}`,
+    );
+    expect(till.rows[0]!.receiptPrinterId).toBeNull();
+  });
+
   it("throws provisioning.adopt_incomplete when the bundle omits a designated id", async () => {
     const { rows, designated } = makeRows();
     // The bundle's series rows do not contain the designated seriesId — a malformed bundle.
