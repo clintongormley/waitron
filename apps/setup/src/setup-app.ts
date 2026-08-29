@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
+import "./screens/role-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -13,13 +14,19 @@ import type { ApiError, ProvisionBody, SetupApi } from "./api/client.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs): `mode` (demo/live) → `admin`
- * (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). All seven are real
- * screens; the venue step routes to `cert` only for a live ES-common venue, otherwise straight to
- * `review`.
+ * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The FIRST screen is `role`
+ * (primary | mirror), which forks the rest of the flow (spec §8, C2b):
+ *
+ * - `role` = **primary** → the existing provisioning flow, unchanged: `mode` (demo/live) → `admin`
+ *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
+ *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
+ *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
+ * - `role` = **mirror** → `connect` (connect-to-primary), which reuses the shared `provisioning` /
+ *   `done` terminal screens. The `connect` screen itself is built in Task 13; the name is in the
+ *   union here so the shell can already route to it.
  */
-export type Screen = "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
+export type Screen =
+  "role" | "connect" | "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
 
 /**
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
@@ -136,8 +143,8 @@ export class SetupApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /** Which screen is showing. Defaults to `mode`, the wizard's first step. */
-  @state() private screen: Screen = "mode";
+  /** Which screen is showing. Defaults to `role`, the wizard's first step (primary | mirror). */
+  @state() private screen: Screen = "role";
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -227,6 +234,19 @@ export class SetupApp extends LitElement {
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
+  }
+
+  /**
+   * Resolve the first `role` screen's choice (spec §8, C2b). The role→next-screen conditional lives
+   * HERE, in the shell, not in the role screen — the same altitude fix (m) that lifted venue→`cert`/
+   * `review` out of a screen (backlog #149). A **primary** enters the existing provisioning flow at
+   * `mode` (unchanged); a **mirror** goes to the connect-to-primary screen, which skips
+   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no demo/live choice, seeds no
+   * admin, and files nothing). Same boundary `stopPropagation` as {@link SetupApp.#onPatch}.
+   */
+  #onRole(event: CustomEvent<{ role: "primary" | "mirror" }>): void {
+    event.stopPropagation();
+    this.screen = event.detail.role === "mirror" ? "connect" : "mode";
   }
 
   /**
@@ -375,13 +395,15 @@ export class SetupApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the
-    // draft), `setup-goto` (flip the visible screen), `setup-advance` (the venue screen's conditional
-    // next-step, resolved here against the draft), and `provision-requested` (review's Provision and the
-    // provisioning screen's retry both fire it). Wiring them on the container means each screen talks
-    // back without the shell knowing which one is mounted.
+    // The screens emit these composed events UP to the shell: `setup-role` (the first screen's
+    // primary/mirror choice, routed here), `setup-patch` (merge a slice into the draft), `setup-goto`
+    // (flip the visible screen), `setup-advance` (the venue screen's conditional next-step, resolved
+    // here against the draft), and `provision-requested` (review's Provision and the provisioning
+    // screen's retry both fire it). Wiring them on the container means each screen talks back without
+    // the shell knowing which one is mounted.
     return html`<div
       class="wizard"
+      @setup-role=${(e: CustomEvent<{ role: "primary" | "mirror" }>) => this.#onRole(e)}
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
@@ -392,19 +414,30 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * The mounted screen for the current {@link SetupApp.screen} — all seven are real screens, each
-   * carrying the `data-test="screen-*"` hook on its own host so the shell's screen-switching tests
-   * stay uniform.
+   * The mounted screen for the current {@link SetupApp.screen} — each real screen carries the
+   * `data-test="screen-*"` hook on its own host so the shell's screen-switching tests stay uniform.
+   * The `role` screen (the wizard's first step) is the `default`.
    *
-   * `mode` reads `environment` (to warn on a production box); `admin`, `venue`, `cert` and `review`
-   * read the accumulated `draft` (to seed their fields / summarise it, so stepping Back is
-   * non-destructive); `venue` and `review` also take a routed-back server error (`venueError` /
-   * `reviewError`); `provisioning` takes the mapped message + retry flag + terminal reload label; `done` takes the `api` to
-   * poll during the restart. All are passed as properties, since neither an api nor a draft object can
-   * travel as an attribute.
+   * `role` forks the flow (primary → `mode`, mirror → `connect`); `mode` reads `environment` (to warn
+   * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
+   * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
+   * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
+   * retry flag + terminal reload label; `done` takes the `api` to poll during the restart. All are
+   * passed as properties, since neither an api nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
+      case "mode":
+        return html`<setup-mode-screen
+          data-test="screen-mode"
+          .environment=${this.environment}
+        ></setup-mode-screen>`;
+      case "connect":
+        // Task 13 mounts <setup-connect-screen> here (the connect-to-primary form → SetupApi.adopt).
+        // Until then a mirror-role box reaches a minimal placeholder rather than a broken element; the
+        // `data-test="screen-connect"` hook lets the shell's routing test assert the mirror path lands
+        // here. See spec §8.
+        return html`<div data-test="screen-connect"></div>`;
       case "admin":
         return html`<setup-admin-screen
           data-test="screen-admin"
@@ -440,10 +473,7 @@ export class SetupApp extends LitElement {
           .api=${this.api}
         ></setup-done-screen>`;
       default:
-        return html`<setup-mode-screen
-          data-test="screen-mode"
-          .environment=${this.environment}
-        ></setup-mode-screen>`;
+        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
     }
   }
 }

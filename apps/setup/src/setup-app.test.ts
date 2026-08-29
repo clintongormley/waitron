@@ -70,6 +70,13 @@ async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
  * which has no DOM surface until the later `review` screen. TS-private is erased at runtime. */
 const readDraft = (el: SetupApp) => (el as unknown as { draft: DeepPartial<ProvisionBody> }).draft;
 
+/** Fires the composed `setup-role` the first `role` screen emits (primary | mirror), into the shell. */
+function role(el: SetupApp, choice: "primary" | "mirror"): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("setup-role", { detail: { role: choice }, bubbles: true, composed: true }),
+  );
+}
+
 function goto(el: SetupApp, screen: Screen): void {
   wizard(el).dispatchEvent(
     new CustomEvent("setup-goto", { detail: { screen }, bubbles: true, composed: true }),
@@ -101,14 +108,34 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
 }
 
 describe("setup-app", () => {
-  it("renders the mode screen with the setup heading on boot", async () => {
+  it("renders the role screen with its heading on boot", async () => {
     const el = await mountSetupApp();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
+    const roleScreen = await screenHost(el, "role");
+    expect(roleScreen.shadowRoot!.querySelector("h1")?.textContent).toContain("What is this box?");
+  });
+
+  // The primary path: role=primary lands on `mode`, the head of the existing (unchanged) flow.
+  it("routes role=primary to the mode screen", async () => {
+    const el = await mountSetupApp();
+    role(el, "primary");
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this Waitron box");
   });
 
-  it("boot reads the box environment via getStatus and surfaces it", async () => {
+  // The mirror path: role=mirror lands on `connect` (Task 13 mounts the real screen there).
+  it("routes role=mirror to the connect screen", async () => {
+    const el = await mountSetupApp();
+    role(el, "mirror");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
+  });
+
+  it("boot reads the box environment via getStatus and surfaces it on the mode screen", async () => {
     const getStatus = vi.fn().mockResolvedValue({
       provisioned: false,
       environment: "production",
@@ -117,6 +144,8 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
+    role(el, "primary");
+    await el.updateComplete;
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
       "production",
@@ -127,8 +156,10 @@ describe("setup-app", () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
-    // The shell rendered its first screen despite the rejection, and no environment is shown.
-    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+    // The shell rendered its first screen despite the rejection, and no environment is shown on mode.
+    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
+    role(el, "primary");
+    await el.updateComplete;
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
   });
@@ -143,7 +174,17 @@ describe("setup-app", () => {
 
   it("renders a screen for every state the machine can reach", async () => {
     const el = await mountSetupApp();
-    const screens: Screen[] = ["admin", "venue", "cert", "review", "provisioning", "done", "mode"];
+    const screens: Screen[] = [
+      "connect",
+      "admin",
+      "venue",
+      "cert",
+      "review",
+      "provisioning",
+      "done",
+      "mode",
+      "role",
+    ];
     for (const screen of screens) {
       goto(el, screen);
       await el.updateComplete;
