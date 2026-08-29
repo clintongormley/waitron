@@ -1132,9 +1132,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         appDb: db,
         retentionDb,
         stateDir: config.stateDir,
+        // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and
+        // `packages/sync/src/pull.ts` builds `${trimSlash(peer.url)}/sync-api/hello` → `undiciFetch`,
+        // which throws on a scheme-less address. The mirror always speaks HTTPS end-to-end to the box
+        // cert through the tunnel, so the scheme is https (matches Task 5's `https://relay.test:9000/`).
         relayUrl:
           tunnelConfig !== undefined
-            ? `${tunnelConfig.relayHost}:${tunnelConfig.relayPort}`
+            ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
         designated: config.till,

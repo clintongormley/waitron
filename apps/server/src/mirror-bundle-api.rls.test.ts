@@ -145,7 +145,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const lines: string[] = [];
     const log: Logger = (level, event, fields) =>
       lines.push(JSON.stringify({ level, event, fields }));
-    const app = mountApp(designated, "relay.example:9000", log);
+    const app = mountApp(designated, "https://relay.example:9000/", log);
 
     const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
     expect(res.status).toBe(200);
@@ -156,7 +156,12 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       boxHostname: string;
     };
     expect(bundle.rows.tenant.id).toBe(designated.tenantId);
-    expect(bundle.relayUrl).toBe("relay.example:9000");
+    // The relay coordinates round-trip verbatim as a FULL https URL — the form the mirror consumes as
+    // its `peer.url` (`packages/sync/src/pull.ts` fetches `${trimSlash(peer.url)}/sync-api/hello`, which
+    // requires a scheme). Boot builds exactly `https://${relayHost}:${relayPort}/`.
+    expect(bundle.relayUrl).toBe("https://relay.example:9000/");
+    expect(bundle.relayUrl.startsWith("https://")).toBe(true);
+    expect(bundle.relayUrl.endsWith("/")).toBe(true);
     expect(bundle.boxHostname).toBe("waitron.local");
     // The token is `${selector}.${secret}` — a uuid selector, a dot, then the base64url secret.
     expect(bundle.syncToken).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
@@ -187,7 +192,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect((await res.json()).error.code).toBe("password.invalid");
   });
 
-  it("refuses a malformed body with 401 (the dashboard-login screen)", async () => {
+  it("refuses an invalid credential shape with 401 (the dashboard-login screen)", async () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated, "relay.example:9000");
 

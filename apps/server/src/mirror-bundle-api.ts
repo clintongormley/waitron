@@ -13,7 +13,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
-import { authorizeManager, loginManager } from "@waitron/identity";
+import { authorizeManager, endManagementSession, loginManager } from "@waitron/identity";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -103,6 +103,10 @@ export function mountMirrorBundleApi(
           managementSessionId: session.id,
           permission: "mirror.create",
         });
+        // The session existed only to authorize this one credential — no cookie is set and the mirror
+        // never reuses it, so end it in the same transaction rather than leave a permanently-dead
+        // `management_sessions` row behind on every mint.
+        await endManagementSession(tx, session.id);
       });
 
       // A mirror with no relay to dial is unusable, so refuse BEFORE minting a token (design §4). The
