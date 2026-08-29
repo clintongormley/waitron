@@ -88,8 +88,37 @@ those five ([boot.mirror.rls.test.ts:88-99](../../../apps/server/src/boot.mirror
 replaces the hand-seed with a real step and the bundle carries the rows it needs.
 
 The bundle therefore carries the primary's **actual rows**, read `SELECT`-style on the primary and
-inserted verbatim on the mirror (both run the identical schema/version, so a column-for-column copy is
-safe and survives schema additions):
+inserted on the mirror verbatim **EXCEPT for the out-of-scope FK columns, which `adoptVenue` nulls**.
+A column-for-column copy is NOT unconditionally safe: two of these five tables carry a nullable FK to a
+table that is **not present on the mirror at adopt time**, so a verbatim copy of a non-null value
+raises a `23503` foreign-key violation (not an `AppError` → the adopt boundary maps it to an opaque
+`server.internal` 500 and rolls back — the mirror cannot be provisioned). Both are nulled before insert
+([venue-adopt.ts](../../../packages/provisioning/src/venue-adopt.ts) `OUT_OF_SCOPE_FK_COLUMNS`):
+
+- `locations.catalogue_id` → `catalogues` (FK `locations_catalogue_id_catalogues_id_fk`, migration
+  0028). `catalogues` IS synced, but sync starts only **after** the mirror reboots into mirror mode; at
+  adopt (setup mode) it is empty. And `locations` is **not** synced, so once the catalogue rows do
+  arrive the pointer is never restored.
+- `tills.receipt_printer_id` → `printers` (composite FK `tills_receipt_printer_fk`, migration 0068).
+  `printers` is **not** in the 17-table sync registry — it never arrives on a mirror at all.
+
+A freshly-provisioned venue leaves both NULL (which is why C2a's hand-seed and the earlier fixtures
+never hit this), but a **real trading venue** sets them — a menu assigned to the location
+(`assignCatalogueToLocation`) and a receipt printer to the till (print-api) — so this is load-bearing
+for the actual deli target. A future parent-table FK to an out-of-scope table is a one-line addition to
+that map; "the schemas are identical so a verbatim copy is always safe" was the original false
+assumption (CLAUDE.md §1) and does not hold across FK columns whose target is out of the bundle/sync
+scope.
+
+**Resulting fidelity limitation (v1 DR).** Nulling `catalogue_id` means the mirror's location loses its
+menu pointer. This is a deliberate v1 disaster-recovery limitation, **not** a read-only-dashboard
+regression: `locations.catalogue_id` is consumed only by `listAvailableProducts`
+([catalogue/operations.ts](../../../packages/catalogue/src/operations.ts)) — the till **selling** path,
+which a mirror never runs — while the read-only dashboard's catalogue list reads the `catalogues` table
+directly. `receipt_printer_id` is consumed by the receipt-print (selling) path and the printer-config
+dashboard screen, both inert on a read-only mirror (writes are 403'd and printers are never synced).
+Restoring the location→menu pointer on a mirror would mean carrying `catalogues` in the bundle (or
+syncing `locations`) — a future owner decision, out of scope here:
 
 - `tenant` — the one `tenants` row (`id, country, tax_id, legal_name`).
 - `locations` — every `locations` row for the tenant (v1 is single-location, but carry the set).
@@ -208,8 +237,10 @@ variants carry no id except `ensure-tenant`
 required). C2b adds a distinct adopt path — an `adoptVenue(rows, { db: ownerDb })` in `packages/provisioning`,
 where `rows` is Part 1 of the bundle (the tenant + the location/node/till/series row arrays) — that:
 
-- inserts the `tenants` row, then every `locations`/`nodes`/`tills`/`invoice_series` row **verbatim,
-  all columns including the explicit ids**, under one `withTenant(ownerDb, tenantId, …)` transaction
+- inserts the `tenants` row, then every `locations`/`nodes`/`tills`/`invoice_series` row **all columns
+  including the explicit ids — verbatim EXCEPT the out-of-scope FK columns (`locations.catalogue_id`,
+  `tills.receipt_printer_id`), which are nulled** (§3: their targets are absent on the mirror at adopt,
+  so a verbatim non-null value would 23503), under one `withTenant(ownerDb, tenantId, …)` transaction
   (the `applyVenue` shape, [venue-apply.ts:58](../../../packages/provisioning/src/venue-apply.ts)), in
   FK order (tenant → location → node → till → series), each insert `ON CONFLICT (id) DO NOTHING` for
   idempotency. Full rows, not just ids, because these parents do not sync and the mirror's dashboard
