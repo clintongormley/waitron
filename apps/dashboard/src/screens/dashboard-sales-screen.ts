@@ -126,17 +126,19 @@ export class SalesScreen extends LitElement {
   }
 
   /** Load the current range: a single-day close (`from === to`) or a period roll-up (`from !== to`).
-   * The unused branch's state is cleared so the DOM never shows a stale close beside a period. A
-   * rejection anywhere (including the server's `report.range` 400 for `from > to`) becomes the banner. */
+   * BOTH branches' state is cleared up-front, BEFORE the request — so a rejection (including the
+   * server's `report.range` 400 for `from > to`) can never leave a stale close or period rendering
+   * beside the error banner. Clearing before the `await` also avoids showing the previous view during
+   * a slow fetch. A rejection anywhere becomes the banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
+    this.close = null;
+    this.period = null;
     try {
       if (this.from === this.to) {
         this.close = await this.api.getDailyClose(this.from);
-        this.period = null;
       } else {
         this.period = await this.api.getSalesPeriod(this.from, this.to);
-        this.close = null;
       }
     } catch (error) {
       this.errorKey = codeOf(error);

@@ -179,6 +179,35 @@ describe("dashboard-sales-screen", () => {
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("report.range");
+    // The previous single-day view must NOT survive the rejection beside the banner: #load clears
+    // both branches up-front, so no stale close (tender/VAT tables) renders on the error path.
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-test=daily-close]")).toBeNull();
+    expect(root.querySelector("[data-test=tender-table]")).toBeNull();
+    expect(root.querySelector("[data-test=vat-table]")).toBeNull();
+  });
+
+  it("leaves no stale period view when a single-day load rejects after a successful period", async () => {
+    // Symmetric direction: successful period → collapse to one day → getDailyClose rejects. The
+    // period content must be gone, not lingering beside the error banner.
+    const api = stubApi({
+      getDailyClose: vi
+        .fn()
+        .mockResolvedValueOnce(close) // the initial single-day connect load succeeds
+        .mockRejectedValue({ code: "report.forbidden" }), // the collapse-back single-day load rejects
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+    setDate(el, "to-picker", "2030-06-15"); // → period (success)
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=period]")).not.toBeNull();
+    setDate(el, "from-picker", "2030-06-15"); // from === to → single-day load rejects
+    await flush(el);
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("report.forbidden");
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-test=period]")).toBeNull();
+    expect(root.querySelector("[data-test=period-note]")).toBeNull();
+    expect(root.querySelector("[data-test=vat-table]")).toBeNull();
   });
 
   it("falls back to server.internal when a thrown error carries no code", async () => {
