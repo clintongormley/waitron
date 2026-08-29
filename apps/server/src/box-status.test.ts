@@ -61,4 +61,13 @@ describe("collectBoxStatus", () => {
     const status = await collectBoxStatus({ ...base, replicationLag: async () => [] });
     expect(status.replication).toEqual({ configured: true, worstLagSeq: "0", subscribers: 0 });
   });
+
+  it("propagates a replicationLag reader fault (fail-loud, no configured:false fallback)", async () => {
+    await expect(
+      collectBoxStatus({
+        ...base,
+        replicationLag: () => Promise.reject(new Error("lag read failed")),
+      }),
+    ).rejects.toThrow("lag read failed");
+  });
 });
