@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -15,7 +18,29 @@ import { mountManagementApi } from "./management-api.js";
 // (`applyVenue`/`planVenue` + password `login`) is the one `management-api.status.test.ts` uses.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
-const NOW = new Date("2026-08-29T10:00:00Z");
+
+// The same self-signed fixture leaf `cert-expiry.test.ts` (Task 2) uses; its notAfter is exactly
+// 2036-08-26T13:07:51.000Z, so the cert-configured assertion below is deterministic against a fixed now.
+const FIXTURE_PEM = `-----BEGIN CERTIFICATE-----
+MIIDETCCAfmgAwIBAgIUXR2PZXVKgwQiVrnQ/Qci32bg/LcwDQYJKoZIhvcNAQEL
+BQAwGDEWMBQGA1UEAwwNd2FpdHJvbi5sb2NhbDAeFw0yNjA4MjkxMzA3NTFaFw0z
+NjA4MjYxMzA3NTFaMBgxFjAUBgNVBAMMDXdhaXRyb24ubG9jYWwwggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDI1QDlkZGqlcL3VZRZMiE320bvvWt8d5EN
+LeySMgeDUZ/0ouUJMpThEcI/3Qqi8jnLc8f60dwdV4cdpi10wRORX2HDXgGFoBjQ
++cGdwAGXhP/9/5dWmai6NFuIMbFkjIrALrgfEkHikfsQ5OqToPnAUNGBBVqAR199
+6c2JlHKQX1jA8p89aNU8XSjtZkBUlWP5WiMmF2b7+nEU2df3ZplUtOtjZHHuVxL9
++XQDSirSjllwbYRaeP/JlK90BqzpE2rnLekH5Z+0/QuSxceF7acR2CxYmQMb2i9B
+KqVok9LWUCHzVNdWpyv2lAzXOzaS4hhwT0YvMzV+peLerUtv0/RRAgMBAAGjUzBR
+MB0GA1UdDgQWBBS+DcjQYlLbSYPFR5w4dgFNaV7vRDAfBgNVHSMEGDAWgBS+DcjQ
+YlLbSYPFR5w4dgFNaV7vRDAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+A4IBAQBviWwjpi2O3e3t1/8vSfJmfEJlhr8L6ljQxVPqlxNj1wVdmUCP53oyNl4W
+dI0YqK6LhuWLK79I0Ki983sPef7EsF+k3V342vfi0J2fELLB/yeSDmhusjd6nnOz
+CoI7R2hGi/uJUazoyV7lENejq06xyy2ymz/7zUzHPqp+kBZ94ZWMQ4pPhwOYSmpt
+9FXSgsgjr0mhhb2MyBZukfVKnO40Mc8cfHewNVI6zOgb8dtHBxaxsitwSTPPCBpJ
+k3UErVZoW0l7rwcBONa2Bz8MBvsp2OZsrPiXN0IYqchpFQwANC7ONW6nnIaXL19I
+gzRdhdm/TSERpovs914rORxWIQ+K
+-----END CERTIFICATE-----
+`;
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -75,6 +100,44 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
   return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
 }
 
+/**
+ * A Hono app carrying the management API (for its login route) plus the box-status route under test.
+ * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other. `now`
+ * feeds BOTH the cert reader and the duties snapshot; `tlsCertPath` toggles the cert branch.
+ */
+function buildApp(
+  tenantId: string,
+  nodeId: string,
+  opts: { now: Date; tlsCertPath: string | undefined },
+): Hono {
+  const app = new Hono();
+  mountManagementApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId },
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost",
+    },
+    () => {},
+  );
+  mountBoxStatusApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId, nodeId },
+      environment: "preproduction",
+      health: createHealthState(opts.now),
+      now: () => opts.now,
+      tlsCertPath: opts.tlsCertPath,
+      readReplicationLag: undefined,
+    },
+    () => {},
+  );
+  return app;
+}
+
 /** Log in over HTTP as `personId`, returning just the `waitron_management_session=…` cookie pair. */
 async function login(app: Hono, personId: string): Promise<string> {
   const res = await app.request("/management-api/session", {
@@ -92,34 +155,10 @@ describe("GET /api/box/status (real postgres)", () => {
 
   beforeAll(async () => {
     const { tenantId, nodeId, managerId } = await setupTenant();
-    app = new Hono();
-    // The management API is mounted only for its login route, so the box-status route can be exercised
-    // with a real manager session cookie; both surfaces share the same owner db + tenant, so a cookie
-    // minted on one resolves on the other.
-    mountManagementApi(
-      app,
-      {
-        db: suite.admin,
-        cfg: { tenantId },
-        secureCookies: false,
-        rpId: "localhost",
-        origin: "http://localhost",
-      },
-      () => {},
-    );
-    mountBoxStatusApi(
-      app,
-      {
-        db: suite.admin,
-        cfg: { tenantId, nodeId },
-        environment: "preproduction",
-        health: createHealthState(NOW),
-        now: () => NOW,
-        tlsCertPath: undefined,
-        readReplicationLag: undefined,
-      },
-      () => {},
-    );
+    app = buildApp(tenantId, nodeId, {
+      now: new Date("2026-08-29T10:00:00Z"),
+      tlsCertPath: undefined,
+    });
     managerCookie = await login(app, managerId);
   });
 
@@ -139,5 +178,35 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.replication).toEqual({ configured: false }); // no lag reader
     expect(body.backup).toEqual({ configured: false });
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
+  });
+});
+
+describe("GET /api/box/status with a configured TLS cert (real postgres)", () => {
+  let app: Hono;
+  let managerCookie: string;
+
+  beforeAll(async () => {
+    const { tenantId, nodeId, managerId } = await setupTenant();
+    // A real leaf on disk exercises the cert-configured branch + `readCertExpiry` closure end-to-end
+    // (the undefined-cert suite above never touches them). `now` is 30 days before the fixture's
+    // notAfter, so `daysRemaining` is a deterministic 30.
+    const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.crt");
+    writeFileSync(certPath, FIXTURE_PEM);
+    app = buildApp(tenantId, nodeId, {
+      now: new Date("2036-07-27T13:07:51.000Z"),
+      tlsCertPath: certPath,
+    });
+    managerCookie = await login(app, managerId);
+  });
+
+  it("reports cert.available:true with the fixture's notAfter and daysRemaining", async () => {
+    const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cert).toEqual({
+      available: true,
+      notAfter: "2036-08-26T13:07:51.000Z",
+      daysRemaining: 30,
+    });
   });
 });

@@ -1016,10 +1016,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The operator box-status surface (onboarding slice 4a). Mounted AFTER the sync block so a later
   // slice can hand it the sync-pool lag reader when sync is on; `readReplicationLag: undefined` here
   // yields `replication.configured:false` (the free-tier single box, and today's wiring). GET-only, so
-  // the mirror read-only gate passes it; the ambient mirror viewer session makes
-  // `requireManagementSession` pass read-only on a mirror. `health` and `now` are the same bindings
-  // `healthApp(health, now)` used above; `config.tls?.certFile` is the served-leaf path (absent on a
-  // plain-HTTP boot → `cert.available:false`).
+  // the mirror read-only gate passes it. On a mirror the ambient viewer primes the session cookie on
+  // the RESPONSE, so a cookieless first request 401s AND emits the Set-Cookie; the browser's next
+  // request carries that ambient cookie and `requireManagementSession` passes (see
+  // `mirror-e2e.rls.test.ts` — Hono setCookie is a response header, not readable within the same
+  // request). `health` and `now` are the same bindings `healthApp(health, now)` used above;
+  // `config.tls?.certFile` is the served-leaf path (absent on a plain-HTTP boot → `cert.available:false`).
   mountBoxStatusApi(
     app,
     {
