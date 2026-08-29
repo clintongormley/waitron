@@ -1099,5 +1099,13 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
+    "recovery.passphrase_too_short": { min: number };
+    /** Recovery-bundle decryption failed its GCM auth tag — a wrong passphrase OR a tampered
+     * bundle, deliberately indistinguishable (revealing which would help an attacker). */
+    "recovery.passphrase_invalid": Record<string, never>;
+    /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
+     * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
+    "recovery.bundle_invalid": { reason: string };
   }
 }
