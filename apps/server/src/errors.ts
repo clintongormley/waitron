@@ -1099,6 +1099,9 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /** The recovery-bundle download request carried no `passphrase` string (or an empty one). A
+     * client error — the operator must supply the passphrase the bundle will be encrypted under. */
+    "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
     "recovery.passphrase_too_short": { min: number };
     /** Recovery-bundle decryption failed its GCM auth tag — a wrong passphrase OR a tampered
