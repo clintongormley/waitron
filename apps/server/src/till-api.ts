@@ -1,12 +1,13 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   endSession,
+  listActivePersonsWithPermission,
   listActiveStaff,
   loginWithPin,
   roleHasPermission,
@@ -281,6 +282,37 @@ function requireUuidId(
     throw new AppError(code, { workingOrderId: id });
   }
   return id;
+}
+
+/**
+ * Parse and SCREEN the optional supervisor `override` on `POST /api/drawer/open` before it reaches
+ * `authorize()`'s credential gate. The whole override is optional — a supervisor opening directly, and
+ * every `open`-policy open, sends none, so an absent `raw` returns `undefined` (no override) and the
+ * gate falls back to the operator's own role.
+ *
+ * When an override IS supplied it must be well-formed, mapped to the SAME codes the credential gate
+ * gives a bad credential so a malformed one never becomes an opaque 500:
+ *   • `personId` must be a UUID string — a non-string or malformed value is refused `person.not_found`
+ *     (401) BEFORE it can reach the `persons.id` uuid column inside `verifyPersonCredential` as a
+ *     `22P02` → opaque 500, the same code a well-formed-but-absent id gets from that gate;
+ *   • `pin` must be a string — a missing/non-string PIN is refused `pin.invalid` (401), the code a
+ *     wrong PIN already gets, rather than reaching `verifyPin` as a non-string.
+ * (A well-formed-but-UNKNOWN personId needs no screen here — the credential gate returns
+ * `person.not_found` for it already.)
+ */
+function parseDrawerOverride(
+  raw: { personId?: unknown; pin?: unknown } | undefined | null,
+): { personId: string; pin: string } | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw.personId !== "string" || !isUuid(raw.personId)) {
+    // `raw.personId` is `unknown` here (a non-string or a non-UUID string); coerce for the debug param,
+    // which the ErrorParams type declares `string`. A caller-supplied id is safe to echo.
+    throw new AppError("person.not_found", { personId: String(raw.personId) });
+  }
+  if (typeof raw.pin !== "string") {
+    throw new AppError("pin.invalid", {});
+  }
+  return { personId: raw.personId, pin: raw.pin };
 }
 
 /**
@@ -1007,25 +1039,90 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Manually open the cash drawer (counter receipt/drawer §3d) — the operator's "open drawer" button, for
-  // a no-sale open (giving change, a cash count). SESSION-GUARDED and AUDITED: it records a
-  // `drawer_opens('manual')` row (who/when) beside a kick-only outbox job to the till's receipt printer
-  // (the drawer IS that printer's kick — deli-hardware §6). A till with NO receipt printer set has nothing
-  // to kick, refused `drawer.no_printer` (400, errors.ts) BEFORE any write — the resolve + throw is at
-  // this route layer (which imports errors.js), so `receipt-print.ts` stays throw-free. `resolveReceiptPrinter`
-  // takes the same `active = true` + `FOR SHARE` posture the sale hook uses, so an absent/inactive printer
-  // is the no-printer case. (The `cash.drawer` permission + supervisor override is the §8 fast-follow;
-  // this slice is session-gated + audited.) Returns 200 with an empty body.
+  // The eligible authorizers for a gated privileged action — the active persons whose role holds
+  // `cash.drawer` (cash-drawer-authorization §5). SESSION-GUARDED, not permission-gated: ANY logged-in
+  // operator may call it (they are about to request a supervisor override and need the picker of who
+  // could authorize it), so `requireSession` runs FIRST and no `authorize` gate follows. Runs under
+  // `withTenant` + `asAppUser` (RLS scopes it to this till's tenant), returning the SAME no-secrets
+  // `{ personId, displayName }` shape as `GET /api/staff` — no PIN material, role or status: the till
+  // shows this picker BEFORE the supervisor has entered their credential. The client sends the chosen
+  // `{ personId, pin }` only on the authenticated `POST /api/drawer/open` override request.
+  app.get("/api/drawer/authorizers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const authorizers = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listActivePersonsWithPermission(tx, "cash.drawer");
+      });
+      return c.json(authorizers);
+    }),
+  );
+
+  // Manually open the cash drawer (counter receipt/drawer §3d + cash-drawer-authorization §3) — the
+  // operator's "open drawer" button, for a no-sale open (giving change, a cash count). SESSION-GUARDED,
+  // AUTHORIZED and AUDITED: it records a `drawer_opens('manual')` row (who performed it, who authorized
+  // it, whether via override) beside a kick-only outbox job to the till's receipt printer (the drawer IS
+  // that printer's kick — deli-hardware §6).
+  //
+  // This is the FIRST till route to parse a supervisor OVERRIDE and call `authorize()` WITH one (FP-2
+  // already calls `authorize(…"till.configure")` at the table-placement routes, but with NO override —
+  // it is the reusable OVERRIDE hop that is new here). The per-location `drawer_open_policy` decides:
+  //   • `open`  → any logged-in operator opens directly; `authorizedBy = personId`, `viaOverride = false`.
+  //   • `gated` → `authorize(tx, { sessionId, permission: "cash.drawer", override })`, satisfied by the
+  //     operator's OWN role OR a supervisor PIN override (a second person who holds `cash.drawer`); an
+  //     unpermitted operator with no/insufficient override throws `authorization.not_permitted` (403).
+  // The gate runs BEFORE the printer resolution (spec §3 order), so an unpermitted operator is refused
+  // regardless of printer state. An optional `override: { personId, pin }` is parsed from the body (a
+  // supervisor opening directly, and every `open`-policy open, sends NO body): a missing/empty/malformed
+  // body is coerced to `{}` (`readJsonBody`), never a 500. A present-but-malformed `override.personId`
+  // (non-UUID) is screened to `person.not_found` (401) rather than reaching the `persons.id` uuid column
+  // as a 22P02 → opaque 500 — the same code a well-formed-but-absent id gets from the credential gate.
+  //
+  // A till with NO receipt printer set has nothing to kick, refused `drawer.no_printer` (400, errors.ts)
+  // — the resolve + throw is at this route layer (which imports errors.js), so `receipt-print.ts` stays
+  // throw-free. `resolveReceiptPrinter` takes the same `active = true` + `FOR SHARE` posture the sale hook
+  // uses, so an absent/inactive printer is the no-printer case. Returns 200 with an empty body.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId, sessionId } = await requireSession(deps, c);
+      const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
+        const [loc] = await tx
+          .select({ policy: locations.drawerOpenPolicy })
+          .from(locations)
+          .where(
+            and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, deps.cfg.locationId)),
+          );
+        // The till's own location always resolves under RLS (tenant-scoped, like the receipt-mode read
+        // in `receipt-print.ts`); if it somehow does not, fall back to the SECURE 'gated' default so a
+        // missing row can never leave the gate open.
+        /* v8 ignore next -- unreachable: the till's own location row always resolves under RLS */
+        const policy = loc?.policy ?? "gated";
+
+        // `authorize()` returns `{ authorizedBy, viaOverride }` (plus `permission`), the same names the
+        // `'open'` branch supplies directly — so a ternary destructure covers both policies.
+        const { authorizedBy, viaOverride } =
+          policy === "open"
+            ? { authorizedBy: personId, viaOverride: false }
+            : await authorize(tx, {
+                sessionId,
+                permission: "cash.drawer",
+                override: parseDrawerOverride(body.override),
+              });
+
         const printer = await resolveReceiptPrinter(tx, deps.cfg);
         if (printer === undefined) {
           throw new AppError("drawer.no_printer", { tillId: deps.cfg.tillId });
         }
-        await enqueueManualDrawerOpen(tx, deps.cfg, printer.id, personId);
+        await enqueueManualDrawerOpen(
+          tx,
+          deps.cfg,
+          printer.id,
+          personId,
+          authorizedBy,
+          viaOverride,
+        );
       });
       return c.body(null, 200);
     }),

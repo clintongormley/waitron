@@ -176,6 +176,15 @@ const PRINT_MODE_NAMES: NameTable = {
   never: { en: "Never", es: "Nunca" },
 };
 
+// The two cash-drawer-open policies (the `drawer_open_policy` pgEnum), the per-location toggle on the
+// Impresoras screen. `gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is
+// held by supervisor/manager/admin — (the SECURE default); `open` = any operator may. Raw string-keyed
+// LOCAL copy, same bundle-decoupling reason as above.
+const DRAWER_OPEN_POLICY_NAMES: NameTable = {
+  gated: { en: "Supervisor approval required", es: "Requiere autorización de un responsable" },
+  open: { en: "Any operator", es: "Cualquier operario" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -194,6 +203,11 @@ export function jobStatusName(value: string, locale: string = currentLocale()): 
 /** A receipt print mode (auto / on_request / never) → its display name (raw-value fallback). */
 export function printModeName(value: string, locale: string = currentLocale()): string {
   return resolve(PRINT_MODE_NAMES, value, locale);
+}
+
+/** A cash-drawer-open policy (gated / open) → its display name (raw-value fallback). */
+export function drawerPolicyName(value: string, locale: string = currentLocale()): string {
+  return resolve(DRAWER_OPEN_POLICY_NAMES, value, locale);
 }
 
 /** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */

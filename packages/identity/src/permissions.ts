@@ -59,6 +59,13 @@ export const PERMISSIONS = [
   // only the central-management surface (printing design §7). Codes/permissions are never renamed
   // once shipped.
   "printer.manage",
+  // Authorizing a cash-drawer OPEN when a location's drawer_open_policy is 'gated' (@waitron/db
+  // drawer_opens audit log). A domain-named CASH-ACCOUNTABILITY permission on the floor lane, NOT a
+  // management-dashboard config gate — so it sits in the SUPERVISOR set beside sale.void/refund/
+  // discount/rectify, granting it to supervisor + manager + admin and NEVER to staff. Under an 'open'
+  // policy no permission is consulted; under 'gated' the drawer route requires this. Codes/permissions
+  // are never renamed once shipped.
+  "cash.drawer",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -71,6 +78,9 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
   "sale.refund",
   "sale.discount",
   "sale.rectify",
+  // A supervisor on the floor can authorize a gated cash-drawer open; manager (spreads SUPERVISOR)
+  // and admin (ALL) inherit it, staff never holds it.
+  "cash.drawer",
 ]);
 const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,

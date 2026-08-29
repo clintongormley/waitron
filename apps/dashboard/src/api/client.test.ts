@@ -1935,4 +1935,16 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       body: JSON.stringify({ mode: "on_request" }),
     });
   });
+
+  it("setDrawerOpenPolicy PATCHes the location's drawer-open-policy route with { policy }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setDrawerOpenPolicy("loc-1", "open")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc-1/drawer-open-policy", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ policy: "open" }),
+    });
+  });
 });

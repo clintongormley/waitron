@@ -115,6 +115,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getLocations: vi.fn().mockResolvedValue(locations),
     setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
     setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
+    setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -922,6 +923,62 @@ describe("printers-screen", () => {
     // (auto), never the "never" that failed to save.
     expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
     expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("secondary");
+    // ...and the failure is surfaced in the localised error banner (raw code never shown).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
+    expect(banner).not.toContain("management.request_invalid");
+  });
+
+  it("renders a drawer-policy toggle per location and calls setDrawerOpenPolicy with the chosen policy", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
+
+    // The two-policy segmented control is present; pick "open".
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
+    expect(q(el, "[data-test=drawer-policy-loc-1-open]")).not.toBeNull();
+    q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
+    await flush(el);
+
+    expect(api.setDrawerOpenPolicy).toHaveBeenCalledWith("loc-1", "open");
+    expect(api.listTills).toHaveBeenCalledTimes(1); // reload after the mutation
+  });
+
+  it("reflects the picked drawer policy in the segmented control (primary variant), surviving the reload", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // Default: gated is primary (the SECURE column default).
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe("primary");
+
+    q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
+    await flush(el);
+    // The pick is reflected (no read route, so the local pick survives the reload, not reset to gated).
+    expect(q(el, "[data-test=drawer-policy-loc-1-open]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe(
+      "secondary",
+    );
+  });
+
+  it("leaves the drawer-policy toggle on the PRIOR policy (not the failed value) and shows the banner when setDrawerOpenPolicy is rejected", async () => {
+    const api = stubApi({
+      setDrawerOpenPolicy: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    // Default: gated is primary.
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe("primary");
+
+    q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
+    await flush(el);
+
+    // The write failed, so the local pick is NOT applied: the control still shows the prior policy
+    // (gated), never the "open" that failed to save.
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=drawer-policy-loc-1-open]")!.getAttribute("variant")).toBe(
+      "secondary",
+    );
     // ...and the failure is surfaced in the localised error banner (raw code never shown).
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));

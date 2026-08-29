@@ -114,6 +114,7 @@ function stubApi(): DashboardApi {
     getLocations: vi.fn().mockResolvedValue(locations),
     setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
     setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
+    setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
 }
 

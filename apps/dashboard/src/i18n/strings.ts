@@ -209,6 +209,8 @@ export const en = {
   "printers.print_mode_title": "Auto-print per location",
   "printers.print_mode": "When to print",
   "printers.no_locations": "No locations yet",
+  "printers.drawer_policy_title": "Cash drawer per location",
+  "printers.drawer_policy": "Cash drawer",
   // Person form
   "person.new": "New user",
   "person.name": "Name",
@@ -534,6 +536,8 @@ export const es: Record<StringKey, string> = {
   "printers.print_mode_title": "Impresión automática por local",
   "printers.print_mode": "Cuándo imprimir",
   "printers.no_locations": "Aún no hay locales",
+  "printers.drawer_policy_title": "Cajón por local",
+  "printers.drawer_policy": "Cajón",
   "person.new": "Nuevo usuario",
   "person.name": "Nombre",
   "person.role": "Rol",

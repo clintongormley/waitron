@@ -17,6 +17,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
+  drawerOpenPolicy,
   locations,
   printAgents,
   printJobs,
@@ -666,6 +667,33 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const updated = await tx
           .update(locations)
           .set({ receiptPrintMode: mode })
+          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .returning({ id: locations.id });
+        if (updated.length === 0) {
+          throw new AppError("management.request_invalid", { field: "locationId" });
+        }
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Set a location's cash-drawer-open policy (printer.manage) ─────────────────────────────────────
+  // Cash-drawer-authorization §5 — the dashboard's per-location drawer-policy toggle (`gated`/`open`,
+  // which the till's drawer-open authorize() hook reads). One-for-one SIBLING of the receipt-print-mode
+  // route above: same `gated` / `printer.manage` gate + `requireUuidParam` id screen. `policy` is
+  // screened to the `drawer_open_policy` enum's members (`management.request_invalid`, 400, before the
+  // enum column). An unknown/foreign (RLS-hidden) location is `management.request_invalid` (400) — there
+  // is no `location.*` code, the same request-shape treatment the receipt-print-mode route takes.
+  app.patch("/management-api/locations/:id/drawer-open-policy", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationRowId = requireUuidParam(c.req.param("id"), "LocationId");
+      const body = await readJsonBody<{ policy?: unknown }>(c);
+      const policy = requireEnum(body.policy, "policy", drawerOpenPolicy.enumValues);
+      await gated(sessionId, async (tx) => {
+        const updated = await tx
+          .update(locations)
+          .set({ drawerOpenPolicy: policy })
           .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
           .returning({ id: locations.id });
         if (updated.length === 0) {

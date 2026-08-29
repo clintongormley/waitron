@@ -402,6 +402,14 @@ async function locationPrintMode(locationId: string): Promise<string> {
   return row.rows[0]!.receipt_print_mode;
 }
 
+/** Read a location's currently-set drawer-open policy (owner SQL, a distinct connection). */
+async function locationDrawerPolicy(locationId: string): Promise<string> {
+  const row = await suite.admin.execute<{ drawer_open_policy: string }>(
+    sql`select drawer_open_policy from locations where id = ${locationId}`,
+  );
+  return row.rows[0]!.drawer_open_policy;
+}
+
 describe("Receipt-printer + print-mode config routes over real Postgres (printer.manage, FORCE RLS)", () => {
   it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
     const app = mountApp(tenantA);
@@ -506,6 +514,41 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     expect(await badMode.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
+  it("sets a location's drawer open policy as a manager (persists)", async () => {
+    const app = mountApp(tenantA);
+    for (const policy of ["open", "gated"] as const) {
+      const res = await send(
+        app,
+        "PATCH",
+        `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
+        { cookie: managerCookie, body: { policy } },
+      );
+      expect(res.status).toBe(204);
+      expect(await locationDrawerPolicy(tenantA.locationId)).toBe(policy);
+    }
+  });
+
+  it("400s an unknown location and a bad drawer-open-policy value", async () => {
+    const app = mountApp(tenantA);
+    const unknown = await send(
+      app,
+      "PATCH",
+      `/management-api/locations/${randomUUID()}/drawer-open-policy`,
+      { cookie: managerCookie, body: { policy: "gated" } },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+
+    const badPolicy = await send(
+      app,
+      "PATCH",
+      `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
+      { cookie: managerCookie, body: { policy: "sometimes" } },
+    );
+    expect(badPolicy.status).toBe(400);
+    expect(await badPolicy.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
+
   it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId } (printer set + unset)", async () => {
     const app = mountApp(tenantA);
     const agent = await enrolAgent(app, "Recibos agent 2");
@@ -570,8 +613,8 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     expect(manager.status).toBe(200);
   });
 
-  it("require printer.manage on BOTH config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
-    // Both config routes funnel through the SAME `gated` helper as the sibling printer/mapping routes, so
+  it("require printer.manage on ALL config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
+    // Every config route funnels through the SAME `gated` helper as the sibling printer/mapping routes, so
     // the by-deletion proof recorded on the first gate block covers these too: deleting the
     // `authorizeManager(...)` call from print-api.ts's `gated` flips every staff case below from 403 to a
     // 2xx success, turning these assertions red; restoring it turns them green.
@@ -579,10 +622,13 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
     const tillRoute = `/management-api/tills/${tillId}/receipt-printer`;
     const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
+    const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
 
     // Unauthenticated → 401 on each route.
-    for (const route of [tillRoute, modeRoute]) {
-      const unauth = await send(app, "PATCH", route, { body: { printerId: null, mode: "auto" } });
+    for (const route of [tillRoute, modeRoute, policyRoute]) {
+      const unauth = await send(app, "PATCH", route, {
+        body: { printerId: null, mode: "auto", policy: "gated" },
+      });
       expect(unauth.status).toBe(401);
       expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
@@ -604,6 +650,14 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     expect(await staffMode.json()).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
+    const staffPolicy = await send(app, "PATCH", policyRoute, {
+      cookie: staffCookie,
+      body: { policy: "open" },
+    });
+    expect(staffPolicy.status).toBe(403);
+    expect(await staffPolicy.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
 
     // Manager session → 204 (the gate admits it) on each route.
     expect(
@@ -613,6 +667,14 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
     expect(
       (await send(app, "PATCH", modeRoute, { cookie: managerCookie, body: { mode: "auto" } }))
         .status,
+    ).toBe(204);
+    expect(
+      (
+        await send(app, "PATCH", policyRoute, {
+          cookie: managerCookie,
+          body: { policy: "gated" },
+        })
+      ).status,
     ).toBe(204);
   });
 });

@@ -209,6 +209,45 @@ describe("TillApi", () => {
     expect(r).toEqual(roster);
   });
 
+  it("openDrawer POSTs an empty body to /api/drawer/open when no override is given", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    await new TillApi("", fetchStub).openDrawer();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/drawer/open",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("openDrawer POSTs { override } carrying the supervisor's personId + PIN when one is given", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    await new TillApi("", fetchStub).openDrawer({ personId: "sup-1", pin: "4321" });
+
+    // The PIN travels ONLY in this authenticated request body — never in the URL or a query string.
+    const [url, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/drawer/open");
+    expect(url).not.toContain("4321");
+    expect(init.body).toBe(JSON.stringify({ override: { personId: "sup-1", pin: "4321" } }));
+  });
+
+  it("listDrawerAuthorizers GETs the eligible supervisors from /api/drawer/authorizers", async () => {
+    const roster = [{ personId: "sup-1", displayName: "Responsable" }];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
+
+    const r = await new TillApi("", fetchStub).listDrawerAuthorizers();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/drawer/authorizers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(roster);
+  });
+
   it("listProducts GETs the sellable catalogue, carrying each product's allergens", async () => {
     // Typed as `TillProduct[]` so the mock is a COMPILE-TIME proof the client shape carries
     // `allergens` — the EU-14 declaration map keyed by allergen code (menu & allergens, Task 4).

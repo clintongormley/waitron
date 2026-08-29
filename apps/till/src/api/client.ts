@@ -762,18 +762,35 @@ export class TillApi {
   }
 
   /**
-   * Manually open the cash drawer (counter receipt/drawer §3d/§5) → `POST /api/drawer/open` with an empty
-   * body — the ticket screen's "Abrir cajón" lever, for a no-sale open (giving change, a cash count).
-   * SESSION-gated and AUDITED server-side: it enqueues a kick-only outbox job to the till's receipt
-   * printer (the drawer IS that printer's kick) and records a `drawer_opens('manual')` row. It takes no
-   * id — the till's printer is resolved server-side from `cfg`. A till with NO receipt printer set has
-   * nothing to kick and rejects `{ code: "drawer.no_printer" }` (400); the caller surfaces that as its
-   * usual error banner, never an unhandled rejection. The server answers an empty 200 (`c.body(null,
-   * 200)`), so this resolves void; the empty `{}` body mirrors the empty-200 POST siblings (the route
-   * parses none).
+   * Manually open the cash drawer (counter receipt/drawer §3d/§5 + cash-drawer-authorization §5) →
+   * `POST /api/drawer/open` — the ticket screen's "Abrir cajón" lever, for a no-sale open (giving
+   * change, a cash count). SESSION-gated, AUTHORIZED and AUDITED server-side: it enqueues a kick-only
+   * outbox job to the till's receipt printer (the drawer IS that printer's kick) and records a
+   * `drawer_opens('manual')` row. It takes no id — the till's printer is resolved server-side from `cfg`.
+   *
+   * Under a `gated` drawer-open policy an operator whose role lacks `cash.drawer` is refused
+   * `{ code: "authorization.not_permitted" }` (403); the caller then fetches the eligible supervisors
+   * ({@link listDrawerAuthorizers}) and retries with an `override: { personId, pin }` — the authorizing
+   * supervisor's id and PIN. The `override` is sent in the body ONLY on this authenticated request (never
+   * a URL or query), and only when supplied — a permitted operator, and every `open`-policy open, sends
+   * none. A wrong PIN rejects `{ code: "pin.invalid" }` (401); a till with NO receipt printer rejects
+   * `{ code: "drawer.no_printer" }` (400). The server answers an empty 200 (`c.body(null, 200)`), so this
+   * resolves void; with no override the `{}` body mirrors the empty-200 POST siblings (the route parses
+   * an optional body).
    */
-  async openDrawer(): Promise<void> {
-    await this.#request<void>("/api/drawer/open", "POST", {});
+  async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
+    await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});
+  }
+
+  /**
+   * The eligible authorizers for a gated cash-drawer open (cash-drawer-authorization §5) →
+   * `GET /api/drawer/authorizers`. SESSION-gated (any logged-in operator may ask): the active persons
+   * whose role holds `cash.drawer`, as `{ personId, displayName }` only — the same no-secrets shape as
+   * {@link listStaff}. The caller shows them as a picker in the supervisor-override dialog; the chosen
+   * supervisor's PIN reaches only {@link openDrawer}'s authenticated request.
+   */
+  listDrawerAuthorizers(): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>("/api/drawer/authorizers", "GET");
   }
 
   /**

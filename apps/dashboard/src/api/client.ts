@@ -741,16 +741,23 @@ export interface StationPrinter {
 }
 
 // ── Receipt-printer + print-mode configuration (counter receipt/drawer §5) ────────────────────────
-// LOCAL copies of the server's till/receipt-mode shapes (the print-api.ts routes:
+// LOCAL copies of the server's till/receipt-mode/drawer-policy shapes (the print-api.ts routes:
 // `GET /management-api/tills`, `PATCH …/tills/:id/receipt-printer`, `PATCH …/locations/:id/receipt-print-mode`,
-// all printer.manage-gated), deliberately NOT imported from `apps/server`/`@waitron/db` (the #70 bundle
-// rule the printing shapes above follow). These are the CONTRACT the Impresoras screen's receipt-printer
-// picker + print-mode toggle build on; a mismatch surfaces as a runtime shape error a view test catches.
+// `PATCH …/locations/:id/drawer-open-policy`, all printer.manage-gated), deliberately NOT imported from
+// `apps/server`/`@waitron/db` (the #70 bundle rule the printing shapes above follow). These are the CONTRACT
+// the Impresoras screen's receipt-printer picker + print-mode toggle + drawer-policy toggle build on; a
+// mismatch surfaces as a runtime shape error a view test catches.
 
 /** The venue's per-location receipt print mode — the `receipt_print_mode` pgEnum
  * (`auto` = auto-print on sale; `on_request` = only reprint; `never`). Mirrors the server enum; the
  * server re-validates against the real enum on the PATCH. */
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
+
+/** The venue's per-location cash-drawer-open policy — the `drawer_open_policy` pgEnum
+ * (`gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is held by
+ * supervisor/manager/admin — the SECURE default; `open` = any operator may). Mirrors the server enum;
+ * the server re-validates against the real enum on the PATCH. */
+export type DrawerOpenPolicy = "gated" | "open";
 
 /** One `GET /management-api/tills` row — the till-picker's source. `label` is the till's display name
  * (`tills.name`), `locationId` its location (so the receipt-printer picker can offer that location's
@@ -1397,11 +1404,12 @@ export class DashboardApi {
     );
   }
 
-  // ── Receipt printer + print mode (counter receipt/drawer §5) ──────────────────────────────────────
-  // The three verbs the Impresoras screen's receipt-printing section drives (the print-api.ts routes,
+  // ── Receipt printer + print mode + drawer policy (counter receipt/drawer §5) ──────────────────────
+  // The four verbs the Impresoras screen's receipt-printing section drives (the print-api.ts routes,
   // printer.manage-gated). `listTills` is the picker's source; `setTillReceiptPrinter` points a till at
   // one of its location's printers (or clears it with `null`); `setReceiptPrintMode` sets a location's
-  // auto/on_request/never mode. The writes answer an empty 204.
+  // auto/on_request/never mode; `setDrawerOpenPolicy` sets a location's gated/open drawer policy. The
+  // writes answer an empty 204.
 
   /** `GET /management-api/tills` — this tenant's tills (id, display label, location, currently-set
    * receipt printer or null). The per-till receipt-printer picker's source. */
@@ -1428,6 +1436,19 @@ export class DashboardApi {
       "PATCH",
       {
         mode,
+      },
+    );
+  }
+
+  /** `PATCH /management-api/locations/:id/drawer-open-policy` — set a location's cash-drawer-open
+   * policy (`gated` / `open`). An unknown location or a value off the enum rejects
+   * `{ code: "management.request_invalid" }` (400). Answers an empty 204. */
+  setDrawerOpenPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
+    return this.#request<void>(
+      `/management-api/locations/${locationId}/drawer-open-policy`,
+      "PATCH",
+      {
+        policy,
       },
     );
   }
