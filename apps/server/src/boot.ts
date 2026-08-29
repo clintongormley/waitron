@@ -834,27 +834,41 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
-  // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
-  // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
-  // code, list devices, revoke one). It reuses the EXACT `db` and — unlike the sibling mounts, which
-  // pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because the
-  // device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
-  // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
-  // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
-  // device guard and the `device.manage` gate run per request.
-  mountDeviceApi(app, { db, cfg: till, secureCookies }, log);
-  // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the
-  // UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`, redeem a pairing code for a Bearer
-  // token), the `requireAgent`-gated agent group (claim this agent's queued jobs, report each result —
-  // the claim commits within the request, holding no lock across the agent's push, design §3c/Ruling 6)
-  // and the `printer.manage`-gated management group (mint agent codes, list/revoke agents, printers
-  // CRUD, recent jobs). It reuses the EXACT `db` and this venue's tenant + location (`till.tenantId`/
-  // `till.locationId`) so scope cannot drift from the sibling mounts. No `secureCookies` (the agent uses
-  // a Bearer token, the management group the shared management session), no fiscal backend/clock/card
-  // provider/media store — these routes touch only the four print_* tables. Routes only — no database
-  // work at boot; the agent guard and the `printer.manage` gate run per request.
-  mountPrintApi(app, { db, cfg: { tenantId: till.tenantId, locationId: till.locationId } }, log);
+  // The operational agent/device groups — NOT mounted under mirror mode. Unlike the dashboard read
+  // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
+  // all sit behind non-GET verbs the read-only gate refuses, these two groups each expose a WRITE
+  // BEHIND A GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE
+  // (packages/printing/src/runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-18
+  // flags exactly this) cannot catch a write on a GET, so the read-only guarantee for these operational
+  // groups rests on NOT mounting them on a mirror rather than on the verb — where before it rested only
+  // on their backing tables (`print_*`, `devices`) being unprovisioned on a mirror, which the gate
+  // comment said a later slice MUST revisit. A mirror provisions none of those tables anyway, so it
+  // loses nothing by their absence; a primary mounts both. This guard skips route REGISTRATION only —
+  // every shared boot value (`till`, `secureCookies`) is built above and read by the sibling mounts, so
+  // nothing downstream depends on these mounts having run.
+  if (!isMirror) {
+    // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
+    // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
+    // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
+    // code, list devices, revoke one). It reuses the EXACT `db` and — unlike the sibling mounts, which
+    // pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because the
+    // device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
+    // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
+    // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
+    // device guard and the `device.manage` gate run per request.
+    mountDeviceApi(app, { db, cfg: till, secureCookies }, log);
+    // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the
+    // UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`, redeem a pairing code for a Bearer
+    // token), the `requireAgent`-gated agent group (claim this agent's queued jobs, report each result —
+    // the claim commits within the request, holding no lock across the agent's push, design §3c/Ruling 6)
+    // and the `printer.manage`-gated management group (mint agent codes, list/revoke agents, printers
+    // CRUD, recent jobs). It reuses the EXACT `db` and this venue's tenant + location (`till.tenantId`/
+    // `till.locationId`) so scope cannot drift from the sibling mounts. No `secureCookies` (the agent uses
+    // a Bearer token, the management group the shared management session), no fiscal backend/clock/card
+    // provider/media store — these routes touch only the four print_* tables. Routes only — no database
+    // work at boot; the agent guard and the `printer.manage` gate run per request.
+    mountPrintApi(app, { db, cfg: { tenantId: till.tenantId, locationId: till.locationId } }, log);
+  }
   // The dashboard's management HTTP surface (manager login, staff/person management, passkey
   // ceremonies) on the SAME app, the identical convention `mountWebhook` and `mountTillApi` above
   // follow. It reuses the EXACT values `mountTillApi` receives so the two cannot drift: the same `db`,

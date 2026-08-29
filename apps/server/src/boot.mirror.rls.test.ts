@@ -268,6 +268,17 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(bundle.status).toBe(403);
       expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
+      // The operational agent/device groups are NOT mounted on a mirror (Task 4). These are GETs, so
+      // the read-only gate passes them through — the guarantee that a mirror never runs their
+      // write-behind-a-GET (`GET /print-api/agent/jobs` → claimPrintJobs, a locking UPDATE, flagged in
+      // read-only-gate.ts's own comment) rests on the route being ABSENT (404), not on the verb. The
+      // primary control below reaches each route's agent/device auth (NOT 404) — the A/B that these
+      // 404s are the guard, not a missing route.
+      const printJobs = await fetch(`${base}/print-api/agent/jobs`);
+      expect(printJobs.status).toBe(404);
+      const deviceStation = await fetch(`${base}/api/device/station`);
+      expect(deviceStation.status).toBe(404);
+
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
       // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
@@ -320,6 +331,16 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
       expect(bundle.status).toBe(401);
       expect((await bundle.json()).error.code).toBe("password.invalid");
+
+      // The operational agent/device groups DO mount on a primary (Task 4 control, CLAUDE.md §1's
+      // other direction): each GET reaches its own agent/device auth (401 — a missing Bearer / device
+      // cookie), never a 404. This is what makes the mirror's 404s above the guard rather than a route
+      // that never existed. Flip boot.ts's `if (!isMirror)` off and the mirror 404s become 401s like
+      // these; keep it and the two disagree, which is the whole point.
+      const printJobs = await fetch(`${base}/print-api/agent/jobs`);
+      expect(printJobs.status).not.toBe(404);
+      const deviceStation = await fetch(`${base}/api/device/station`);
+      expect(deviceStation.status).not.toBe(404);
     } finally {
       await server.close();
     }
