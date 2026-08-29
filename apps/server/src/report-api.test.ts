@@ -188,7 +188,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId } }, noopLog);
   return app;
 }
 

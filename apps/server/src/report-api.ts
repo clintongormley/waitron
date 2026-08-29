@@ -5,11 +5,20 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { eq, sql } from "drizzle-orm";
+import {
+  AppError,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+  type NodeId,
+  type TenantId,
+} from "@waitron/shared";
 import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
+  computeDailyClose,
+  computeTopSellers,
   computeVatReturn,
+  currentBusinessDay,
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
@@ -21,17 +30,20 @@ import { requireManagementSession } from "./management-session.js";
 import type { Logger } from "./logger.js";
 
 /** Deps for the reporting/export routes: `db` + this venue's `cfg.tenantId` scope every read via
- * `withTenant` (RLS confines it to this server's one tenant). Same minimal shape as PurchasingApiDeps
- * — no nodeId, no card provider, no clock: the routes are pure reads over the filed record. */
+ * `withTenant` (RLS confines it to this server's one tenant). `cfg.nodeId` is THIS server's own node —
+ * the dashboard overview is node-scoped (today's takings/counts/open-tables/top-sellers for this node),
+ * unlike the modelo 303 export, which aggregates ALL of the obligado's nodes and ignores it. */
 export interface ReportApiDeps {
   db: Database;
-  cfg: { tenantId: string };
+  cfg: { tenantId: string; nodeId: string };
 }
 
-/** The ONE permission gating the modelo 303 export — a NEW domain-named reporting seam (spec D7),
- * mapped to manager + admin. One constant, referenced at the route, so a future re-map is a one-line
- * swap here. */
+/** The permissions gating the reporting routes, referenced through these constants (never an inline
+ * literal — the catalogue-api `CATALOGUE_WRITE_PERMISSION` pattern). `report.export` gates the modelo
+ * 303 DR303 export (manager + admin); `report.view` gates the dashboard overview reads (supervisor,
+ * manager + admin). Two DISTINCT seams: viewing the takings dashboard is not exporting the fiscal file. */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
+const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
 /** Every AppError CODE these routes answer + its HTTP status (the purchasing-api STATUS parallel).
  * CLIENT faults only; a genuine SERVER fault reaches `run` as a non-AppError → an opaque 500. No new
@@ -87,6 +99,52 @@ function requireDeclarationType(raw: string | undefined): string {
   return raw;
 }
 
+/** Reads THIS server's venue clock — the `time_zone`/`day_cutover` of the node's location — the inputs
+ * `currentBusinessDay`/`computeDailyClose` consume (spec D9). `day_cutover` is a `time` ("HH:MM:SS"),
+ * sliced to the "HH:MM" the reporting validators expect. A missing node is not user input: `cfg.nodeId`
+ * is this server's OWN node (from `till.nodeId`), whose location row always exists (composite FK), so
+ * the guard is an unreachable invariant break → an opaque 500 via `run`, never a registered code (the
+ * `tenants`-row guard in the modelo 303 route below does the same). */
+async function resolveVenueClock(
+  tx: Transaction,
+  nodeId: string,
+): Promise<{ timeZone: string; dayCutover: string }> {
+  const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
+    select l.time_zone, l.day_cutover
+    from nodes n join locations l on l.tenant_id = n.tenant_id and l.id = n.location_id
+    where n.id = ${nodeId}
+  `);
+  const row = rows[0];
+  /* v8 ignore start */
+  if (row === undefined) {
+    // Unreachable: this server's own node + its location always exist (mirrors the modelo 303 route's
+    // whoami-style tenant guard). A misconfigured node becomes an opaque 500 via `run`.
+    throw new Error(`report-api: no node/location row for ${nodeId}`);
+  }
+  /* v8 ignore stop */
+  return { timeZone: row.time_zone, dayCutover: row.day_cutover.slice(0, 5) };
+}
+
+/** Counts THIS node's dining tables and how many carry an open tab, for the overview's open-tables tile.
+ * `dining_tables` is LOCATION-scoped, not node-scoped, so it is scoped by the node's location (join
+ * `nodes` on the tenant-consistent `location_id`); `tab_id is not null` is the open flag (design §2b).
+ * Inactive tables (deactivated, `active = false`) are excluded. The explicit `tenant_id` predicate is
+ * belt-and-suspenders over RLS, the aggregate idiom the reporting reads use. */
+async function countOpenTables(
+  tx: Transaction,
+  tenantId: TenantId,
+  nodeId: NodeId,
+): Promise<{ open: number; total: number }> {
+  const { rows } = await tx.execute<{ total: string; open: string }>(sql`
+    select count(*)::text as total,
+           count(*) filter (where dt.tab_id is not null)::text as open
+    from dining_tables dt
+    join nodes n on n.tenant_id = dt.tenant_id and n.location_id = dt.location_id
+    where dt.tenant_id = ${tenantId} and n.id = ${nodeId} and dt.active = true
+  `);
+  return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
+}
+
 /**
  * Mounts the gated modelo 303 export route on an existing Hono app — `mountPurchasingApi`'s sibling,
  * attached to the SAME app. `GET /management-api/reports/modelo-303?year&period&declarationType`
@@ -99,13 +157,14 @@ function requireDeclarationType(raw: string | undefined): string {
  * prorrata the base is emitted unscaled pending an asesor confirmation.
  */
 export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): void {
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+  const gated = <T>(
+    sessionId: string,
+    permission: Permission,
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: REPORT_EXPORT_PERMISSION,
-      });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
 
@@ -116,7 +175,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const { period, token } = requireLiquidationPeriod(c.req.query("period"));
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
-      const record = await gated(sessionId, async (tx) => {
+      const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
         // The obligado identity comes from the authoritative tenant row (RLS-scoped), not a client
         // param — the till-api whoami idiom. Structurally present: cfg.tenantId is this server's own.
         const [issuer] = await tx
@@ -158,6 +217,54 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         "Content-Disposition": `attachment; filename="modelo-303-${year}-${token}.txt"`,
         "Cache-Control": "no-store",
       });
+    }),
+  );
+
+  // The dashboard's sales/takings overview for THIS node, TODAY: takings (tender + tip + gross), the
+  // record counts, the open-tables tile and the top sellers — the venue clock (node's location) decides
+  // "today". Node-scoped (unlike the tenant-wide modelo 303 export), gated on `report.view`. Money
+  // crosses the wire as decimal STRINGS (the branded `Decimal` JSON-stringifies as-is).
+  app.get("/management-api/reports/overview", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const tenantId = brandTenantId(deps.cfg.tenantId);
+        const nodeId = brandNodeId(deps.cfg.nodeId);
+        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const businessDay = await currentBusinessDay(tx, clock);
+        const input = {
+          tenantId,
+          nodeId,
+          businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [close, topSellers, openTables] = await Promise.all([
+          computeDailyClose(tx, input),
+          computeTopSellers(tx, {
+            tenantId,
+            nodeId,
+            fromBusinessDay: businessDay,
+            toBusinessDay: businessDay,
+            timeZone: clock.timeZone,
+            dayCutover: clock.dayCutover,
+            limit: 5,
+          }),
+          countOpenTables(tx, tenantId, nodeId),
+        ]);
+        return {
+          businessDay,
+          takings: {
+            tenderTotal: close.cash.tenderTotal,
+            tipTotal: close.cash.tipTotal,
+            grossTotal: close.vat.grossTotal,
+          },
+          counts: close.counts,
+          openTables,
+          topSellers,
+        };
+      });
+      return c.json(result);
     }),
   );
 }

@@ -234,11 +234,16 @@ async function seedPurchase(v: Venue, p: SeedPurchase): Promise<void> {
   });
 }
 
-/** One Hono app per tenant — `mountReportApi` binds ONE tenant via `cfg.tenantId`, so each venue's
- * route needs its own app (mirrors `purchasing-api.rls.test.ts`). */
-function mountApp(tenantId: string): Hono {
+/** One Hono app per venue — `mountReportApi` binds ONE (tenant, node) via `cfg`, so each venue's route
+ * needs its own app (mirrors `purchasing-api.rls.test.ts`). The `nodeId` scopes the overview route; the
+ * modelo 303 export ignores it. */
+function mountApp(v: Pick<Venue, "tenantId" | "nodeId">): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  mountReportApi(
+    app,
+    { db: suite.admin, cfg: { tenantId: v.tenantId, nodeId: v.nodeId } },
+    noopLog,
+  );
   return app;
 }
 
@@ -299,7 +304,7 @@ describe("mountReportApi — modelo 303 export over real Postgres (RLS end-to-en
     await seedPurchase(b, B_PURCHASE);
 
     // A's file: box 27 == A's OWN Σ cuota, A's NIF present, B's NIF absent.
-    const fileA = await download(mountApp(a.tenantId), a.managerCookie, "2026", "08", "I");
+    const fileA = await download(mountApp(a), a.managerCookie, "2026", "08", "I");
     expect(fileA.status).toBe(200);
     const bytesA = Buffer.from(new Uint8Array(await fileA.arrayBuffer()));
     expect(bytesA.toString("latin1", BOX_27.offset, BOX_27.offset + BOX_27.len)).toBe(
@@ -310,7 +315,7 @@ describe("mountReportApi — modelo 303 export over real Postgres (RLS end-to-en
 
     // The reverse direction: B's file carries B's OWN figures + NIF, never A's — the isolation is
     // symmetric, not an artefact of which tenant was provisioned first.
-    const fileB = await download(mountApp(b.tenantId), b.managerCookie, "2026", "08", "I");
+    const fileB = await download(mountApp(b), b.managerCookie, "2026", "08", "I");
     expect(fileB.status).toBe(200);
     const bytesB = Buffer.from(new Uint8Array(await fileB.arrayBuffer()));
     expect(bytesB.toString("latin1", BOX_27.offset, BOX_27.offset + BOX_27.len)).toBe(
@@ -332,7 +337,55 @@ describe("mountReportApi — modelo 303 export over real Postgres (RLS end-to-en
     // 200 (the file) instead of 403, so the `toBe(403)` assertion flipped GREEN→RED. Restored the line
     // and the test passed again; `git diff report-api.ts` is clean afterwards.
     const v = await setupVenue();
-    const res = await download(mountApp(v.tenantId), v.staffCookie, "2026", "08", "I");
+    const res = await download(mountApp(v), v.staffCookie, "2026", "08", "I");
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+  });
+});
+
+describe("mountReportApi — /reports/overview over real Postgres (RLS + app-role grants)", () => {
+  it("returns the node's open-tables tile — the app role can SELECT dining_tables (TS-1 grant)", async () => {
+    // The overview route runs ENTIRELY as the app role (`asAppUser` inside `gated`), so its
+    // `countOpenTables` read exercises app_user's SELECT on `dining_tables` (+ `nodes`, `locations`)
+    // for real — PGlite cannot, being a superuser that bypasses grants (CLAUDE.md §4). Were the TS-1
+    // `GRANT SELECT ON dining_tables TO app_user` (0044_dining_tables_rls) absent, this read would
+    // raise 42501 → an opaque 500 here, not the 200 + {open:1,total:2} asserted below. Seed two tables
+    // at the node's location, one carrying an open tab (a real working_orders row, for the composite
+    // tab_id FK) and one free.
+    const v = await setupVenue();
+    const loc = await suite.admin.execute<{ location_id: string }>(
+      sql`select location_id from nodes where id = ${v.nodeId}`,
+    );
+    const locationId = loc.rows[0]!.location_id;
+    const wo = await suite.admin.execute<{ id: string }>(sql`
+      insert into working_orders (tenant_id, till_id, node_id, order_number, status)
+      values (${v.tenantId}, ${v.tillId}, ${v.nodeId}, 1, 'open') returning id`);
+    await suite.admin.execute(sql`
+      insert into dining_tables (tenant_id, location_id, label, tab_id)
+      values (${v.tenantId}, ${locationId}, 'Mesa 1', ${wo.rows[0]!.id})`);
+    await suite.admin.execute(sql`
+      insert into dining_tables (tenant_id, location_id, label, tab_id)
+      values (${v.tenantId}, ${locationId}, 'Mesa 2', null)`);
+
+    const res = await mountApp(v).request("/management-api/reports/overview", {
+      method: "GET",
+      headers: { cookie: v.managerCookie },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { openTables: { open: number; total: number } };
+    expect(body.openTables).toEqual({ open: 1, total: 2 });
+  });
+
+  it("refuses the overview to a staff-role session — 403 (report.view gate)", async () => {
+    // A `staff`-role session holds no `report.view`, so `authorizeManager` throws
+    // `authorization.not_permitted` before any read — a 403, the counterpart to the export gate above.
+    const v = await setupVenue();
+    const res = await mountApp(v).request("/management-api/reports/overview", {
+      method: "GET",
+      headers: { cookie: v.staffCookie },
+    });
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
