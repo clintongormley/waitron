@@ -12,8 +12,9 @@ topology from [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-
 
 **Decides:** the ordered action a human's "make this primary" triggers on a target node — its trigger
 surface and authority, the state it moves, the live in-process mechanism that avoids restarting the sale
-path, the per-target step sequences, and how the sequence interleaves the physical fence of the old node
-so two submitters never coexist. **Does not decide:** the membership-list wire-protocol and re-admission
+path, the per-target step sequences (including the **no-hot-failover cold-restore-from-backup** path,
+where data loss is accepted but trading is not blocked), and how the sequence interleaves the physical
+fence of the old node so two submitters never coexist. **Does not decide:** the membership-list wire-protocol and re-admission
 format (lifecycle §9.1), the promoted-node-while-partitioned filing question (lifecycle §9.4), or
 cloud-relay-vs-sink (lifecycle §9.3) — §9 keeps these open.
 
@@ -30,7 +31,7 @@ flag read through a refreshable holder, a per-request read-only gate, and an amb
 fires on the flip — but C2a's own §10/§11 put **the promote action itself, and the worker start/stop it
 entails, out of scope**. This spec designs that action.
 
-**Three targets, each a different step-set:**
+**Four targets, each a different step-set:**
 
 - **Local secondary → primary.** The on-prem failover. The node is already selling active-active on its
   own SIF; promotion claims the singletons only.
@@ -39,6 +40,16 @@ entails, out of scope**. This spec designs that action.
   Heaviest.
 - **Rejoining old primary → secondary** (the inverse). A returning node relinquishes the singletons,
   keeps its own chain, catches up as a mirror, and requests re-admission.
+- **Cold restore → primary (no hot failover).** The majority single-box case: the only node is gone, and
+  there is no peer or mirror to promote — it is rebuilt from an object-storage backup. Mint a fresh SIF,
+  go live immediately, reconcile the lost tail at month-end. **Data loss is accepted; being unable to
+  trade is not.** A recovery-to-primary rather than a promotion of a live node, but it reuses the same
+  go-live machinery (§5d).
+
+**A principle all four share, sharpest in the cold-restore case: trading never blocks on filing or
+reconciliation.** Selling needs neither a peer, nor the cert, nor a reconciliation pass — the huella is a
+plain hash (#33 §9) — so a node can always be brought into service to trade; filing and reconciliation are
+off the critical path and catch up afterwards (no filing deadline, #33 §6).
 
 **Three boundaries, so this pass does not collide with adjacent open items:**
 
@@ -218,6 +229,34 @@ sequence runs. Notation: `(mode, singleton_role)`.
 5. **Rotate the key ring** if this node had held the cert as a disaster-primary (#33 failback rotation).
    Keeps its own chain throughout — a returning (non-reimaged) node never starts a new chain.
 
+### 5d. Cold restore → primary — no hot failover (the majority single-box case)
+
+The only node is gone (dead disk, theft, fire) and there is no peer or mirror to promote. Recovery rebuilds
+a node from the object-storage backup regime, which is non-optional for a sole system of record (lifecycle
+§6.1). There is no fence step — there is no old node still running to fence.
+
+1. **Restore the latest backup** onto new/reinstalled hardware — base backup + WAL PITR to the last
+   archived point. The backup **includes `sync_log`** (lifecycle §6.2), so cursors are exact.
+2. **Environment handshake:** the backup's `deployment.environment` stamp is checked against the intended
+   environment (lifecycle §6.2 / sync §10) — a preproduction backup can never seed production.
+3. **Mint a fresh SIF / new chain** from a fresh installation number + new series — **never resume the old
+   chain.** Records chained after the last WAL archive are lost, and resuming would chain the next record
+   from the backup's last while AEAT saw the lost records chain from that same huella — a fork, the one
+   unrecoverable failure (#33 §3, `CLAUDE.md` §5). The same NIF files the new chain, so the cert is reused;
+   only the installation number and series are fresh. (Same-series resume, `cloud-storage §5`, is available
+   *only* when loss is provably zero — not the async-PITR default.) This is the point-of-no-return (§7).
+4. **Unlock the key ring** (break-glass) to unseal the cert from the restored blob, *if the operator holds
+   the secret* — the node then files its new chain. If the secret is lost, skip it: the node still trades
+   (step 5), and filing waits on a re-provisioned cert. Filing is never on the critical path to trading.
+5. **Set `(mode, singleton_role) = (primary, primary)`** — a sole node with zero configured peers
+   self-assumes primary (lifecycle §3.4). **Go live immediately:** the only preconditions to trading are a
+   successful restore, a passed handshake, and a minted SIF. Nothing waits on reconciliation or a human
+   decision about the lost data.
+6. **Month-end reconciliation via VeriFactu** (lifecycle §5.2): `consultar` recovers the *submitted*-but-
+   lost records into the reporting view; the irreducible gap (un-submitted *and* un-replicated) is the
+   customer's paper factura only. This belongs with the reporting/close subsystem, cross-referenced there —
+   it is **not** a gate on going live.
+
 ---
 
 ## 6. The one-primary invariant during the transition (fencing interleave)
@@ -245,7 +284,9 @@ The sequence is ordered so **every reversible step precedes the point-of-no-retu
 attestation → key-ring unlock are all abortable with **zero lasting effect**: a failed promote here leaves
 the node exactly as it was (still selling if a secondary, still read-only if a mirror). The **irreversible**
 steps — mint the SIF, start the chain, flip the axes — come *after*, and only once (§5b step 3 is the PONR
-for a mirror; for a local secondary the PONR is claiming the submitter, §5a step 3).
+for a mirror; for a local secondary the PONR is claiming the submitter, §5a step 3; for a cold restore it
+is minting the fresh SIF, §5d step 3). The cold-restore path has no fence step (no old node runs), so its
+only abort-before-PONR failures are a failed restore or a failed environment handshake.
 
 - **Wrong break-glass / missing cert blob** → key-ring unlock fails → abort *before* claiming singletons (a
   node that cannot unseal the cert must never become the submitter).
@@ -264,7 +305,9 @@ for a mirror; for a local secondary the PONR is claiming the submitter, §5a ste
   reserve, capture triggers fire on the first originating write, singleton workers start. *local
   secondary→primary:* the singleton-role flips and **the sale path stays responsive across the live flip**
   — the zero-downtime claim, proven by hitting a till route throughout, not asserted. *rejoin:* relinquishes
-  singletons, **stays a replication source**, catches up as a mirror.
+  singletons, **stays a replication source**, catches up as a mirror. *cold restore:* restore a backup +
+  `sync_log`, pass the environment handshake, mint a fresh SIF, and **assert the node trades on the new
+  chain even with the key ring absent** (filing withheld, selling not).
 - **Proven by deletion** on the two guards: remove the fence-attestation gate → confirm two submitters
   become possible; remove the key-ring precondition → confirm a non-submitter can wrongly claim the role.
   Restore, confirm green (`CLAUDE.md` §4 — prove a guard by deletion).
@@ -303,6 +346,11 @@ a real-PG check the plan must run):
 6. **The continuous conflict-detection watcher** that auto-demotes a mis-promoted loser (#33 §8's
    always-on re-resolution). This spec lands the `singleton_role` field and the promote/relinquish
    transitions; the standing watcher is arguably its own slice.
+7. **The backup regime the cold-restore path (§5d) stands on** — WAL archiving + periodic base backups to
+   object storage (lifecycle §6.1), and the month-end `consultar` reconciliation (lifecycle §5.2). This
+   spec *assumes* both and sequences the restore; **building and verify-restoring** the backup regime, and
+   building the reconciliation, most likely belong with the provisioning and reporting/close subsystems,
+   not this action. A single-box venue must not rely on §5d before the backup regime is proven restorable.
 
 ---
 
@@ -313,10 +361,14 @@ a real-PG check the plan must run):
   teardown) and closes what C2a §10/§11 deferred — the promote action and the worker start/stop.
 - **Adds** the `deployment.singleton_role` column that #33 §8's `role` needs and `nodes.ts` deferred —
   on `deployment`, not `nodes`, per that file's own guidance.
+- **Assembles**, for the cold-restore path (§5d), lifecycle §5.2 (`consultar` month-end reconciliation),
+  §6.1 (the non-optional backup regime), §6.2 (restore-then-stream), and §7.4 (the cold-recovery tier)
+  into a single-box recovery-to-primary runbook.
 - **Depends on** sync's ownership map, idempotent apply, capture triggers, and environment handshake;
   #33's role model, new-chain-on-takeover, and key-ring-follows-the-primary; the C2b break-glass/mirror
-  bundle for the promotion secret; and `packages/verifactu`'s `consultar` client only indirectly (the
-  lifecycle spec's recovery path, not this action).
+  bundle for the promotion secret; and `packages/verifactu`'s `consultar` client via the cold-restore
+  path's month-end reconciliation (§5d step 6), which most likely lives in the reporting/close subsystem,
+  not this action.
 - **Does not touch** `docs/backlog.md` or `docs/compliance/*` — those updates belong to the landing flow
   if and when this design is approved.
 
