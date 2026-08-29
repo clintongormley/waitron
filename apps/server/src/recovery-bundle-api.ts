@@ -22,8 +22,12 @@ export type RecoveryBundleDeps = {
 /**
  * Code→HTTP status for this route. The management gate's codes match `box-status.ts` exactly (401/403).
  * `recovery.passphrase_required` and `recovery.passphrase_too_short` are client errors (400).
- * `recovery.state_incomplete` is deliberately ABSENT — a box missing its own secret files is a server
- * fault, so the boundary answers it (and any other throw) with an opaque 500.
+ * `recovery.state_incomplete` maps to a STRUCTURED 500: a provisioned box that has lost its own secret
+ * files is a box-side fault, not something the authorized operator did wrong, and it still carries a
+ * `{ code, missing }` body naming the absent file. It must be listed here — an AppError absent from
+ * this map gets the boundary's `?? 400` fallback (a client error), not a 500. The boundary's OPAQUE
+ * `server.internal` 500 (no body detail) is reached only by NON-AppError throws, so an AppError is
+ * never opaque.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -32,6 +36,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "recovery.passphrase_required": 400,
   "recovery.passphrase_too_short": 400,
+  "recovery.state_incomplete": 500,
 };
 
 /**
@@ -39,7 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
  * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTenant` + `asAppUser`
  * + `authorizeManager("till.configure")`. The passphrase rides the JSON body (never the URL/query — it
  * is a secret). The bundle carries the box's UNRECOVERABLE state (vault master key + fiscal identity +
- * CA/leaf), so it is streamed as an attachment and logged (session id only, never the passphrase or
+ * CA/leaf), so it is returned as an attachment and logged (session id only, never the passphrase or
  * any secret). POST, not GET: it carries a secret and produces a sensitive artifact.
  */
 export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log: Logger): void {

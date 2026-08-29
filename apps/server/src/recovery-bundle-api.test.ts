@@ -75,6 +75,17 @@ async function seedStateDir(): Promise<string> {
   return dir;
 }
 
+/** Seed every `RECOVERY_FILES` path EXCEPT `omit`, so the route hits `recovery.state_incomplete`. */
+async function seedStateDirMissing(omit: string): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), "recovery-state-"));
+  await mkdir(join(dir, "tls"), { recursive: true });
+  for (const rel of RECOVERY_FILES) {
+    if (rel === omit) continue;
+    await writeFile(join(dir, rel), `contents-of-${rel}\n`);
+  }
+  return dir;
+}
+
 function buildApp(tenantId: string, stateDir: string): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -109,9 +120,11 @@ async function login(app: Hono, personId: string): Promise<string> {
 describe("POST /api/box/recovery-bundle (real postgres)", () => {
   let app: Hono;
   let cookie: string;
+  let tenantId: string;
+  let managerId: string;
 
   beforeAll(async () => {
-    const { tenantId, managerId } = await setupTenant();
+    ({ tenantId, managerId } = await setupTenant());
     app = buildApp(tenantId, await seedStateDir());
     cookie = await login(app, managerId);
   });
@@ -155,5 +168,22 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
     const files = decryptBundle(await res.text(), BUNDLE_PASS);
     expect(Object.keys(files).sort()).toEqual([...RECOVERY_FILES].sort());
     expect(files["secrets.env"]).toBe("contents-of-secrets.env\n");
+  });
+
+  it("500s with recovery.state_incomplete when the box lost one of its own secret files", async () => {
+    // A provisioned box missing its own `trading.env` is a box-side fault, not operator error, so
+    // the boundary classifies it a STRUCTURED 500 that names the absent file — not a 400 and not an
+    // opaque 500. Same authorized manager, a state dir seeded all-but-one.
+    const incompleteApp = buildApp(tenantId, await seedStateDirMissing("trading.env"));
+    const incompleteCookie = await login(incompleteApp, managerId);
+    const res = await incompleteApp.request("/api/box/recovery-bundle", {
+      method: "POST",
+      headers: { cookie: incompleteCookie, "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: BUNDLE_PASS }),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({
+      error: { code: "recovery.state_incomplete", params: { missing: "trading.env" } },
+    });
   });
 });
