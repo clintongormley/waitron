@@ -477,10 +477,34 @@ Provisioning/build*).
     box that lost its own secret files is a server fault — but per the `error-boundary` convention an
     `AppError` is logged at `warn` regardless of the mapped status; only an unexpected non-`AppError`
     takes the `error`/opaque-500 branch.)
-  - **4b-ii — scheduled DB backup.** Scheduled `pg_dump` (incl. `sync_log`) + last-backup age wired
-    into box-status's `backup` field. Decisions: **`pg_dump`, not WAL/continuous archiving** (too
-    much overhead, owner call); and the backup role must **bypass RLS** or a FORCE-RLS table dumps
-    only policy-visible rows — a silent partial fiscal backup (pin with a prove-by-deletion test).
+  - **4b-ii — scheduled DB backup — implemented on `feat/onboarding-4b-ii-scheduled-backup`** (a
+    post-merge docs commit flips this to LANDED). A scheduled worker takes one `pg_dump`
+    (`--format=custom`, so the whole DB incl. `sync_log`) into `WAITRON_BACKUP_DIR` each tick, prunes
+    to the newest `WAITRON_BACKUP_RETAIN` dumps (default 7), and wires the newest dump's age +
+    staleness into box-status's `backup` field (`{ configured, lastBackupAt, ageSeconds, stale }`;
+    never-run reads stale-by-definition). Decision held: **`pg_dump`, not WAL/continuous archiving**
+    (too much overhead, owner call). **Opt-in + fail-closed** the same way sync/tunnel are:
+    `WAITRON_BACKUP_DIR` is the off-switch (unset/empty → backup off), and when it IS set a privileged
+    `WAITRON_BACKUP_DATABASE_URL` is **required** — a blank one throws `server.config_invalid` and
+    fails boot loud (never resolves to the "empty connection string is a valid connection string" trap,
+    §3). PRIMARY-only (a mirror's primary owns the duty — same `!isMirror` gate as retention).
+  - **4b-ii correctness crux + deferred dependency.** A boot-time **RLS probe**
+    (`assertBackupCanReadFiscal`) refuses to enable backup unless the backup connection is
+    `rolsuper OR rolbypassrls`: under FORCE ROW LEVEL SECURITY a non-bypassing role's `pg_dump` either
+    ERRORS loudly (default `row_security=off`) or, run `--enable-row-security`, SILENTLY emits a
+    per-tenant-truncated (empty) fiscal dump — the unrecoverable failure. The probe is the correctness
+    guard (prove-by-deletion with real roles). **Deferred dependency, prominent:** no BYPASSRLS/superuser
+    role exists in the production role model yet — the privileged backup connection is **operator-supplied**,
+    and provisioning that role is deferred to the **parked appliance-provisioning layer** (the same place
+    the real runtime admin connection is deferred). In dev/CI it is the container superuser.
+  - **4b-ii fail-safe (§5) + follow-ups.** A misconfigured or unreachable backup connection — a fenced
+    role, a dead `WAITRON_BACKUP_DATABASE_URL`, any probe error — leaves backup **OFF** with a logged
+    `backup.disabled_rls_fenced`, and **never aborts boot or blocks trading** (nothing may block a sale,
+    §5); only config-SHAPE errors (dir set, url blank) fail boot loud (fail-closed, like sync/tunnel).
+    Follow-ups noted: the `realPgDump` JS wrapper is **v8-ignored** (its correctness proven via a
+    docker-exec `pg_dump` smoke, not the wrapper itself — same posture `time-health.ts`'s `defaultRun`
+    takes); and the boot probe has **no connect-timeout**, so a hung backup DB would stall boot exactly
+    as any boot-time DB query does — worth a bounded connect later.
   - **4b-iii — cold-restore / fresh-chain runbook.** Per the owner + #158's cold-restore runbook:
     **restore + a FRESH chain must let a no-hot-failover venue go live unblocked**, month-end AEAT
     `consultar` reconciling the lost tail.
