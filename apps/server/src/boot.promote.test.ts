@@ -261,7 +261,10 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
       // Phase B — now the singleton. The next drain pass claims the seeded row and attempts the submit;
       // the mocked `undici` fetch rejects, so `claimBatch` incremented intentos to 1 and `backoffBatch`
       // set incidencia=true and re-queued it 'pendiente'. Poll — the wall-clock loop is not injectable.
-      await poll(async () => ((await readEnvio(registroIds[0]!)).intentos >= 1 ? true : undefined));
+      // Poll on `incidencia` (set by `backoffBatch`, the LAST step of a failed attempt), NOT `intentos`
+      // (set at CLAIM, when estado is transiently 'enviando'): polling intentos races the assertion below
+      // and can catch the row mid-attempt as {estado:'enviando', incidencia:false}.
+      await poll(async () => ((await readEnvio(registroIds[0]!)).incidencia ? true : undefined));
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 1,
