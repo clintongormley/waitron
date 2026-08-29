@@ -647,15 +647,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   }
 
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
-  // primary is today's flow. Read ONCE here into a refreshable holder so a later promotion
-  // (deployment.mode='primary' + a refresh of this holder) can flip the read-only gate live, no
-  // restart — the seam design §10 is "designed for, not built" in C2a (nothing refreshes it yet). The
-  // pool is already open, so this DB read is free.
+  // primary is today's flow. Read ONCE here into a refreshable holder that the promote action
+  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its owner-role write — so a mode flip
+  // would take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
+  // flip the mode: a local-secondary promote refreshes this holder without changing its value ('primary'
+  // stays 'primary'). What FLIPS deployment.mode to 'primary' to open the read-only gate live is the
+  // mirror→primary path (spec §5b), a later slice. The pool is already open, so this DB read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
-  // duties; only a 'primary' drains/reconciles. Read PER PASS below, so a later promotion that flips
-  // this holder would start the duties on the next tick, no restart — but like the mode holder this seam
-  // is "designed for, not built": nothing refreshes it yet (the promote action is a later slice).
+  // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
+  // holder: after writing singleton_role='primary' it refreshes both holders, so the fiscal pass starts on
+  // the next tick with no restart (promotion runbook design §3b/§3c).
   const holders = createDeploymentHolders(
     await readDeploymentMode(db),
     await readSingletonRole(db),
