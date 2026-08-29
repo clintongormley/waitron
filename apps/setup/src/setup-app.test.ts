@@ -26,9 +26,16 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       needs: ["venue"],
     } satisfies SetupStatus),
     provision: vi.fn().mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+    adopt: vi.fn().mockResolvedValue({ adopted: true, tenantId: "t-1", restarting: true }),
     ...overrides,
   } as unknown as SetupApi;
 }
+
+/** The connect screen's assembled adopt body — the shape the shell forwards straight to `api.adopt`. */
+const adoptBody = {
+  primaryUrl: "https://waitron.local",
+  credential: { personId: "op-1", password: "correct horse" },
+};
 
 async function mountSetupApp(api: SetupApi = stubApi()): Promise<SetupApp> {
   const host = document.createElement("div");
@@ -98,6 +105,13 @@ function advance(el: SetupApp): void {
 function provisionRequest(el: SetupApp): void {
   wizard(el).dispatchEvent(
     new CustomEvent("provision-requested", { bubbles: true, composed: true }),
+  );
+}
+
+/** Fires the composed `adopt-requested` the connect screen emits (with its assembled body), into the shell. */
+function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
   );
 }
 
@@ -554,6 +568,141 @@ describe("setup-app", () => {
     const body = provision.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.mode).toBe("demo");
     expect("aeatCert" in body).toBe(false);
+  });
+
+  // ── The mirror path (C2b Task 13): role=mirror → connect → adopt → provisioning → done. ──
+
+  it("mounts the real connect screen on the mirror path", async () => {
+    const el = await mountSetupApp();
+    role(el, "mirror");
+    await el.updateComplete;
+    const connect = await screenHost(el, "connect");
+    expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain(
+      "Connect to the primary",
+    );
+  });
+
+  it("adopts on adopt-requested and, on the 200, advances to done — forwarding the body verbatim", async () => {
+    const adopt = vi.fn().mockResolvedValue({ adopted: true, tenantId: "t-1", restarting: true });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    // The shell forwards the connect screen's assembled body straight through — credential stays the
+    // structured object, never re-shaped into a string.
+    expect(adopt).toHaveBeenCalledWith(adoptBody);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("shows the in-flight provisioning state while the adopt POST is pending", async () => {
+    let resolveAdopt!: (value: unknown) => void;
+    const adopt = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAdopt = resolve;
+        }),
+    );
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull();
+    resolveAdopt({ adopted: true, tenantId: "t-1", restarting: true });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  // The retryable adopt failures route BACK to the connect form with a banner — the connect form (not
+  // the provisioning screen, which fires `provision-requested`) is the mirror path's retry surface, so
+  // a re-submit re-fires `adopt-requested`. Prove-by-deletion: point the default branch at
+  // `provisioning` instead of `connect` and these flip red.
+  it.each([
+    ["mirror.bundle_fetch_failed", "reach the primary"],
+    ["setup.request_invalid", "rejected the details"],
+    ["setup.not_ready", "isn't ready"],
+    ["server.internal", "Couldn't connect"],
+    ["some.unexpected_code", "Couldn't connect"],
+  ])(
+    "routes the adopt failure %s back to the connect form with a banner",
+    async (code, fragment) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params: {} });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      adoptRequest(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+      expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(fragment);
+    },
+  );
+
+  // A code-less rejection (network drop / non-JSON body) must not strand the operator or throw an
+  // unhandled `undefined.startsWith`. Prove-by-deletion: drop the `typeof … === "string"` coercion.
+  it.each([
+    ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
+    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+  ])(
+    "routes a code-less adopt rejection (%s) back to connect without stranding",
+    async (_l, rejection) => {
+      const rejections: PromiseRejectionEvent[] = [];
+      const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
+      window.addEventListener("unhandledrejection", onReject);
+      try {
+        const adopt = vi.fn().mockRejectedValue(rejection);
+        const el = await mountSetupApp(stubApi({ adopt }));
+        adoptRequest(el);
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+        expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
+          "Couldn't connect",
+        );
+      } finally {
+        window.removeEventListener("unhandledrejection", onReject);
+      }
+      expect(rejections).toEqual([]);
+    },
+  );
+
+  it("maps setup.already_provisioning on adopt to an in-progress message with a reload (no retry)", async () => {
+    const adopt = vi.fn().mockRejectedValue({ code: "setup.already_provisioning", params: {} });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+      "already in progress",
+    );
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
+  });
+
+  it.each(["setup.already_provisioned", "deployment.already_stamped"])(
+    "maps the fiscal 409 %s on adopt to 'already set up' with a dashboard reload and NO retry",
+    async (code) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params: {} });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      adoptRequest(el);
+      await flush(el);
+      expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
+      const host = await screenHost(el, "provisioning");
+      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain(
+        "open the dashboard",
+      );
+    },
+  );
+
+  // The connect screen's own re-submit is the retry: a routed-back failure, corrected and re-fired,
+  // reaches `api.adopt` again and succeeds.
+  it("re-adopts when the connect form re-emits adopt-requested after a routed-back failure", async () => {
+    const adopt = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {} })
+      .mockResolvedValue({ adopted: true, tenantId: "t-1", restarting: true });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+    adoptRequest(el); // the operator corrects and re-submits
+    await flush(el);
+    expect(adopt).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 });
 

@@ -110,6 +110,33 @@ export interface ProvisionResult {
 }
 
 /**
+ * The `POST /setup-api/adopt` request body — the MIRROR-side sibling of {@link ProvisionBody} (C2b).
+ * A LOCAL copy of the server's shape (`apps/server/src/setup-api.ts` — the adopt handler's per-field
+ * validation, and `AdoptCredential`/`AdoptRequest` in `apps/server/src/adopt.ts`), deliberately NOT
+ * imported for the same bundle-hygiene reason as the shapes above.
+ *
+ * `credential` is a STRUCTURED OBJECT, not a string — Task 9 widened it so the mirror collects the
+ * primary's login (`personId` + `password`, optional `totp`) as fields and sends the object directly.
+ * The server validates each field at its own boundary and forwards them to the primary's management
+ * login; the `password`/`totp` are never logged. `totp` is OMITTED when the operator leaves it blank.
+ */
+export interface AdoptBody {
+  primaryUrl: string;
+  credential: { personId: string; password: string; totp?: string };
+}
+
+/**
+ * `POST /setup-api/adopt` success (`apps/server/src/setup-api.ts` — the 200 the adopt handler flushes
+ * before restarting into mirror mode). Like {@link ProvisionResult}, this is the last response the
+ * wizard gets: the box SIGTERMs on the next tick and comes back serving the read-only dashboard.
+ */
+export interface AdoptResult {
+  adopted: true;
+  tenantId: string;
+  restarting: true;
+}
+
+/**
  * A rejected `#request`. `code` is the server's stable domain code from the `{ error: { code } }`
  * envelope (`apps/server/src/error-boundary.ts`); `params` carries its per-code detail — for
  * `setup.request_invalid` the `{ field }` the wizard marks invalid inline. Present because the wizard
@@ -146,6 +173,18 @@ export class SetupApi {
    */
   provision(body: ProvisionBody): Promise<ProvisionResult> {
     return this.#request<ProvisionResult>("/setup-api/provision", "POST", body);
+  }
+
+  /**
+   * `POST /setup-api/adopt` — the MIRROR-side sibling of {@link SetupApi.provision} (C2b Task 13). The
+   * mirror fetches the primary's bundle server-side using the supplied admin `credential` (a nested
+   * object, sent verbatim), adopts the venue into its own database, then restarts into mirror mode. On
+   * success the box restarts (see {@link AdoptResult}); a failure rejects with an {@link ApiError} the
+   * connect screen surfaces (`mirror.bundle_fetch_failed` when the primary is unreachable or the login
+   * is refused, `setup.*` for the shared latch/deps/validation guards).
+   */
+  adopt(body: AdoptBody): Promise<AdoptResult> {
+    return this.#request<AdoptResult>("/setup-api/adopt", "POST", body);
   }
 
   /**

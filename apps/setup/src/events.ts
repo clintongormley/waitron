@@ -1,5 +1,5 @@
 import type { DeepPartial, Screen } from "./setup-app.js";
-import type { ProvisionBody } from "./api/client.js";
+import type { AdoptBody, ProvisionBody } from "./api/client.js";
 
 /**
  * Typed dispatchers for the five events the setup-wizard screens emit UP to the shell
@@ -57,4 +57,19 @@ export function dispatchSetupAdvance(el: EventTarget): void {
  */
 export function dispatchProvisionRequested(el: EventTarget): void {
   el.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
+}
+
+/**
+ * Fire the mirror-path adopt (`adopt-requested`) — the connect screen's `Connect` reaches the shell
+ * through this (C2b Task 13). UNLIKE `provision-requested`, it CARRIES the assembled {@link AdoptBody}
+ * in its detail: the primary's URL + admin credential are collected only on this screen and are
+ * deliberately NOT accumulated into the shell's provision draft (a mirror files nothing, and the
+ * password must never be persisted), so the shell forwards the detail straight to `SetupApi.adopt`
+ * rather than assembling it from a draft. The connect form is the mirror path's retry surface, so a
+ * re-submit simply re-fires this.
+ */
+export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
+  el.dispatchEvent(
+    new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
+  );
 }
