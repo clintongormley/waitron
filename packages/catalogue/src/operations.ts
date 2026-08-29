@@ -371,6 +371,41 @@ export async function resolveAccessibleCatalogueIds(
   return [...ids];
 }
 
+export interface AccessibleCatalogue {
+  id: string;
+  name: string;
+  /** True for `locations.catalogue_id` — the till's menu switcher pre-selects this one. */
+  isDefault: boolean;
+}
+
+/**
+ * The active catalogues (menus) `locationId` may sell from — its default plus any
+ * `location_catalogues` members (see {@link resolveAccessibleCatalogueIds}) — for the till's menu
+ * switcher. `isDefault` flags the one row matching `locations.catalogue_id`. Ordered default-first,
+ * then by name, so the switcher's default entry always sorts to the top regardless of naming.
+ * Returns `[]` when the location has no accessible catalogue at all.
+ */
+export async function listAccessibleCatalogues(
+  tx: Transaction,
+  locationId: string,
+): Promise<AccessibleCatalogue[]> {
+  const [loc] = await tx
+    .select({ defaultId: locations.catalogueId })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  const ids = await resolveAccessibleCatalogueIds(tx, locationId);
+  if (ids.length === 0) return [];
+  const rows = await tx
+    .select({ id: catalogues.id, name: catalogues.name })
+    .from(catalogues)
+    .where(and(inArray(catalogues.id, ids), eq(catalogues.active, true)));
+  return rows
+    .map((r) => ({ id: r.id, name: r.name, isDefault: r.id === loc?.defaultId }))
+    .sort((a, b) =>
+      a.isDefault === b.isDefault ? a.name.localeCompare(b.name) : a.isDefault ? -1 : 1,
+    );
+}
+
 /**
  * The products the till can sell at `locationId`, across the WHOLE accessible catalogue set (the
  * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each

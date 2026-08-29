@@ -14,6 +14,7 @@ import {
   createProduct,
   deactivateCatalogue,
   deactivateProduct,
+  listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
   listCategories,
@@ -528,6 +529,58 @@ describe("catalogue operations", () => {
         catalogueId: lunch.id,
         catalogueName: "Lunch",
       });
+    });
+  });
+
+  it("lists accessible catalogues with the default flagged, default first", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+        { id: lunch.id, name: "Lunch", isDefault: false },
+      ]);
+    });
+  });
+
+  // The "then by name" half of the ordering: several non-default catalogues tie on isDefault, so the
+  // sort must fall through to the alphabetical comparison rather than the default-first branch alone.
+  it("sorts non-default accessible catalogues alphabetically after the default", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const zebra = await createCatalogue(tx, { name: "Zebra" });
+      const alpha = await createCatalogue(tx, { name: "Alpha" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, zebra.id);
+      await addCatalogueToLocation(tx, locationId, alpha.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+        { id: alpha.id, name: "Alpha", isDefault: false },
+        { id: zebra.id, name: "Zebra", isDefault: false },
+      ]);
+    });
+  });
+
+  // Ordering must come from `isDefault`, not row order: the default is created SECOND here (so it is
+  // not first in creation/scan order) and still sorts first.
+  it("sorts the default first regardless of creation order", async () => {
+    await asTenant(async (tx) => {
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const main = await createCatalogue(tx, { name: "Main" });
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+        { id: lunch.id, name: "Lunch", isDefault: false },
+      ]);
+    });
+  });
+
+  it("returns [] from listAccessibleCatalogues for a location with no accessible catalogue", async () => {
+    await asTenant(async (tx) => {
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([]);
     });
   });
 
