@@ -1,7 +1,7 @@
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,8 +10,15 @@ import { getRequestListener } from "@hono/node-server";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { setDeploymentMode, stampDeployment, withTenant, type Database } from "@waitron/db";
+import {
+  setDeploymentMode,
+  stampDeployment,
+  withTenant,
+  writeMirrorConfig,
+  type Database,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { loadKeyRing } from "@waitron/credentials";
 import { createCatalogue } from "@waitron/catalogue";
 import { enrolPeer } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
@@ -24,6 +31,7 @@ import { realSleep } from "./loop.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSyncApi } from "./sync-api.js";
+import { sealMirrorToken } from "./mirror-token.js";
 
 // C2a — the HEADLINE tunnel e2e (Task 6): a real booted mirror pulls a real primary's captured
 // sync_log THROUGH B's outbound tunnel, applies it under FORCE RLS as the non-superuser sync roles,
@@ -49,10 +57,12 @@ import { mountSyncApi } from "./sync-api.js";
 const log: Logger = () => {};
 
 // The primary's sync ORIGIN id — the marker sync_capture stamps on source.sync_log and the id the
-// mirror's peer pulls (`?originId=`). Distinct from the mirror's own node id (WAITRON_TILL_NODE_ID
-// below), which is the SUBSCRIBER half of the cursor key: subscriber and origin are never the same
-// node, and they live in two different databases.
-const PRIMARY_SYNC_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+// mirror's peer pulls (`?originId=`). Under C2b's ADOPT model the mirror adopts the primary's
+// identity, so the mirror's OWN node id (WAITRON_TILL_NODE_ID) IS the origin it pulls: boot builds the
+// pull peer as `{ nodeId: config.till.nodeId }` (mirror-token.ts enrols the token under that same node
+// as subscriber). Subscriber and origin are therefore the same adopted node id here — the two roles
+// still live in two different databases (the source and the mirror), they just share the id.
+const PRIMARY_SYNC_NODE = "33333333-3333-4333-8333-333333333333";
 
 // The peer's subscriber_id AT THE SOURCE — the identity the source resolves the Bearer token to. Its
 // value is irrelevant to /hello + /log (they need only a valid peer), so one enrolment serves the pull.
@@ -90,12 +100,17 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
+// The vault key ring the boot's `loadKeyRing(env)` builds from KEY_ENV — used to SEAL the sync token
+// into each mirror clone's `sync.mirror_token` the way `adoptFromPrimary` would, so the boot's
+// `readMirrorToken` (app_user) unseals it.
+const RING = loadKeyRing(KEY_ENV);
+
 const source = useTemplateDb({ template: "manifest" });
 const mirror = useTemplateDb({ template: "manifest" });
 const wrongMirror = useTemplateDb({ template: "manifest" });
 
 let migrationsRoot: string;
-let caFile: string;
+let boxCaPem: string; // the box leaf's CA PEM — seeded into each mirror's `mirror_config.box_ca_pem`
 let sourceReader: Database; // sync_reader: the HTTPS sync-api reads source.sync_log through this
 let sourceWriter: Database; // app_login: captures the catalogues into source.sync_log
 let peerToken: string; // enrolled on the SOURCE; the Bearer every pull presents
@@ -200,28 +215,21 @@ async function orderedCursor(admin: Database): Promise<string | null> {
 }
 
 /** Boot apps/server in mirror mode against the SHARED relay's client port. Everything is identical
- * across the positive and deletion-control boots EXCEPT `boxHostname` — which is the single deletion:
- * "box.test" is the box cert's SAN (tunnelHttpClient authenticates it and the pull succeeds), any other
- * value fails checkServerIdentity on every pull so nothing is ever fetched or applied. */
-function bootMirror(
-  clone: { pg: { uri: string } },
-  boxHostname: string,
-  port: number,
-): Promise<StartedServer> {
+ * across the positive and deletion-control boots EXCEPT the `box_hostname` seeded into each clone's
+ * `mirror_config` (see beforeAll) — the single deletion: "box.test" is the box cert's SAN
+ * (tunnelHttpClient authenticates it and the pull succeeds), any other value fails checkServerIdentity
+ * on every pull so nothing is ever fetched or applied. C2b: the relay URL, box CA + hostname and the
+ * per-peer token all come from the DB (`mirror_config`) + the vault (`sync.mirror_token`), NOT env —
+ * only the local `sync_applier` pool stays in env. The origin the mirror pulls is its OWN adopted node
+ * id (`config.till.nodeId` = WAITRON_TILL_NODE_ID = PRIMARY_SYNC_NODE), built by boot. */
+function bootMirror(clone: { pg: { uri: string } }, port: number): Promise<StartedServer> {
   return startServer({
     ...KEY_ENV,
     DATABASE_URL: roleUrl(clone.pg.uri, "app_login", "app_pw"),
     WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    // The peer's `url` is the RELAY (dialed by the tunnel http client), NOT the box directly; its
-    // `nodeId` is the primary's ORIGIN id, which the pull sends as `?originId=`.
-    WAITRON_SYNC_PEERS: JSON.stringify([
-      { nodeId: PRIMARY_SYNC_NODE, url: relayClientUrl, token: peerToken },
-    ]),
     WAITRON_SYNC_DATABASE_URL: roleUrl(clone.pg.uri, "sync_applier", "ap"),
-    WAITRON_MIRROR_BOX_CA_FILE: caFile,
-    WAITRON_MIRROR_BOX_HOSTNAME: boxHostname,
   });
 }
 
@@ -263,16 +271,14 @@ beforeAll(async () => {
 
   // The box's HTTPS sync-api behind the tunnel (tunnel-e2e.test.ts's shape): a leaf whose SAN is
   // `box.test` ONLY — never a 127.0.0.1 IP-SAN shortcut — so the mirror must authenticate the box
-  // hostname. Its CA is written to `caFile` for WAITRON_MIRROR_BOX_CA_FILE. Advertises `preproduction`
-  // on /hello so the mirror's environment handshake matches.
+  // hostname. Its CA PEM is seeded into each mirror's `mirror_config.box_ca_pem` below. Advertises
+  // `preproduction` on /hello so the mirror's environment handshake matches.
   const { caCertPem, serverCertPem, serverKeyPem } = mintSelfSignedServerCert({
     hostnames: ["box.test"],
     ipAddresses: [],
     now: new Date(),
   });
-  const caDir = await mkdtemp(join(tmpdir(), "waitron-mirror-e2e-ca-"));
-  caFile = join(caDir, "box-ca.crt");
-  await writeFile(caFile, caCertPem);
+  boxCaPem = caCertPem;
 
   const app = new Hono();
   mountSyncApi(
@@ -312,6 +318,25 @@ beforeAll(async () => {
   });
   await registered;
   relayClientUrl = `https://127.0.0.1:${relay.clientPort}/`;
+
+  // The DB-stored connection config each mirror pulls with (C2b), written owner-role exactly as
+  // `adoptFromPrimary` would — this is what boot's `readMirrorConfig` / `readMirrorToken` read INSTEAD
+  // of the retired WAITRON_MIRROR_BOX_* + WAITRON_SYNC_PEERS env. Both clones get the SAME relay URL,
+  // CA and sealed token (the source-enrolled `peerToken`); the ONLY difference is `box_hostname` —
+  // "box.test" (the leaf SAN → the pull succeeds) vs "wrong.test" (fails checkServerIdentity → nothing
+  // pulled), the single deletion the two tests turn on.
+  await writeMirrorConfig(mirror.admin, {
+    relayUrl: relayClientUrl,
+    boxHostname: "box.test",
+    boxCaPem,
+  });
+  await sealMirrorToken(mirror.admin, RING, TENANT, peerToken);
+  await writeMirrorConfig(wrongMirror.admin, {
+    relayUrl: relayClientUrl,
+    boxHostname: "wrong.test",
+    boxCaPem,
+  });
+  await sealMirrorToken(wrongMirror.admin, RING, TENANT, peerToken);
 }, 180_000);
 
 afterAll(async () => {
@@ -331,14 +356,13 @@ afterAll(async () => {
     await new Promise<void>((resolve) => httpsServer.close(() => resolve()));
   }
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  if (caFile !== undefined) await rm(join(caFile, ".."), { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
 });
 
 describe("mirror-mode headline e2e — pull through the tunnel, apply, serve read-only", () => {
   it("a mirror pulls the primary's sync_log through the tunnel, applies it, and serves it read-only", async () => {
     const port = await freePort();
-    const server = await bootMirror(mirror, "box.test", port);
+    const server = await bootMirror(mirror, port);
     const base = `http://127.0.0.1:${port}`;
     try {
       // 1. THE PULL THROUGH THE TUNNEL + APPLY: the booted mirror's own runSyncPull (via
@@ -388,8 +412,9 @@ describe("mirror-mode headline e2e — pull through the tunnel, apply, serve rea
 
   it("proven by deletion: a wrong box hostname makes the tunnel TLS validation refuse, so nothing is pulled or served", async () => {
     // The single deletion on the PULL/TUNNEL path (CLAUDE.md §4). This boot is BYTE-IDENTICAL to the
-    // positive one above except WAITRON_MIRROR_BOX_HOSTNAME = "wrong.test" instead of "box.test". The
-    // box leaf carries SAN=box.test only, so tunnelHttpClient's checkServerIdentity (servername drives
+    // positive one above except the `wrongMirror` clone's seeded `mirror_config.box_hostname` is
+    // "wrong.test" instead of "box.test" (see beforeAll). The box leaf carries SAN=box.test only, so
+    // tunnelHttpClient's checkServerIdentity (servername drives
     // BOTH SNI and the identity check — tunnel-http.ts:14-15) refuses the box on EVERY pull with
     // ERR_TLS_CERT_ALTNAME_INVALID; the pull throws before any row is fetched, the worker backs off, and
     // the mirror's own database stays empty.
@@ -411,7 +436,7 @@ describe("mirror-mode headline e2e — pull through the tunnel, apply, serve rea
     const restore = captureStdout(logLines);
     let server: StartedServer;
     try {
-      server = await bootMirror(wrongMirror, "wrong.test", port);
+      server = await bootMirror(wrongMirror, port);
     } catch (error) {
       restore();
       throw error;

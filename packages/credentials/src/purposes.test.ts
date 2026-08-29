@@ -4,8 +4,12 @@ import { PURPOSES, isPurpose, validatePayload } from "./purposes.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 describe("PURPOSES", () => {
-  it("declares the two purposes the host needs", () => {
-    expect(Object.keys(PURPOSES).sort()).toEqual(["fiscal.aeat", "payments.stripe"]);
+  it("declares the three purposes the host needs", () => {
+    expect(Object.keys(PURPOSES).sort()).toEqual([
+      "fiscal.aeat",
+      "payments.stripe",
+      "sync.mirror_token",
+    ]);
   });
 
   it("names every field the Stripe hosted client is constructed from", () => {
@@ -28,6 +32,17 @@ describe("PURPOSES", () => {
     expect(() =>
       validatePayload("fiscal.aeat", { pfxBase64: "AAA=", passphrase: "s3cret" }),
     ).toThrow(/credentials.invalid_payload/);
+  });
+});
+
+describe("sync.mirror_token purpose", () => {
+  it("is a known purpose whose payload field is `token`", () => {
+    expect(isPurpose("sync.mirror_token")).toBe(true);
+    expect(PURPOSES["sync.mirror_token"]).toEqual(["token"]);
+  });
+  it("validatePayload accepts a token and rejects a payload missing it", () => {
+    expect(() => validatePayload("sync.mirror_token", { token: "abc" })).not.toThrow();
+    expect(() => validatePayload("sync.mirror_token", {})).toThrow();
   });
 });
 

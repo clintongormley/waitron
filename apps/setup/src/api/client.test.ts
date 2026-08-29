@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
-import type { ProvisionBody } from "./client.js";
+import type { AdoptBody, ProvisionBody } from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -97,5 +97,37 @@ describe("SetupApi", () => {
     // provision's declared return is ProvisionResult; the empty-body branch resolves undefined at
     // runtime regardless of T — the shared `#request` behaviour this asserts.
     await expect(api.provision(provisionBody)).resolves.toBeUndefined();
+  });
+
+  // The mirror-side sibling of `provision` (C2b Task 13). The credential is the STRUCTURED OBJECT
+  // { personId, password, totp? } — sent DIRECTLY, never JSON-stringified into a string field.
+  const adoptBody: AdoptBody = {
+    primaryUrl: "https://waitron.local",
+    credential: { personId: "op-1", password: "correct horse", totp: "123456" },
+  };
+
+  it("adopt POSTs the body (credential as a nested object) as JSON and returns the result", async () => {
+    const result = { adopted: true, tenantId: "t-1", restarting: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
+    const api = new SetupApi("", fetchImpl);
+    expect(await api.adopt(adoptBody)).toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/adopt", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(adoptBody),
+    });
+  });
+
+  it("surfaces the mirror.bundle_fetch_failed code on a 502 (couldn't reach/auth the primary)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "mirror.bundle_fetch_failed" } }, false, 502),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.adopt(adoptBody)).rejects.toMatchObject({
+      code: "mirror.bundle_fetch_failed",
+    });
   });
 });

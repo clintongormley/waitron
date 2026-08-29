@@ -23,9 +23,13 @@ import type { Logger } from "./logger.js";
  *    carries no params and leaks nothing about the cause.
  *
  * The `warn`-vs-`error` split reflects a caller convention rather than anything this factory checks:
- * both of today's call sites pass a `status` map of CLIENT 4xx codes only (see each file's `STATUS`),
- * so an `AppError` reaching the boundary is always a client fault and a 5xx-worthy fault always
- * arrives as a non-`AppError` on the `error`/500 branch.
+ * an `AppError` reaching the boundary is logged at `warn` and re-emitted at the status its map assigns.
+ * A status map MAY carry a 5xx — `setup-api.ts`'s `ADOPT_STATUS` maps `mirror.bundle_fetch_failed` to
+ * 502, an UPSTREAM/dependency failure (the primary's bundle fetch) that is a deliberate, expected
+ * AppError rather than a bug — so it is re-emitted at 502 and logged at `warn`, not as an `error`/500.
+ * Most call sites' maps are still CLIENT 4xx codes only (see each file's `STATUS`), where every mapped
+ * AppError is a client fault; the factory does not require that, and either way a fault the map does NOT
+ * name arrives as a non-`AppError` and takes the opaque `server.internal` 500 on the `error` branch.
  */
 export function createErrorBoundary(
   status: Record<string, ContentfulStatusCode>,

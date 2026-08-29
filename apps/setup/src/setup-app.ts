@@ -2,6 +2,8 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 // Side-effect imports register the screen custom elements this shell only names as tags below.
+import "./screens/role-screen.js";
+import "./screens/connect-screen.js";
 import "./screens/mode-screen.js";
 import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
@@ -9,17 +11,23 @@ import "./screens/cert-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/done-screen.js";
-import type { ApiError, ProvisionBody, SetupApi } from "./api/client.js";
+import type { AdoptBody, ApiError, ProvisionBody, SetupApi } from "./api/client.js";
 
 /**
  * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs): `mode` (demo/live) → `admin`
- * (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
- * `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). All seven are real
- * screens; the venue step routes to `cert` only for a live ES-common venue, otherwise straight to
- * `review`.
+ * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The FIRST screen is `role`
+ * (primary | mirror), which forks the rest of the flow (spec §8, C2b):
+ *
+ * - `role` = **primary** → the existing provisioning flow, unchanged: `mode` (demo/live) → `admin`
+ *   (first operator) → `venue` (tenant + location + series) → `cert` (AEAT, live ES-common only) →
+ *   `review` (confirm + POST) → `provisioning` (in flight) → `done` (restarting). The venue step
+ *   routes to `cert` only for a live ES-common venue, otherwise straight to `review`.
+ * - `role` = **mirror** → `connect` (connect-to-primary), which reuses the shared `provisioning` /
+ *   `done` terminal screens. The `connect` screen itself is built in Task 13; the name is in the
+ *   union here so the shell can already route to it.
  */
-export type Screen = "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
+export type Screen =
+  "role" | "connect" | "mode" | "admin" | "venue" | "cert" | "review" | "provisioning" | "done";
 
 /**
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
@@ -101,6 +109,27 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * Plain-English messages for the adopt failures the shell routes BACK to the `connect` screen (C2b).
+ * `mirror.bundle_fetch_failed` is the mirror's own 502 when it can't reach or authenticate to the
+ * primary; `setup.request_invalid` is the shared per-field guard; `setup.not_ready` is the deps gate.
+ * Every other code — `server.internal`, an unrecognised code, or a code-LESS rejection (a network
+ * drop mid-adopt) — falls back to the generic message (see {@link SetupApp.#mapAdoptError}). The two
+ * fiscal double-setup 409s are NOT here: they are TERMINAL and route to the `provisioning` screen's
+ * reload action instead, never back to the retryable form.
+ */
+const ADOPT_ERROR_MESSAGES: Record<string, string> = {
+  "mirror.bundle_fetch_failed":
+    "Couldn't reach the primary box or the login was refused. Check the address and login, then try again.",
+  "setup.request_invalid":
+    "The box rejected the details. Check the address and login, then try again.",
+  "setup.not_ready": "The box isn't ready yet. Wait a moment, then try again.",
+};
+
+/** The generic connect-form banner for a code the map above doesn't name (or a code-less rejection). */
+const ADOPT_GENERIC_ERROR =
+  "Couldn't connect to the primary. Check the address and login, then try again.";
+
+/**
  * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
  * `apps/dashboard/src/dashboard-app.ts`.
  *
@@ -136,8 +165,8 @@ export class SetupApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /** Which screen is showing. Defaults to `mode`, the wizard's first step. */
-  @state() private screen: Screen = "mode";
+  /** Which screen is showing. Defaults to `role`, the wizard's first step (primary | mirror). */
+  @state() private screen: Screen = "role";
 
   /**
    * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
@@ -176,6 +205,13 @@ export class SetupApp extends LitElement {
    * operator can correct the offending detail. `undefined` normally; cleared before every new POST.
    */
   @state() private venueError?: string;
+
+  /**
+   * An adopt failure the server threw at connect time (C2b), routed back to the `connect` screen as a
+   * banner so the operator can correct the primary address / admin login and re-submit. `undefined`
+   * normally; cleared before every new adopt POST. The mirror path's analogue of `venueError`.
+   */
+  @state() private connectError?: string;
 
   /**
    * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
@@ -230,6 +266,22 @@ export class SetupApp extends LitElement {
   }
 
   /**
+   * Resolve the first `role` screen's choice (spec §8, C2b). The role→next-screen conditional lives
+   * HERE, in the shell, not in the role screen — the same altitude fix (m) that lifted venue→`cert`/
+   * `review` out of a screen (backlog #149). A **primary** enters the existing provisioning flow at
+   * `mode` (unchanged); a **mirror** goes to the connect-to-primary screen, which skips
+   * `mode`/`admin`/`venue`/`cert`/`review` entirely (a mirror has no demo/live choice, seeds no
+   * admin, and files nothing). Same boundary `stopPropagation` as {@link SetupApp.#onPatch}.
+   */
+  #onRole(event: CustomEvent<{ role: "primary" | "mirror" }>): void {
+    event.stopPropagation();
+    // A fresh role choice starts a clean flow — drop any stale adopt banner from an earlier attempt so
+    // re-entering the connect screen doesn't show a rejection the operator has since navigated away from.
+    this.connectError = undefined;
+    this.screen = event.detail.role === "mirror" ? "connect" : "mode";
+  }
+
+  /**
    * Advance (or step back) to another screen — a plain local state change, no server call. Same
    * boundary `stopPropagation` as {@link SetupApp.#onPatch}.
    *
@@ -243,6 +295,7 @@ export class SetupApp extends LitElement {
     event.stopPropagation();
     this.venueError = undefined;
     this.reviewError = undefined;
+    this.connectError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -374,37 +427,126 @@ export class SetupApp extends LitElement {
     }
   }
 
+  /**
+   * Fire the mirror-path adopt (C2b Task 13) — the connect screen's `Connect` reaches here through the
+   * composed `adopt-requested`, which CARRIES the assembled {@link AdoptBody} in its detail (unlike
+   * `provision-requested`, which the shell assembles from its draft). The credential is forwarded
+   * VERBATIM to `SetupApi.adopt` — the structured `{ personId, password, totp? }` object, never
+   * re-shaped and never persisted to the shell's draft (a mirror files nothing; the password is not
+   * kept). Success takes the box down for its restart into mirror mode, so `done` is where the reload
+   * happens; a failure is mapped by {@link SetupApp.#mapAdoptError}.
+   *
+   * The `isConnected` guards mirror {@link SetupApp.#onProvisionRequested}: a teardown mid-request must
+   * not write state onto a detached element.
+   */
+  async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
+    event.stopPropagation();
+    this.connectError = undefined;
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.screen = "provisioning";
+    try {
+      await this.api.adopt(event.detail.body);
+      if (!this.isConnected) return;
+      this.screen = "done";
+    } catch (error) {
+      if (!this.isConnected) return;
+      this.#mapAdoptError(error as ApiError);
+    }
+  }
+
+  /**
+   * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
+   *
+   * - The double-setup 409s (`setup.already_provisioned` / `deployment.already_stamped`) and the
+   *   concurrent-setup 409 (`setup.already_provisioning`) are TERMINAL — re-submitting is meaningless
+   *   or unrecoverable (CLAUDE.md §5), so they land on the `provisioning` screen with a reload action
+   *   and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload for an
+   *   already-set-up mirror opens the read-only DASHBOARD (a mirror serves no till). Of the three,
+   *   only two are reachable from an adopt today: `deployment.already_stamped` (the adopt path stamps
+   *   the environment — `adoptFromPrimary` → `stampDeployment`, `apps/server/src/adopt.ts`) and
+   *   `setup.already_provisioning` (the shared concurrent-setup guard). `setup.already_provisioned` is
+   *   thrown ONLY by `provisionVenue` (`apps/server/src/provision.ts:72`), which the adopt path never
+   *   calls (`adoptFromPrimary` → `adoptVenue`, which never throws it — grepped 2026-08-29); its case
+   *   below is DEFENSIVE parity with `#mapProvisionError`, not a live adopt outcome, and is kept so a
+   *   future adopt throw of it maps sensibly rather than falling through to the generic banner.
+   * - Everything else — `mirror.bundle_fetch_failed`, `setup.request_invalid`, `setup.not_ready`,
+   *   `server.internal`, an unrecognised code, and a code-LESS rejection (a bare `TypeError`/
+   *   `SyntaxError` out of `#request` on a network drop or non-JSON body) — routes BACK to the
+   *   `connect` form with a banner. The connect form (not the `provisioning` screen, whose retry fires
+   *   `provision-requested`) is the mirror path's retry surface, so a corrected re-submit re-fires
+   *   `adopt-requested`. The code-less coercion mirrors `#mapProvisionError`: without it `code.startsWith`
+   *   would throw on `undefined` and strand the operator (proven by deletion in the shell test).
+   */
+  #mapAdoptError(error: ApiError): void {
+    const code =
+      typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
+    switch (code) {
+      case "setup.already_provisioning":
+        this.provisionMessage = "Setup is already in progress on this box.";
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "setup.already_provisioned":
+      case "deployment.already_stamped":
+        this.provisionMessage = "This box is already set up.";
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload to open the dashboard";
+        return;
+      default:
+        this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
+        this.screen = "connect";
+        return;
+    }
+  }
+
   override render(): TemplateResult {
-    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the
-    // draft), `setup-goto` (flip the visible screen), `setup-advance` (the venue screen's conditional
-    // next-step, resolved here against the draft), and `provision-requested` (review's Provision and the
-    // provisioning screen's retry both fire it). Wiring them on the container means each screen talks
-    // back without the shell knowing which one is mounted.
+    // The screens emit these composed events UP to the shell: `setup-role` (the first screen's
+    // primary/mirror choice, routed here), `setup-patch` (merge a slice into the draft), `setup-goto`
+    // (flip the visible screen), `setup-advance` (the venue screen's conditional next-step, resolved
+    // here against the draft), and `provision-requested` (review's Provision and the provisioning
+    // screen's retry both fire it). Wiring them on the container means each screen talks back without
+    // the shell knowing which one is mounted.
     return html`<div
       class="wizard"
+      @setup-role=${(e: CustomEvent<{ role: "primary" | "mirror" }>) => this.#onRole(e)}
       @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
       @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
       @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
       @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
+      @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
     >
       ${this.#renderScreen()}
     </div>`;
   }
 
   /**
-   * The mounted screen for the current {@link SetupApp.screen} — all seven are real screens, each
-   * carrying the `data-test="screen-*"` hook on its own host so the shell's screen-switching tests
-   * stay uniform.
+   * The mounted screen for the current {@link SetupApp.screen} — each real screen carries the
+   * `data-test="screen-*"` hook on its own host so the shell's screen-switching tests stay uniform.
+   * The `role` screen (the wizard's first step) is the `default`.
    *
-   * `mode` reads `environment` (to warn on a production box); `admin`, `venue`, `cert` and `review`
-   * read the accumulated `draft` (to seed their fields / summarise it, so stepping Back is
-   * non-destructive); `venue` and `review` also take a routed-back server error (`venueError` /
-   * `reviewError`); `provisioning` takes the mapped message + retry flag + terminal reload label; `done` takes the `api` to
-   * poll during the restart. All are passed as properties, since neither an api nor a draft object can
-   * travel as an attribute.
+   * `role` forks the flow (primary → `mode`, mirror → `connect`); `mode` reads `environment` (to warn
+   * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
+   * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
+   * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
+   * retry flag + terminal reload label; `done` takes the `api` to poll during the restart. All are
+   * passed as properties, since neither an api nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
+      case "mode":
+        return html`<setup-mode-screen
+          data-test="screen-mode"
+          .environment=${this.environment}
+        ></setup-mode-screen>`;
+      case "connect":
+        // The mirror path's connect-to-primary form (C2b Task 13). It carries the assembled adopt body
+        // up in `adopt-requested`; the shell routes a failed adopt back here via `connectError`.
+        return html`<setup-connect-screen
+          data-test="screen-connect"
+          .errorMessage=${this.connectError}
+        ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen
           data-test="screen-admin"
@@ -440,10 +582,7 @@ export class SetupApp extends LitElement {
           .api=${this.api}
         ></setup-done-screen>`;
       default:
-        return html`<setup-mode-screen
-          data-test="screen-mode"
-          .environment=${this.environment}
-        ></setup-mode-screen>`;
+        return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
     }
   }
 }

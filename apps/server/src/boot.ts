@@ -3,7 +3,14 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
-import { createPostgresDb, readDeploymentAxes, withTenant, type Database } from "@waitron/db";
+import {
+  createPostgresDb,
+  readDeploymentAxes,
+  readMirrorConfig,
+  withTenant,
+  type Database,
+  type MirrorConnection,
+} from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import {
@@ -19,10 +26,9 @@ import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport
 import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
-  loadMirrorConfig,
+  loadMirrorSyncConfig,
   loadSyncConfig,
   loadTunnelConfig,
-  type MirrorConfig,
   type ServerConfig,
 } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
@@ -62,12 +68,15 @@ import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
+import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
 import { provisionVenue } from "./provision.js";
+import { adoptFromPrimary } from "./adopt.js";
+import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { sealAeatCredential } from "./aeat-credential.js";
-import { writeTradingEnv } from "./trading-config.js";
+import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -78,6 +87,7 @@ import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
+import { readMirrorToken } from "./mirror-token.js";
 import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
@@ -540,23 +550,40 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `mountSetup` or `startListening` — never leaks it.
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
       try {
+        // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
+        // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
+        // and `adopt` (C2b) persist `trading.env` through the SAME writer.
+        const persistTrading = async (cfg: TradingConfig): Promise<void> => {
+          await writeTradingEnv(config.stateDir, cfg);
+        };
         // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
         // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
         // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
-        // connection strings for the next boot. The `*` catch-all inside `mountSetup` stays terminal
-        // and last, so the new POST route (registered before it) is not shadowed.
+        // connection strings for the next boot. `adopt` is the MIRROR-side sibling (C2b): it fetches the
+        // primary's bundle over real HTTP (`fetchMirrorBundle`) and adopts the venue into this box's own
+        // database, reusing the SAME `ownerDb`/`ring`/`persistTrading` the provision path wires. The `*`
+        // catch-all inside `mountSetup` stays terminal and last, so the POST routes (registered before
+        // it) are not shadowed.
         mountSetup(
           app,
           {
             environment: config.environment,
             provision: (req) => provisionVenue({ ownerDb }, req),
+            adopt: (req) =>
+              adoptFromPrimary(
+                {
+                  ownerDb,
+                  ring,
+                  fetchBundle: fetchMirrorBundle,
+                  persistTrading,
+                  databaseUrl: config.databaseUrl,
+                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                },
+                req,
+              ),
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
-            // `writeTradingEnv` returns the path it wrote; the surface only needs `Promise<void>`, so
-            // discard it explicitly rather than widen the dep's type.
-            persistTrading: async (cfg) => {
-              await writeTradingEnv(config.stateDir, cfg);
-            },
+            persistTrading,
             databaseUrl: config.databaseUrl,
             migrationsDatabaseUrl: config.migrationsDatabaseUrl,
             requestRestart: () => process.kill(process.pid, "SIGTERM"),
@@ -666,7 +693,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // holder flips to 'primary', the gate opens writes AND the ambient viewer stops (real auth applies) —
   // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
   // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
-  // it, matching the loadMirrorConfig/loadKeyRing discipline in this branch.
+  // it, matching the loadKeyRing / mirror-config db-cleanup discipline in this branch.
   if (isMirror) {
     app.use(
       "*",
@@ -879,37 +906,51 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the gated groups purely for reading order; route registration only, no database work at boot.
   mountMedia(app, { mediaDir: config.mediaDir }, log);
 
-  // The active-active sync transport: enabled iff WAITRON_SYNC_PEERS is set (loadSyncConfig). It opens
-  // its OWN pool (a sync_tailer + app_user member — the app pool cannot read sync_log), mounts the
+  // The active-active sync transport. A PRIMARY enables it iff WAITRON_SYNC_PEERS is set
+  // (`loadSyncConfig` → undefined otherwise). A MIRROR always pulls (`loadMirrorSyncConfig` never
+  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and its
+  // pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT from env
+  // (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens its OWN pool
+  // (a sync_tailer + app_user member — the app pool cannot read sync_log), the primary mounts the
   // peer-authenticated source group on the SAME app (each caller's Bearer token resolves to its
-  // enrolled sync_peers identity), and starts the background pull worker
-  // against each configured peer. The sync NODE ID is till.nodeId (one source of truth; no second
-  // WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double as the worker's idle interval and backoff
-  // ceiling. A host that sets no sync env leaves syncConfig undefined, so every existing boot is
-  // unchanged (boot.test.ts sets none). Torn down in close() below.
-  const syncConfig = loadSyncConfig(env);
-  // The mirror's link to its primary through B's tunnel (C2a design §7): the box CA + hostname
-  // `tunnelHttpClient` validates the box's TLS leaf against; a mirror REQUIRES it (loud if absent).
-  // Loaded ONLY on a mirror: `loadMirrorConfig` reads the CA file inside the loader (a bad path throws a
-  // raw ENOENT; a partial WAITRON_MIRROR_BOX_* pair throws server.config_invalid), so gating the load on
-  // `isMirror` keeps a stray mirror var from ever blocking a PRIMARY's boot — a primary must always be
-  // able to trade (§5) and the mirror config is meaningless on it. Wrapped in the same db-cleanup guard
-  // the `loadKeyRing` load above uses, so the throw closes the pool rather than leaking it (only `db` is
-  // open here — the sync and retention pools below are not yet).
-  let mirrorConfig: MirrorConfig | undefined;
+  // enrolled sync_peers identity), and both start the background pull worker. The sync NODE ID is
+  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double
+  // as the worker's idle interval and backoff ceiling. A primary that sets no sync env leaves
+  // syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none). Torn down in
+  // close() below.
+  const syncConfig = isMirror ? loadMirrorSyncConfig(env) : loadSyncConfig(env);
+  // The mirror's link to its primary through B's tunnel (C2b, spec §7): the box CA + hostname
+  // `tunnelHttpClient` validates the box's TLS leaf against, the relay URL it dials, and the per-peer
+  // sync token — all read from the DATABASE (`mirror_config`, written owner-role at adopt) and the
+  // vault (`sync.mirror_token`, sealed under the mirror's OWN box key), NEVER from env. A mirror
+  // REQUIRES them: an absent/partial `mirror_config` is a loud `server.config_invalid` (fail-closed),
+  // and an absent or unsealable token throws its own loud `credentials.*` error — never a silent
+  // no-op. The peer's `nodeId` is this node's own id: the mirror adopted the primary's identity, so
+  // the subscriber and the origin it pulls are the same adopted node (design §5/§7), and the token was
+  // enrolled with that same node as its subscriber (mirror-bundle.ts). Read ONLY on a mirror (a
+  // primary sets none), and wrapped in the same db-cleanup guard the `loadKeyRing` load above uses, so
+  // a throw closes the pool rather than leaking it (only `db` is open here — the sync and retention
+  // pools below are not yet). The token is never logged.
+  let mirror: MirrorConnection | undefined;
+  let mirrorPeer: { nodeId: string; url: string; token: string } | undefined;
   if (isMirror) {
     try {
-      mirrorConfig = loadMirrorConfig(env);
+      const loaded = await readMirrorConfig(db);
+      if (loaded === null) {
+        // The registered `server.config_invalid` shape is `{ variable, reason }` (errors.ts). The
+        // "variable" is no longer an env name — the mirror's connection config lives in the DB now — so
+        // it names the DB record instead; `reason` says the mirror requires it.
+        throw new AppError("server.config_invalid", {
+          variable: "mirror_config",
+          reason: "mirror_requires_mirror_config",
+        });
+      }
+      mirror = loaded;
+      const token = await readMirrorToken(db, ring, config.till.tenantId);
+      mirrorPeer = { nodeId: config.till.nodeId, url: loaded.relayUrl, token };
     } catch (error) {
       await db.close();
       throw error;
-    }
-    if (mirrorConfig === undefined) {
-      await db.close();
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_MIRROR_BOX_CA_FILE",
-        reason: "mirror_requires_box_ca_and_hostname",
-      });
     }
   }
   const syncController = new AbortController();
@@ -943,13 +984,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     const localSyncDb = syncDb;
     // A mirror pulls through B's reverse tunnel: the peer `url` names the RELAY, but TLS terminates at
     // the BOX, so `tunnelHttpClient` dials the relay while validating the box's own cert end-to-end
-    // (C2a design §7). A primary pulls directly over `fetchHttpClient`. `mirrorConfig` is always
-    // defined on a mirror (the required-check above threw otherwise); the `&& mirrorConfig !== undefined`
-    // is what narrows it for the tunnel branch.
+    // against the DB-stored box CA + hostname (C2b, spec §7). A primary pulls directly over
+    // `fetchHttpClient`. `mirror`/`mirrorPeer` are always defined on a mirror (the required-check above
+    // threw otherwise); the `&& … !== undefined` is what narrows them for the tunnel branch.
     const syncHttp =
-      isMirror && mirrorConfig !== undefined
-        ? tunnelHttpClient({ ca: mirrorConfig.ca, servername: mirrorConfig.servername })
+      isMirror && mirror !== undefined
+        ? tunnelHttpClient({ ca: mirror.boxCaPem, servername: mirror.boxHostname })
         : fetchHttpClient;
+    // A mirror's ONE peer is the relay it dials, built from the DB config + the vault token above; a
+    // primary's peers come from WAITRON_SYNC_PEERS (loadSyncConfig).
+    const peers = isMirror && mirrorPeer !== undefined ? [mirrorPeer] : syncConfig.peers;
     const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
       runSyncPull({
         localDb: localSyncDb,
@@ -958,7 +1002,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         localEnvironment: config.environment,
         http: syncHttp,
         batchLimit: 500,
-        peers: syncConfig.peers,
+        peers,
         sleep: realSleep,
         signal: syncController.signal,
         minIdleMs,
@@ -1114,6 +1158,36 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
   } else if (!isMirror) {
     log("info", "tunnel.disabled", {});
+  }
+
+  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
+  // cloud mirror adopts (design §4). PRIMARY-only, and only when the retention sweep opened its
+  // `sync_retention` connection — the handler mints the peer token as that role via `enrolPeer`, so the
+  // endpoint exists exactly when the connection it needs does (a mirror never opens one, and a primary
+  // that configured no retention role cannot mint). `relayUrl` is this primary's own relay coordinates
+  // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses `mirror.no_relay`
+  // before minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
+  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
+  if (!isMirror && retentionDb !== undefined) {
+    mountMirrorBundleApi(
+      app,
+      {
+        appDb: db,
+        retentionDb,
+        stateDir: config.stateDir,
+        // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and
+        // `packages/sync/src/pull.ts` builds `${trimSlash(peer.url)}/sync-api/hello` → `undiciFetch`,
+        // which throws on a scheme-less address. The mirror always speaks HTTPS end-to-end to the box
+        // cert through the tunnel, so the scheme is https (matches Task 5's `https://relay.test:9000/`).
+        relayUrl:
+          tunnelConfig !== undefined
+            ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
+            : undefined,
+        boxHostname: BOX_HOSTNAME,
+        designated: config.till,
+      },
+      log,
+    );
   }
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the

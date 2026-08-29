@@ -13,6 +13,7 @@ import {
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { ProvisionRequest } from "./provision.js";
+import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import { validateAeatCert, type AeatCert } from "./aeat-credential.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
@@ -707,5 +708,304 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     const text = await res.text();
     expect(text).toContain("needs setup"); // the inline placeholder shell
     expect(text).not.toContain("setup-wizard-spa");
+  });
+});
+
+// The mirror-side sibling of `/setup-api/provision` (C2b Task 9): fetch the primary's bundle
+// server-side, adopt the venue, then restart into mirror mode. It REUSES the same one-shot latch, the
+// same deps gate + `setup.not_ready`/`setup.already_provisioning` refusals, and the same
+// deferred-restart shape provision uses — these tests copy those tests' shape.
+const PRIMARY_URL = "https://primary.example";
+// The admin login the primary authenticates, carried as a STRUCTURED `AdoptCredential` object end to
+// end (the connect screen sends `{ personId, password, totp? }` directly — see mirror-bundle-fetch.ts).
+const ADOPT_CREDENTIAL: AdoptCredential = {
+  personId: "88888888-8888-8888-8888-888888888888",
+  password: "correct-horse-battery",
+};
+
+/** Adopt deps, each a spy. An adopt-only box wires just `adopt` + `requestRestart` (the two the adopt
+ * route's gate needs); the provision deps are irrelevant to this route and left unwired. */
+function makeAdoptDeps(overrides: Partial<SetupDeps> = {}): {
+  deps: SetupDeps;
+  adopt: ReturnType<typeof vi.fn>;
+  adoptRequests: AdoptRequest[];
+  requestRestart: ReturnType<typeof vi.fn>;
+} {
+  const adoptRequests: AdoptRequest[] = [];
+  const adopt = vi.fn(async (req: AdoptRequest) => {
+    adoptRequests.push(req);
+    return { tenantId: TENANT_ID };
+  });
+  const requestRestart = vi.fn();
+  const deps: SetupDeps = {
+    environment: "preproduction",
+    adopt,
+    requestRestart,
+    ...overrides,
+  };
+  return { deps, adopt, adoptRequests, requestRestart };
+}
+
+function adoptBody(): Record<string, unknown> {
+  return { primaryUrl: PRIMARY_URL, credential: ADOPT_CREDENTIAL };
+}
+
+async function postAdopt(app: Hono, body: unknown): Promise<Response> {
+  return app.request("/setup-api/adopt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, sharing provision's latch", () => {
+  it("adopts a venue: 200, passes the body through to adopt, defers the restart", async () => {
+    const app = new Hono();
+    const { deps, adopt, adoptRequests, requestRestart } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ adopted: true, tenantId: TENANT_ID, restarting: true });
+
+    // `adopt` saw exactly the operator's `{ primaryUrl, credential }` — no reshaping at the boundary.
+    expect(adopt).toHaveBeenCalledTimes(1);
+    expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential: ADOPT_CREDENTIAL });
+
+    // The restart is deferred to the next macrotask so the 200 flushes first (provision's shape).
+    expect(requestRestart).not.toHaveBeenCalled();
+    await tick();
+    expect(requestRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps a mirror.bundle_fetch_failed from adopt to HTTP 502", async () => {
+    const app = new Hono();
+    const adopt = vi.fn(async () => {
+      throw new AppError("mirror.bundle_fetch_failed", {});
+    });
+    const { deps, requestRestart } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: { code: "mirror.bundle_fetch_failed", params: {} },
+    });
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled(); // a failed fetch never restarts
+  });
+
+  it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
+    const app = new Hono();
+    let release!: (v: { tenantId: string }) => void;
+    const pending = new Promise<{ tenantId: string }>((resolve) => {
+      release = resolve;
+    });
+    const adopt = vi.fn(() => pending);
+    const { deps } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    // Fire the first POST but do NOT await it — its adopt hangs on `pending`.
+    const first = postAdopt(app, adoptBody());
+    await tick(); // let the first request reach + set the shared latch
+
+    const second = await postAdopt(app, adoptBody());
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({
+      error: { code: "setup.already_provisioning", params: {} },
+    });
+    expect(adopt).toHaveBeenCalledTimes(1); // the second never reached adopt
+
+    release({ tenantId: TENANT_ID });
+    expect((await first).status).toBe(200);
+    await tick();
+  });
+
+  it("resets the latch after a FAILED adopt so a corrected retry is accepted", async () => {
+    const app = new Hono();
+    const adopt = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("transient boom"))
+      .mockResolvedValueOnce({ tenantId: TENANT_ID });
+    const { deps, requestRestart } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    const first = await postAdopt(app, adoptBody());
+    expect(first.status).toBe(500); // a non-AppError adopt fault → opaque server.internal
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+
+    const second = await postAdopt(app, adoptBody());
+    expect(second.status).toBe(200);
+    await tick();
+    expect(requestRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the latch SET after a SUCCESSFUL adopt — a second POST is 409 while the box restarts", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const first = await postAdopt(app, adoptBody());
+    expect(first.status).toBe(200);
+    await tick(); // let the deferred restart fire; the latch stays set
+
+    const second = await postAdopt(app, adoptBody());
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({
+      error: { code: "setup.already_provisioning", params: {} },
+    });
+    expect(adopt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([["primaryUrl"], ["credential"]] as const)(
+    "rejects a body missing %s with 400 setup.request_invalid naming the field, without adopting",
+    async (field) => {
+      const app = new Hono();
+      const { deps, adopt, requestRestart } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const body = adoptBody();
+      delete body[field];
+      const res = await postAdopt(app, body);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe("setup.request_invalid");
+      expect(json.error.params.field).toBe(field);
+      expect(adopt).not.toHaveBeenCalled();
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    },
+  );
+
+  // Per-field credential validation happens at the MIRROR's own boundary (400), so a wrong-shape login
+  // never reaches the fetcher to fail the primary and surface as an opaque 502. `credential.password`'s
+  // value is NEVER echoed — the error names the field only. A non-object credential is rejected too.
+  it.each([
+    ["credential.personId", (c: Record<string, unknown>) => delete c.personId],
+    ["credential.password", (c: Record<string, unknown>) => delete c.password],
+  ] as const)(
+    "rejects a credential missing %s with 400 setup.request_invalid, without adopting",
+    async (field, mutate) => {
+      const app = new Hono();
+      const { deps, adopt } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const cred: Record<string, unknown> = { ...ADOPT_CREDENTIAL };
+      mutate(cred);
+      const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: cred });
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe("setup.request_invalid");
+      expect(json.error.params.field).toBe(field);
+      expect(adopt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a non-object credential with 400 setup.request_invalid naming 'credential'", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: "1234" });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("setup.request_invalid");
+    expect(json.error.params.field).toBe("credential");
+    expect(adopt).not.toHaveBeenCalled();
+  });
+
+  it("accepts a credential carrying an optional totp and adopts (200)", async () => {
+    const app = new Hono();
+    const { deps, adopt, adoptRequests } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const credential: AdoptCredential = { ...ADOPT_CREDENTIAL, totp: "123456" };
+    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential });
+    expect(res.status).toBe(200);
+    expect(adopt).toHaveBeenCalledTimes(1);
+    expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential });
+    await tick();
+  });
+
+  // The one-shot latch is SHARED across provision and adopt (a box is set up as a primary XOR a mirror),
+  // so a start of either verb must latch out a concurrent start of the OTHER. Untested cross-route, a
+  // mutation splitting the shared `provisioning` into two independent latches passed every same-route
+  // test — this pins that they are one latch, in both directions.
+  it("shares the one-shot latch across routes: provision in flight blocks adopt, and adopt blocks provision", async () => {
+    // provision in flight → a concurrent adopt is refused 409
+    {
+      const app = new Hono();
+      let release!: (v: VenueResult) => void;
+      const pending = new Promise<VenueResult>((resolve) => {
+        release = resolve;
+      });
+      const provision = vi.fn(() => pending);
+      const adopt = vi.fn(async () => ({ tenantId: TENANT_ID }));
+      const { deps } = makeDeps({ provision, adopt });
+      mountSetup(app, deps, noopLog);
+
+      const first = postProvision(app, demoBody());
+      await tick(); // the provision holds the shared latch
+      const blocked = await postAdopt(app, adoptBody());
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toEqual({
+        error: { code: "setup.already_provisioning", params: {} },
+      });
+      expect(adopt).not.toHaveBeenCalled(); // the shared latch refused it synchronously
+
+      release(makeVenueResult());
+      expect((await first).status).toBe(200);
+      await tick();
+    }
+
+    // adopt in flight → a concurrent provision is refused 409 (the reverse direction)
+    {
+      const app = new Hono();
+      let release!: (v: { tenantId: string }) => void;
+      const pending = new Promise<{ tenantId: string }>((resolve) => {
+        release = resolve;
+      });
+      const adopt = vi.fn(() => pending);
+      const { deps, provision } = makeDeps({ adopt });
+      mountSetup(app, deps, noopLog);
+
+      const first = postAdopt(app, adoptBody());
+      await tick(); // the adopt holds the shared latch
+      const blocked = await postProvision(app, demoBody());
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toEqual({
+        error: { code: "setup.already_provisioning", params: {} },
+      });
+      expect(provision).not.toHaveBeenCalled(); // the shared latch refused it synchronously
+
+      release({ tenantId: TENANT_ID });
+      expect((await first).status).toBe(200);
+      await tick();
+    }
+  });
+
+  it("answers 503 setup.not_ready when the adopt dep is unwired", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps({ adopt: undefined });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    // The dep was overridden to `undefined` on `deps`, so the gate refused before the route body — the
+    // captured spy (still returned here) was therefore never reached.
+    expect(adopt).not.toHaveBeenCalled();
+  });
+
+  it("answers 503 setup.not_ready when requestRestart is unwired (the other gate arm)", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps({ requestRestart: undefined });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    expect(adopt).not.toHaveBeenCalled();
   });
 });

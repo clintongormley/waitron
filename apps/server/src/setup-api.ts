@@ -5,10 +5,12 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
+import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import { validateAeatCert } from "./aeat-credential.js";
 import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -32,6 +34,13 @@ export interface SetupDeps {
    * returning the five ids the trading boot needs. Plaintext admin secrets never reach it — the
    * provision route hashes them at the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
+   * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
+   * credential never touches a browser→primary hop), adopts the venue into this box's own database,
+   * seals the sync token, and persists `trading.env` — returning the adopted `tenantId`. OPTIONAL for
+   * the same reason `provision` is: a `POST /setup-api/adopt` that arrives before it is wired is
+   * answered `503 setup.not_ready`. */
+  adopt?: (req: AdoptRequest) => Promise<{ tenantId: string }>;
   /** `sealAeatCredential(db, ring, …)` bound in boot: seals the AEAT cert into the tenant's
    * `fiscal.aeat` vault purpose. Needed only when a LIVE ES-common provision supplies a certificate. */
   sealAeat?: (tenantId: string, cert: AeatCert) => Promise<void>;
@@ -111,6 +120,25 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
 // The `"setup.provision_failed"` here is the LOG TAG for the unexpected-crash branch, not a wire code
 // (see the map's doc comment above and error-boundary.ts): a non-`AppError` is answered `server.internal`.
 const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_failed");
+
+/**
+ * The adopt route's 4xx/5xx contract (the provision map's mirror-side sibling). `mirror.bundle_fetch_failed`
+ * is the one code that is NOT a client fault: the operator's request is well-formed, but the mirror's
+ * UPSTREAM — the primary it was pointed at — failed to serve or return a parseable bundle, so it maps to
+ * HTTP 502 (the mirror is a gateway; its upstream failed), the status `mirror.bundle_fetch_failed`'s own
+ * doc comment in errors.ts assigns it. `setup.request_invalid` (a missing/mistyped `primaryUrl`/`credential`)
+ * defaults to 400 anyway but is enumerated so this map is the surface's whole contract. `setup.not_ready`/
+ * `setup.already_provisioning` are NOT here — like provision's, they are returned directly, outside the
+ * boundary. A non-`AppError` fault is answered an opaque `server.internal` 500 under the log tag below.
+ */
+const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.request_invalid": 400,
+  "mirror.bundle_fetch_failed": 502,
+};
+
+// `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
+// `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
+const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
  * password, passphrase or PFX is exactly the secret a caller can mis-send). */
@@ -210,13 +238,17 @@ function directError(
 
 /**
  * Mount the UNAUTHENTICATED setup-mode routes on an existing Hono app — the whole surface the box
- * exposes while no venue is bound (design: slice 1b). Two routes:
+ * exposes while no venue is bound (design: slice 1b/2b, plus C2b's adopt). The routes:
  *
  *   - `GET /setup-api/status` → a small, STABLE JSON fact sheet
  *     `{ provisioned: false, environment, needs: ["venue"] }`. Slice 2's wizard reads this to learn
  *     what the box still needs, so the shape is a contract: `provisioned` is always `false` here (a
  *     provisioned box never mounts these routes), and `needs` lists the outstanding steps — today
  *     only `"venue"`.
+ *   - `POST /setup-api/provision` → the PRIMARY-box path (slice 2b): mints the venue on this box and
+ *     restarts it into trading mode. Gated on `deps.provision` being wired (`503 setup.not_ready`).
+ *   - `POST /setup-api/adopt` → the MIRROR-box path (C2b): fetches the primary's bundle server-side,
+ *     adopts the venue into this box, and restarts into mirror mode. Gated on `deps.adopt` the same way.
  *   - a root catch-all `GET *` → either the built setup wizard (via `mountSpa`, when `deps.setupAppDir`
  *     is configured — slice 2c) or, absent that, the inline `SETUP_PLACEHOLDER_HTML` shell
  *     (`text/html`, `no-cache`). Either way it is registered LAST, so it only answers paths nothing
@@ -239,11 +271,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   // The one-shot provisioning latch. CLOSURE-scoped (per `mountSetup`, i.e. per booted process — one
   // mount per boot), so it survives across requests to THIS box yet gives every test its own fresh
-  // latch. It is the inner ring of the double-provision guard: `applyVenue` mints a FRESH SIF/hash
-  // chain on every run and `provisionVenue`'s tenant-exists check is not atomic with `applyVenue`, so
-  // two concurrent provisions could each pass that check and start a second, unrecoverable chain
-  // (CLAUDE.md §5). The single setup process + this latch prevent the concurrent case; the
-  // tenant-exists check backstops a sequential re-POST.
+  // latch. It is SHARED with the adopt route below (a box is set up EITHER as a primary via provision
+  // OR as a mirror via adopt, never both), so a start of either action latches out a concurrent start
+  // of the other — the double-first-boot guard, expressed once. It is the inner ring of that guard:
+  // `applyVenue` mints a FRESH SIF/hash chain on every run and `provisionVenue`'s tenant-exists check
+  // is not atomic with `applyVenue`, so two concurrent provisions could each pass that check and start
+  // a second, unrecoverable chain (CLAUDE.md §5). The single setup process + this latch prevent the
+  // concurrent case; the tenant-exists check backstops a sequential re-POST.
   let provisioning = false;
 
   // POST /setup-api/provision — orchestrates the whole flow: demo/live fork → validate + hash →
@@ -361,16 +395,75 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
+  // POST /setup-api/adopt — the MIRROR-side sibling of provision (C2b Task 9). Fetches the primary's
+  // bundle server-side, adopts the venue into this box's own database, seals the token + persists
+  // `trading.env`, then restarts into mirror mode. It REUSES provision's one-shot latch (the same
+  // `provisioning` closure variable): a box is set up EITHER as a primary (provision) OR as a mirror
+  // (adopt), never both, so a start of either action must latch out a concurrent start of the other —
+  // the same "one unrecoverable first-boot action" guard, expressed once. Registered BEFORE the
+  // `GET *` catch-all below (Hono first-match wins).
+  app.post("/setup-api/adopt", (c) => {
+    // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Only `adopt` and
+    // `requestRestart` are load-bearing for this route (the fetch/persist deps are captured inside the
+    // `adopt` closure in boot). Captured as consts so TypeScript narrows them non-undefined below.
+    const adopt = deps.adopt;
+    const requestRestart = deps.requestRestart;
+    if (adopt === undefined || requestRestart === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+
+    // One-shot latch — CRITICAL, SYNCHRONOUS before ANY `await` — shared with provision (above). The
+    // loser is refused 409 here rather than starting a second adopt. Reset to false on ANY failure
+    // (below) so a corrected retry works; LEFT true on success — the box is about to restart.
+    if (provisioning) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    provisioning = true;
+
+    return runAdopt(c, log, async () => {
+      try {
+        // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
+        // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
+        // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
+        // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
+        // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
+        // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
+        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+        const cred = asObject(body.credential, "credential");
+        const credential: AdoptCredential = {
+          personId: asString(cred.personId, "credential.personId"),
+          password: asString(cred.password, "credential.password"),
+          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+        };
+
+        const { tenantId } = await adopt({ primaryUrl, credential });
+
+        const response = c.json({ adopted: true, tenantId, restarting: true }, 200);
+        // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
+        // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
+        // the same persist-then-restart transition provision uses.
+        setTimeout(() => requestRestart(), 0);
+        return response;
+      } catch (error) {
+        // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
+        // returned above, so the latch stays true and no second setup action can start before restart.
+        provisioning = false;
+        throw error;
+      }
+    });
+  });
+
   // The root catch-all, registered LAST and matching everything, so it answers only the paths
-  // `/setup-api/status` and `/setup-api/provision` (above) and any earlier route (e.g. `/health`, or
-  // the setup branch's discovery/CA/trust routes registered before this mount) did not claim. When a
-  // built wizard dir is configured (slice 2c), serve it as that catch-all via `mountSpa` — basePath
-  // "" = origin root, exactly like the till: the root "/" serves index.html and real files under the
-  // dir serve their bytes, while a stray unmatched path 404s (mountSpa has no SPA history fallback —
-  // the wizard is an in-memory-state SPA, so a reload only ever lands on "/"). Absent a configured dir
-  // serve the inline placeholder shell (dev, and any box whose wizard bundle was not built in). Boot
-  // has already `assertBuiltApp`-checked a configured dir holds an `index.html`, so `mountSpa` here
-  // never becomes a catch-all that 404s the root itself.
+  // `/setup-api/status`, `/setup-api/provision` and `/setup-api/adopt` (above) and any earlier route
+  // (e.g. `/health`, or the setup branch's discovery/CA/trust routes registered before this mount)
+  // did not claim. When a built wizard dir is configured (slice 2c), serve it as that catch-all via
+  // `mountSpa` — basePath "" = origin root, exactly like the till: the root "/" serves index.html and
+  // real files under the dir serve their bytes, while a stray unmatched path 404s (mountSpa has no
+  // SPA history fallback — the wizard is an in-memory-state SPA, so a reload only ever lands on "/").
+  // Absent a configured dir serve the inline placeholder shell (dev, and any box whose wizard bundle
+  // was not built in). Boot has already `assertBuiltApp`-checked a configured dir holds an
+  // `index.html`, so `mountSpa` here never becomes a catch-all that 404s the root itself.
   if (deps.setupAppDir !== undefined) {
     mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
   } else {

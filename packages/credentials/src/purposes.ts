@@ -27,6 +27,9 @@ export const PURPOSES = {
    * while nothing is provisioned.
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
+  /** The per-peer sync bearer token a cloud mirror presents when it pulls (sync cloud-mirror C2b).
+   * Sealed under the mirror's OWN box key at adopt; a mirror-local operational secret, one field. */
+  "sync.mirror_token": ["token"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;

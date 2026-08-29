@@ -1,14 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { isAbsolute, resolve } from "node:path";
+import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import {
   deploymentEnvironment,
   loadConfig,
-  loadMirrorConfig,
+  loadMirrorSyncConfig,
   loadSyncConfig,
   loadTunnelConfig,
 } from "./config.js";
@@ -906,101 +904,42 @@ describe("loadTunnelConfig", () => {
   });
 });
 
-describe("loadMirrorConfig", () => {
-  // The mirror's box CA + hostname (the two tunnelHttpClient inputs, §7). The PULL peers (relay
-  // address + per-peer token) come from loadSyncConfig, not here — this loader only supplies the
-  // TLS trust anchor + servername. Both vars required together (fail-closed, the
-  // loadTunnelConfig/loadSyncConfig posture); an empty value is refused (the empty-string trap,
-  // CLAUDE.md §3); neither set → undefined (a non-mirror sets neither).
-  // Track every temp dir writeCa creates and remove them in afterAll, so repeated local runs don't
-  // accumulate `mirror-ca-*` dirs under tmpdir (Copilot).
-  const caDirs: string[] = [];
-  function writeCa(contents: string): string {
-    const dir = mkdtempSync(join(tmpdir(), "mirror-ca-"));
-    caDirs.push(dir);
-    const caPath = join(dir, "box-ca.pem");
-    writeFileSync(caPath, contents);
-    return caPath;
-  }
-  afterAll(() => {
-    for (const dir of caDirs) rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("reads the box CA file + hostname when both are set", () => {
-    const caPath = writeCa("-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n");
-    const cfg = loadMirrorConfig({
-      WAITRON_MIRROR_BOX_CA_FILE: caPath,
-      WAITRON_MIRROR_BOX_HOSTNAME: "box.test",
-    });
-    expect(cfg).toEqual({
-      ca: expect.stringContaining("BEGIN CERTIFICATE"),
-      servername: "box.test",
+describe("loadMirrorSyncConfig", () => {
+  // C2b (spec §7): a mirror's CONNECTION to its primary (relay URL, box CA + hostname, per-peer token)
+  // now lives in the DB (`mirror_config`) + the vault (`sync.mirror_token`), read at boot — NOT in env.
+  // This loader supplies only the mirror's LOCAL pull config: the `sync_applier` pool
+  // (WAITRON_SYNC_DATABASE_URL) and the fast-lane tick. `peers` is deliberately empty — boot builds the
+  // one relay peer from the DB config. Unlike `loadSyncConfig` it never returns undefined: a mirror MUST
+  // pull, so an absent sync DB URL is a loud `server.config_missing`.
+  it("returns the sync pool URL + defaulted ticks, and an empty peers list, from just the sync DB URL", () => {
+    expect(loadMirrorSyncConfig({ WAITRON_SYNC_DATABASE_URL: "postgres://a@h/d" })).toEqual({
+      databaseUrl: "postgres://a@h/d",
+      peers: [],
+      fastMinIdleMs: 1000,
+      retentionTickMs: 60_000,
     });
   });
 
-  it("is undefined when neither var is set (a non-mirror sets neither)", () => {
-    expect(loadMirrorConfig({})).toBeUndefined();
-  });
-
-  // A PARTIAL set fails closed, naming the MISSING variable — the same both-or-neither posture the
-  // TLS pair and loadTunnelConfig's box id/token take. Hostname set, CA file absent → the error
-  // names the CA file.
-  it("fails closed on a partial set (hostname without CA file), naming the CA file", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(loadMirrorConfig({ WAITRON_MIRROR_BOX_HOSTNAME: "box.test" })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MIRROR_BOX_CA_FILE",
-      reason: "required_with_mirror_hostname",
+  it("reads WAITRON_SYNC_FAST_TICK_MS and WAITRON_SYNC_RETENTION_TICK_MS when set", () => {
+    expect(
+      loadMirrorSyncConfig({
+        WAITRON_SYNC_DATABASE_URL: "postgres://a@h/d",
+        WAITRON_SYNC_FAST_TICK_MS: "250",
+        WAITRON_SYNC_RETENTION_TICK_MS: "5000",
+      }),
+    ).toEqual({
+      databaseUrl: "postgres://a@h/d",
+      peers: [],
+      fastMinIdleMs: 250,
+      retentionTickMs: 5000,
     });
   });
 
-  // Symmetric partial: CA file set, hostname absent → the error names the hostname.
-  it("fails closed on a partial set (CA file without hostname), naming the hostname", async () => {
-    const caPath = writeCa("x");
-    const error = await captureError(() =>
-      Promise.resolve(loadMirrorConfig({ WAITRON_MIRROR_BOX_CA_FILE: caPath })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
-      reason: "required_with_mirror_ca",
-    });
-  });
-
-  // Empty string is unset (config.ts's own isUnset): WAITRON_MIRROR_BOX_HOSTNAME= beside a real CA
-  // file is a partial set, so an empty hostname is refused rather than reaching tunnelHttpClient as
-  // "" (the empty-string trap, CLAUDE.md §3).
-  it("refuses an empty hostname", async () => {
-    const caPath = writeCa("x");
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadMirrorConfig({ WAITRON_MIRROR_BOX_CA_FILE: caPath, WAITRON_MIRROR_BOX_HOSTNAME: "" }),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MIRROR_BOX_HOSTNAME",
-      reason: "required_with_mirror_ca",
-    });
-  });
-
-  // Symmetric empty-string case: WAITRON_MIRROR_BOX_CA_FILE= beside a real hostname is unset too, so
-  // the CA file is reported missing — never read as readFileSync("").
-  it("refuses an empty CA file path", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadMirrorConfig({
-          WAITRON_MIRROR_BOX_CA_FILE: "",
-          WAITRON_MIRROR_BOX_HOSTNAME: "box.test",
-        }),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MIRROR_BOX_CA_FILE",
-      reason: "required_with_mirror_hostname",
-    });
+  // Fail-closed: a mirror that cannot open its sync pool cannot pull, so an absent (or empty, via
+  // `required`'s `isUnset`) WAITRON_SYNC_DATABASE_URL is a loud boot failure, never sync-off.
+  it("throws server.config_missing when WAITRON_SYNC_DATABASE_URL is absent", async () => {
+    const error = await captureError(() => Promise.resolve(loadMirrorSyncConfig({})));
+    expect(codeOf(error)).toBe("server.config_missing");
+    expect(isAppError(error) && error.params).toEqual({ variable: "WAITRON_SYNC_DATABASE_URL" });
   });
 });

@@ -1,8 +1,8 @@
 import type { DeepPartial, Screen } from "./setup-app.js";
-import type { ProvisionBody } from "./api/client.js";
+import type { AdoptBody, ProvisionBody } from "./api/client.js";
 
 /**
- * Typed dispatchers for the four events the setup-wizard screens emit UP to the shell
+ * Typed dispatchers for the five events the setup-wizard screens emit UP to the shell
  * ({@link SetupApp}). Every wizard screen goes through these rather than hand-rolling a
  * `new CustomEvent(...)`, which buys two things. The compiler checks each event's DETAIL shape and
  * the `screen` VALUE (against the {@link Screen} union), so an invalid `screen` or a malformed
@@ -11,7 +11,7 @@ import type { ProvisionBody } from "./api/client.js";
  * means a screen can no longer drift its own spelling of `"setup-goto"` out of sync with the
  * shell's listener; fixing the string once fixes every caller.
  *
- * All four are `composed: true, bubbles: true` — the emitting screen lives in its own shadow root,
+ * All five are `composed: true, bubbles: true` — the emitting screen lives in its own shadow root,
  * so the events must cross that boundary to reach the shell, which is their only (and final)
  * consumer (it calls `stopPropagation`). These flags and the detail shapes must stay byte-for-byte
  * what the shell's listeners and the screen tests expect; this module is a typed wrapper, not a
@@ -33,6 +33,17 @@ export function dispatchSetupGoto(el: EventTarget, screen: Screen): void {
 }
 
 /**
+ * Emit the box's role choice (`setup-role`) from the first `role` screen; the shell routes a
+ * `primary` to the existing `mode` flow and a `mirror` to the `connect` screen. Typed on the two
+ * roles so a screen cannot emit anything else.
+ */
+export function dispatchSetupRole(el: EventTarget, role: "primary" | "mirror"): void {
+  el.dispatchEvent(
+    new CustomEvent("setup-role", { detail: { role }, bubbles: true, composed: true }),
+  );
+}
+
+/**
  * Request a screen-agnostic advance (`setup-advance`); the shell decides the next step from the
  * merged draft. Carries no detail — only the venue screen emits it today.
  */
@@ -46,4 +57,19 @@ export function dispatchSetupAdvance(el: EventTarget): void {
  */
 export function dispatchProvisionRequested(el: EventTarget): void {
   el.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
+}
+
+/**
+ * Fire the mirror-path adopt (`adopt-requested`) — the connect screen's `Connect` reaches the shell
+ * through this (C2b Task 13). UNLIKE `provision-requested`, it CARRIES the assembled {@link AdoptBody}
+ * in its detail: the primary's URL + admin credential are collected only on this screen and are
+ * deliberately NOT accumulated into the shell's provision draft (a mirror files nothing, and the
+ * password must never be persisted), so the shell forwards the detail straight to `SetupApi.adopt`
+ * rather than assembling it from a draft. The connect form is the mirror path's retry surface, so a
+ * re-submit simply re-fires this.
+ */
+export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
+  el.dispatchEvent(
+    new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
+  );
 }

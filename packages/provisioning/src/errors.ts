@@ -181,6 +181,22 @@ declare module "@waitron/shared" {
      * statement back in its message, and this file's header forbids a param that could carry one.
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
+    /** `adoptVenue` finished its inserts but one of the five DESIGNATED ids the mirror bundle names
+     * for `trading.env` is not present among the rows it inserted — a malformed or incomplete bundle
+     * (spec §5). `adoptVenue` inserts the primary's tenant/location/node/till/series rows VERBATIM
+     * with their explicit ids under `ON CONFLICT (id) DO NOTHING`, then reads each designated id back
+     * (SELECT 1 per id); a `null` read means the bundle's row arrays did not carry a row with that
+     * id, so the mirror would boot pointed at a till/series that does not exist. Refused loudly here
+     * rather than left to fail confusingly at first sale.
+     *
+     * `provisioning.*` and not a `tenant.*`/`series.*` prefix: this is a refusal OF STANDING A MIRROR
+     * VENUE UP — the same activity the header describes — not a fact about a row that exists.
+     * `missing` is the ROLE LABEL of the absent parent (`tenant`|`location`|`node`|`till`|`series`),
+     * never the uuid: the label is enough for the operator to see which part of the bundle was
+     * short, and it echoes no id at all — the same discipline the secret-bearing codes above keep. */
+    "provisioning.adopt_incomplete": {
+      missing: "tenant" | "location" | "node" | "till" | "series";
+    };
     /** A venue request named a number of invoice locales the schema will not accept: the
      * `invoice_locales` list must hold one or two entries. This is the same rule the DB CHECK
      * `locations_invoice_locales_len` enforces — `cardinality(invoice_locales) between 1 and 2` on

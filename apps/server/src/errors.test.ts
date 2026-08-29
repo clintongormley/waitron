@@ -196,6 +196,38 @@ describe("the device error codes carry their declared params", () => {
 // code deliberately absent from the status map it is handed. Task 6's route may still list
 // `drawer.no_printer: 400` explicitly in its own STATUS map for readability (the house style
 // `placement.invalid`'s comment describes), but the mapping holds either way.
+// Sync cloud-mirror C2b (Task 6 — registered BEFORE Task 5 because later tasks throw these). The three
+// `mirror.*` codes govern the operator flow that assembles a read-only mirror from a primary's bundle.
+// As with every block above, each `it` only proves the code is REGISTERED with the right param SHAPE —
+// the construction typechecks solely because errors.ts's `declare module` augmentation is loaded (the
+// side-effect import above), so the fail-first signal for these registration tests is `tsc --noEmit`,
+// NOT the runtime run (AppError does no runtime validation of the code, so `new AppError("mirror.no_relay",
+// {})` would run green even with the code undeclared). The real throwers arrive in later C2b tasks: the
+// primary-side assemble/bundle endpoints (not_provisioned/no_relay) and the mirror-side bundle fetch
+// (bundle_fetch_failed). All three carry `Record<string, never>` — the refusal names no row, so a log line
+// leaks nothing (the sync.*/tunnel.* discipline node.read_only already follows). The HTTP statuses
+// (409/400/502) are NOT here — they live in the throwing routes' local STATUS maps (later tasks), the same
+// declare-here / status-in-route split the node.*/device.* codes above follow.
+describe("the mirror error codes carry no params", () => {
+  it("constructs mirror.not_provisioned with no params (the refusal names no row)", () => {
+    const error = new AppError("mirror.not_provisioned", {});
+    expect(error.code).toBe("mirror.not_provisioned");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs mirror.no_relay with no params (the refusal names no row)", () => {
+    const error = new AppError("mirror.no_relay", {});
+    expect(error.code).toBe("mirror.no_relay");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs mirror.bundle_fetch_failed with no params (the refusal names no row)", () => {
+    const error = new AppError("mirror.bundle_fetch_failed", {});
+    expect(error.code).toBe("mirror.bundle_fetch_failed");
+    expect(error.params).toEqual({});
+  });
+});
+
 describe("the drawer error code carries its declared params and maps to HTTP 400", () => {
   it("constructs drawer.no_printer naming the misconfigured till, matching station.no_default's shape", () => {
     const tillId = "99999999-9999-9999-9999-999999999999";
