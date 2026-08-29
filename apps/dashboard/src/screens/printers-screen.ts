@@ -8,9 +8,10 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { jobStatusName, printModeName, transportName } from "../i18n/domain.js";
+import { drawerPolicyName, jobStatusName, printModeName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
+  DrawerOpenPolicy,
   LocationSummary,
   PrintAgentRow,
   PrintJobRow,
@@ -27,6 +28,11 @@ import type {
 /** The three receipt print modes the per-location toggle offers, in render order — the `receipt_print_mode`
  * pgEnum's members. `auto` leads (auto-print on every sale, the column default), then the two quieter modes. */
 const PRINT_MODES: readonly ReceiptPrintMode[] = ["auto", "on_request", "never"];
+
+/** The two cash-drawer-open policies the per-location toggle offers, in render order — the
+ * `drawer_open_policy` pgEnum's members. `gated` leads (a manager must authorize an out-of-sale drawer
+ * open, the SECURE column default), then `open` (any operator may). */
+const DRAWER_POLICIES: readonly DrawerOpenPolicy[] = ["gated", "open"];
 
 /** A printer the row editor holds in local, editable state — a defensive copy of the loaded {@link Printer}
  * with the nullable connection columns flattened to STRINGS (`null` → `""`), so a `wt-input` can bind them
@@ -229,6 +235,12 @@ export class PrintersScreen extends LitElement {
   // OPERATOR's own picks. `#load` seeds an entry per location, preserving any pick already made, so a
   // post-mutation reload does not reset the segmented control.
   @state() private printModes: Record<string, ReceiptPrintMode> = {};
+  // The per-location drawer-open policy the toggle reflects — a locationId → policy map. SAME bump_mode
+  // precedent as `printModes` above: `drawer_open_policy` has NO read route in this slice, so the toggle
+  // starts on the column default (`gated`, the SECURE choice) and reflects the OPERATOR's own picks.
+  // `#load` seeds an entry per location, preserving any pick already made, so a post-mutation reload does
+  // not reset the segmented control.
+  @state() private drawerPolicies: Record<string, DrawerOpenPolicy> = {};
 
   // The generate-agent-code form's label, and the one-time code held ONLY here (never re-fetchable).
   @state() private newAgentLabel = "";
@@ -345,6 +357,11 @@ export class PrintersScreen extends LitElement {
       // A reload after a mode mutation therefore keeps the segmented control on the chosen mode.
       this.printModes = Object.fromEntries(
         locations.map((l) => [l.id, this.printModes[l.id] ?? "auto"]),
+      );
+      // Seed one drawer-policy entry per location, PRESERVING any pick already made — the same bump_mode
+      // precedent as `printModes` above (no read route, so the toggle reflects the operator's picks).
+      this.drawerPolicies = Object.fromEntries(
+        locations.map((l) => [l.id, this.drawerPolicies[l.id] ?? "gated"]),
       );
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -567,6 +584,20 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(async () => {
       await this.api.setReceiptPrintMode(locationId, mode);
       this.printModes = { ...this.printModes, [locationId]: mode };
+    });
+  }
+
+  /** Set the cash-drawer-open policy on the location `locationId`, reflecting the pick locally (the same
+   * bump_mode precedent as `#setPrintMode` — no read route, so the segmented control tracks the operator's
+   * picks). A no-op reselect of the current policy still writes (idempotent server-side). The local pick
+   * is applied ONLY once the write RESOLVES, inside `#mutate`'s action (which then reloads, preserving it
+   * via `#load`'s `?? "gated"` seed): a rejection therefore leaves `drawerPolicies` untouched, so the
+   * segmented control keeps showing the PRIOR policy rather than the value that failed to save, and
+   * surfaces the `errorKey` banner. */
+  async #setDrawerPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
+    await this.#mutate(async () => {
+      await this.api.setDrawerOpenPolicy(locationId, policy);
+      this.drawerPolicies = { ...this.drawerPolicies, [locationId]: policy };
     });
   }
 
@@ -996,6 +1027,40 @@ export class PrintersScreen extends LitElement {
     </li>`;
   }
 
+  /** One policy button in a location's segmented drawer-policy control — the primary/secondary highlight
+   * + click-to-set idiom of the print-mode option above. */
+  #drawerPolicyOption(locationId: string, policy: DrawerOpenPolicy): TemplateResult {
+    return html`<wt-button
+      variant=${(this.drawerPolicies[locationId] ?? "gated") === policy ? "primary" : "secondary"}
+      size="sm"
+      data-test="drawer-policy-${locationId}-${policy}"
+      @click=${() => void this.#setDrawerPolicy(locationId, policy)}
+      >${drawerPolicyName(policy)}</wt-button
+    >`;
+  }
+
+  /** One location's cash-drawer-open policy toggle (counter receipt/drawer §5) — a segmented gated/open
+   * control. Set-only (no read route this slice, the bump_mode precedent): it reflects the SECURE column
+   * default (`gated`) then the operator's picks. */
+  #renderDrawerPolicy(loc: LocationSummary): TemplateResult {
+    return html`<li data-test="drawer-policy-row-${loc.id}">
+      <wt-card>
+        <div class="row">
+          <div class="details">
+            <span class="label" data-test="drawer-location-name-${loc.id}">${loc.name}</span>
+          </div>
+          <div
+            class="mode-options"
+            role="group"
+            aria-label=${`${t("printers.drawer_policy")} ${loc.name}`}
+          >
+            ${DRAWER_POLICIES.map((policy) => this.#drawerPolicyOption(loc.id, policy))}
+          </div>
+        </div>
+      </wt-card>
+    </li>`;
+  }
+
   #renderReceiptSection(): TemplateResult {
     return html`
       <section>
@@ -1016,6 +1081,17 @@ export class PrintersScreen extends LitElement {
             ? html`<p class="empty" data-test="no-locations">${t("printers.no_locations")}</p>`
             : html`<ol>
                 ${this.locations.map((loc) => this.#renderPrintMode(loc))}
+              </ol>`
+        }
+
+        <h3 class="panel-title">${t("printers.drawer_policy_title")}</h3>
+        ${
+          this.locations.length === 0
+            ? html`<p class="empty" data-test="no-locations-drawer">
+                ${t("printers.no_locations")}
+              </p>`
+            : html`<ol>
+                ${this.locations.map((loc) => this.#renderDrawerPolicy(loc))}
               </ol>`
         }
       </section>

@@ -5,7 +5,9 @@ import {
   allergenName,
   allergenStateName,
   breachKindName,
+  drawerPolicyName,
   jobStatusName,
+  printModeName,
   regimeName,
   roleName,
   statusName,
@@ -159,6 +161,22 @@ it("resolves a print-job-status token to Spanish and English, unknown value raw"
   expect(jobStatusName("failed", "es")).toBe("Fallido");
   expect(jobStatusName("failed", "en")).toBe("Failed");
   expect(jobStatusName("paused", "es")).toBe("paused");
+});
+
+it("resolves a receipt-print-mode token to Spanish and English, unknown value raw", () => {
+  expect(printModeName("auto", "es")).toBe("Automático");
+  expect(printModeName("on_request", "es")).toBe("Bajo petición");
+  expect(printModeName("never", "es")).toBe("Nunca");
+  expect(printModeName("auto", "en")).toBe("Automatic");
+  expect(printModeName("sometimes", "es")).toBe("sometimes");
+});
+
+it("resolves a drawer-open-policy token to Spanish and English, unknown value raw", () => {
+  expect(drawerPolicyName("gated", "es")).toBe("Requiere autorización de un responsable");
+  expect(drawerPolicyName("open", "es")).toBe("Cualquier operario");
+  expect(drawerPolicyName("gated", "en")).toBe("Manager approval required");
+  expect(drawerPolicyName("open", "en")).toBe("Any operator");
+  expect(drawerPolicyName("sometimes", "es")).toBe("sometimes");
 });
 
 it("resolves a purchase-VAT-kind token to Spanish and English, unknown value raw", () => {
