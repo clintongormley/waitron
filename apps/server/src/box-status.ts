@@ -6,6 +6,7 @@ import {
   type Database,
   type DeploymentEnvironment,
   type DeploymentMode,
+  type SingletonRole,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { SubscriberLag } from "@waitron/sync";
@@ -30,6 +31,7 @@ export type BoxStatus = {
   time: TimeHealth;
   cert: { available: true; notAfter: string; daysRemaining: number } | { available: false };
   chain: ChainHeight;
+  singletonRole: SingletonRole;
   replication:
     { configured: false } | { configured: true; worstLagSeq: string; subscribers: number };
   backup: { configured: false };
@@ -42,12 +44,18 @@ export type BoxStatusReaders = {
   time: () => Promise<TimeHealth>;
   cert: (() => Promise<CertExpiry>) | undefined;
   chain: () => Promise<ChainHeight>;
+  singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
   duties: () => Record<string, unknown>;
 };
 
 export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxStatus> {
-  const [mode, time, chain] = await Promise.all([readers.mode(), readers.time(), readers.chain()]);
+  const [mode, time, chain, singletonRole] = await Promise.all([
+    readers.mode(),
+    readers.time(),
+    readers.chain(),
+    readers.singletonRole(),
+  ]);
 
   let cert: BoxStatus["cert"] = { available: false };
   if (readers.cert !== undefined) {
@@ -80,6 +88,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     time,
     cert,
     chain,
+    singletonRole,
     replication,
     backup: { configured: false },
     duties: readers.duties(),
@@ -95,6 +104,7 @@ export type BoxStatusDeps = {
   tlsCertPath: string | undefined;
   readReplicationLag: (() => Promise<SubscriberLag[]>) | undefined;
   readMode: () => DeploymentMode;
+  readSingletonRole: () => SingletonRole;
 };
 
 /**
@@ -136,6 +146,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
       const certPath = deps.tlsCertPath;
       const status = await collectBoxStatus({
         mode: () => Promise.resolve(deps.readMode()),
+        singletonRole: () => Promise.resolve(deps.readSingletonRole()),
         environment: deps.environment,
         time: () => checkTimeHealth(),
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),

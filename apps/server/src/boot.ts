@@ -1116,6 +1116,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
       readMode: () => holders.mode.current,
+      // The live singleton role (primary/secondary), read per-request from the same holder the
+      // duty loop reads — box-status now shows BOTH deployment axes (mode + singleton_role, #158).
+      readSingletonRole: () => holders.singletonRole.current,
     },
     log,
   );

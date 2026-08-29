@@ -3,6 +3,7 @@ import { collectBoxStatus, type BoxStatusReaders } from "./box-status.js";
 
 const base: BoxStatusReaders = {
   mode: async () => "primary",
+  singletonRole: async () => "primary",
   environment: "preproduction",
   time: async () => ({ synced: true, source: "timedatectl", warn: false }),
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
@@ -16,6 +17,7 @@ describe("collectBoxStatus", () => {
     const status = await collectBoxStatus(base);
     expect(status).toEqual({
       mode: "primary",
+      singletonRole: "primary",
       environment: "preproduction",
       time: { synced: true, source: "timedatectl", warn: false },
       cert: { available: true, notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 },
@@ -24,6 +26,11 @@ describe("collectBoxStatus", () => {
       backup: { configured: false },
       duties: { "fiscal.drain": { stale: false } },
     });
+  });
+
+  it("passes singletonRole through from its reader", async () => {
+    const status = await collectBoxStatus({ ...base, singletonRole: async () => "secondary" });
+    expect(status.singletonRole).toBe("secondary");
   });
 
   it("reports cert unavailable when no cert reader is configured", async () => {
