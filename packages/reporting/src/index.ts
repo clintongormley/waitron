@@ -1,3 +1,4 @@
+export { currentBusinessDay } from "./business-day.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeVatReturn } from "./vat-return.js";

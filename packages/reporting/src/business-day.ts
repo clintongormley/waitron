@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { Transaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
@@ -84,6 +85,40 @@ export function validateBusinessDayRange(input: {
  */
 function businessDayLocalDate(column: SQL, input: { timeZone: string; dayCutover: string }): SQL {
   return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date`;
+}
+
+/**
+ * Evaluates the venue-local business DATE of an arbitrary `timestamptz` SQL expression, returning it
+ * as a `"YYYY-MM-DD"` string (node-postgres renders a `::date` OID as that text). The executing core
+ * behind `currentBusinessDay` — split out so the cutover-shift maths can be tested against a LITERAL
+ * timestamptz (a fixed, wall-clock-independent instant) rather than the live `now()` the public entry
+ * passes. Package-internal, deliberately NOT in the public barrel (`index.ts`); the route consumes
+ * `currentBusinessDay`. Assumes `nowSql` is validated by the caller.
+ */
+export async function businessDayOf(
+  tx: Transaction,
+  nowSql: SQL,
+  input: { timeZone: string; dayCutover: string },
+): Promise<string> {
+  const { rows } = await tx.execute<{ day: string }>(
+    sql`select ${businessDayLocalDate(nowSql, input)} as day`,
+  );
+  return rows[0]!.day;
+}
+
+/**
+ * Today's venue-local business day (cutover-shifted) as `"YYYY-MM-DD"`, evaluated from the database's
+ * `now()` so the venue's own clock and DST rules decide it — never Node's. Anchors the `/reports`
+ * overview's default period. Invalid inputs are a caller precondition and throw a plain `Error`
+ * (matching this file's validators — no registered error code), before any query runs.
+ */
+export async function currentBusinessDay(
+  tx: Transaction,
+  input: { timeZone: string; dayCutover: string },
+): Promise<string> {
+  validateTimeZone(input.timeZone);
+  validateCutover(input.dayCutover);
+  return businessDayOf(tx, sql`now()`, input);
 }
 
 /**
