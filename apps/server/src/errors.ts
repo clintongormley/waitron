@@ -1107,5 +1107,9 @@ declare module "@waitron/shared" {
     /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
      * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
     "recovery.bundle_invalid": { reason: string };
+    /** The box is missing one of its own persisted secret files, so a complete recovery bundle
+     * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
+     * fault, not a client error: the box has lost part of its own unrecoverable state. */
+    "recovery.state_incomplete": { missing: string };
   }
 }
