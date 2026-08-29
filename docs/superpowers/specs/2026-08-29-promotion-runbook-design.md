@@ -1,7 +1,7 @@
 # The promotion runbook: what "make this primary" executes
 
 **Date:** 2026-08-29
-**Status:** DRAFT — not yet approved. The next design pass flagged by
+**Status:** APPROVED — landed 2026-08-29; implementation plan to follow. The next design pass flagged by
 [`2026-08-29-promotion-failover-and-node-lifecycle-design.md`](2026-08-29-promotion-failover-and-node-lifecycle-design.md)
 §9 item 2 (hereafter **the lifecycle spec**), which called it "the biggest remaining gap." Inherits its
 topology from [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
@@ -369,8 +369,9 @@ a real-PG check the plan must run):
   bundle for the promotion secret; and `packages/verifactu`'s `consultar` client via the cold-restore
   path's month-end reconciliation (§5d step 6), which most likely lives in the reporting/close subsystem,
   not this action.
-- **Does not touch** `docs/backlog.md` or `docs/compliance/*` — those updates belong to the landing flow
-  if and when this design is approved.
+- **`docs/backlog.md`** — the *SIF topology follow-ups* section was updated at land (2026-08-29) to record
+  that the promotion runbook design is done and its implementation plan is next. **Does not touch**
+  `docs/compliance/*`.
 
 ---
 

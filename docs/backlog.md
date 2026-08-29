@@ -428,17 +428,23 @@ decided the topology; §14 defers the buildable pieces. The
 (landed 2026-08-29) is the **first pass over that deferred ground**: it decides node role-resolution on
 boot/return, physical + membership fencing, per-tab ownership/failover, disposal (durability ≠
 convergence), backups + node seeding, AEAT `consultar` recovery, and cloud-failover sizing. Its §9 lists
-seven still-open items; **the ordered promotion runbook (§9 item 2) is the flagged next design pass** —
-what a human's "make this primary" actually executes (claim the singletons, inject/rotate the key ring,
-enable capture/origination on a formerly-passive mirror, start the primary-only workers, resize). NB the
-C2a mirror-mode server built the *seam* (a `deployment.mode` flag + read-only gate) but **not** the
-promote action — nothing refreshes the mode holder or starts the workers at runtime yet (see the
-cloud-mirror C2a notes).
+seven still-open items. The first of those — the **ordered promotion runbook (§9 item 2)** — now has its
+own landed design, the
+[promotion runbook design](superpowers/specs/2026-08-29-promotion-runbook-design.md) (APPROVED 2026-08-29):
+what a human's "make this primary" executes across four targets (local secondary, cloud mirror,
+rejoin-as-secondary, and the no-hot-failover **cold restore from backup**). It decides a live in-process
+mechanism (mount-and-gate, start the primary-only workers without restarting the sale path), a new
+`deployment.singleton_role` axis (the singleton-ownership `role` #33 §8 needs, which `nodes.ts` deferred),
+a remote-first authenticated trigger with a local offline fallback + one break-glass secret, and the
+fence-then-claim-submitter attestation gate. **Next: its implementation plan → build.** NB C2a built the
+`deployment.mode` *seam* but **not** the promote action — nothing refreshes the mode holder or starts the
+workers at runtime yet.
 
-- **Promotion + fencing tooling and the till-side failover list** — the *design* is done (2026-08-29
-  spec); the *tooling* is still gated on that spec's §9 open items — chiefly the promotion runbook
-  (§9.2), the membership/rejoin wire-protocol (§9.1), and the till-failover detail (§9.5). Boot-time
-  role resolution, continuous conflict-detection, the "one primary" invariant.
+- **Promotion + fencing tooling and the till-side failover list** — the promotion-runbook *design* is done
+  (its own spec, above); **next is its implementation plan + build**. The rest of the tooling is still
+  gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol (§9.1) and the
+  till-failover detail (§9.5). Boot-time role resolution, continuous conflict-detection, the "one primary"
+  invariant.
 - **Split-brain** — largely worked through by the 2026-08-29 spec: server-level fencing (physical +
   membership, §3.5), per-tab single-writer ownership with transfer-not-share (§8), and the bounded worst
   case (a detectable/refundable double-bill, never a forked chain, §8.4). Remaining cross-cutting seams
