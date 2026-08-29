@@ -505,6 +505,13 @@
       "when": 1788011128654,
       "tag": "0071_deployment_singleton_role",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1788051600000,
+      "tag": "0072_mirror_config",
+      "breakpoints": true
     }
   ]
 }
