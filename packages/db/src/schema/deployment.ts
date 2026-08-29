@@ -21,7 +21,14 @@ export const deployment = pgTable(
   {
     id: integer("id").primaryKey(),
     environment: text("environment").notNull(),
+    // Which role this database plays in the cloud-mirror topology (C2a design §3): a `primary`
+    // writes and originates; a `mirror` pulls + applies and serves read-only. Read at runtime so a
+    // later promotion needs no restart. Default 'primary' so every existing deployment is unchanged.
+    mode: text("mode").notNull().default("primary"),
     stampedAt: timestamp("stamped_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("deployment_singleton_ck", sql`${t.id} = 1`)],
+  (t) => [
+    check("deployment_singleton_ck", sql`${t.id} = 1`),
+    check("deployment_mode_ck", sql`${t.mode} in ('primary', 'mirror')`),
+  ],
 );

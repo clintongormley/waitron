@@ -484,6 +484,13 @@
       "when": 1787903451013,
       "tag": "0068_receipt_printing_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1787917245946,
+      "tag": "0069_deployment_mode",
+      "breakpoints": true
     }
   ]
 }

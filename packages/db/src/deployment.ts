@@ -49,7 +49,9 @@ export async function readDeploymentEnvironment(
 /**
  * Records which environment this database belongs to. Idempotent for the same value; a DIFFERENT
  * value is refused rather than overwritten, because the rows already written under the first one
- * cannot be moved (the design's §2).
+ * cannot be moved (the design's §2). This immutability is the ENVIRONMENT's alone: the same singleton
+ * row also carries `mode` (added 2026-08-28, cloud-mirror C2a), which IS mutable — `setDeploymentMode`
+ * below promotes a mirror to a primary in place (design §10), with no such "already stamped" guard.
  */
 export async function stampDeployment(
   db: Database,
@@ -64,4 +66,39 @@ export async function stampDeployment(
     });
   }
   await db.insert(deployment).values({ id: 1, environment });
+}
+
+/** Which role this database plays — a `primary` writes and originates; a `mirror` pulls + applies and
+ * serves read-only (C2a design §3). Narrowed to the two-value union for the same reason
+ * `DeploymentEnvironment` is: an unrepresentable value is a `tsc` error, not a runtime CHECK violation. */
+export type DeploymentMode = "primary" | "mirror";
+
+/** The role this database plays, or `"primary"` when nothing has been stamped — an unstamped database
+ * is a primary. Same `to_regclass` probe (not a caught undefined-table error) `readDeploymentEnvironment`
+ * uses and for the same reason: a failed statement would poison the caller's transaction. */
+export async function readDeploymentMode(db: Database): Promise<DeploymentMode> {
+  const present = await db.execute<{ exists: boolean }>(
+    sql`select to_regclass('public.deployment') is not null as exists`,
+  );
+  if (present.rows[0]?.exists !== true) return "primary";
+  const rows = await db.execute<{ mode: DeploymentMode }>(
+    sql`select mode from deployment where id = 1`,
+  );
+  return rows.rows[0]?.mode ?? "primary";
+}
+
+/** Sets this database's role. Mutable by design — a mirror is PROMOTED to a primary (design §10) — so,
+ * unlike `stampDeployment`'s immutable environment, there is no "already stamped" guard. An OWNER-role
+ * write: `app_user` holds no UPDATE on `deployment` (the grant read-back asserts it), so this runs on the
+ * provisioning/owner connection, never the app pool. Requires the singleton row (stamp the environment
+ * first) — a 0-row UPDATE is a silent no-op on an unstamped DB, which never happens for a real mirror. */
+export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
+  const result = await db.execute<{ id: number }>(
+    sql`update deployment set mode = ${mode} where id = 1 returning id`,
+  );
+  // Fail loud on a 0-row update: the singleton must already exist (stamp first). A silent no-op here
+  // would let a mis-sequenced promotion "succeed" while leaving the database in the wrong mode.
+  if (result.rows.length === 0) {
+    throw new AppError("deployment.not_stamped", {});
+  }
 }

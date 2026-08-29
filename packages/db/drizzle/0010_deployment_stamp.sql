@@ -4,6 +4,12 @@
 -- pre-production database can never be promoted, because its invoice series has a hole no stamp
 -- can fill).
 --
+-- 2026-08-28 (cloud-mirror C2a): "written once and never updated" describes the `environment` column
+-- ONLY. This same singleton row later gained a `mode` column (`primary`|`mirror`), added by
+-- drizzle/0069_deployment_mode.sql, and `mode` IS mutable — a mirror is PROMOTED to a primary in
+-- place via a single owner-role `UPDATE deployment SET mode='primary'` (C2a design §10). No
+-- replace-not-update rule applies to it; only `environment` is fixed for the life of the database.
+--
 -- Deliberately NOT tenant-scoped and NOT RLS-protected: it is a fact about the whole database, so
 -- there is no tenant to isolate it by, and every role must be able to read it before any tenant
 -- scope exists. It carries no secret — the environment name is already in the host's own config.
