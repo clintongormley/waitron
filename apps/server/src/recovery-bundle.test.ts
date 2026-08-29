@@ -66,4 +66,31 @@ describe("recovery-bundle envelope", () => {
       new AppError("recovery.bundle_invalid", { reason: "malformed" }),
     );
   });
+
+  it("rejects an (N,r) pair that passes both bounds but breaches scrypt maxmem", () => {
+    // N=2^20 and r=32 each pass their individual bound (N not > MAX_SCRYPT_N; r not > 32), but
+    // 128*N*r ≈ 4GB exceeds maxmem — scryptSync would throw a RAW error without the guard.
+    const env = JSON.parse(encryptBundle(FILES, PASS));
+    env.kdf.N = 2 ** 20;
+    env.kdf.r = 32;
+    expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
+      new AppError("recovery.bundle_invalid", { reason: "malformed" }),
+    );
+  });
+
+  it("rejects an envelope with a truncated iv (Invalid IV length) as bundle_invalid", () => {
+    const env = JSON.parse(encryptBundle(FILES, PASS));
+    env.iv = "AA"; // decodes to 1 byte, not 12
+    expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
+      new AppError("recovery.bundle_invalid", { reason: "malformed" }),
+    );
+  });
+
+  it("rejects an envelope with a truncated tag (Invalid auth tag length) as bundle_invalid", () => {
+    const env = JSON.parse(encryptBundle(FILES, PASS));
+    env.tag = "AA"; // decodes to 1 byte, not 16
+    expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
+      new AppError("recovery.bundle_invalid", { reason: "malformed" }),
+    );
+  });
 });

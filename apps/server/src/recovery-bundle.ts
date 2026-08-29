@@ -1,4 +1,10 @@
-import { randomBytes, scryptSync, createCipheriv, createDecipheriv } from "node:crypto";
+import {
+  randomBytes,
+  scryptSync,
+  createCipheriv,
+  createDecipheriv,
+  type DecipherGCM,
+} from "node:crypto";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -78,7 +84,16 @@ function parseEnvelope(envelopeJson: string): Envelope {
     (kdf.r as number) < 1 ||
     (kdf.r as number) > 32 ||
     (kdf.p as number) < 1 ||
-    (kdf.p as number) > 16
+    (kdf.p as number) > 16 ||
+    // scrypt's memory use is 128*N*r bytes; N and r can BOTH pass their individual bounds
+    // (e.g. N=2^20, r=32 ≈ 4GB) and still breach maxmem, which would throw a raw
+    // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync rather than our contract error.
+    128 * (kdf.N as number) * (kdf.r as number) > SCRYPT.maxmem ||
+    // Decoded byte lengths: a short/odd base64 salt/iv/tag passes the typeof check above but makes
+    // scryptSync / createDecipheriv / setAuthTag throw a raw length error later.
+    Buffer.from(kdf.salt, "base64").length !== 16 ||
+    Buffer.from(e.iv, "base64").length !== 12 ||
+    Buffer.from(e.tag, "base64").length !== 16
   ) {
     throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
   }
@@ -87,15 +102,24 @@ function parseEnvelope(envelopeJson: string): Envelope {
 
 export function decryptBundle(envelopeJson: string, passphrase: string): BundleFiles {
   const env = parseEnvelope(envelopeJson);
-  const key = deriveKey(
-    passphrase,
-    Buffer.from(env.kdf.salt, "base64"),
-    env.kdf.N,
-    env.kdf.r,
-    env.kdf.p,
-  );
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(env.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(env.tag, "base64"));
+  let decipher: DecipherGCM;
+  try {
+    const key = deriveKey(
+      passphrase,
+      Buffer.from(env.kdf.salt, "base64"),
+      env.kdf.N,
+      env.kdf.r,
+      env.kdf.p,
+    );
+    decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(env.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(env.tag, "base64"));
+  } catch {
+    // Belt-and-braces: parseEnvelope already rejects the reachable KDF/length cases, but any
+    // residual raw error from key derivation or cipher setup on a shape-valid but hostile envelope
+    // becomes our contract error, never a raw 500 on the operator recovery path. NOT
+    // passphrase_invalid: this is a malformed bundle, not a failed authentication.
+    throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
+  }
   let plaintext: Buffer;
   try {
     plaintext = Buffer.concat([decipher.update(Buffer.from(env.ct, "base64")), decipher.final()]);
