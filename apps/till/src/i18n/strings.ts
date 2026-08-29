@@ -29,6 +29,8 @@ export const en = {
   "action.back": "Back",
   "action.cancel": "Cancel",
   "action.hold": "Hold",
+  // The confirm verb of the reusable supervisor-override dialog (cash-drawer-authorization §5).
+  "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
   "tender.card": "Card",
@@ -49,6 +51,15 @@ export const en = {
   "login.no_staff": "No staff available",
   "login.load_failed": "Could not load staff, try again",
   "login.error": "Could not log in, try again",
+  // Supervisor-override dialog (cash-drawer-authorization §5) — the reusable "authorize this action"
+  // modal a non-permitted operator gets under a gated policy: pick an eligible supervisor, then enter
+  // their PIN. `override.error` is the generic in-dialog failure (a wrong PIN surfaces the shared
+  // `pin.invalid` copy instead); `override.no_supervisors` is the empty-picker state.
+  "override.title": "Supervisor authorization",
+  "override.pick_supervisor": "Choose a supervisor",
+  "override.enter_pin": "Enter the supervisor's PIN",
+  "override.no_supervisors": "No supervisors available",
+  "override.error": "Could not authorize, try again",
   // Weight entry (priced-by-weight products)
   "weigh.prompt": "Enter weight (kg)",
   // Held (parked) orders
@@ -278,6 +289,7 @@ export const es: Record<StringKey, string> = {
   "action.back": "Atrás",
   "action.cancel": "Cancelar",
   "action.hold": "Aparcar",
+  "action.authorize": "Autorizar",
   "tender.cash": "Efectivo",
   "tender.card": "Tarjeta",
   "tender.card_ref": "Número de operación (opcional)",
@@ -293,6 +305,11 @@ export const es: Record<StringKey, string> = {
   "login.no_staff": "No hay personal disponible",
   "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
+  "override.title": "Autorización de un responsable",
+  "override.pick_supervisor": "Elige a un responsable",
+  "override.enter_pin": "Introduce el PIN del responsable",
+  "override.no_supervisors": "No hay responsables disponibles",
+  "override.error": "No se pudo autorizar, inténtalo de nuevo",
   "weigh.prompt": "Introduce el peso (kg)",
   "held.label_prompt": "Nombra este pedido (opcional)",
   "held.title": "Pedidos aparcados",

@@ -18,6 +18,8 @@ import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-expo-screen.js";
+// The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
+import "./widgets/supervisor-override-dialog.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -356,6 +358,17 @@ export class TillApp extends LitElement {
   @state() private receipt: ReceiptConfig = {};
   /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: StringKey;
+  /**
+   * The eligible authorizers for an in-flight cash-drawer override (cash-drawer-authorization §5).
+   * `undefined` means the override dialog is closed; a (possibly empty) array opens it. Set only when a
+   * gated `POST /api/drawer/open` refuses the operator with `authorization.not_permitted` (403) and the
+   * authorizer roster has been fetched; cleared on confirm-success, cancel, or a non-retryable failure.
+   */
+  @state() private overrideAuthorizers?: StaffMember[];
+  /** A raw error code to show INSIDE the open override dialog on a failed authorize — a wrong
+   * supervisor PIN (`pin.invalid`). Nulled before every attempt so a repeat re-shows; the dialog maps
+   * it to copy (never the raw code). */
+  @state() private overrideError: string | null = null;
   /**
    * The outcome of the most recent DECLINED/`timeout`/`network_unavailable` `collect-card` attempt
    * (integrated card terminal, sub-project 7 Task 8) — `undefined` once none is pending. Set by
@@ -1023,20 +1036,77 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Open the cash drawer (counter receipt/drawer §5) — the ticket screen's "Abrir cajón" button
-   * (`till-ticket-view` dispatches `open-drawer`). Takes no id: the server resolves the till's printer
-   * from its own `cfg` and AUDITS the open (`drawer_opens('manual')`). A till with no receipt printer set
-   * rejects `{ code: "drawer.no_printer" }`, and a transient failure rejects too — both non-fatal, both
-   * surfaced as the generic `drawer.error` banner (never an unhandled rejection or the raw code, the
+   * Open the cash drawer (counter receipt/drawer §5 + cash-drawer-authorization §5) — the ticket
+   * screen's "Abrir cajón" button (`till-ticket-view` dispatches `open-drawer`). OPTIMISTIC: it always
+   * tries the direct open first and holds NO policy or role knowledge, so it stays correct if the
+   * location's `drawer_open_policy` changes mid-shift.
+   *
+   * On the server's `authorization.not_permitted` (403 — a gated policy + an operator lacking
+   * `cash.drawer`) it opens the reusable supervisor-override dialog (see {@link #openOverrideDialog}).
+   * Any OTHER failure — a `drawer.no_printer` (no receipt printer set) or a transient one — is non-fatal
+   * and surfaces the generic `drawer.error` banner (never an unhandled rejection or the raw code, the
    * `#onConfirmPayment` convention). Writes only reactive state, so no `isConnected` guard is needed.
    */
   async #onOpenDrawer(): Promise<void> {
     this.errorKey = undefined;
     try {
       await this.api.openDrawer();
+    } catch (error) {
+      if ((error as { code?: string }).code === "authorization.not_permitted") {
+        await this.#openOverrideDialog();
+      } else {
+        this.errorKey = "drawer.error";
+      }
+    }
+  }
+
+  /**
+   * The operator lacks `cash.drawer` under a gated policy: fetch the eligible supervisors and open the
+   * override dialog with them. A failed fetch degrades to the generic `drawer.error` banner (no dialog)
+   * — the operator retries. NO client-side policy or role knowledge: the picker is the server's list.
+   */
+  async #openOverrideDialog(): Promise<void> {
+    try {
+      const authorizers = await this.api.listDrawerAuthorizers();
+      this.overrideError = null;
+      this.overrideAuthorizers = authorizers;
     } catch {
       this.errorKey = "drawer.error";
     }
+  }
+
+  /**
+   * Retry the drawer open with the supervisor override the dialog emitted (`{ personId, pin }` — the
+   * `authorize()` override shape). On success the dialog closes; on `pin.invalid` (a wrong supervisor
+   * PIN) the dialog stays open showing the retry error; on any other failure (`drawer.no_printer`, a
+   * transient one) the dialog closes and the generic `drawer.error` banner shows. The PIN reaches only
+   * this authenticated `openDrawer` request — it is never stored on the app or logged.
+   */
+  async #onOverrideConfirm(event: Event): Promise<void> {
+    const { personId, pin } = (event as CustomEvent<{ personId: string; pin: string }>).detail;
+    this.overrideError = null; // fresh attempt: clear any prior error so a repeat re-shows
+    try {
+      await this.api.openDrawer({ personId, pin });
+      this.#closeOverrideDialog();
+    } catch (error) {
+      if ((error as { code?: string }).code === "pin.invalid") {
+        this.overrideError = "pin.invalid"; // keep the dialog open for a retry
+      } else {
+        this.#closeOverrideDialog();
+        this.errorKey = "drawer.error";
+      }
+    }
+  }
+
+  /** Dismiss the override dialog without opening the drawer. */
+  #onOverrideCancel(): void {
+    this.#closeOverrideDialog();
+  }
+
+  /** Close the override dialog and clear its error. */
+  #closeOverrideDialog(): void {
+    this.overrideAuthorizers = undefined;
+    this.overrideError = null;
   }
 
   /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
@@ -1341,6 +1411,8 @@ export class TillApp extends LitElement {
         @new-sale=${() => this.#onNewSale()}
         @reprint=${() => void this.#onReprint()}
         @open-drawer=${() => void this.#onOpenDrawer()}
+        @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
+        @override-cancel=${() => this.#onOverrideCancel()}
         @show-schedule=${() => this.#onShowSchedule()}
         @show-floor=${() => void this.#onShowFloor()}
         @floor-refresh=${() => void this.#refreshFloor()}
@@ -1356,6 +1428,17 @@ export class TillApp extends LitElement {
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
+        <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
+             override is in flight. It takes the eligible authorizers + the retry error as PROPS and emits
+             override-confirm/override-cancel (wired on the app wrapper above) — the app owns the request. -->
+        ${
+          this.overrideAuthorizers !== undefined
+            ? html`<till-supervisor-override-dialog
+                .authorizers=${this.overrideAuthorizers}
+                .error=${this.overrideError}
+              ></till-supervisor-override-dialog>`
+            : nothing
+        }
         <!-- keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
              the whole screen subtree, repainting every child in the new language (the screens hold no
              LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it. -->

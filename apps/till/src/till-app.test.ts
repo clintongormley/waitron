@@ -212,6 +212,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     // resolved; the failure tests override them to reject.
     reprint: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
+    // Cash-drawer-authorization (§5): the eligible supervisors the override dialog picks from, fetched
+    // only when a gated 403 sends the operator into the override flow. Default roster of one.
+    listDrawerAuthorizers: vi
+      .fn()
+      .mockResolvedValue([{ personId: "sup-1", displayName: "Responsable" }]),
     // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T) + the per-line advance.
     listStations: vi.fn().mockResolvedValue([defaultStation]),
     getStationQueue: vi.fn().mockResolvedValue([]),
@@ -261,6 +266,12 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+/** The supervisor-override dialog (cash-drawer-authorization §5), present only while an override is
+ * in flight; typed loosely enough to read its `authorizers`/`error` props without importing the class. */
+const overrideDialog = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement & { authorizers: unknown; error: string | null }>(
+    "till-supervisor-override-dialog",
+  );
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
@@ -290,6 +301,16 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
   await flush(el);
   return counter(el)!;
+}
+
+/** Boots, logs in, rings a cash sale — leaving the app on the ticket screen where the Reprint / Abrir
+ * cajón levers live (counter receipt/drawer §5). */
+async function toTicket(el: TillApp): Promise<void> {
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  await el.updateComplete;
+  emit(c, "confirm-payment", { method: "cash", amount: "5" });
+  await flush(el);
 }
 
 /** Boots, logs in, opens the floor, then opens `table`'s tab — leaving the app on the table-order
@@ -593,6 +614,130 @@ describe("till-app", () => {
     expect(banner!.textContent).toContain(t("drawer.error"));
     // Non-fatal: the ticket is still on screen.
     expect(ticket(el)).not.toBeNull();
+  });
+
+  // ── Cash-drawer-authorization (§5): the OPTIMISTIC 403 → supervisor-override dialog → retry flow ──
+  // The till carries NO policy or role knowledge: it always TRIES the direct open, and only on the
+  // server's `authorization.not_permitted` (a gated policy + an operator who lacks cash.drawer) does it
+  // fetch the eligible supervisors and open the override dialog. This stays correct if the location's
+  // policy changes mid-shift.
+
+  it("a direct open (200 first try) never opens the override dialog and fetches no authorizers", async () => {
+    const { el } = await mountApp(); // openDrawer resolves by default
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    expect(currentApi.openDrawer).toHaveBeenCalledWith(); // tried directly, no override
+    expect(overrideDialog(el)).toBeNull(); // no dialog
+    expect(currentApi.listDrawerAuthorizers).not.toHaveBeenCalled(); // no fetch
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("a gated 403 fetches the eligible supervisors and opens the override dialog", async () => {
+    const { el } = await mountApp({
+      openDrawer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+
+    // The 403 sent the operator into the override flow: authorizers fetched, dialog open with them.
+    expect(currentApi.listDrawerAuthorizers).toHaveBeenCalledTimes(1);
+    const dialog = overrideDialog(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.authorizers).toEqual([{ personId: "sup-1", displayName: "Responsable" }]);
+    // No error banner yet — the 403 is an expected branch, not a failure to surface.
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("override-confirm retries openDrawer with { personId, pin } and closes the dialog on success", async () => {
+    // First (direct) open is refused 403; the override retry succeeds.
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockResolvedValueOnce(undefined);
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    expect(overrideDialog(el)).not.toBeNull();
+
+    // The dialog emits the picked supervisor + PIN; the app retries with it as the override.
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el);
+
+    expect(openDrawer).toHaveBeenNthCalledWith(2, { personId: "sup-1", pin: "4321" });
+    expect(overrideDialog(el)).toBeNull(); // closed on success
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("a wrong override PIN keeps the dialog open showing the pin.invalid retry error", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.invalid" });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "0000" });
+    await flush(el);
+
+    // Still open for a retry, told to show the wrong-PIN error; no app-level banner.
+    const dialog = overrideDialog(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.error).toBe("pin.invalid");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("a drawer.no_printer on the override closes the dialog and surfaces the generic drawer.error banner", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "drawer.no_printer" });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el);
+
+    expect(overrideDialog(el)).toBeNull(); // closed
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner).not.toBeNull();
+    expect(banner!.textContent).toContain(t("drawer.error"));
+  });
+
+  it("override-cancel closes the dialog with no banner and no further openDrawer call", async () => {
+    const openDrawer = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    expect(overrideDialog(el)).not.toBeNull();
+
+    emit(overrideDialog(el)!, "override-cancel");
+    await flush(el);
+    expect(overrideDialog(el)).toBeNull();
+    expect(openDrawer).toHaveBeenCalledTimes(1); // only the initial direct attempt
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("a failed authorizers fetch degrades to the drawer.error banner, opening no dialog", async () => {
+    const { el } = await mountApp({
+      openDrawer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      listDrawerAuthorizers: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+
+    expect(overrideDialog(el)).toBeNull();
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner).not.toBeNull();
+    expect(banner!.textContent).toContain(t("drawer.error"));
   });
 
   it("reprint: a rejection surfaces the reprint.error banner, never an unhandled rejection", async () => {
