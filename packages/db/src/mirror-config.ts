@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
+import { mirrorConfig } from "./schema/mirror-config.js";
 
 /**
  * A cloud mirror's non-secret connection config (sync cloud-mirror C2b): where the mirror dials to
@@ -50,13 +51,24 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
  * app pool.
  */
 export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Promise<void> {
-  await db.execute(sql`
-    insert into mirror_config (id, relay_url, box_hostname, box_ca_pem)
-    values (1, ${cfg.relayUrl}, ${cfg.boxHostname}, ${cfg.boxCaPem})
-    on conflict (id) do update set
-      relay_url = excluded.relay_url,
-      box_hostname = excluded.box_hostname,
-      box_ca_pem = excluded.box_ca_pem,
-      adopted_at = now()
-  `);
+  // Uses the Drizzle table object (not raw SQL) — the same split `deployment.ts` uses, where
+  // `stampDeployment` writes via `db.insert(deployment)`. `now()` on the update refreshes
+  // `adopted_at` each re-adoption; the read side keeps its raw `to_regclass` probe.
+  await db
+    .insert(mirrorConfig)
+    .values({
+      id: 1,
+      relayUrl: cfg.relayUrl,
+      boxHostname: cfg.boxHostname,
+      boxCaPem: cfg.boxCaPem,
+    })
+    .onConflictDoUpdate({
+      target: mirrorConfig.id,
+      set: {
+        relayUrl: cfg.relayUrl,
+        boxHostname: cfg.boxHostname,
+        boxCaPem: cfg.boxCaPem,
+        adoptedAt: sql`now()`,
+      },
+    });
 }

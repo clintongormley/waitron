@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createPgliteDb } from "./client.js";
 import { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
+import { captureError } from "./testing/errors.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
 
 // PGlite, not real Postgres: the accessor round-trip is pure SQL logic (upsert/read of a
@@ -56,5 +57,16 @@ describe("mirror_config accessors", () => {
       boxHostname: "b",
       boxCaPem: "b",
     });
+  });
+
+  it("permits at most one row — the singleton CHECK rejects any id but 1", async () => {
+    // mirror_config_singleton_ck pins id = 1, so a second row can never exist and "what is this
+    // mirror's config" can never have two answers. Mirrors deployment.test.ts's own singleton test.
+    const error = await captureError(() =>
+      pg.db.execute(
+        sql`insert into mirror_config (id, relay_url, box_hostname, box_ca_pem) values (2, 'x', 'x', 'x')`,
+      ),
+    );
+    expect(error).toBeDefined();
   });
 });

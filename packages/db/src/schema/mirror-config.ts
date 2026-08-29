@@ -1,4 +1,5 @@
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * The cloud mirror's connection config (sync cloud-mirror C2b). A whole-database operational
@@ -14,10 +15,14 @@ import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
  * that fails against any database that already ran 0071. The accessors are exported from the
  * package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
  */
-export const mirrorConfig = pgTable("mirror_config", {
-  id: integer("id").primaryKey().notNull().default(1),
-  relayUrl: text("relay_url").notNull(),
-  boxHostname: text("box_hostname").notNull(),
-  boxCaPem: text("box_ca_pem").notNull(),
-  adoptedAt: timestamp("adopted_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const mirrorConfig = pgTable(
+  "mirror_config",
+  {
+    id: integer("id").primaryKey().notNull().default(1),
+    relayUrl: text("relay_url").notNull(),
+    boxHostname: text("box_hostname").notNull(),
+    boxCaPem: text("box_ca_pem").notNull(),
+    adoptedAt: timestamp("adopted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("mirror_config_singleton_ck", sql`${t.id} = 1`)],
+);
