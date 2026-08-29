@@ -10,11 +10,22 @@ import "./errors.js";
  * env the supervisor sources on the next boot so the mirror enters the trading branch (design §6). */
 export type PersistTradingArgs = TradingConfig;
 
-/** The operator's two inputs (design §8): the primary's address and an admin login for it. The admin
- * credential authorises the bundle mint on the primary; it never touches the mirror's own database. */
+/** The admin login the operator supplies for the PRIMARY (design §8). It is the SAME shape the primary's
+ * `POST /management-api/mirror-bundle` authenticates — the dashboard-login body (`mirror-bundle-api.ts`
+ * screens exactly these fields) — carried as a structured object end to end so the whole chain
+ * (connect screen → `/setup-api/adopt` → `fetchMirrorBundle` → the primary) is compile-time safe rather
+ * than a JSON string threaded through an opaque `string`. `totp` is present only when the admin has TOTP
+ * enrolled. It authorises the bundle mint on the primary; it never touches the mirror's own database. */
+export interface AdoptCredential {
+  personId: string;
+  password: string;
+  totp?: string;
+}
+
+/** The operator's two inputs (design §8): the primary's address and the admin login for it. */
 export interface AdoptRequest {
   primaryUrl: string;
-  credential: string;
+  credential: AdoptCredential;
 }
 
 export interface AdoptDeps {
@@ -28,7 +39,7 @@ export interface AdoptDeps {
   /** Fetches the bundle from the primary. Injected so the HTTP call (Task 9) is stubbable and the
    * orchestration is testable against a hand-built bundle. Throws `mirror.bundle_fetch_failed` on a
    * failed fetch — surfaced by the fetcher, not this orchestrator. */
-  fetchBundle: (primaryUrl: string, credential: string) => Promise<MirrorBundle>;
+  fetchBundle: (primaryUrl: string, credential: AdoptCredential) => Promise<MirrorBundle>;
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;

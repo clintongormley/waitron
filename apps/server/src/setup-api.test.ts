@@ -13,7 +13,7 @@ import {
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { ProvisionRequest } from "./provision.js";
-import type { AdoptRequest } from "./adopt.js";
+import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import { validateAeatCert, type AeatCert } from "./aeat-credential.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
@@ -716,12 +716,12 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
 // same deps gate + `setup.not_ready`/`setup.already_provisioning` refusals, and the same
 // deferred-restart shape provision uses — these tests copy those tests' shape.
 const PRIMARY_URL = "https://primary.example";
-// The admin login the primary authenticates, carried as the single opaque `credential` string (the
-// connect screen serialises `{ personId, password, totp? }` into it — see mirror-bundle-fetch.ts).
-const ADOPT_CREDENTIAL = JSON.stringify({
+// The admin login the primary authenticates, carried as a STRUCTURED `AdoptCredential` object end to
+// end (the connect screen sends `{ personId, password, totp? }` directly — see mirror-bundle-fetch.ts).
+const ADOPT_CREDENTIAL: AdoptCredential = {
   personId: "88888888-8888-8888-8888-888888888888",
   password: "correct-horse-battery",
-});
+};
 
 /** Adopt deps, each a spy. An adopt-only box wires just `adopt` + `requestRestart` (the two the adopt
  * route's gate needs); the provision deps are irrelevant to this route and left unwired. */
@@ -877,6 +877,113 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       expect(requestRestart).not.toHaveBeenCalled();
     },
   );
+
+  // Per-field credential validation happens at the MIRROR's own boundary (400), so a wrong-shape login
+  // never reaches the fetcher to fail the primary and surface as an opaque 502. `credential.password`'s
+  // value is NEVER echoed — the error names the field only. A non-object credential is rejected too.
+  it.each([
+    ["credential.personId", (c: Record<string, unknown>) => delete c.personId],
+    ["credential.password", (c: Record<string, unknown>) => delete c.password],
+  ] as const)(
+    "rejects a credential missing %s with 400 setup.request_invalid, without adopting",
+    async (field, mutate) => {
+      const app = new Hono();
+      const { deps, adopt } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const cred: Record<string, unknown> = { ...ADOPT_CREDENTIAL };
+      mutate(cred);
+      const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: cred });
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe("setup.request_invalid");
+      expect(json.error.params.field).toBe(field);
+      expect(adopt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a non-object credential with 400 setup.request_invalid naming 'credential'", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: "1234" });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe("setup.request_invalid");
+    expect(json.error.params.field).toBe("credential");
+    expect(adopt).not.toHaveBeenCalled();
+  });
+
+  it("accepts a credential carrying an optional totp and adopts (200)", async () => {
+    const app = new Hono();
+    const { deps, adopt, adoptRequests } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const credential: AdoptCredential = { ...ADOPT_CREDENTIAL, totp: "123456" };
+    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential });
+    expect(res.status).toBe(200);
+    expect(adopt).toHaveBeenCalledTimes(1);
+    expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential });
+    await tick();
+  });
+
+  // The one-shot latch is SHARED across provision and adopt (a box is set up as a primary XOR a mirror),
+  // so a start of either verb must latch out a concurrent start of the OTHER. Untested cross-route, a
+  // mutation splitting the shared `provisioning` into two independent latches passed every same-route
+  // test — this pins that they are one latch, in both directions.
+  it("shares the one-shot latch across routes: provision in flight blocks adopt, and adopt blocks provision", async () => {
+    // provision in flight → a concurrent adopt is refused 409
+    {
+      const app = new Hono();
+      let release!: (v: VenueResult) => void;
+      const pending = new Promise<VenueResult>((resolve) => {
+        release = resolve;
+      });
+      const provision = vi.fn(() => pending);
+      const adopt = vi.fn(async () => ({ tenantId: TENANT_ID }));
+      const { deps } = makeDeps({ provision, adopt });
+      mountSetup(app, deps, noopLog);
+
+      const first = postProvision(app, demoBody());
+      await tick(); // the provision holds the shared latch
+      const blocked = await postAdopt(app, adoptBody());
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toEqual({
+        error: { code: "setup.already_provisioning", params: {} },
+      });
+      expect(adopt).not.toHaveBeenCalled(); // the shared latch refused it synchronously
+
+      release(makeVenueResult());
+      expect((await first).status).toBe(200);
+      await tick();
+    }
+
+    // adopt in flight → a concurrent provision is refused 409 (the reverse direction)
+    {
+      const app = new Hono();
+      let release!: (v: { tenantId: string }) => void;
+      const pending = new Promise<{ tenantId: string }>((resolve) => {
+        release = resolve;
+      });
+      const adopt = vi.fn(() => pending);
+      const { deps, provision } = makeDeps({ adopt });
+      mountSetup(app, deps, noopLog);
+
+      const first = postAdopt(app, adoptBody());
+      await tick(); // the adopt holds the shared latch
+      const blocked = await postProvision(app, demoBody());
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toEqual({
+        error: { code: "setup.already_provisioning", params: {} },
+      });
+      expect(provision).not.toHaveBeenCalled(); // the shared latch refused it synchronously
+
+      release({ tenantId: TENANT_ID });
+      expect((await first).status).toBe(200);
+      await tick();
+    }
+  });
 
   it("answers 503 setup.not_ready when the adopt dep is unwired", async () => {
     const app = new Hono();

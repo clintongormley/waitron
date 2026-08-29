@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { afterEach, describe, expect, it } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
+import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 
@@ -32,12 +33,12 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   syncToken: "plaintext-sync-token",
 };
 
-// The admin login the primary authenticates: the connect screen serialises `{ personId, password,
-// totp? }` into the single `credential` string, which the fetcher forwards VERBATIM as the JSON body.
-const CREDENTIAL = JSON.stringify({
+// The admin login the primary authenticates — the structured `AdoptCredential` the fetcher serialises
+// as the JSON request body (`{ personId, password, totp? }`, the dashboard-login shape).
+const CREDENTIAL: AdoptCredential = {
   personId: "99999999-9999-9999-9999-999999999999",
   password: "correct-horse-battery",
-});
+};
 
 const servers: ServerType[] = [];
 
@@ -80,11 +81,11 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(bundle).toEqual(SAMPLE_BUNDLE);
     expect(bundle.syncToken).toBe("plaintext-sync-token");
     // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
-    // VERBATIM as the JSON body (the shape the primary's dashboard-login screen authenticates).
+    // OBJECT serialised as the JSON body (the shape the primary's dashboard-login screen authenticates).
     expect(seen).toEqual({
       method: "POST",
       path: "/management-api/mirror-bundle",
-      body: CREDENTIAL,
+      body: JSON.stringify(CREDENTIAL),
     });
   });
 

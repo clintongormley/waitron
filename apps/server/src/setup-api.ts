@@ -5,7 +5,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
-import type { AdoptRequest } from "./adopt.js";
+import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import { validateAeatCert } from "./aeat-credential.js";
 import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -417,11 +417,19 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runAdopt(c, log, async () => {
       try {
         // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
-        // through to the field screen below (a 400) rather than an opaque 500. The credential is NEVER
-        // logged — `asString` echoes the field NAME only, never its value.
+        // through to the field screen below (a 400) rather than an opaque 500. Validate the credential
+        // PER FIELD here — the primary's login object (`personId`/`password` required, `totp` optional) —
+        // so a wrong-shape body is refused at the mirror's OWN boundary as a clean `setup.request_invalid`
+        // 400, never forwarded to fail the primary and surface as an opaque `mirror.bundle_fetch_failed`
+        // 502. The password/TOTP is NEVER logged — `asString` echoes the field NAME only, never its value.
         const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
         const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-        const credential = asString(body.credential, "credential");
+        const cred = asObject(body.credential, "credential");
+        const credential: AdoptCredential = {
+          personId: asString(cred.personId, "credential.personId"),
+          password: asString(cred.password, "credential.password"),
+          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+        };
 
         const { tenantId } = await adopt({ primaryUrl, credential });
 

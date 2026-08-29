@@ -2,13 +2,14 @@
 // (adopt.ts). It POSTs the operator's admin credential to the primary's
 // `POST /management-api/mirror-bundle` (mirror-bundle-api.ts) and parses the returned `MirrorBundle`.
 //
-// CREDENTIAL SHAPE. The primary authenticates the SAME body its dashboard login does — a JSON object
-// `{ personId, password, totp? }` (mirror-bundle-api.ts screens exactly those fields). `AdoptRequest`
-// (adopt.ts) types `credential` a single opaque `string` so this transport owns the encoding: the
-// connect screen (a later C2b task) serialises that login object into `credential`, and this fetcher
-// forwards it VERBATIM as the JSON request body. The mirror never re-derives the login shape, and a
-// bare (non-JSON) credential simply fails the primary's screen → a 502 below, never a silent success.
+// CREDENTIAL SHAPE. `credential` is NOT an opaque string — it is the primary's login OBJECT
+// (`AdoptCredential`: `{ personId, password, totp? }`), the SAME body the primary's dashboard login
+// authenticates (mirror-bundle-api.ts screens exactly those fields). It travels as a structured type end
+// to end (connect screen → `/setup-api/adopt` → here → the primary), so this fetcher simply serialises
+// it as the JSON request body — no string-threading, and a wrong shape is rejected at the mirror's own
+// `/setup-api/adopt` boundary (a clean 4xx) before it ever reaches this transport.
 import { AppError } from "@waitron/shared";
+import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import "./errors.js";
 
@@ -23,7 +24,7 @@ import "./errors.js";
  */
 export async function fetchMirrorBundle(
   primaryUrl: string,
-  credential: string,
+  credential: AdoptCredential,
 ): Promise<MirrorBundle> {
   // Strip a trailing slash so `<origin>/` + the path never yields a double slash the primary won't route.
   const url = `${primaryUrl.replace(/\/+$/, "")}/management-api/mirror-bundle`;
@@ -38,7 +39,7 @@ export async function fetchMirrorBundle(
     response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: credential,
+      body: JSON.stringify(credential),
     });
   } catch {
     throw new AppError("mirror.bundle_fetch_failed", {});

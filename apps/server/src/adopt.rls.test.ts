@@ -21,7 +21,7 @@ import {
   type AdoptResult,
   type AdoptVenueRows,
 } from "@waitron/provisioning";
-import { adoptFromPrimary, type PersistTradingArgs } from "./adopt.js";
+import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
 
@@ -130,14 +130,18 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     };
 
     const persisted: PersistTradingArgs[] = [];
-    let fetchArgs: { primaryUrl: string; credential: string } | undefined;
+    let fetchArgs: { primaryUrl: string; credential: AdoptCredential } | undefined;
+    const credential: AdoptCredential = {
+      personId: "99999999-9999-9999-9999-999999999999",
+      password: "dashPass123",
+    };
 
     const result = await adoptFromPrimary(
       {
         ownerDb: mirror.admin,
         ring: RING,
-        fetchBundle: async (primaryUrl, credential) => {
-          fetchArgs = { primaryUrl, credential };
+        fetchBundle: async (primaryUrl, cred) => {
+          fetchArgs = { primaryUrl, credential: cred };
           return bundle;
         },
         persistTrading: async (a) => {
@@ -146,12 +150,12 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
       },
-      { primaryUrl: "https://primary.test/", credential: "1234" },
+      { primaryUrl: "https://primary.test/", credential },
     );
 
     // The orchestrator returns the adopted tenant and forwarded the operator's inputs to the fetcher.
     expect(result.tenantId).toBe(designated.tenantId);
-    expect(fetchArgs).toEqual({ primaryUrl: "https://primary.test/", credential: "1234" });
+    expect(fetchArgs).toEqual({ primaryUrl: "https://primary.test/", credential });
 
     // Environment stamped to the primary's value, mode flipped to mirror.
     expect(await readDeploymentEnvironment(mirror.admin)).toBe("preproduction");
