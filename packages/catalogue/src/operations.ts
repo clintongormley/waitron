@@ -1,5 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
-import { catalogues, categories, locations, products } from "@waitron/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { catalogues, categories, locationCatalogues, locations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
@@ -104,6 +104,14 @@ export interface AvailableProduct {
    * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
    * a `listAvailableProducts` row stays structurally assignable to it (priceBasket ignores it). */
   courseId: string | null;
+  /** The catalogue (menu) this product is sold from — its `catalogues.id`. A location may sell across
+   * several accessible catalogues (its default plus any `location_catalogues` members), so a row is
+   * tagged with which one it came from. An extra field beyond `PriceableProduct`, so the row stays
+   * structurally assignable to it (priceBasket ignores it, like `courseId`). */
+  catalogueId: string;
+  /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
+   * beyond `PriceableProduct` and ignored by priceBasket. */
+  catalogueName: string;
 }
 
 const CATALOGUE_COLUMNS = {
@@ -323,16 +331,60 @@ export async function assignCatalogueToLocation(
 }
 
 /**
- * The products the till can sell at `locationId`: `locations` → (its `catalogue_id`) `catalogues` →
- * `products`, keeping only active products of an active catalogue, with the category NAME resolved
- * via a left join (null when the product has no category). Returns `[]` for a location with no
- * catalogue assigned (the inner join finds nothing on a null `catalogue_id`). Ordered by product
- * `created_at` then `id` so the result is stable.
+ * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row): the
+ * location may then sell from it alongside its default `catalogue_id`. Idempotent — the composite PK
+ * (tenant_id, location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
+ * default assignment stays with {@link assignCatalogueToLocation}; this only adds OTHER menus.
+ */
+export async function addCatalogueToLocation(
+  tx: Transaction,
+  locationId: string,
+  catalogueId: string,
+): Promise<void> {
+  await tx
+    .insert(locationCatalogues)
+    .values({ tenantId: CURRENT_TENANT, locationId, catalogueId })
+    .onConflictDoNothing();
+}
+
+/**
+ * The catalogue ids a location may sell from: its default (`locations.catalogue_id`, when non-null)
+ * unioned with every `location_catalogues` member, de-duplicated (a `Set`, since the default may also
+ * appear as a member). Order is not meaningful — {@link listAvailableProducts} sorts by catalogue
+ * name — so the returned array is just the set's insertion order.
+ */
+export async function resolveAccessibleCatalogueIds(
+  tx: Transaction,
+  locationId: string,
+): Promise<string[]> {
+  const [def] = await tx
+    .select({ id: locations.catalogueId })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  const members = await tx
+    .select({ id: locationCatalogues.catalogueId })
+    .from(locationCatalogues)
+    .where(eq(locationCatalogues.locationId, locationId));
+  const ids = new Set<string>();
+  if (def?.id != null) ids.add(def.id);
+  for (const m of members) ids.add(m.id);
+  return [...ids];
+}
+
+/**
+ * The products the till can sell at `locationId`, across the WHOLE accessible catalogue set (the
+ * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each
+ * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only active products of an
+ * active catalogue, with the category NAME resolved via a left join (null when the product has no
+ * category). Returns `[]` when the location has no accessible catalogue at all. Ordered by catalogue
+ * name, then product `created_at`, then `id` so the result is stable and grouped by menu.
  */
 export async function listAvailableProducts(
   tx: Transaction,
   locationId: string,
 ): Promise<AvailableProduct[]> {
+  const accessible = await resolveAccessibleCatalogueIds(tx, locationId);
+  if (accessible.length === 0) return [];
   const rows = await tx
     .select({
       id: products.id,
@@ -343,15 +395,20 @@ export async function listAvailableProducts(
       category: categories.name,
       allergens: products.allergens,
       courseId: products.courseId,
+      catalogueId: catalogues.id,
+      catalogueName: catalogues.name,
     })
-    .from(locations)
-    .innerJoin(catalogues, eq(catalogues.id, locations.catalogueId))
-    .innerJoin(products, eq(products.catalogueId, catalogues.id))
+    .from(products)
+    .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
     .leftJoin(categories, eq(categories.id, products.categoryId))
     .where(
-      and(eq(locations.id, locationId), eq(catalogues.active, true), eq(products.active, true)),
+      and(
+        inArray(catalogues.id, accessible),
+        eq(catalogues.active, true),
+        eq(products.active, true),
+      ),
     )
-    .orderBy(products.createdAt, products.id);
+    .orderBy(catalogues.name, products.createdAt, products.id);
   return rows.map((row) => ({
     id: row.id,
     descriptions: row.descriptions,
@@ -361,5 +418,7 @@ export async function listAvailableProducts(
     category: row.category,
     allergens: row.allergens,
     courseId: row.courseId,
+    catalogueId: row.catalogueId,
+    catalogueName: row.catalogueName,
   }));
 }

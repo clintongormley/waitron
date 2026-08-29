@@ -6,6 +6,7 @@ import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
 import {
+  addCatalogueToLocation,
   applyRecipeDerivation,
   assignCatalogueToLocation,
   createCatalogue,
@@ -490,6 +491,46 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("lists products across the default AND other accessible catalogues, tagged", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const other = await createCatalogue(tx, { name: "Unlisted" }); // NOT accessible
+      const pMain = await createProduct(tx, {
+        catalogueId: main.id,
+        categoryId: null,
+        descriptions: { "en-GB": "Steak" },
+        pricingUnit: "each",
+        unitPrice: "20.00",
+        vatClass: "general",
+      });
+      const pLunch = await createProduct(tx, {
+        catalogueId: lunch.id,
+        categoryId: null,
+        descriptions: { "en-GB": "Set menu" },
+        pricingUnit: "each",
+        unitPrice: "12.00",
+        vatClass: "general",
+      });
+      await createProduct(tx, {
+        catalogueId: other.id,
+        categoryId: null,
+        descriptions: { "en-GB": "Hidden" },
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, locationId, main.id); // default
+      await addCatalogueToLocation(tx, locationId, lunch.id); // other accessible
+      const rows = await listAvailableProducts(tx, locationId);
+      expect(rows.map((r) => r.id).sort()).toEqual([pMain.id, pLunch.id].sort());
+      expect(rows.find((r) => r.id === pLunch.id)).toMatchObject({
+        catalogueId: lunch.id,
+        catalogueName: "Lunch",
+      });
+    });
+  });
+
   it("returns null category for an available product with no category", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
@@ -550,6 +591,8 @@ describe("catalogue operations", () => {
       category: null,
       allergens: null,
       courseId: null,
+      catalogueId: "00000000-0000-0000-0000-000000000001",
+      catalogueName: "Deli",
     };
     expect(widen(sample).unitPrice).toBe("1.50");
   });

@@ -51,7 +51,7 @@ let venueTaxId: string;
 // something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
 // the route reads back — id, descriptions, unit price, VAT class, the resolved category NAME, and its
 // EU-14 allergen declaration (menu & allergens, Task 4), which the route carries through unchanged.
-let aguaProduct: { id: string };
+let aguaProduct: { id: string; catalogueId: string };
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -117,9 +117,9 @@ const suite = usePgliteDb({
         allergens: { sulphites: { presence: "may_contain" } },
       });
       await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
-      return p;
+      return { ...p, catalogueId: cat.id };
     });
-    aguaProduct = { id: product.id };
+    aguaProduct = { id: product.id, catalogueId: product.catalogueId };
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -873,8 +873,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     expect(res.status).toBe(200);
     // The exact `AvailableProduct` shape the route reads back: the seeded product with its resolved
     // category NAME (not id), priced from the catalogue, its EU-14 allergen declaration carried
-    // through unchanged, KDS-2's default `courseId` (null — no course assigned), one entry for the one
-    // assigned product.
+    // through unchanged, KDS-2's default `courseId` (null — no course assigned), and the menu tag
+    // (`catalogueId`/`catalogueName`) the multi-menu read now carries, one entry for the one assigned
+    // product.
     expect(await res.json()).toEqual([
       {
         id: aguaProduct.id,
@@ -885,6 +886,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         category: "Bebidas",
         allergens: { sulphites: { presence: "may_contain" } },
         courseId: null,
+        catalogueId: aguaProduct.catalogueId,
+        catalogueName: "Carta",
       },
     ]);
   });
