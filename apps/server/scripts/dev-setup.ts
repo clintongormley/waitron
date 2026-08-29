@@ -18,19 +18,13 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { sql } from "drizzle-orm";
-import { asAppUser, createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { createPostgresDb, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import {
-  assignCatalogueToLocation,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { parseEnvFile } from "../src/env-file.js";
+import { seedDemoRestaurant } from "./demo-seed/seed.js";
+import type { SeedLocale } from "./demo-seed/menu.js";
 
 // Re-exported so `dev-setup.test.ts`'s round-trip assertion keeps importing it from here; the parser
 // itself is the shared, dependency-free `env-file.ts` one (split on the first `=`, skip blank/`#`).
@@ -39,13 +33,22 @@ export { parseEnvFile };
 /** The container superuser + default database every demo uses — one place so the scripts agree. */
 export const DEV_DATABASE_URL = "postgres://postgres:pg@localhost:5432/postgres";
 
-/** The seeded cashier's PIN (login) and the provisioned admin's PIN — printed for the operator. */
-export const CASHIER_PIN = "5555";
-export const ADMIN_PIN = "1234";
+/** The one demo PIN. Every login — the provisioned admin and every seeded staff member (seedStaff's
+ * `DEMO_PIN`) — shares it, so the demo hands out a single number. */
+export const ADMIN_PIN = "5555";
 /** The provisioned admin's dashboard password — mirrors `till-demo.ts`. */
 const ADMIN_PASSWORD = "dashPass123";
 
-const LOCALE = "es-ES";
+/**
+ * The demo's seed locale, resolved from the environment at each run: English by default, Spanish only
+ * when `WAITRON_SEED_LOCALE=es-ES` is set explicitly. It drives the location's `invoiceLocales`, every
+ * seeded menu/floor/status/staff string, the historical sales' locale, and the `WAITRON_TILL_LOCALE`
+ * the server boots the till against. Read at call time (not module load) so it is testable and so a
+ * one-shot `WAITRON_SEED_LOCALE=es-ES pnpm dev:reset` takes effect.
+ */
+export function resolveSeedLocale(): SeedLocale {
+  return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es-ES" : "en-GB";
+}
 
 /** The exact env contract `apps/server` boots against (config.ts + till-config.ts), in write order. */
 export interface DevEnv {
@@ -59,6 +62,7 @@ export interface DevEnv {
   WAITRON_TILL_NODE_ID: string;
   WAITRON_TILL_SERIES_ID: string;
   WAITRON_TILL_LOCATION_ID: string;
+  WAITRON_TILL_LOCALE: string;
 }
 
 /** Ordered so `renderEnvFile` emits a stable, reviewable `.env`. */
@@ -73,6 +77,7 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
   "WAITRON_TILL_LOCATION_ID",
+  "WAITRON_TILL_LOCALE",
 ];
 
 /**
@@ -210,9 +215,15 @@ export async function inspectVenues(
   }
 }
 
-/** Provision one preproduction venue + SIF and seed a sellable catalogue + a cashier. Returns the
- * five fiscal ids the server boots against. Mirrors `till-demo.ts`'s setup, minus the sale. */
-async function provisionVenue(db: Database): Promise<{
+/** Provision one preproduction venue + SIF, then seed the full demo restaurant (two menus, floor,
+ * staff, media, and `salesDays` of back-dated preproduction sales) via `seedDemoRestaurant`. Returns
+ * the five fiscal ids the server boots against. `seedLocale` drives the location's `invoiceLocales`
+ * and every seeded string; `salesDays` is the historical-sales horizon (0 skips sales). */
+async function provisionVenue(
+  db: Database,
+  seedLocale: SeedLocale,
+  salesDays: number,
+): Promise<{
   tenantId: string;
   tillId: string;
   nodeId: string;
@@ -227,7 +238,7 @@ async function provisionVenue(db: Database): Promise<{
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [seedLocale],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
@@ -249,46 +260,22 @@ async function provisionVenue(db: Database): Promise<{
     { db },
   );
 
-  // Seed a minimal catalogue + a cashier person as `app_user` under RLS — the same shape as
-  // `till-demo.ts`, so the running till is immediately sellable (one weight product, one each
-  // product, plus a cashier whose PIN the login route can verify).
-  const tenantId = brandTenantId(venue.tenantId);
-  await withTenant(db, tenantId, async (tx) => {
-    await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    await createProduct(tx, {
-      catalogueId: cat.id,
-      categoryId: comida.id,
-      descriptions: { [LOCALE]: "Jamón cortado" },
-      pricingUnit: "weight",
-      unitPrice: "24.90",
-      vatClass: "reduced",
-    });
-    await createProduct(tx, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
-    });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    await tx.execute(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'Cajera', ${hashPin(CASHIER_PIN)}, 'staff')`);
-  });
-
-  return {
+  // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
+  // ordinary sale's series (the same index `till-demo.ts` reads).
+  const ids = {
     tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
-    // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
-    // ordinary sale's series (the same index `till-demo.ts` reads).
     seriesId: venue.seriesIds[0]!,
     locationId: venue.locationId,
   };
+
+  // Stand up the whole demo restaurant on the fresh venue: catalogues/floor/staff/media in one
+  // tenant/app_user tx, then the back-dated preproduction sales (its own per-sale tx). This replaces
+  // the former inline "Delicatessen + one Cajera" stub — the demo now seeds real menus and staff.
+  await seedDemoRestaurant(db, { venue: ids, locale: seedLocale, salesDays });
+
+  return ids;
 }
 
 /**
@@ -339,11 +326,16 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   log("dev-setup: migrating…");
   await applyMigrations(databaseUrl, migrationOptionsFor(manifestSets(), null));
 
+  // Resolve the seed shape ONCE per run: the locale (English default, Spanish via WAITRON_SEED_LOCALE)
+  // and the historical-sales horizon (WAITRON_SEED_SALES_DAYS, default 28; 0 skips sales entirely).
+  const seedLocale = resolveSeedLocale();
+  const salesDays = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+
   const db = await createPostgresDb(databaseUrl);
   let ids;
   try {
-    log("dev-setup: provisioning a preproduction venue + seeding a catalogue…");
-    ids = await provisionVenue(db);
+    log("dev-setup: provisioning a preproduction venue + seeding the demo restaurant…");
+    ids = await provisionVenue(db, seedLocale, salesDays);
   } finally {
     await db.close();
   }
@@ -359,6 +351,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     WAITRON_TILL_NODE_ID: ids.nodeId,
     WAITRON_TILL_SERIES_ID: ids.seriesId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
+    WAITRON_TILL_LOCALE: seedLocale,
   };
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
@@ -390,8 +383,16 @@ async function main(): Promise<void> {
   console.log("  dashboard  http://localhost:5191");
   console.log("  server     http://localhost:8080");
   console.log("");
-  console.log(`  cashier PIN (till login): ${CASHIER_PIN}`);
-  console.log(`  admin PIN (dashboard):    ${ADMIN_PIN}`);
+  console.log(`  demo PIN (every login):   ${ADMIN_PIN}`);
+  console.log(`  locale:                   ${result.env.WAITRON_TILL_LOCALE}`);
+  const salesDays = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  if (!result.reused) {
+    console.log(
+      salesDays > 0
+        ? `  reports carry ~${salesDays} days of back-dated sales history.`
+        : "  no historical sales seeded (WAITRON_SEED_SALES_DAYS=0).",
+    );
+  }
   console.log("");
   console.log("Next: `pnpm dev` (or `wa-wt <worktree>`) to start all three processes.");
 }
