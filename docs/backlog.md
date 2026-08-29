@@ -174,7 +174,8 @@ to be proven against a local stand-in cloud. Spec + plan:
   `ack`/`reject`/closes parks a pool slot until abort); and a `tunnelHttpClient` disposal seam for C's
   long-running subscriber. SNI-based multi-box routing is also T1's (the stand-in serves one box).
 - **C — cloud read-mirror.** Split (owner, 2026-08-27) into **C1 — the `dining_tables` FK-closure
-  enrolment — LANDED (#153)** and **C2 — the mirror-mode server — next**.
+  enrolment — LANDED (#153)** and **C2 — the mirror-mode server**, itself split (owner, 2026-08-28) into
+  **C2a — the runtime mechanism — LANDED (#155)** and **C2b — the operator flow — next**.
   - **C1 LANDED (#153).** Enrolled the runtime-mutable FK closure — `dining_tables`, `floor_zones`,
     `table_service_statuses` — into the commercial **ordered** lane (a new mutable / no-watermark /
     no-delete registry shape), renumbered `fkRank` to place `dining_tables` above `working_orders`
@@ -183,11 +184,30 @@ to be proven against a local stand-in cloud. Spec + plan:
     (plus a settle-cascade test for the `0050` `working_orders → dining_tables` status-clear). This
     closed the ordered-lane hard gate below. Spec + plan:
     [c1-enrolment](superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md).
-  - **C2 — the mirror-mode server (next).** A third boot mode of `apps/server` that pulls through B's
-    `tunnelHttpClient`, applies into its own Postgres, and serves `apps/dashboard` **read-only, writes
-    refused** (no management-write-back in v1). **Provisioned once** with the box's matching config —
-    auto config-flow-down stays a deferred, separate slice. Its own spec → plan → build; provable
-    against a second local Postgres + a reader on another port.
+  - **C2a — the mirror-mode server mechanism. LANDED (#155).** A third boot path of `apps/server` keyed
+    on a new `deployment.mode` (`primary`|`mirror`, migration `0069`, runtime-read from a refreshable
+    holder): a mirror pulls the 17 commercial tables through B's `tunnelHttpClient`, applies into its own
+    Postgres, and serves the dashboard **read-only** — every non-GET refused with `node.read_only` (a
+    method-based gate, so promotion is a flag-flip), served unauthenticated via a boot-seeded read-only
+    ambient viewer whose keepalive is throttled and holder-gated (a flag-flip to `primary` ends the
+    ambient session + clears the cookie, so no auto-admin outlives promotion). Runs **none** of the
+    primary-only workers (fiscal drain, reconcile, sync source, retention, tunnel client). Real-PG e2e
+    proves pull-through-tunnel + apply + read-only serve. Spec + plan:
+    [c2a-mirror-server](superpowers/specs/2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md).
+    **Deferred (C2b / hosting slice), named so they are not dropped:** (1) the unauthenticated
+    ambient-admin dashboard MUST be network-gated before any reachable deployment — accepted local
+    stand-in posture, real per-user auth/TLS belongs to the hosting slice; (2) a later slice that syncs
+    or provisions `print_agents`/`devices`/`kitchen_stations` MUST revisit the read-only method-gate — a
+    few operational GET handlers write (e.g. `GET /print-api/agent/jobs`'s `claimPrintJobs`), inert on a
+    mirror today only because those tables are not synced; (3) the promote **action** itself + starting
+    the primary-only workers on promotion.
+  - **C2b — the operator flow (next).** The primary emits a **"mirror bundle"** (its five identity ids +
+    CA + a minted per-peer sync token + relay coords); the setup wizard gains a **primary/mirror** choice
+    whose mirror path consumes the bundle, runs an **"adopt existing venue"** provisioning (insert
+    `tenants`/`locations`/`nodes`/`tills`/`invoice_series` with the primary's **explicit** ids, **no
+    `registerSif`** — re-registering a SIF mints a second unrecoverable hash chain), and moves the
+    connection config from C2a's env to DB-stored, wizard-entered config. Its own spec → plan → build;
+    provable against a second local Postgres + a reader on another port.
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
@@ -459,6 +479,22 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
+- **Testcontainers leak on interrupted test runs → local pre-push flakiness (build a reaper).**
+  `TESTCONTAINERS_RYUK_DISABLED=true` is mandatory locally (Ryuk hangs, CLAUDE.md §4), which disables the
+  automatic reaper. Diagnosed 2026-08-29: **clean** vitest exits self-reap (`startSharedContainer`'s
+  `container.stop()` in `globalTeardown` removes the container + anon volume — verified 0 leaks after a
+  clean `pnpm -r test:coverage`), but **interrupted** runs (Ctrl-C, a timeout SIGTERM, a crash) skip
+  teardown and leak a running container + its anonymous volume. Un-reaped, these pile up (found 173
+  volumes / 23GB, 13 containers, 40GB images) and bloat the Docker daemon, adding the ambient load that
+  tips the heavy parallel `pnpm -r … test:coverage` over its 60s PGlite `beforeAll` timeout + the
+  `freePort→bind` race (EADDRINUSE) — the cause of three `--no-verify` pushes in the C2a session, all of
+  which CI (dedicated runners) passed cleanly. A one-off `docker rm -f -v` of orphaned
+  `org.testcontainers` containers + `docker volume prune -f` + `docker builder prune -f` reclaimed ~27GB
+  and made the exact failing command pass 1381/1381. **Build:** a lightweight reaper (compensating for
+  disabled Ryuk) — remove orphaned `org.testcontainers` containers + their anon volumes at the START of
+  the pre-push hook's test phase (safe: nothing is running then), plus a manual `pnpm reap`/make target
+  and a CLAUDE.md §4 note. NEVER prune images or the named dev volumes (`waitron-dev-db`, devcontainer
+  postgres/redis, VS Code volumes). Its own test-infra branch.
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
   ten route files (recipe/catalogue/me/workforce/management/schedule/purchasing/device/print/till-locale)
