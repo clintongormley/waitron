@@ -451,11 +451,19 @@ fence-then-claim-submitter attestation gate. **Next: its implementation plan →
 workers at runtime yet.
 
 - **Promotion + fencing tooling and the till-side failover list** — the promotion-runbook *design* is done
-  (its own spec, above), and its **foundation slice is planned**
-  ([singleton-role plan](superpowers/plans/2026-08-29-promotion-foundation-singleton-role.md)): the
-  `deployment.singleton_role` axis + gating the fiscal pass on it (the dependency-free first slice; later
-  slices — promote endpoint/auth, per-target orchestration, cold restore — need the break-glass /
-  reserved-SIF / backup foundations that don't exist yet). **Next: build slice F1.** The rest of the
+  (its own spec, above), and its **foundation slice LANDED (#158)**: the `deployment.singleton_role` axis
+  (migration `0071` + accessors + the `(mirror, primary)` CHECK + the `setDeploymentMode('mirror')`
+  co-set) and the `singletonPass` helper gating the fiscal drain/reconcile pass on it (read per-pass, so a
+  future promotion flips it with no restart). Only the fiscal pass moved to the new axis; the read-only
+  gate / sync source / retention / tunnel stay on `mode`. Fixes the active-active correctness bug (a local
+  secondary would otherwise run the AEAT submitter); today's primary + C2a mirror are byte-identical.
+  **Next promotion slice → the promote *action*** (endpoint + break-glass auth + live start of the
+  mode-gated workers + fresh-SIF mint + fence attestation; cold restore later) — each **gated on unbuilt
+  foundations** (break-glass mint, reserved-SIF staging, backup regime; see spec §3f/§9). **Two
+  follow-ons from the #158 reviews, for that next slice:** a `(primary, secondary)` sell-only boot
+  integration assertion (the composition is unit-proven + db-tested but not e2e-proven), and revisiting
+  whether a sell-only secondary should keep mounting the sync source / retention / tunnel (all on `mode`
+  today — correct for this slice, but the active-active *serving* decision isn't built). The rest of the
   tooling is still gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol
   (§9.1) and the till-failover detail (§9.5). Boot-time role resolution, continuous conflict-detection,
   the "one primary" invariant.
