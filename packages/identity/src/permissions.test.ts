@@ -92,6 +92,17 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "device.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "device.manage")).toBe(false);
   });
+  it("grants cash.drawer to supervisor, manager and admin but not staff (cash-drawer authorization)", () => {
+    // A domain-named cash-accountability permission: authorizing a cash-drawer open under a location's
+    // 'gated' drawer_open_policy requires it. Unlike the manager-only config gates above, it lives in the
+    // SUPERVISOR set beside sale.void/refund/discount/rectify — a supervisor on the floor can authorize a
+    // gated drawer open — so supervisor, manager (spreads SUPERVISOR) and admin (ALL) hold it, and staff
+    // NEVER does (least privilege — a plain operator cannot self-authorize a gated open).
+    expect(roleHasPermission("supervisor", "cash.drawer")).toBe(true);
+    expect(roleHasPermission("manager", "cash.drawer")).toBe(true);
+    expect(roleHasPermission("admin", "cash.drawer")).toBe(true);
+    expect(roleHasPermission("staff", "cash.drawer")).toBe(false);
+  });
   it("grants printer.manage to manager and admin only (printing subsystem central management)", () => {
     // A domain-named printer-admin permission (enrol/list/revoke print agents, CRUD printers, enqueue a
     // test print) on the management dashboard (@waitron/printing), granted to exactly the roles that

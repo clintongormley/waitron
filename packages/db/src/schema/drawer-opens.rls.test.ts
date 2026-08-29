@@ -23,6 +23,9 @@ const PRINTER_B = "bbbbbbbb-0000-4000-8000-000000000021";
 // The acting operator recorded in `person_id` — an identity person id, plain uuid, no FK (the person
 // schema is a separate slice; a raw uuid keeps this audit table independent of it).
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
+// The authorizer recorded in `authorized_by` (a supervisor who authorized the open) — same shape as
+// PERSON: a raw identity person id, plain uuid, no FK.
+const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
 
 class RollbackSignal extends Error {}
 async function rollBackAfter(
@@ -122,6 +125,32 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
     expect(row!.reason).toBe("manual");
     expect(row!.saleId).toBeNull();
     expect(row!.openedAt).toBeInstanceOf(Date); // defaultNow() populated the server-clock timestamp
+    // The new audit columns on their DEFAULT path: this open supplied neither, so authorized_by is NULL
+    // (an 'open'-policy / self-authorized open records no separate authorizer) and via_override took its
+    // NOT NULL DEFAULT false. Exercises the produced column mapping for both.
+    expect(row!.authorizedBy).toBeNull();
+    expect(row!.viaOverride).toBe(false);
+  });
+
+  it("records authorized_by and via_override on an authorized open (new audit columns present + writable)", async () => {
+    // The new audit columns written by the app role: a gated open a supervisor (AUTHORIZER) authorized on
+    // behalf of an operator (PERSON) who lacks cash.drawer — authorized_by set, via_override true. app_user
+    // holds INSERT (append-only), so this exercises the write grant AND the produced column mapping when
+    // both are populated. Read back through the Drizzle `drawerOpens` export.
+    await asApp(TENANT_A, (tx) =>
+      tx.execute(
+        sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, authorized_by, via_override)
+            values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
+      ),
+    );
+    const [row] = await asApp(TENANT_A, (tx) =>
+      tx
+        .select()
+        .from(drawerOpens)
+        .where(sql`person_id = ${PERSON} and authorized_by = ${AUTHORIZER}`),
+    );
+    expect(row!.authorizedBy).toBe(AUTHORIZER);
+    expect(row!.viaOverride).toBe(true);
   });
 
   it("app_user has NO UPDATE (a drawer open is a fact, never edited)", async () => {
@@ -316,6 +345,31 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
         sql`select receipt_print_mode from locations where id = ${LOCATION_A}`,
       );
       expect(r.rows[0]!.receipt_print_mode).toBe("on_request");
+    });
+  });
+
+  it("locations.drawer_open_policy defaults to 'gated' (the SECURE default) and is settable under the app role", async () => {
+    // The new per-venue enum column: the seeded locations carry no explicit value, so they take the
+    // DEFAULT 'gated' — the SECURE default (an unconfigured venue gets cash accountability, not an open
+    // drawer), deliberately unlike receipt_print_mode's inert 'auto'. The app role (app_user holds UPDATE
+    // on locations) can move it to 'open'. Rolled back so the shared template clone keeps its default.
+    const policy = await asApp(TENANT_A, (tx) =>
+      tx
+        .execute<{ drawer_open_policy: string }>(
+          sql`select drawer_open_policy from locations where id = ${LOCATION_A}`,
+        )
+        .then((r) => r.rows[0]!.drawer_open_policy),
+    );
+    expect(policy).toBe("gated");
+    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(
+        sql`update locations set drawer_open_policy = 'open' where id = ${LOCATION_A}`,
+      );
+      const r = await tx.execute<{ drawer_open_policy: string }>(
+        sql`select drawer_open_policy from locations where id = ${LOCATION_A}`,
+      );
+      expect(r.rows[0]!.drawer_open_policy).toBe("open");
     });
   });
 });

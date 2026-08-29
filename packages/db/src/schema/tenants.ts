@@ -51,6 +51,18 @@ export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen",
 export const receiptPrintMode = pgEnum("receipt_print_mode", ["auto", "on_request", "never"]);
 
 /**
+ * The per-venue CASH-DRAWER OPEN POLICY (cash-drawer-authorization slice §2). `gated` (default): a
+ * cash-drawer open must be authorized — the drawer route requires the `cash.drawer` permission
+ * (@waitron/identity), and the `drawer_opens` audit row records who authorized it and whether an
+ * override was used. `open`: no authorization is consulted; any operator may open the drawer. A pgEnum
+ * on `locations`, matching `order_flow` / `bump_mode` / `fire_control` / `receipt_print_mode`'s precedent
+ * on the same table (a per-venue config mode — one declaration yields both the union and the constraint).
+ * Unlike those siblings, the DEFAULT is the SECURE value `'gated'`, not an inert one: a venue that has
+ * not chosen a policy gets cash accountability, not an open drawer (spec §2).
+ */
+export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
+
+/**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
@@ -139,6 +151,13 @@ export const locations = pgTable(
     // `bump_mode` / `fire_control` above default. Read per-location by the print-on-sale hook (a later
     // task); no read logic here.
     receiptPrintMode: receiptPrintMode("receipt_print_mode").notNull().default("auto"),
+    // The per-venue cash-drawer open policy (cash-drawer-authorization slice §2): `gated` (default) =
+    // a drawer open requires the `cash.drawer` permission and is audited; `open` = no authorization is
+    // consulted. NOT NULL DEFAULT 'gated' — the SECURE default, deliberately unlike the inert defaults of
+    // `order_flow` / `bump_mode` / `fire_control` / `receipt_print_mode` above: an unconfigured venue gets
+    // cash accountability, not an open drawer. Read per-location by the drawer route (a later task); no
+    // read logic here.
+    drawerOpenPolicy: drawerOpenPolicy("drawer_open_policy").notNull().default("gated"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
     // each other; the cycle is harmless because every cross-module reference is a lazy
