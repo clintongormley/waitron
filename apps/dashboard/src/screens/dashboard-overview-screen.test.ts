@@ -10,8 +10,9 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    { descriptions: { "es-ES": "Café con leche", en: "Latte" }, quantity: "18", total: "36.00" },
-    // Second row has no es-ES key: exercises localizedName's fallback-to-first-value arm.
+    // Short language-subtag keys — the real `descriptions` shape (schema `invoiceLocales: ["es","ca"]`).
+    { descriptions: { es: "Café con leche", en: "Latte" }, quantity: "18", total: "36.00" },
+    // Second row has no "es" key: exercises localizedName's fallback-to-first-value arm.
     { descriptions: { en: "Croissant" }, quantity: "12", total: "24.00" },
   ],
 };

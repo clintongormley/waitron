@@ -5,10 +5,13 @@ import { currentLocale } from "./t.js";
  * for the active locale, else the first value as a fallback, else "" for an empty map.
  *
  * This is the ONE place that rule lives — the business-overview screen (Task 7) and the daily-close
- * screen (Task 8) both call it rather than re-implementing the lookup inline. It keys on the full
- * locale tag (`currentLocale()`, e.g. "es-ES"), matching how the server keys `descriptions`; a map
- * missing that key degrades to whatever name it does carry so the operator never sees a blank cell.
+ * screen (Task 8) both call it rather than re-implementing the lookup inline. It strips the region
+ * subtag before the lookup ("es-ES" → "es"), mirroring `pickLocale`'s region-strip rule (t.ts), because
+ * a `descriptions` map is keyed by SHORT language subtags ("es" / "ca" / "en" — see the schema's
+ * `invoiceLocales` and `computeTopSellers`), never by full BCP-47 tags. A map missing that language
+ * degrades to whatever name it does carry so the operator never sees a blank cell.
  */
 export function localizedName(map: Record<string, string>): string {
-  return map[currentLocale()] ?? Object.values(map)[0] ?? "";
+  const lang = currentLocale().replace(/-.*$/, ""); // "es-ES" → "es"
+  return map[lang] ?? Object.values(map)[0] ?? "";
 }

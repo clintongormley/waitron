@@ -10,7 +10,7 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    { descriptions: { "es-ES": "Café con leche", en: "Latte" }, quantity: "18", total: "36.00" },
+    { descriptions: { es: "Café con leche", en: "Latte" }, quantity: "18", total: "36.00" },
     { descriptions: { en: "Croissant" }, quantity: "12", total: "24.00" },
   ],
 };
