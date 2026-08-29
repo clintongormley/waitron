@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { DUMP_FILE_NAME } from "./pg-dump.js";
 
 /**
  * The backup slice's box-status contribution. `configured: false` is the deliberate N/A placeholder
@@ -10,10 +11,6 @@ import { join } from "node:path";
 export type BackupStatus =
   | { configured: false }
   | { configured: true; lastBackupAt: string | null; ageSeconds: number | null; stale: boolean };
-
-/** Matches a `waitron-<stamp>.dump` filename, the convention `dumpFileName` (pg-dump.ts) emits and
- * `pruneOldDumps` filters on. Kept in step with that regex. */
-const DUMP_NAME = /^waitron-.*\.dump$/;
 
 /**
  * Scan `dir` for the newest `waitron-*.dump` FILE (by mtime) and summarise its freshness. Returns
@@ -34,14 +31,17 @@ export async function readBackupStatus(
     names = await readdir(dir);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return { configured: true, lastBackupAt: null, ageSeconds: null, stale: true };
+      // A missing dir is "no dumps yet" — leave the list empty and fall through to the single
+      // `newestMs === null` return below, so the "never run yet" shape is written in one place.
+      names = [];
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   let newestMs: number | null = null;
   for (const name of names) {
-    if (!DUMP_NAME.test(name)) continue;
+    if (!DUMP_FILE_NAME.test(name)) continue;
     const info = await stat(join(dir, name));
     if (!info.isFile()) continue; // a dir named like a dump is not a backup
     const mtimeMs = info.mtime.getTime();

@@ -1083,7 +1083,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // sync/tunnel ones so close() below tears it down), a `.catch` logging `codeOf`, and a teardown that
   // aborts + awaits. `runBackupSweep` shells out to `pg_dump` and holds no long-lived pool of its own,
   // so there is nothing to add to `closePools` — the probe pool below is the only pool it involves, and
-  // that is closed in its own `finally` before the worker ever starts.
+  // that is closed in its own `finally` (the worker shells out to a fresh `pg_dump` process and never
+  // touches the probe pool, so the two never share a connection).
   //
   // Before the worker starts, an RLS PROBE (`assertBackupCanReadFiscal`): under FORCE RLS a `pg_dump`
   // as a role that is neither SUPERUSER nor BYPASSRLS either loud-fails or silently emits an empty
@@ -1095,27 +1096,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `backupEnabled = false` and logs `backup.disabled_rls_fenced` (with the structured `errorCode` so a
   // connection fault is distinguishable from a fence) rather than throwing out of boot — a bad backup
   // role must not brick the till. The whole open+assert sits inside the `try`, and the probe pool is
-  // closed in the `finally` whichever way it settles, so nothing leaks. When `backupConfig` is set on a
-  // mirror the config is simply not consulted (the `!isMirror` gate), matching retention/tunnel.
+  // closed in the `finally` whichever way it settles, so nothing leaks. `backupWorker` is the single
+  // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
+  // unreachable role leaves it `undefined`), and the box-status wiring and teardown below both gate on
+  // `backupWorker !== undefined`. When `backupConfig` is set on a mirror the config is simply not
+  // consulted (the `!isMirror` gate), matching retention/tunnel.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
   let backupWorker: Promise<void> | undefined;
-  let backupEnabled = false;
   if (!isMirror && backupConfig !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
-      backupEnabled = true;
-    } catch (err) {
-      log("error", "backup.disabled_rls_fenced", { errorCode: codeOf(err) });
-    } finally {
-      // `.catch(() => {})`: a throw in this `finally` would ESCAPE the surrounding try/catch, so a
-      // pool-close rejection on the strict §5 path must never become a boot-aborting throw. The
-      // probe's own errors are already handled by the `catch` above.
-      if (probeDb !== undefined) await probeDb.close().catch(() => {});
-    }
-    if (backupEnabled) {
       backupWorker = runBackupSweep({
         dir: backupConfig.dir,
         databaseUrl: backupConfig.databaseUrl,
@@ -1128,6 +1121,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       backupWorker.catch((err) =>
         log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
       );
+    } catch (err) {
+      log("error", "backup.disabled_rls_fenced", { errorCode: codeOf(err) });
+    } finally {
+      // `.catch(() => {})`: a throw in this `finally` would ESCAPE the surrounding try/catch, so a
+      // pool-close rejection on the strict §5 path must never become a boot-aborting throw. The
+      // probe's own errors are already handled by the `catch` above.
+      if (probeDb !== undefined) await probeDb.close().catch(() => {});
     }
   } else if (!isMirror) {
     log("info", "backup.disabled", {});
@@ -1179,11 +1179,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
       // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
       // the SAME dir `runBackupSweep` writes into, scanning for the newest dump per request; `now()` is
-      // the boot clock. `backupConfig!` is safe: `backupEnabled` is only ever true when `backupConfig`
+      // the boot clock. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
-      readBackup: backupEnabled
-        ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())
-        : undefined,
+      readBackup:
+        backupWorker !== undefined
+          ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())
+          : undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.

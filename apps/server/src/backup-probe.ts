@@ -17,6 +17,7 @@ import "./errors.js";
  * fiscal rows to check.
  */
 export async function assertBackupCanReadFiscal(db: Database): Promise<void> {
+  // The same rolsuper-or-rolbypassrls predicate lives in scripts/dev-setup.ts's inspectVenues; keep them in step.
   const rows = await db.execute<{ can_bypass: boolean }>(
     sql`select (rolsuper or rolbypassrls) as can_bypass from pg_roles where rolname = current_user`,
   );

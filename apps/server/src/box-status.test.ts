@@ -9,6 +9,7 @@ const base: BoxStatusReaders = {
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   replicationLag: undefined,
+  backup: undefined,
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
 

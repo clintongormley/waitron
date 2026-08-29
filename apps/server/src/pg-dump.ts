@@ -39,6 +39,10 @@ export function dumpFileName(now: Date): string {
   return `waitron-${stamp}.dump`;
 }
 
+/** Matches the `waitron-<stamp>.dump` filenames `dumpFileName` emits — the single source of truth for
+ * that convention, shared by `pruneOldDumps` here and `readBackupStatus` (backup-status.ts). */
+export const DUMP_FILE_NAME = /^waitron-.*\.dump$/;
+
 /** Keep the newest `retain` `waitron-*.dump` files in `dir` and unlink the rest. Newest-first is a
  * descending NAME sort, which equals age order because `dumpFileName` is sortable. Non-matching files
  * are ignored, and a missing `dir` is tolerated (returns without error). */
@@ -51,7 +55,7 @@ export async function pruneOldDumps(dir: string, retain: number): Promise<void> 
     throw err;
   }
   const dumps = entries
-    .filter((name) => /^waitron-.*\.dump$/.test(name))
+    .filter((name) => DUMP_FILE_NAME.test(name))
     .sort()
     .reverse();
   await Promise.all(dumps.slice(retain).map((name) => unlink(join(dir, name))));

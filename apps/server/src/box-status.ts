@@ -47,7 +47,7 @@ export type BoxStatusReaders = {
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
-  backup?: () => Promise<BackupStatus>;
+  backup: (() => Promise<BackupStatus>) | undefined;
   duties: () => Record<string, unknown>;
 };
 
