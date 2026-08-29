@@ -47,6 +47,15 @@ describe("state-secrets", () => {
     expect((err as NodeJS.ErrnoException).code).toBe("EISDIR");
   });
 
+  it("rejects a bundle key that would escape destDir (traversal guard), writing nothing outside", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-escape-"));
+    await expect(unpackBundleToDir({ "../escape": "pwned\n" }, dest)).rejects.toThrow(
+      new AppError("recovery.bundle_invalid", { reason: "unsafe_path" }),
+    );
+    // The sibling path the traversal would have written to must not exist.
+    await expect(readFile(join(dest, "..", "escape"), "utf8")).rejects.toThrow();
+  });
+
   it("unpacks a bundle to a dir with 0600 files and a tls/ subdir, round-tripping contents", async () => {
     const src = await seedStateDir();
     const files = await collectStateSecrets(src);

@@ -1,5 +1,5 @@
 import { mkdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -45,12 +45,18 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
  * Write a decrypted `BundleFiles` map back under `destDir` — the inverse of `collectStateSecrets`,
  * used by the `waitron-recovery unpack` CLI and by tests. Each file is created 0600 via
  * `writeFileAtomic` (temp-then-rename, so a reader never sees a torn file), and any parent (`tls/`)
- * is made 0700 first. Keys are trusted here (a decrypted bundle we just authenticated), so no path
- * traversal guard beyond joining under `destDir`.
+ * is made 0700 first. Each key is traversal-guarded (rejected if absolute or if it resolves outside
+ * `destDir`): GCM auth proves the bundle's integrity, not that its keys are the fixed
+ * `RECOVERY_FILES` set, so a crafted-but-authentic bundle carrying a key like `../../etc/x` must not
+ * be allowed to escape `destDir` via `join`.
  */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
+  const destRoot = resolve(destDir);
   for (const [rel, contents] of Object.entries(files)) {
     const target = join(destDir, rel);
+    if (isAbsolute(rel) || !resolve(target).startsWith(destRoot + sep)) {
+      throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
+    }
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });
     await writeFileAtomic(target, contents, 0o600);
   }

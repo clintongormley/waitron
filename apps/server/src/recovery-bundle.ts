@@ -9,16 +9,20 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 /** The floor for a bundle passphrase. The bundle wraps the unrecoverable vault master key, so a weak
- * passphrase is the whole risk surface; 12 chars is the operator-facing minimum (spec §12). */
+ * passphrase is the whole risk surface; the 12-char floor is this build's choice, not a
+ * spec-mandated number. */
 export const MIN_PASSPHRASE_LENGTH = 12;
 
 /** A recovery bundle's plaintext: relative posix path → UTF-8 file contents. */
 export type BundleFiles = Record<string, string>;
 
 const ENVELOPE_VERSION = 1;
-// scrypt work factor. N=2^15 with r=8,p=1 needs ~32MB (128*N*r); maxmem is set well above that on both
-// sides so a future N bump does not silently fail. keylen 32 = AES-256.
-const SCRYPT = { N: 2 ** 15, r: 8, p: 1, keylen: 32, maxmem: 128 * 1024 * 1024 } as const;
+// scrypt work factor. N=2^17 per OWASP 2024 — the bundle wraps the vault master key AND the TLS
+// private keys and is a downloadable, offline-brute-forceable file, so the KDF must be strong. At
+// N=2^17, r=8 the derivation needs exactly 128*N*r = 134,217,728 bytes = 128 MiB, and scryptSync
+// throws at the exact boundary; maxmem is 256 MiB to sit above 128*N*r with headroom. keylen 32 =
+// AES-256.
+const SCRYPT = { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 } as const;
 // Bounds an UNTRUSTED envelope's KDF cost so a hand-edited bundle cannot make decrypt allocate wildly.
 // The operator runs decrypt on their own bundle, so this is defence-in-depth, not a security boundary.
 const MAX_SCRYPT_N = 2 ** 20;
@@ -93,9 +97,12 @@ function parseEnvelope(envelopeJson: string): Envelope {
     r > 32 ||
     p < 1 ||
     p > 16 ||
-    // scrypt's memory use is 128*N*r bytes; N and r can BOTH pass their individual bounds
-    // (e.g. N=2^20, r=32 ≈ 4GB) and still breach maxmem, which would throw a raw
-    // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync rather than our contract error.
+    // scrypt's memory use is ~128*N*r bytes; N and r can BOTH pass their individual bounds
+    // (e.g. N=2^20, r=32 ≈ 4GB) and still breach maxmem. This is a CHEAP up-front reject of the
+    // gross cases, NOT the real backstop: OpenSSL's actual limit is slightly larger
+    // (~128*r*(N+2+p)), so a shape-valid envelope just under it could still throw a raw
+    // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync — which decryptBundle's try/catch turns
+    // into our contract error. That try/catch, not this bound, is what guarantees no raw 500.
     128 * N * r > SCRYPT.maxmem ||
     // Decoded byte lengths: a short/odd base64 salt/iv/tag passes the typeof check above but makes
     // scryptSync / createDecipheriv / setAuthTag throw a raw length error later.

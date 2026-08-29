@@ -27,6 +27,33 @@ describe("waitron-recovery unpack", () => {
     expect(out).toEqual([`unpacked 2 file(s) to ${dest}`]);
   });
 
+  it("returns 1 and a non-leaking message on the wrong passphrase", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "recovery-unpack-badpass-"));
+    const envPath = join(dir, "bundle.wrb");
+    await writeFile(envPath, encryptBundle(FILES, PASS));
+    const out: string[] = [];
+    const code = await runRecoveryUnpack({
+      argv: ["unpack", envPath, join(dir, "out")],
+      env: { WAITRON_RECOVERY_PASSPHRASE: PASS + "!" },
+      out: (line) => out.push(line),
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual(["recovery failed: wrong passphrase or corrupt bundle"]);
+  });
+
+  it("returns 1 and names the path when the envelope file is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "recovery-unpack-missing-"));
+    const envPath = join(dir, "does-not-exist.wrb");
+    const out: string[] = [];
+    const code = await runRecoveryUnpack({
+      argv: ["unpack", envPath, join(dir, "out")],
+      env: { WAITRON_RECOVERY_PASSPHRASE: PASS },
+      out: (line) => out.push(line),
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([`cannot read bundle file: ${envPath}`]);
+  });
+
   it("returns 2 and prints guidance when the passphrase env var is missing", async () => {
     const out: string[] = [];
     const code = await runRecoveryUnpack({
