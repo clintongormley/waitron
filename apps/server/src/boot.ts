@@ -1035,9 +1035,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation` policy (no TO clause → applies
   // under FORCE RLS to this login too), and with no `app.tenant_id` set `current_tenant_id()` is NULL,
   // so a BARE `lagFor(syncDb)` sees ZERO `sync_log` rows and reports every subscriber at lag 0 — a
-  // silent false-healthy. Proven on postgres:18-alpine: as a `sync_tailer` member a bare `lagFor`
-  // reports lag 0 where a `sync_retention` member reports 7, and that SAME `sync_tailer` member under
-  // `withTenant` reports 7. The box is single-venue (one tenant, `till.tenantId`), so every captured
+  // silent false-healthy. This is PINNED by the box-status durability guard
+  // (`packages/sync/src/retention.gate.test.ts`), which asserts a bare `sync_tailer` `lagFor` and the
+  // SAME member under `withTenant` DISAGREE — the invariant, not any specific number (the guard's own
+  // probe happens to see 0 vs a real lag). The box is single-venue (one tenant, `till.tenantId`), so every captured
   // outbox row carries that tenant_id and its context reveals the whole log. NO `asAppUser` here — that
   // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
   // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.

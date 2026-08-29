@@ -670,7 +670,7 @@ Fills the `replication` field with a real lag summary when `WAITRON_SYNC_PEERS` 
 
 **Interfaces:**
 - Consumes: `lagFor(db)` (`@waitron/sync`) reading `syncDb` (the `sync_tailer`+`app_user` member pool).
-- Produces: no new export; `readReplicationLag` in the `boot.ts` mount becomes `syncDb ? () => lagFor(syncDb) : undefined`.
+- Produces: no new export; `readReplicationLag` in the `boot.ts` mount becomes `syncDb ? () => withTenant(syncDb, till.tenantId, (tx) => lagFor(tx)) : undefined`. **(Corrected during implementation — a bare `lagFor(syncDb)` reads `sync_log` under a NULL tenant context and reports a false-healthy lag 0; it MUST run inside `withTenant`, no `asAppUser`. Pinned by the guard in `packages/sync/src/retention.gate.test.ts`.)**
 
 - [ ] **Step 1: Write the failing test**
 
@@ -680,6 +680,8 @@ Drive `mountBoxStatusApi` with a real `readReplicationLag` closure over a DB hol
 // Seed (as the appropriate roles): a sync_log with max(seq)=10 for origin O, and two sync_cursor rows
 // for subscribers s1 (last_applied_seq=3 → lag 7) and s2 (last_applied_seq=10 → lag 0).
 // Then mount with readReplicationLag: () => lagFor(db) and GET /api/box/status.
+// NB this test reader passes the OWNER connection (bypasses RLS) to prove the summary SHAPE only; the
+// tenant-context requirement of the real boot wiring is pinned separately in packages/sync's guard.
 it("summarises replication worst-first when sync is configured", async () => {
   // … seed sync_log + sync_cursor per packages/sync fixtures (recordSubscriberCursor / direct inserts) …
   const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
@@ -705,10 +707,16 @@ Change the mount added in Task 5 so `readReplicationLag` is supplied from the sy
   // non-undefined narrowing inside the closure (same reason the sync block hoists `localSyncDb`).
   const lagPool = syncDb;
   // … in the mountBoxStatusApi deps:
-  readReplicationLag: lagPool === undefined ? undefined : () => lagFor(lagPool),
+  readReplicationLag:
+    lagPool === undefined ? undefined : () => withTenant(lagPool, till.tenantId, (tx) => lagFor(tx)),
 ```
 
-Import `lagFor` from `@waitron/sync` at the top of `boot.ts` (it already imports other sync pieces).
+**Corrected during implementation:** a bare `lagFor(lagPool)` reads `sync_log` under a NULL tenant
+context (the `sync_tailer` login is fenced by `sync_log`'s per-tenant RLS policy) and reports a
+**false-healthy lag 0**, so the reader MUST run inside `withTenant(till.tenantId)` — and NOT under
+`asAppUser` (which would drop the `sync_tailer` SELECT). Pinned by the prove-by-deletion guard in
+`packages/sync/src/retention.gate.test.ts`. Import `lagFor` AND `withTenant` from `@waitron/db`/`@waitron/sync`
+at the top of `boot.ts`.
 
 - [ ] **Step 4: Run tests**
 
