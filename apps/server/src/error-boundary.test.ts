@@ -52,11 +52,13 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(lines).toEqual([{ level: "warn", event: "tenant.not_found", fields: { id } }]);
   });
 
-  it("maps an AppError whose code is mapped to 500 to that status and logs it at error", async () => {
+  it("maps an AppError whose code is mapped to 500 to that status but still logs it at warn", async () => {
     const lines: Line[] = [];
     // A server-fault AppError (a box that has lost its own secret files): the map assigns it 500, so
-    // severity derives from the RESOLVED status — the response is a structured 500 logged at ERROR,
-    // not warn.
+    // the RESPONSE is a structured 500 — but log severity keys off AppError-vs-not, not the status, so
+    // a deliberate/expected AppError is logged at WARN even when re-emitted at a 5xx (the same
+    // convention `setup-api.ts`'s `mirror.bundle_fetch_failed` → 502 follows). Only an unexpected
+    // non-AppError takes the `error`/opaque-500 branch.
     const status: Record<string, ContentfulStatusCode> = { "recovery.state_incomplete": 500 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const app = new Hono();
@@ -71,9 +73,9 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(await res.json()).toEqual({
       error: { code: "recovery.state_incomplete", params: { missing: "trading.env" } },
     });
-    // Logged at ERROR (5xx), with the code and its params — never the error's `.message`.
+    // Logged at WARN (AppError → warn regardless of the 5xx status), with the code and its params.
     expect(lines).toEqual([
-      { level: "error", event: "recovery.state_incomplete", fields: { missing: "trading.env" } },
+      { level: "warn", event: "recovery.state_incomplete", fields: { missing: "trading.env" } },
     ]);
   });
 
