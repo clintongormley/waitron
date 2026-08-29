@@ -68,9 +68,9 @@ follow.
    intra-community/import boxes (32–39), plus the two pre-filing caveats a human must clear.
 4. **Printing + hardware surface** — the **printing subsystem is built** (agents/printers/outbox/
    runtime/`usb`+`network_tcp` transports/ESC/POS/dashboard, security-reviewed), and so are its
-   **kitchen** (KDS-4) and **counter-receipt + cash-drawer** consumers. Remaining on the track:
-   `cloud_poll` transports (fast-follow), cash-drawer authorization, the expo device kind. Real deli
-   hardware need; mechanical.
+   **kitchen** (KDS-4), **counter-receipt + cash-drawer**, and **cash-drawer authorization**
+   consumers. Remaining on the track: `cloud_poll` transports (fast-follow), the expo device kind.
+   Real deli hardware need; mechanical.
 5. **Cloud trial on-ramp** — the distribution design's zero-hardware demo path (today's same-origin
    PWA pointed at a cloud instance). **Least new *application* code, but not infra-cheap:** there is
    **no cloud / deploy / hosting / domain infrastructure yet** (verified 2026-08-26 — no Dockerfile,
@@ -108,7 +108,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook (security) | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
 | 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys | mid-shift-suspension enforce, discount gate, till-refund enforce; **encrypt `totp_secret` at rest** |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
-| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing** — operable end to end | cash-drawer **authorization** (top-tier #4) |
+| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **fiscal remainder (top-tier #3)** |
 | 9 | Deployment | distribution & client-topology design (#86) | **cloud trial on-ramp (#5)** + agent/appliance/reroute (#8) |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill** (fiscal) |
@@ -239,8 +239,9 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 ### Printing + hardware surface (top-tier #4)
 
 The **printing subsystem is built and security-reviewed** (2026-08-17..26), and its **kitchen**
-(KDS-4) and **counter-receipt + cash-drawer** consumers have landed; the remaining consumers below
-are specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans}/2026-08-17-*`:
+(KDS-4), **counter-receipt + cash-drawer**, and **cash-drawer authorization** consumers have landed;
+the remaining consumers below are specced-and-planned only. Specs/plans under
+`docs/superpowers/{specs,plans}/2026-08-17-*`:
 
 - **Printing subsystem** (`printing-subsystem*`) — **BUILT** (`@waitron/printing` + `print-api`
   routes + the Impresoras dashboard): central-managed `printers` plus **print agents** (enrol/revoke
@@ -274,15 +275,27 @@ are specced-and-planned only. Specs/plans under `docs/superpowers/{specs,plans}/
   print a receipt with no kick. Plus a **manual reprint** (`POST /api/sales/:id/reprint` — paper only,
   files nothing, ignores print-mode, no drawer) and a **manual drawer-open** (`POST /api/drawer/open` —
   a `drawer_opens('manual')` row + kick, refused `drawer.no_printer` when the till has no printer), and
-  the dashboard's per-till printer picker + per-location print-mode toggle. Fast-follows: the
-  **`cash.drawer` permission + supervisor-override gate** (spec §8 — the manual open is session-gated
-  and audited today, not yet permission-gated; needs the till `authorize()` path — see **Cash-drawer
-  authorization** below) and the `cloud_poll` transports. Deferred UI niceties: the per-till picker
+  the dashboard's per-till printer picker + per-location print-mode toggle. The
+  **`cash.drawer` permission + supervisor-override gate** foreseen here (spec §8 — the manual open was
+  session-gated and audited but not yet permission-gated at this slice) is now **BUILT** — see
+  **Cash-drawer authorization** below; the remaining fast-follow is the `cloud_poll` transports.
+  Deferred UI niceties: the per-till picker
   isn't location-filtered (all active printers, fine for the single-location deli); the print-mode
   toggle is set-only (no read-back route this slice, the `bump_mode` precedent).
-- **Cash-drawer authorization** (`cash-drawer-authorization*`) — a per-location `drawer_open_policy`
-  and the **first till-side `authorize()`-with-supervisor-override path** + a reusable supervisor-
-  override dialog (which on-till config and future till void/refund reuse).
+- **Cash-drawer authorization** (`cash-drawer-authorization*`) — **BUILT**: a `cash.drawer` permission
+  (supervisor+), a per-location `drawer_open_policy` (`gated`/`open`, secure default `gated`) with a
+  dashboard toggle, and `POST /api/drawer/open` upgraded to parse a supervisor override and call
+  `authorize()` — under `gated` the open is satisfied by the operator's own role OR a supervisor-PIN
+  override, stamping `authorized_by`/`via_override` on the `drawer_opens` audit row (a cash-control
+  audit trail, not a fiscal record — the branch touches no `registros`/huella/alta path; §4, H2
+  grep-proven). Plus a session-guarded `GET /api/drawer/authorizers` (the eligible-supervisor set) and
+  a **reusable supervisor-override dialog** on the till (props-in/events-out, driven by an optimistic
+  403→dialog→retry flow). This is the **first till route to parse a supervisor OVERRIDE and call
+  `authorize()` WITH one** — FP-2's `PUT/DELETE /api/tables/:id/placement` already calls
+  `authorize(…"till.configure")` but with NO override — so the override dialog + the override hop are
+  the foundation that **on-till config** (device-identity manager-on-till, FP-2 "Editar plano") and
+  future till void/refund reuse. With this landed the **counter-POS surface (sub-project 7) is fully
+  built** — nothing left to design on it.
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server
   Direct Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the
   central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node with no agent.
