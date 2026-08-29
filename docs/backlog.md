@@ -55,8 +55,8 @@ hit — not a rough frontend.
   break-glass. *Open threads → Onboarding, cloud trial & distribution/failover.*
 - **Sync cloud-mirror C2b** — the operator flow (mirror-bundle + wizard primary/mirror choice +
   adopt-existing-venue). *Open threads → Sync.*
-- **Promotion — Slice 1 (local secondary → primary, in-process) LANDING** (`feat/promote-local-secondary`,
-  PR open — owner chose to land it now, overriding the park). The **remaining** promote-action slices stay
+- **Promotion — Slice 1 (local secondary → primary, in-process) LANDED (#160)** (owner chose to land it
+  now, overriding the demo-first park). The **remaining** promote-action slices stay
   **PARKED**: gated on unbuilt foundations (break-glass mint, reserved-SIF, backup regime), the demo never
   touches them, resume post-demo. Design + #158 foundation landed. *Open threads → SIF topology.*
 
@@ -538,7 +538,7 @@ mechanism (mount-and-gate, start the primary-only workers without restarting the
 `deployment.singleton_role` axis (the singleton-ownership `role` #33 §8 needs, which `nodes.ts` deferred),
 a remote-first authenticated trigger with a local offline fallback + one break-glass secret, and the
 fence-then-claim-submitter attestation gate. **Its implementation plan is written, and the first slice —
-local secondary → primary, in-process — is landing on `feat/promote-local-secondary`.** C2a built the
+local secondary → primary, in-process — LANDED (#160).** C2a built the
 `deployment.mode` *seam*; this slice adds the runtime **holder refresh** (`deployment-holders.ts`) and the
 in-process `promoteLocalSecondaryToPrimary` (`promote.ts`), so a fence-attested local-secondary promote
 flips `singleton_role` live and the fiscal drain/reconcile pass starts on the next tick with **no restart**
@@ -554,7 +554,7 @@ opens the read-only gate live, and starting the mode-gated workers at runtime (l
   secondary would otherwise run the AEAT submitter); today's primary + C2a mirror are byte-identical.
   The promote *action* is being built slice by slice (plan:
   `docs/superpowers/plans/2026-08-29-promote-action-slice-1-local-secondary.md`). **Slice 1 — local
-  secondary → primary, in-process — is landing on `feat/promote-local-secondary`:** the fence-attestation
+  secondary → primary, in-process — LANDED (#160):** the fence-attestation
   gate + the idempotent `promoteLocalSecondaryToPrimary` (owner-write `singleton_role`→primary + live holder
   refresh; fiscal pass starts next tick, no restart), exposed as an in-process `StartedServer` method,
   real-PG e2e proven. **Remaining slices, each gated on an unbuilt foundation:** Slice 2 — the authenticated
