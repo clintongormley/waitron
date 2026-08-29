@@ -43,6 +43,12 @@ export const PERMISSIONS = [
   // (purchase.manage) or staff admin (person.manage); granted to manager + admin, the dashboard's
   // audience (spec D7). Codes/permissions are never renamed once shipped.
   "report.export",
+  // Viewing the management reporting surface (sales/takings) from the management dashboard / API
+  // (@waitron/reporting). A domain-named REPORTING permission distinct from report.export (exporting
+  // the modelo 303 fiscal file, manager+admin only): reading the reports is a floor-supervisor
+  // capability, so it lives in the SUPERVISOR set — supervisor, manager (spreads SUPERVISOR) and admin
+  // (ALL) hold it, staff never does. Codes/permissions are never renamed once shipped.
+  "report.view",
   // Generating pairing codes and managing enrolled devices (a kitchen/station display binds to one
   // kitchen_stations row via a single-use pairing code, then authenticates by a device cookie) from
   // the management dashboard (device-identity-1). A domain-named DEVICE-ADMIN permission, distinct from
@@ -84,6 +90,9 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
   // A supervisor on the floor can authorize a gated cash-drawer open; manager (spreads SUPERVISOR)
   // and admin (ALL) inherit it, staff never holds it.
   "cash.drawer",
+  // A supervisor can read the management reporting surface (sales/takings); manager (spreads
+  // SUPERVISOR) and admin (ALL) inherit it, staff never holds it. Distinct from report.export.
+  "report.view",
 ]);
 const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,

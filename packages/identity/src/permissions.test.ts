@@ -120,6 +120,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "printer.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "printer.manage")).toBe(false);
   });
+  it("grants report.view to supervisor, manager and admin, not staff", () => {
+    // A domain-named reporting permission (viewing the management reporting surface — sales/takings),
+    // held by SUPERVISOR (so supervisor, manager via ...SUPERVISOR and admin via ALL hold it) and NEVER
+    // by staff. Distinct from report.export (exporting the modelo 303 fiscal file, manager+admin only):
+    // a supervisor on the floor can read the reports without holding the tax-export gate.
+    expect(roleHasPermission("supervisor", "report.view")).toBe(true);
+    expect(roleHasPermission("manager", "report.view")).toBe(true);
+    expect(roleHasPermission("admin", "report.view")).toBe(true);
+    expect(roleHasPermission("staff", "report.view")).toBe(false);
+  });
   it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
     // Minting a cloud-mirror bundle hands out a data-access sync token, so it is admin-only — reached via
     // ALL and NEVER placed in the SUPERVISOR/MANAGER sets. Not even a manager holds it (least privilege —
