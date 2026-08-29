@@ -463,14 +463,27 @@ Provisioning/build*).
 
 **Phase 0 remainder — onboarding 4b then 4c:**
 
-- **4b — backup / recovery.** Recovery-bundle download under an operator passphrase, scheduled
-  `pg_dump` (incl. `sync_log`) + last-backup age, and — per the owner + #158's cold-restore runbook —
-  **restore + a FRESH chain must let a no-hot-failover venue go live unblocked**, month-end AEAT
-  `consultar` reconciling the lost tail. Folds in the **4a follow-ups**: *(i)* an `apps/server`
-  integration test pinning box-status's boot closure `withTenant`-wrapping through a real
-  `sync_tailer` pool (today only the `packages/sync` semantic is guarded); *(ii)* surface
-  **`singleton_role`** (#158) alongside `mode` in box-status; *(iii)* keep `collectBoxStatus`'s
-  `replicationLag` **fail-loud**; *(iv)* a fractional-day cert-expiry test case.
+- **4b split 4b-i / 4b-ii / 4b-iii.**
+  - **4b-i — recovery bundle + the 4a follow-ups — implemented on
+    `feat/onboarding-4b-recovery-bundle`** (not yet landed): an operator downloads a
+    passphrase-encrypted **recovery bundle** of the box's unrecoverable secret files — `secrets.env`
+    (vault master key) + `trading.env` (venue identity) + the `tls/` CA/leaf quartet, **not** the DB —
+    via the management-gated `POST /api/box/recovery-bundle`, and opens it with `waitron-recovery
+    unpack`. Envelope: scrypt (N=2¹⁷, OWASP 2024) + AES-256-GCM, 12-char passphrase floor,
+    hostile-envelope-hardened, path-traversal-guarded on unpack. Folds in the **4a follow-ups**: *(i)*
+    an `apps/server` test pinning box-status's boot closure `withTenant`-wrapping through a real
+    `sync_tailer` pool; *(ii)* surface **`singleton_role`** (#158) alongside `mode` in box-status;
+    *(iii)* keep `collectBoxStatus`'s `replicationLag` **fail-loud**; *(iv)* a fractional-day
+    cert-expiry test case. (Along the way, `error-boundary` now keys log severity off the resolved
+    status, so an `AppError` mapped to a 5xx — e.g. the recovery route's `recovery.state_incomplete`
+    server fault — logs at `error`, not `warn`.)
+  - **4b-ii — scheduled DB backup.** Scheduled `pg_dump` (incl. `sync_log`) + last-backup age wired
+    into box-status's `backup` field. Decisions: **`pg_dump`, not WAL/continuous archiving** (too
+    much overhead, owner call); and the backup role must **bypass RLS** or a FORCE-RLS table dumps
+    only policy-visible rows — a silent partial fiscal backup (pin with a prove-by-deletion test).
+  - **4b-iii — cold-restore / fresh-chain runbook.** Per the owner + #158's cold-restore runbook:
+    **restore + a FRESH chain must let a no-hot-failover venue go live unblocked**, month-end AEAT
+    `consultar` reconciling the lost tail.
 - **4c — break-glass.** Loopback-only admin reset; factory-reset design-only.
 
 **Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid
