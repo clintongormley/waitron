@@ -29,6 +29,32 @@ export interface PeriodVatInput {
   dayCutover: string;
 }
 
+export interface TopSellersInput {
+  tenantId: TenantId;
+  /** Omit → aggregate across ALL the tenant's nodes (RLS + the tenant predicate scope it). */
+  nodeId?: NodeId;
+  /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
+  fromBusinessDay: string;
+  /** Inclusive upper bound, local calendar date of the business day, "YYYY-MM-DD". */
+  toBusinessDay: string;
+  /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
+  timeZone: string;
+  /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
+  dayCutover: string;
+  /** How many top products to return. Must be a positive integer. */
+  limit: number;
+}
+
+/** One product in the top-sellers list, keyed on the frozen per-line `descriptions` snapshot. */
+export interface TopSeller {
+  /** The frozen `sale_lines.descriptions` map (locale → label), returned intact for the frontend. */
+  descriptions: Record<string, string>;
+  /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
+  quantity: Decimal;
+  /** Σ line_total over the range (numeric(12,2)); corrections net in. */
+  total: Decimal;
+}
+
 export interface VatReturnInput {
   /** The obligado — a modelo 303 aggregates ALL nodes of the legal entity (no node predicate). */
   tenantId: TenantId;
