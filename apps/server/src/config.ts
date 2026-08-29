@@ -452,7 +452,11 @@ function parsePositiveInt(env: Env, variable: string): number | undefined {
   return value;
 }
 
-function positiveInt(env: Env, variable: string, fallback: number): number {
+// Exported so `backup-config.ts` (a sibling opt-in config loader, slice 4b-ii) validates
+// `WAITRON_BACKUP_*` positive-integer knobs against the SAME rule — throwing the SAME
+// `server.config_invalid`/`not_a_positive_integer` this file's own knobs do — rather than keeping a
+// second copy that could drift.
+export function positiveInt(env: Env, variable: string, fallback: number): number {
   return parsePositiveInt(env, variable) ?? fallback;
 }
 
