@@ -227,6 +227,10 @@ function adoptDeps(overrides: Partial<AdoptDeps> = {}): AdoptDeps {
     },
     databaseUrl: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
     migrationsDatabaseUrl: mirror.pg.uri,
+    // The mirror's OWN sync pool (a `sync_applier` role) — adopt persists it into trading.env as
+    // WAITRON_SYNC_DATABASE_URL so the reboot's `loadMirrorSyncConfig` reads it back and enters mirror
+    // mode. The same role the reboot env below (`mirrorBootEnv`) uses.
+    syncDatabaseUrl: roleUrl(mirror.pg.uri, "sync_applier", "ap"),
     ...overrides,
   };
 }
@@ -534,6 +538,7 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
       seriesId: designated.seriesId,
       databaseUrl: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
       migrationsDatabaseUrl: mirror.pg.uri,
+      syncDatabaseUrl: roleUrl(mirror.pg.uri, "sync_applier", "ap"),
       environment: "preproduction",
     });
 

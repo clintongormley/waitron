@@ -149,6 +149,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         },
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
+        syncDatabaseUrl: "postgres://sync@mirror/db",
       },
       { primaryUrl: "https://primary.test/", credential },
     );
@@ -165,7 +166,9 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect((await readMirrorConfig(mirror.admin))!.relayUrl).toBe(bundle.relayUrl);
     expect(await readMirrorToken(mirrorApp, RING, designated.tenantId)).toBe(bundle.syncToken);
 
-    // trading.env got the five designated ids + the environment + the DB URLs.
+    // trading.env got the five designated ids + the environment + the DB URLs, including the mirror's
+    // OWN sync-pool URL — without WAITRON_SYNC_DATABASE_URL in trading.env the next (mirror) boot's
+    // `loadMirrorSyncConfig` throws `server.config_missing` and never enters mirror mode.
     expect(persisted).toHaveLength(1);
     expect(persisted[0]).toMatchObject({
       tenantId: designated.tenantId,
@@ -176,6 +179,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       environment: "preproduction",
       databaseUrl: "postgres://app@mirror/db",
       migrationsDatabaseUrl: "postgres://owner@mirror/db",
+      syncDatabaseUrl: "postgres://sync@mirror/db",
     });
 
     // The parent rows landed on the mirror (adoptVenue ran).

@@ -47,6 +47,11 @@ export interface AdoptDeps {
   databaseUrl: string;
   /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
   migrationsDatabaseUrl: string;
+  /** The mirror's OWN sync-pool connection (a `sync_applier` LOGIN role), written into `trading.env`
+   * as `WAITRON_SYNC_DATABASE_URL` — the value the next (mirror) boot's `loadMirrorSyncConfig` reads
+   * back to enter mirror mode. Guaranteed non-empty by the boot adopt closure's Ruling 1 guard, which
+   * refuses an unset value at adopt time (`server.config_missing`) rather than persist nothing. */
+  syncDatabaseUrl: string;
 }
 
 /**
@@ -92,6 +97,7 @@ export async function adoptFromPrimary(
     seriesId: designated.seriesId,
     databaseUrl: deps.databaseUrl,
     migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
+    syncDatabaseUrl: deps.syncDatabaseUrl,
     environment: bundle.environment,
   });
 

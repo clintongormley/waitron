@@ -575,8 +575,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           {
             environment: config.environment,
             provision: (req) => provisionVenue({ ownerDb }, req),
-            adopt: (req) =>
-              adoptFromPrimary(
+            adopt: (req) => {
+              // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
+              // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
+              // `loadMirrorSyncConfig` reads it back — an absent one throws `server.config_missing`
+              // there and the box never boots into mirror mode. The POST /setup-api/adopt request is
+              // the ONE interactive moment the operator can fix the deploy env, so if it is unset we
+              // refuse HERE (before any bundle fetch or DB write) rather than persist nothing and let
+              // the reboot fail. Reuse the existing `server.config_missing` code + its `variable`
+              // param shape (config.ts's `required`) — this fact is exactly a missing config var, so
+              // no new code is minted. The guard narrows `config.syncDatabaseUrl` (string | undefined)
+              // to the non-empty string `AdoptDeps.syncDatabaseUrl` requires.
+              if (config.syncDatabaseUrl === undefined) {
+                throw new AppError("server.config_missing", {
+                  variable: "WAITRON_SYNC_DATABASE_URL",
+                });
+              }
+              return adoptFromPrimary(
                 {
                   ownerDb,
                   ring,
@@ -584,9 +599,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   persistTrading,
                   databaseUrl: config.databaseUrl,
                   migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                  syncDatabaseUrl: config.syncDatabaseUrl,
                 },
                 req,
-              ),
+              );
+            },
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
             persistTrading,
             databaseUrl: config.databaseUrl,
