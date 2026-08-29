@@ -130,7 +130,7 @@ export interface AdoptBody {
  * before restarting into mirror mode). Like {@link ProvisionResult}, this is the last response the
  * wizard gets: the box SIGTERMs on the next tick and comes back serving the read-only dashboard.
  */
-export interface AdoptResult {
+export interface AdoptOutcome {
   adopted: true;
   tenantId: string;
   restarting: true;
@@ -179,12 +179,12 @@ export class SetupApi {
    * `POST /setup-api/adopt` — the MIRROR-side sibling of {@link SetupApi.provision} (C2b Task 13). The
    * mirror fetches the primary's bundle server-side using the supplied admin `credential` (a nested
    * object, sent verbatim), adopts the venue into its own database, then restarts into mirror mode. On
-   * success the box restarts (see {@link AdoptResult}); a failure rejects with an {@link ApiError} the
+   * success the box restarts (see {@link AdoptOutcome}); a failure rejects with an {@link ApiError} the
    * connect screen surfaces (`mirror.bundle_fetch_failed` when the primary is unreachable or the login
    * is refused, `setup.*` for the shared latch/deps/validation guards).
    */
-  adopt(body: AdoptBody): Promise<AdoptResult> {
-    return this.#request<AdoptResult>("/setup-api/adopt", "POST", body);
+  adopt(body: AdoptBody): Promise<AdoptOutcome> {
+    return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
   }
 
   /**
