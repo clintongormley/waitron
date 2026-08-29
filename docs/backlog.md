@@ -464,8 +464,7 @@ Provisioning/build*).
 **Phase 0 remainder — onboarding 4b then 4c:**
 
 - **4b split 4b-i / 4b-ii / 4b-iii.**
-  - **4b-i — recovery bundle + the 4a follow-ups — implemented on
-    `feat/onboarding-4b-recovery-bundle`** (not yet landed): an operator downloads a
+  - **4b-i — recovery bundle + the 4a follow-ups — LANDED #161**: an operator downloads a
     passphrase-encrypted **recovery bundle** of the box's unrecoverable secret files — `secrets.env`
     (vault master key) + `trading.env` (venue identity) + the `tls/` CA/leaf quartet, **not** the DB —
     via the management-gated `POST /api/box/recovery-bundle`, and opens it with `waitron-recovery
