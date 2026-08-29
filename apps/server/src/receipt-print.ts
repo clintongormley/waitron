@@ -244,24 +244,34 @@ export async function enqueueReceiptReprint(
 }
 
 /**
- * Enqueue a KICK-ONLY job to `printerId` and record a manual drawer open (design §3d) — the audited
- * `POST /api/drawer/open`. Pure INSERTs on the caller's tx: a `drawer_opens('manual')` audit row
- * (who/when, NO sale — a manual open is drawer accountability with no attached sale) and the drawer-kick
- * outbox job (no receipt, just the pulse). The caller (`till-api.ts`) resolves the printer via
- * `resolveReceiptPrinter` and throws `drawer.no_printer` when there is none, so this helper is reached
- * only with a real printer and throws nothing itself.
+ * Enqueue a KICK-ONLY job to `printerId` and record a manual drawer open (design §3d + cash-drawer-
+ * authorization §3) — the audited `POST /api/drawer/open`. Pure INSERTs on the caller's tx: a
+ * `drawer_opens('manual')` audit row (who/when, NO sale — a manual open is drawer accountability with
+ * no attached sale) and the drawer-kick outbox job (no receipt, just the pulse). The caller
+ * (`till-api.ts`) resolves the printer via `resolveReceiptPrinter` and throws `drawer.no_printer` when
+ * there is none, so this helper is reached only with a real printer and throws nothing itself.
+ *
+ * `operatorId` (`person_id`) is who PERFORMED the open — the logged-in operator, always. `authorizedBy`
+ * (`authorized_by`) is who AUTHORIZED it — the operator's own id under an `open` policy or a self-
+ * authorizing supervisor, or the supervisor's id when a cashier opened via override — and `viaOverride`
+ * records whether that authorization came through a supervisor override. Both are computed by the route
+ * from `drawer_open_policy` + `authorize()`; this helper just persists them.
  */
 export async function enqueueManualDrawerOpen(
   tx: Transaction,
   cfg: TillConfig,
   printerId: string,
   operatorId: string,
+  authorizedBy: string | null,
+  viaOverride: boolean,
 ): Promise<void> {
   await tx.insert(drawerOpens).values({
     tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     personId: operatorId,
     reason: "manual",
+    authorizedBy,
+    viaOverride,
   });
   await enqueuePrintJob(tx, printConfig(cfg), printerId, DRAWER_KICK);
 }
