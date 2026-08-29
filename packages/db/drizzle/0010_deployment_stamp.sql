@@ -6,7 +6,7 @@
 --
 -- 2026-08-28 (cloud-mirror C2a): "written once and never updated" describes the `environment` column
 -- ONLY. This same singleton row later gained a `mode` column (`primary`|`mirror`), added by
--- drizzle/0067_deployment_mode.sql, and `mode` IS mutable — a mirror is PROMOTED to a primary in
+-- drizzle/0069_deployment_mode.sql, and `mode` IS mutable — a mirror is PROMOTED to a primary in
 -- place via a single owner-role `UPDATE deployment SET mode='primary'` (C2a design §10). No
 -- replace-not-update rule applies to it; only `environment` is fixed for the life of the database.
 --

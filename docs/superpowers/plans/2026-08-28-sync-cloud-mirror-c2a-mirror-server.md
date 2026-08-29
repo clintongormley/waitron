@@ -28,7 +28,7 @@
 
 **Files:**
 - Modify: `packages/db/src/schema/deployment.ts` — add the `mode` column + CHECK.
-- Create: `packages/db/drizzle/0067_deployment_mode.sql` — the ALTER (hand-written custom, like 0010).
+- Create: `packages/db/drizzle/0069_deployment_mode.sql` — the ALTER (hand-written custom, like 0010).
 - Modify: `packages/db/src/deployment.ts` — add `DeploymentMode`, `readDeploymentMode`, `setDeploymentMode`.
 - Test: `packages/db/src/deployment.test.ts` — accessor + CHECK + grant read-back (extend the existing file).
 
@@ -92,7 +92,7 @@ export const deployment = pgTable(
 
 - [ ] **Step 4: Write the migration**
 
-Create `packages/db/drizzle/0067_deployment_mode.sql`:
+Create `packages/db/drizzle/0069_deployment_mode.sql`:
 
 ```sql
 -- Which ROLE this database plays in the cloud-mirror topology (C2a design §3). A `primary` writes and
@@ -174,7 +174,7 @@ Expected: PASS. Then, to prove the negative bites: temporarily add `GRANT UPDATE
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/db/src/schema/deployment.ts packages/db/drizzle/0067_deployment_mode.sql packages/db/src/deployment.ts packages/db/src/index.ts packages/db/src/deployment.test.ts
+git add packages/db/src/schema/deployment.ts packages/db/drizzle/0069_deployment_mode.sql packages/db/src/deployment.ts packages/db/src/index.ts packages/db/src/deployment.test.ts
 git commit -s -m "feat(db): deployment.mode (primary|mirror) + accessors for the cloud mirror"
 ```
 
