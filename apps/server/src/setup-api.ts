@@ -5,10 +5,12 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
+import type { AdoptRequest } from "./adopt.js";
 import { validateAeatCert } from "./aeat-credential.js";
 import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { mountSpa } from "./spa-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -32,6 +34,13 @@ export interface SetupDeps {
    * returning the five ids the trading boot needs. Plaintext admin secrets never reach it — the
    * provision route hashes them at the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
+   * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
+   * credential never touches a browser→primary hop), adopts the venue into this box's own database,
+   * seals the sync token, and persists `trading.env` — returning the adopted `tenantId`. OPTIONAL for
+   * the same reason `provision` is: a `POST /setup-api/adopt` that arrives before it is wired is
+   * answered `503 setup.not_ready`. */
+  adopt?: (req: AdoptRequest) => Promise<{ tenantId: string }>;
   /** `sealAeatCredential(db, ring, …)` bound in boot: seals the AEAT cert into the tenant's
    * `fiscal.aeat` vault purpose. Needed only when a LIVE ES-common provision supplies a certificate. */
   sealAeat?: (tenantId: string, cert: AeatCert) => Promise<void>;
@@ -111,6 +120,25 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
 // The `"setup.provision_failed"` here is the LOG TAG for the unexpected-crash branch, not a wire code
 // (see the map's doc comment above and error-boundary.ts): a non-`AppError` is answered `server.internal`.
 const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_failed");
+
+/**
+ * The adopt route's 4xx/5xx contract (the provision map's mirror-side sibling). `mirror.bundle_fetch_failed`
+ * is the one code that is NOT a client fault: the operator's request is well-formed, but the mirror's
+ * UPSTREAM — the primary it was pointed at — failed to serve or return a parseable bundle, so it maps to
+ * HTTP 502 (the mirror is a gateway; its upstream failed), the status `mirror.bundle_fetch_failed`'s own
+ * doc comment in errors.ts assigns it. `setup.request_invalid` (a missing/mistyped `primaryUrl`/`credential`)
+ * defaults to 400 anyway but is enumerated so this map is the surface's whole contract. `setup.not_ready`/
+ * `setup.already_provisioning` are NOT here — like provision's, they are returned directly, outside the
+ * boundary. A non-`AppError` fault is answered an opaque `server.internal` 500 under the log tag below.
+ */
+const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.request_invalid": 400,
+  "mirror.bundle_fetch_failed": 502,
+};
+
+// `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
+// `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
+const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
  * password, passphrase or PFX is exactly the secret a caller can mis-send). */
@@ -355,6 +383,57 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
         // returned above, so the latch stays true and no second provision can start before the box
         // restarts out of setup mode.
+        provisioning = false;
+        throw error;
+      }
+    });
+  });
+
+  // POST /setup-api/adopt — the MIRROR-side sibling of provision (C2b Task 9). Fetches the primary's
+  // bundle server-side, adopts the venue into this box's own database, seals the token + persists
+  // `trading.env`, then restarts into mirror mode. It REUSES provision's one-shot latch (the same
+  // `provisioning` closure variable): a box is set up EITHER as a primary (provision) OR as a mirror
+  // (adopt), never both, so a start of either action must latch out a concurrent start of the other —
+  // the same "one unrecoverable first-boot action" guard, expressed once. Registered BEFORE the
+  // `GET *` catch-all below (Hono first-match wins).
+  app.post("/setup-api/adopt", (c) => {
+    // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Only `adopt` and
+    // `requestRestart` are load-bearing for this route (the fetch/persist deps are captured inside the
+    // `adopt` closure in boot). Captured as consts so TypeScript narrows them non-undefined below.
+    const adopt = deps.adopt;
+    const requestRestart = deps.requestRestart;
+    if (adopt === undefined || requestRestart === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+
+    // One-shot latch — CRITICAL, SYNCHRONOUS before ANY `await` — shared with provision (above). The
+    // loser is refused 409 here rather than starting a second adopt. Reset to false on ANY failure
+    // (below) so a corrected retry works; LEFT true on success — the box is about to restart.
+    if (provisioning) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    provisioning = true;
+
+    return runAdopt(c, log, async () => {
+      try {
+        // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
+        // through to the field screen below (a 400) rather than an opaque 500. The credential is NEVER
+        // logged — `asString` echoes the field NAME only, never its value.
+        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+        const credential = asString(body.credential, "credential");
+
+        const { tenantId } = await adopt({ primaryUrl, credential });
+
+        const response = c.json({ adopted: true, tenantId, restarting: true }, 200);
+        // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
+        // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
+        // the same persist-then-restart transition provision uses.
+        setTimeout(() => requestRestart(), 0);
+        return response;
+      } catch (error) {
+        // Reset on ANY failure so a corrected retry is accepted. On SUCCESS the function has already
+        // returned above, so the latch stays true and no second setup action can start before restart.
         provisioning = false;
         throw error;
       }

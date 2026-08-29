@@ -67,8 +67,10 @@ import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
 import { provisionVenue } from "./provision.js";
+import { adoptFromPrimary } from "./adopt.js";
+import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { sealAeatCredential } from "./aeat-credential.js";
-import { writeTradingEnv } from "./trading-config.js";
+import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -541,23 +543,40 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `mountSetup` or `startListening` — never leaks it.
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
       try {
+        // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
+        // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
+        // and `adopt` (C2b) persist `trading.env` through the SAME writer.
+        const persistTrading = async (cfg: TradingConfig): Promise<void> => {
+          await writeTradingEnv(config.stateDir, cfg);
+        };
         // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
         // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
         // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
-        // connection strings for the next boot. The `*` catch-all inside `mountSetup` stays terminal
-        // and last, so the new POST route (registered before it) is not shadowed.
+        // connection strings for the next boot. `adopt` is the MIRROR-side sibling (C2b): it fetches the
+        // primary's bundle over real HTTP (`fetchMirrorBundle`) and adopts the venue into this box's own
+        // database, reusing the SAME `ownerDb`/`ring`/`persistTrading` the provision path wires. The `*`
+        // catch-all inside `mountSetup` stays terminal and last, so the POST routes (registered before
+        // it) are not shadowed.
         mountSetup(
           app,
           {
             environment: config.environment,
             provision: (req) => provisionVenue({ ownerDb }, req),
+            adopt: (req) =>
+              adoptFromPrimary(
+                {
+                  ownerDb,
+                  ring,
+                  fetchBundle: fetchMirrorBundle,
+                  persistTrading,
+                  databaseUrl: config.databaseUrl,
+                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                },
+                req,
+              ),
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
-            // `writeTradingEnv` returns the path it wrote; the surface only needs `Promise<void>`, so
-            // discard it explicitly rather than widen the dep's type.
-            persistTrading: async (cfg) => {
-              await writeTradingEnv(config.stateDir, cfg);
-            },
+            persistTrading,
             databaseUrl: config.databaseUrl,
             migrationsDatabaseUrl: config.migrationsDatabaseUrl,
             requestRestart: () => process.kill(process.pid, "SIGTERM"),
