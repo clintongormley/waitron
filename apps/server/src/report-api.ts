@@ -18,10 +18,12 @@ import {
   computeDailyClose,
   computeTopSellers,
   computeVatReturn,
+  computeVatSummaryForPeriod,
   currentBusinessDay,
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
+  validateBusinessDay,
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { authorizeManager, type Permission } from "@waitron/identity";
@@ -40,8 +42,9 @@ export interface ReportApiDeps {
 
 /** The permissions gating the reporting routes, referenced through these constants (never an inline
  * literal — the catalogue-api `CATALOGUE_WRITE_PERMISSION` pattern). `report.export` gates the modelo
- * 303 DR303 export (manager + admin); `report.view` gates the dashboard overview reads (supervisor,
- * manager + admin). Two DISTINCT seams: viewing the takings dashboard is not exporting the fiscal file. */
+ * 303 DR303 export (manager + admin); `report.view` gates the dashboard reporting reads — overview,
+ * daily-close and period (supervisor, manager + admin). Two DISTINCT seams: viewing the takings
+ * dashboard is not exporting the fiscal file (a supervisor holds view but not export). */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
 const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
@@ -95,6 +98,25 @@ function requireLiquidationPeriod(raw: string | undefined): {
 function requireDeclarationType(raw: string | undefined): string {
   if (raw === undefined || Array.from(raw).length !== 1) {
     throw new AppError("management.request_invalid", { field: "declarationType" });
+  }
+  return raw;
+}
+
+/** Screen a business-day query param ("YYYY-MM-DD") the SAME way `requireLiquidationPeriod` screens
+ * `period`: pre-validate at the request boundary so a bad value becomes `management.request_invalid`
+ * {field} (400) here, never a plain `Error` from the reporting layer's own `validateBusinessDay` (which
+ * `computeDailyClose`/`computeVatSummaryForPeriod`/`computeTopSellers` call downstream) reaching `run`
+ * as an opaque `server.internal` 500. `validateBusinessDay` rejects both a malformed shape and a
+ * well-formed-but-impossible date (e.g. "2026-02-30"); its throw is translated, not propagated.
+ * `field` distinguishes `businessDay` (daily-close) from `from`/`to` (period). */
+function requireBusinessDay(raw: string | undefined, field: string): string {
+  if (raw === undefined || raw === "") {
+    throw new AppError("management.request_invalid", { field });
+  }
+  try {
+    validateBusinessDay(raw);
+  } catch {
+    throw new AppError("management.request_invalid", { field });
   }
   return raw;
 }
@@ -263,6 +285,78 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           openTables,
           topSellers,
         };
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The full daily close for ONE explicit business day (unlike overview, which anchors on TODAY): the
+  // VAT summary, the cash-up and record counts (`computeDailyClose`) plus that day's top sellers.
+  // Node-scoped, gated on `report.view`. `businessDay` is screened to a real "YYYY-MM-DD" at the
+  // boundary; money crosses the wire as decimal STRINGS.
+  app.get("/management-api/reports/daily-close", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const businessDay = requireBusinessDay(c.req.query("businessDay"), "businessDay");
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const tenantId = brandTenantId(deps.cfg.tenantId);
+        const nodeId = brandNodeId(deps.cfg.nodeId);
+        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const input = {
+          tenantId,
+          nodeId,
+          businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [close, topSellers] = await Promise.all([
+          computeDailyClose(tx, input),
+          computeTopSellers(tx, {
+            tenantId,
+            nodeId,
+            fromBusinessDay: businessDay,
+            toBusinessDay: businessDay,
+            timeZone: clock.timeZone,
+            dayCutover: clock.dayCutover,
+            limit: 10,
+          }),
+        ]);
+        return { businessDay, vat: close.vat, cash: close.cash, counts: close.counts, topSellers };
+      });
+      return c.json(result);
+    }),
+  );
+
+  // A VAT summary + top sellers over a closed business-day RANGE (`from`..`to`, inclusive) for THIS
+  // node — the period roll-up behind the dashboard's date-range view. Node-scoped, gated on
+  // `report.view`. `from`/`to` are each screened to a real "YYYY-MM-DD", and an inverted range
+  // (`from > to`) is a request fault (400) — a valid string compare because both passed
+  // `validateBusinessDay`'s fixed-shape check, exactly as `validateBusinessDayRange` orders them.
+  app.get("/management-api/reports/period", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const from = requireBusinessDay(c.req.query("from"), "from");
+      const to = requireBusinessDay(c.req.query("to"), "to");
+      if (from > to) {
+        throw new AppError("management.request_invalid", { field: "range" });
+      }
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const tenantId = brandTenantId(deps.cfg.tenantId);
+        const nodeId = brandNodeId(deps.cfg.nodeId);
+        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const common = {
+          tenantId,
+          nodeId,
+          fromBusinessDay: from,
+          toBusinessDay: to,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [vat, topSellers] = await Promise.all([
+          computeVatSummaryForPeriod(tx, common),
+          computeTopSellers(tx, { ...common, limit: 10 }),
+        ]);
+        return { from, to, vat, topSellers };
       });
       return c.json(result);
     }),
