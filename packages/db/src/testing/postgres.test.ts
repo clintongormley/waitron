@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import type { Database } from "../client.js";
@@ -110,6 +111,21 @@ describe.runIf(dockerAvailable())("against a real container", () => {
 
   afterAll(async () => {
     if (pg !== undefined) await pg.stop();
+  });
+
+  it("stamps its container with the com.waitron.reapable label the reaper filters on", () => {
+    // The stale-container reaper (scripts/reap-testcontainers.mjs) removes ONLY containers carrying
+    // `com.waitron.reapable`, never the generic `org.testcontainers` label every project shares. This
+    // proves the harness applies that exact string: our container publishes a unique host port, so
+    // finding that port among the label-filtered list means our container carries the label. Drift in
+    // either the label here or the filter there breaks this test.
+    const port = new URL(pg.uri).port;
+    const labelled = execFileSync(
+      "docker",
+      ["ps", "--filter", "label=com.waitron.reapable", "--format", "{{.Ports}}"],
+      { encoding: "utf8" },
+    );
+    expect(labelled).toContain(`:${port}->`);
   });
 
   it("connect() reaches a migrated database", async () => {

@@ -454,6 +454,14 @@ fi
 
 run_step "lint" "pnpm lint" pnpm lint
 
+# Reap STALE waitron testcontainers left by earlier interrupted runs, before this push's own test phase.
+# Scoped by the `com.waitron.reapable` label (so another project's containers are never touched) AND a 2h
+# age filter (so a watch-mode session's container is spared — unless that one session has itself run past
+# the threshold, the accepted residual edge). See the script's own header (scripts/reap-testcontainers.mjs)
+# for WHY they leak, what it costs, and the two guards. Manual equivalent is `pnpm reap`. Best-effort: the
+# script exits 0 even with Docker absent or nothing to reap, and `|| true` guarantees it never blocks a push.
+node scripts/reap-testcontainers.mjs || true
+
 # The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
 # classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — the
 # tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the two
