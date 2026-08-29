@@ -637,14 +637,14 @@ After the sync/retention block (around `boot.ts:977`, before `makeStartedServer`
       environment: config.environment,
       health,
       now,
-      tlsCertPath: config.tls?.certPath,
+      tlsCertPath: config.tls?.certFile, // corrected 2026-08-29: config.tls is { certFile, keyFile }, no certPath
       readReplicationLag: undefined, // Task 6 fills this from syncDb
     },
     log,
   );
 ```
 
-Confirm `config.tls?.certPath` is the served-leaf path field on the TLS config (check `config.ts`'s `tls` shape; use the exact property name). `health` and `now` are the same bindings `healthApp(health, now)` used at `boot.ts:449`.
+`config.tls?.certFile` is the served-leaf path field on the TLS config (config.ts `tls` shape is `{ certFile, keyFile }` — verified; the earlier `certPath` was wrong). `health` and `now` are the same bindings `healthApp(health, now)` used at `boot.ts:449`.
 
 - [ ] **Step 5: Run tests**
 
