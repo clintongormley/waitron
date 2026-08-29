@@ -838,11 +838,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
   // all sit behind non-GET verbs the read-only gate refuses, these two groups each expose a WRITE
   // BEHIND A GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE
-  // (packages/printing/src/runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-18
+  // (packages/printing/src/runtime.ts). The method gate (`read-only-gate.ts`, whose own comment at 6-24
   // flags exactly this) cannot catch a write on a GET, so the read-only guarantee for these operational
-  // groups rests on NOT mounting them on a mirror rather than on the verb — where before it rested only
-  // on their backing tables (`print_*`, `devices`) being unprovisioned on a mirror, which the gate
-  // comment said a later slice MUST revisit. A mirror provisions none of those tables anyway, so it
+  // groups rests on NOT mounting them on a mirror rather than on the verb — where before this guard
+  // existed it rested only on their backing tables (`print_*`, `devices`) being unprovisioned on a
+  // mirror. A mirror provisions none of those tables anyway, so it
   // loses nothing by their absence; a primary mounts both. This guard skips route REGISTRATION only —
   // every shared boot value (`till`, `secureCookies`) is built above and read by the sibling mounts, so
   // nothing downstream depends on these mounts having run.
