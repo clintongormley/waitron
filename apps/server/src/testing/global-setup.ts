@@ -63,6 +63,10 @@ export default async function ({ provide }: GlobalSetupContext) {
       { name: "app_login", password: "app_pw", inRole: "app_user" },
       { name: "sync_reader", password: "rp", inRole: "sync_tailer" },
       { name: "sync_applier", password: "ap", inRole: ["app_user", "sync_tailer"] },
+      // `sync_pruner` is a `sync_retention` member — the operator/CLI role that holds
+      // SELECT/INSERT/UPDATE on sync_peers (0005_sync_peers.sql). mirror-bundle.rls.test.ts enrols the
+      // mirror peer through it (enrolPeer inserts a sync_peers row), matching packages/sync's own harness.
+      { name: "sync_pruner", password: "pp", inRole: "sync_retention" },
     ],
   });
   provide("sharedPg", handle);
