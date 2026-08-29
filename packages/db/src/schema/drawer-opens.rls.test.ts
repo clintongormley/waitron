@@ -125,9 +125,9 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
     expect(row!.reason).toBe("manual");
     expect(row!.saleId).toBeNull();
     expect(row!.openedAt).toBeInstanceOf(Date); // defaultNow() populated the server-clock timestamp
-    // The new audit columns on their DEFAULT path: this open supplied neither, so authorized_by is NULL
-    // (an 'open'-policy / self-authorized open records no separate authorizer) and via_override took its
-    // NOT NULL DEFAULT false. Exercises the produced column mapping for both.
+    // The new audit columns on their DEFAULT path: this insert supplied neither, so authorized_by is NULL
+    // — as the automatic `cash_sale` drawer kick leaves it (a MANUAL open always sets authorized_by) — and
+    // via_override took its NOT NULL DEFAULT false. Exercises the produced column mapping for both.
     expect(row!.authorizedBy).toBeNull();
     expect(row!.viaOverride).toBe(false);
   });

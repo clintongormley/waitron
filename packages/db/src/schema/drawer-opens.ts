@@ -68,8 +68,9 @@ export const drawerOpens = pgTable(
     // Plain uuid, NULLABLE, NO FK — the same shape and reason as `person_id` above: the person/identity
     // schema is a separate slice, so this audit row records the authorizer as a raw id and stays
     // independent of it (the daily_closes.closed_by / sale_voids.voided_by house seam). NULLABLE because
-    // an 'open'-policy open needs no authorizer, and a self-authorized open records the same person as
-    // person_id. Written by the drawer route (a later task); no write logic here.
+    // the automatic `cash_sale` drawer kick (a cash sale's receipt printing — `receipt-print.ts`) records
+    // no authorizer; a MANUAL open always sets it — a gated override to the authorizing supervisor, an
+    // `open`-policy or self-authorized open to the operator (= person_id). Written by the drawer route.
     authorizedBy: uuid("authorized_by"),
     // Whether a supervisor OVERRIDE authorized this open (cash-drawer-authorization slice §2): a person
     // holding cash.drawer authorized an open on behalf of an operator who does not. NOT NULL DEFAULT

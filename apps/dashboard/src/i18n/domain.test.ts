@@ -174,7 +174,7 @@ it("resolves a receipt-print-mode token to Spanish and English, unknown value ra
 it("resolves a drawer-open-policy token to Spanish and English, unknown value raw", () => {
   expect(drawerPolicyName("gated", "es")).toBe("Requiere autorización de un responsable");
   expect(drawerPolicyName("open", "es")).toBe("Cualquier operario");
-  expect(drawerPolicyName("gated", "en")).toBe("Manager approval required");
+  expect(drawerPolicyName("gated", "en")).toBe("Supervisor approval required");
   expect(drawerPolicyName("open", "en")).toBe("Any operator");
   expect(drawerPolicyName("sometimes", "es")).toBe("sometimes");
 });

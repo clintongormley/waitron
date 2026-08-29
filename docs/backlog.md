@@ -508,6 +508,13 @@ here is the cross-cutting or genuinely-decision-bearing work.
   `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it
   yet). The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the
   box before `verifyTotp` (keeps the offline-verifiable property).
+- **No PIN-attempt throttle at the identity layer.** `verifyPersonCredential` has no lockout /
+  rate-limit, so an authenticated operator can retry a 4-digit PIN. This is **pre-existing** — the
+  same posture the till login (`POST /api/session` → `loginWithPin`) already carries; the cash-drawer
+  supervisor override (`POST /api/drawer/open`, cash-drawer-authorization) just adds a second caller of
+  the same gate, it did not introduce the gap. Mitigated today by scrypt's per-attempt cost +
+  `sameSite:"Strict"` session cookies. A per-person attempt lockout at the identity layer would harden
+  login and the override together. (Surfaced by the cash-drawer-authorization whole-branch review.)
 - **Location-scope the by-id verb family together** (SP6). `getHeldOrder`/`updateHeldOrder`/
   `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by (tenant-via-RLS) + id;
   only *list* verbs scope by location. Unreachable today (single-location tenants); when multi-location

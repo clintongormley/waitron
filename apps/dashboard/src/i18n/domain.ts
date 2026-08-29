@@ -177,10 +177,11 @@ const PRINT_MODE_NAMES: NameTable = {
 };
 
 // The two cash-drawer-open policies (the `drawer_open_policy` pgEnum), the per-location toggle on the
-// Impresoras screen. `gated` = a manager must authorize an out-of-sale drawer open (the SECURE default);
-// `open` = any operator may. Raw string-keyed LOCAL copy, same bundle-decoupling reason as above.
+// Impresoras screen. `gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is
+// held by supervisor/manager/admin — (the SECURE default); `open` = any operator may. Raw string-keyed
+// LOCAL copy, same bundle-decoupling reason as above.
 const DRAWER_OPEN_POLICY_NAMES: NameTable = {
-  gated: { en: "Manager approval required", es: "Requiere autorización de un responsable" },
+  gated: { en: "Supervisor approval required", es: "Requiere autorización de un responsable" },
   open: { en: "Any operator", es: "Cualquier operario" },
 };
 

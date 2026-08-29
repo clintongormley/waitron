@@ -754,8 +754,9 @@ export interface StationPrinter {
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
 
 /** The venue's per-location cash-drawer-open policy — the `drawer_open_policy` pgEnum
- * (`gated` = a manager must authorize an out-of-sale drawer open, the SECURE default; `open` = any
- * operator may). Mirrors the server enum; the server re-validates against the real enum on the PATCH. */
+ * (`gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is held by
+ * supervisor/manager/admin — the SECURE default; `open` = any operator may). Mirrors the server enum;
+ * the server re-validates against the real enum on the PATCH. */
 export type DrawerOpenPolicy = "gated" | "open";
 
 /** One `GET /management-api/tills` row — the till-picker's source. `label` is the till's display name
