@@ -1078,14 +1078,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   const controller = new AbortController();
   const loop = runLoop({
-    // A mirror runs no fiscal/settlement duties (C2a design §8): a trivial empty pass keeps `/health`
-    // advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to the primary
-    // path — its real "work" is the pull worker above (§7). Running the drain/reconcile duties on a
-    // mirror would contact AEAT/Stripe for a host that files and settles nothing. A primary runs them.
-    // NOTE: because a mirror's pass has no duties, `/health` reflects only process liveness, NOT
-    // replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad token) still
-    // reports healthy; those surface as `sync.pull_failed` log lines. Real replication-lag monitoring
-    // belongs to the hosting slice (like real per-user auth), out of scope for the C2a stand-in.
+    // The fiscal/settlement duties (drain/reconcile) run ONLY when this node holds the singletons
+    // (`singleton_role = 'primary'`) — see `singletonPass` (promotion runbook design §2/§3c; #33 §7).
+    // A NON-singleton node gets a trivial empty pass: that covers BOTH a read-only mirror AND a
+    // sell-only local secondary (mode=`primary`, singleton_role=`secondary`). The empty pass keeps
+    // `/health` advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to
+    // the singleton path. Running drain/reconcile on a non-singleton would contact AEAT/Stripe for a
+    // host that must file and settle nothing (a mirror's real "work" is the pull worker above, §7).
+    // `singletonRoleHolder.current` is read PER PASS below, so a promotion that flips the holder to
+    // 'primary' starts these duties on the next tick, no restart.
+    // NOTE: because a non-singleton's pass has no duties, `/health` reflects only process liveness,
+    // NOT replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad
+    // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
+    // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
+    // for the C2a stand-in.
     pass: singletonPass(
       () => singletonRoleHolder.current,
       (at) =>
