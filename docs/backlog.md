@@ -148,7 +148,9 @@ Formerly the numbered top tier; the demo needs none of it.
 **Later / smaller:** SumUp card provider (gated, *Debt*) · D3 payroll export (integrate-not-build) ·
 accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering
 (SP15) · the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both
-reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended).
+reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish**
+(order-timing thresholds + overdue/forgotten alerts — the aging colour-code already ships; routing
+read-back/audit view + station kind; definable kitchen statuses — see *Open threads → KDS operations*).
 
 **Cloud services — parked for later review (north star, not yet ranked).** The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
@@ -180,7 +182,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #4** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; order-timing thresholds/alerts + routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
 | 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #6** |
 | 15 | Online ordering | — | not started (Later phase) |
@@ -383,6 +385,45 @@ the remaining consumers below are specced-and-planned only. Specs/plans under
   on-device agent + till failover list.
 - **Expo device kind** (`expo-device-kind*`) — an `expo_pass` device so the KDS-3 pass screen runs
   always-on, joining KDS-3 to device-identity.
+
+### KDS operations — routing, order timings & status config
+
+Grouped operational-config findings (verified 2026-08-29), mostly already BUILT; the gaps are
+low-priority unless noted.
+
+**Order routing — BUILT, composes into the demo.** Three layers, each with a working UI:
+
+- **Item → station:** `products.station_id` (per-product override) `??` `categories.station_id`
+  (category default) `??` the location's single `is_default` station; resolved + **snapshotted** at
+  fire time (`working-order.ts:677`), fails loud `station.no_default` (food is never silently dropped).
+  Set via the product form + category manager; stations CRUD'd on the kitchen screen. One item → one
+  station.
+- **Station → printer:** `station_printers` m2m (KDS-4) + per-printer station toggles on the Impresoras
+  screen; `printers.ticket_scope` picks a per-station ticket vs one consolidated PASE/pass ticket.
+- **Receipt → printer:** per-till `receipt_printer_id` (= the cash-drawer kick) + per-location
+  `receipt_print_mode` (`auto`/`on_request`/`never`).
+- So "drinks → bar printer, food → kitchen printer, grill → grill station" is configurable **today** by
+  composition (create stations → attach printers → route categories/products). **Gaps (low priority):**
+  a **routing read-back / audit view** (the station selects are set-only — no consolidated "which items
+  go where"; the most useful to close, a demo-config friction point); **no station `type`/`kind`**
+  (bar/kitchen/grill/pass is name-only convention, not data); **single-target only** (no fan-out to
+  kitchen AND expo, no per-modifier/per-time rules — post-demo).
+
+**Order timings — PARTIAL** (owner wants "spot orders taking too long / forgotten", 2026-08-29). The
+till KDS **station queue already ages every order** — coloured by how long its oldest line has waited,
+buckets **fresh <5 min / warm <10 / hot ≥10** with an "N min" label (`station-queue.ts:405-434`,
+injectable clock), so the demo already SHOWS slow orders. **Missing to make it a feature:**
+owner-**configurable thresholds** (5/10 are hardcoded), **active overdue/forgotten alerting +
+escalation** (today it's passive colour — no alert when an order crosses a line or sits unbumped), and
+a **manager/expo overview** of overdue orders across stations (the dashboard has no "orders taking too
+long" view). Base aging demos today; the enhancement is a genuine owner-facing feature — **decide
+whether to elevate into the demo tiers.**
+
+**Status config.** **Table/service statuses — BUILT** (TS-2 `service-status-screen`: full CRUD of
+label / colour / order / active). **Kitchen statuses — PARTIAL:** `bump_mode` (line/ticket) +
+`fire_control` (waiter/kitchen) are configurable fixed enums on the kitchen screen; a
+**user-definable kitchen-status list** (the table-status editor's equivalent) does NOT exist — kitchen
+tickets run a fixed queued→preparing→bumped lifecycle. Low priority (owner, 2026-08-29).
 
 ### Onboarding, cloud trial & distribution/failover (Phase 0: onboarding 4b/4c; rest parked)
 
