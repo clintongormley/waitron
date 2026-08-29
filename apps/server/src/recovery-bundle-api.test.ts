@@ -68,15 +68,9 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   return { tenantId: venue.tenantId, managerId };
 }
 
-async function seedStateDir(): Promise<string> {
-  const dir = mkdtempSync(join(tmpdir(), "recovery-state-"));
-  await mkdir(join(dir, "tls"), { recursive: true });
-  for (const rel of RECOVERY_FILES) await writeFile(join(dir, rel), `contents-of-${rel}\n`);
-  return dir;
-}
-
-/** Seed every `RECOVERY_FILES` path EXCEPT `omit`, so the route hits `recovery.state_incomplete`. */
-async function seedStateDirMissing(omit: string): Promise<string> {
+/** Seed every `RECOVERY_FILES` path, or all but `omit` — omitting one makes the route hit
+ * `recovery.state_incomplete`. */
+async function seedStateDir(omit?: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "recovery-state-"));
   await mkdir(join(dir, "tls"), { recursive: true });
   for (const rel of RECOVERY_FILES) {
@@ -174,7 +168,7 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
     // A provisioned box missing its own `trading.env` is a box-side fault, not operator error, so
     // the boundary classifies it a STRUCTURED 500 that names the absent file — not a 400 and not an
     // opaque 500. Same authorized manager, a state dir seeded all-but-one.
-    const incompleteApp = buildApp(tenantId, await seedStateDirMissing("trading.env"));
+    const incompleteApp = buildApp(tenantId, await seedStateDir("trading.env"));
     const incompleteCookie = await login(incompleteApp, managerId);
     const res = await incompleteApp.request("/api/box/recovery-bundle", {
       method: "POST",

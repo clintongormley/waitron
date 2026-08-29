@@ -70,6 +70,7 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
       return c.body(envelope, 200, {
         "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="waitron-recovery-${date}.wrb"`,
+        "Cache-Control": "no-store",
       });
     }),
   );

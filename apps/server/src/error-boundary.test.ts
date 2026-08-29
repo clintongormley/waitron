@@ -52,6 +52,31 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(lines).toEqual([{ level: "warn", event: "tenant.not_found", fields: { id } }]);
   });
 
+  it("maps an AppError whose code is mapped to 500 to that status and logs it at error", async () => {
+    const lines: Line[] = [];
+    // A server-fault AppError (a box that has lost its own secret files): the map assigns it 500, so
+    // severity derives from the RESOLVED status — the response is a structured 500 logged at ERROR,
+    // not warn.
+    const status: Record<string, ContentfulStatusCode> = { "recovery.state_incomplete": 500 };
+    const boundary = createErrorBoundary(status, "widget.failed");
+    const app = new Hono();
+    app.get("/boom", (c) =>
+      boundary(c, collect(lines), () =>
+        Promise.reject(new AppError("recovery.state_incomplete", { missing: "trading.env" })),
+      ),
+    );
+
+    const res = await app.request("/boom");
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: { code: "recovery.state_incomplete", params: { missing: "trading.env" } },
+    });
+    // Logged at ERROR (5xx), with the code and its params — never the error's `.message`.
+    expect(lines).toEqual([
+      { level: "error", event: "recovery.state_incomplete", fields: { missing: "trading.env" } },
+    ]);
+  });
+
   it("maps an AppError whose code is NOT in the map to 400 (the default) and logs it at warn", async () => {
     const lines: Line[] = [];
     // `session.required` is deliberately absent from this map, so it takes the `?? 400` fallback.

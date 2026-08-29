@@ -78,17 +78,25 @@ function parseEnvelope(envelopeJson: string): Envelope {
     typeof e.ct !== "string" ||
     !Number.isInteger(kdf.N) ||
     !Number.isInteger(kdf.r) ||
-    !Number.isInteger(kdf.p) ||
-    (kdf.N as number) < 2 ||
-    (kdf.N as number) > MAX_SCRYPT_N ||
-    (kdf.r as number) < 1 ||
-    (kdf.r as number) > 32 ||
-    (kdf.p as number) < 1 ||
-    (kdf.p as number) > 16 ||
+    !Number.isInteger(kdf.p)
+  ) {
+    throw new AppError("recovery.bundle_invalid", { reason: "malformed" });
+  }
+  // Past the Number.isInteger guards N/r/p are known-numbers; name them once instead of re-casting.
+  const N = kdf.N as number,
+    r = kdf.r as number,
+    p = kdf.p as number;
+  if (
+    N < 2 ||
+    N > MAX_SCRYPT_N ||
+    r < 1 ||
+    r > 32 ||
+    p < 1 ||
+    p > 16 ||
     // scrypt's memory use is 128*N*r bytes; N and r can BOTH pass their individual bounds
     // (e.g. N=2^20, r=32 ≈ 4GB) and still breach maxmem, which would throw a raw
     // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync rather than our contract error.
-    128 * (kdf.N as number) * (kdf.r as number) > SCRYPT.maxmem ||
+    128 * N * r > SCRYPT.maxmem ||
     // Decoded byte lengths: a short/odd base64 salt/iv/tag passes the typeof check above but makes
     // scryptSync / createDecipheriv / setAuthTag throw a raw length error later.
     Buffer.from(kdf.salt, "base64").length !== 16 ||
