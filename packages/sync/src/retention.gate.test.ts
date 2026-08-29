@@ -393,6 +393,49 @@ describe("recordSubscriberCursor gives the source cross-node visibility (spec §
   });
 });
 
+describe("lagFor as sync_tailer needs a tenant context — the box-status durability guard", () => {
+  it("a bare sync_tailer reads lag 0 (RLS hides sync_log); the same member under withTenant reads the real lag", async () => {
+    // This is the committed guard for GET /api/box/status's `replication` summary (onboarding slice
+    // 4a, boot.ts wiring). box-status hands the reader the sync pool, which connects as a `sync_tailer`
+    // member. `sync_tailer`'s SELECT on `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation`
+    // policy (no TO clause → applies under FORCE RLS to this login too), so with NO `app.tenant_id` set
+    // `current_tenant_id()` is NULL and a bare `lagFor(syncDb)` sees ZERO `sync_log` rows — reporting
+    // every subscriber at lag 0, a SILENT FALSE-HEALTHY. That reading is fiscally dangerous: an operator
+    // who trusts a lag-0 box during a promotion (promotion/failover spec §5.1's durability surface)
+    // discards fiscal records the peer never actually replicated — an unrecoverable loss. The box wires
+    // `lagFor` INSIDE `withTenant(till.tenantId)` precisely to avoid this; this test fails if anyone
+    // collapses that back to a bare `lagFor`.
+    //
+    // Prove-by-deletion (CLAUDE.md §1): the "deletion" is the tenant context. Removed → lag 0 (the bug);
+    // present → the real lag 7. The two answers VISIBLY differ (0 vs 7), so the measurement separates the
+    // hypotheses (a §1 control in the other direction).
+    await resetOutbox();
+    const tenant = await seedTenant(postgres.admin);
+    // One tenant only (pass it as both a and b to seedLog, so every seq 1..10 carries `tenant`), so the
+    // single-venue box's own tenant context reveals the WHOLE log — matching the appliance shape.
+    await seedLog(10, tenant, tenant);
+    await setCursor("box_sub", 3, true); // applied 3 of 10 → true lag 7
+
+    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
+    try {
+      // --- Bare sync_tailer, NO tenant context: RLS hides sync_log → coalesce(NULL, 3) − 3 = 0. ---
+      const bare = await lagFor(tailer);
+      const bareSub = bare.find((l) => l.subscriberId === "box_sub")!;
+      expect(bareSub).toMatchObject({ originId: ORIGIN, lag: 0n }); // the false-healthy reading
+
+      // --- Same member UNDER withTenant: sees the tenant's log (max seq 10) → 10 − 3 = 7. NO asAppUser
+      //     (that SET ROLE app_user would drop the sync_tailer SELECT); withTenant only sets the GUC. ---
+      const scoped = await withTenant(tailer, tenant, (tx) => lagFor(tx));
+      const scopedSub = scoped.find((l) => l.subscriberId === "box_sub")!;
+      expect(scopedSub).toMatchObject({ originId: ORIGIN, lag: 7n }); // the real lag the box must report
+
+      expect(bareSub.lag).not.toBe(scopedSub.lag); // the two directions disagree — the context is load-bearing
+    } finally {
+      await tailer.close();
+    }
+  });
+});
+
 describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)", () => {
   it("evictSubscriber releases a dead subscriber's cursor so retention advances past it", async () => {
     await resetOutbox();

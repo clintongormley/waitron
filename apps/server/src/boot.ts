@@ -7,6 +7,7 @@ import {
   createPostgresDb,
   readDeploymentMode,
   readSingletonRole,
+  withTenant,
   type Database,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
@@ -75,11 +76,12 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
+import { mountBoxStatusApi } from "./box-status.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
-import { runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
+import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -1011,6 +1013,56 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       log("warn", "sync.retention_unconfigured", {});
     }
   }
+
+  // The operator box-status surface (onboarding slice 4a). Mounted AFTER the sync block so it can hand
+  // box-status the sync-pool lag reader when sync is on; when sync is off (`syncDb === undefined`, the
+  // free-tier single box) the reader stays absent and `replication.configured:false`. GET-only, so the
+  // mirror read-only gate passes it. On a mirror the ambient viewer primes the session cookie on the
+  // RESPONSE, so a cookieless first request 401s AND emits the Set-Cookie; the browser's next request
+  // carries that ambient cookie and `requireManagementSession` passes (see `mirror-e2e.rls.test.ts` —
+  // Hono setCookie is a response header, not readable within the same request). `health` and `now` are
+  // the same bindings `healthApp(health, now)` used above; `config.tls?.certFile` is the served-leaf
+  // path (absent on a plain-HTTP boot → `cert.available:false`).
+  //
+  // `syncDb` (the sync_tailer + app_user member pool the sync block opened) is captured into a `const`
+  // so TS keeps its non-`undefined` narrowing inside the reader closure — a captured `let` widens back
+  // to `Database | undefined`, the same reason the sync block hoists `localSyncDb`. It is the pool the
+  // reader must use: `lagFor` reads `sync_log`, which `app_user` (the `db` pool) holds no SELECT on at
+  // all (0000_sync_outbox.sql REVOKEs it, granting only INSERT for capture), so the app pool cannot
+  // read the lag — only this sync-tailer pool can.
+  //
+  // The reader runs `lagFor` INSIDE `withTenant(till.tenantId)`, not bare: `sync_tailer`'s SELECT on
+  // `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation` policy (no TO clause → applies
+  // under FORCE RLS to this login too), and with no `app.tenant_id` set `current_tenant_id()` is NULL,
+  // so a BARE `lagFor(syncDb)` sees ZERO `sync_log` rows and reports every subscriber at lag 0 — a
+  // silent false-healthy. This is PINNED by the box-status durability guard
+  // (`packages/sync/src/retention.gate.test.ts`), which asserts a bare `sync_tailer` `lagFor` and the
+  // SAME member under `withTenant` DISAGREE — the invariant, not any specific number (the guard's own
+  // probe happens to see 0 vs a real lag). The box is single-venue (one tenant, `till.tenantId`), so every captured
+  // outbox row carries that tenant_id and its context reveals the whole log. NO `asAppUser` here — that
+  // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
+  // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.
+  const lagPool = syncDb;
+  mountBoxStatusApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      environment: config.environment,
+      health,
+      now,
+      tlsCertPath: config.tls?.certFile,
+      readReplicationLag:
+        lagPool === undefined
+          ? undefined
+          : () => withTenant(lagPool, till.tenantId, (tx) => lagFor(tx)),
+      // Report the effective mode the box is actually serving as — the same holder the read-only gate
+      // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
+      // live promotion the same way, rather than issuing a fresh DB read of its own.
+      readMode: () => modeHolder.current,
+    },
+    log,
+  );
 
   // The outbound cloud-mirror tunnel (sub-project B): enabled iff WAITRON_TUNNEL_RELAY_URL is set
   // (loadTunnelConfig). The box sits behind NAT with no inbound ports, so it dials OUT to the relay and
