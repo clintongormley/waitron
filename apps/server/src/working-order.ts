@@ -3205,6 +3205,12 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
+  /** The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — the earliest
+   *  reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
+   *  renders "Reservada HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
+   *  `locations.time_zone` at read time (§2b), computed in JS from the injected clock — never in SQL.
+   *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present. */
+  nextReservation: { time: string; partySize: number; contactName: string } | null;
 }
 
 /**
@@ -3224,12 +3230,44 @@ export interface TableState {
  * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
  * table lives at the venue, not the register). `locationId` defaults to the till's own.
  */
+/** Venue-local wall-clock derived from an instant + IANA time zone, for the reserved-on-floor read
+ *  (Bookings-1 §2b/§4). Computed in JS via `Intl` — never in SQL — so no offset is stored: a booking is
+ *  a wall-clock intention, and "today"/"now" for the imminence check are the venue's local values at
+ *  read time. Returns the local calendar date (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
+function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((p) => p.type === type)!.value;
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour")}:${get("minute")}`,
+  };
+}
+
 export async function listTablesWithState(
   tx: Transaction,
   cfg: TillConfig,
   locationId?: string,
+  now: Date = new Date(),
 ): Promise<TableState[]> {
   const loc = locationId ?? cfg.locationId;
+  // Venue-local "today"/"now" for the reserved-on-floor lookup (§2b/§4). Read the location's time zone,
+  // then do the tz math in JS and pass the resulting wall-clock date/time as bound SQL params — the
+  // reservation sub-select never does timezone arithmetic. A location hidden by RLS (or missing)
+  // falls back to the schema default, matching `locations.time_zone`'s own default.
+  const tzRow = await tx.execute<{ time_zone: string }>(
+    sql`select time_zone from locations where id = ${loc}`,
+  );
+  const timeZone = tzRow.rows[0]?.time_zone ?? "Europe/Madrid";
+  const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
   const result = await tx.execute<{
     id: string;
     label: string;
@@ -3249,10 +3287,16 @@ export async function listTablesWithState(
     pos_y: number | null;
     shape: FloorTableShape | null;
     rotation: number | null;
+    next_reservation_time: string | null;
+    next_reservation_party_size: number | null;
+    next_reservation_contact_name: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
+      res.booking_time as next_reservation_time,
+      res.party_size as next_reservation_party_size,
+      res.contact_name as next_reservation_contact_name,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
@@ -3299,6 +3343,22 @@ export async function listTablesWithState(
     ) del on true
     left join table_service_statuses tss
       on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
+    -- Reserved-on-floor (Bookings-1 section 4): the table's NEXT still-booked reservation for the
+    -- venue's TODAY at/after the venue's current wall-clock. venueToday/venueNow are computed in JS
+    -- from locations.time_zone (bound params below), so this sub-select does no timezone arithmetic.
+    -- Correlated to the BASE dining_tables dt on qualified outer columns (dt.tenant_id / dt.id) -- the
+    -- CLAUDE.md scalar-subquery trap is about BARE interpolated columns binding inward; these are
+    -- explicit dt.-qualified references, so they resolve to the outer table.
+    left join lateral (
+      select b.booking_time, b.party_size, b.contact_name
+      from bookings b
+      where b.tenant_id = dt.tenant_id and b.table_id = dt.id
+        and b.status = 'booked'
+        and b.booking_date = ${venueToday}
+        and b.booking_time >= ${venueNow}
+      order by b.booking_time asc
+      limit 1
+    ) res on true
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);
@@ -3331,6 +3391,17 @@ export async function listTablesWithState(
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
+      // Reserved-on-floor (§4): the imminent booking, or null. The DB `time` arrives as `HH:MM:SS`;
+      // normalise to `HH:MM` at the presentation edge (controller ruling) so the floor reads "Reservada
+      // HH:MM" straight off it.
+      nextReservation:
+        r.next_reservation_time !== null
+          ? {
+              time: r.next_reservation_time.slice(0, 5),
+              partySize: Number(r.next_reservation_party_size),
+              contactName: r.next_reservation_contact_name!,
+            }
+          : null,
       ...(hasOpenTab
         ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
         : {}),
