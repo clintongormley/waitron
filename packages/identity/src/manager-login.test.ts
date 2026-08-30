@@ -6,8 +6,8 @@ import { generateSecret, generateSync } from "otplib";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { codeOf, seedManager, seedPerson } from "../test/fixtures.js";
-import { authorizeManager, loginManager } from "./manager-login.js";
+import { codeOf, seedManager, seedPerson, seedPersonWithPassword } from "../test/fixtures.js";
+import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
@@ -131,6 +131,52 @@ describe("loginManager", () => {
       codeOf(() =>
         loginManager(tx, { tenantId, email: "owner-suspended@x.com", password: "correct horse" }),
       ),
+    );
+    expect(code).toBe("person.suspended");
+  });
+});
+
+// The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin, which is
+// provisioned WITHOUT an email (so the email path cannot resolve it). Behaviour is `loginManager`'s,
+// minus email lookup: an UNKNOWN id is `person.not_found` (no enumeration surface here), and every
+// post-lookup check is the shared `completeManagerLogin`.
+describe("loginManagerById", () => {
+  it("logs in an emailless person by id + password (the provisioned-admin shape)", async () => {
+    // `seedPersonWithPassword` sets a password but NO email — exactly the admin the mirror flow signs in.
+    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    const session = await run((tx) =>
+      loginManagerById(tx, { tenantId, personId, password: "correct horse" }),
+    );
+    expect(session.personId).toBe(personId);
+  });
+  it("rejects an unknown id with person.not_found", async () => {
+    const code = await run((tx) =>
+      codeOf(() =>
+        loginManagerById(tx, {
+          tenantId,
+          personId: "00000000-0000-0000-0000-000000000000",
+          password: "correct horse",
+        }),
+      ),
+    );
+    expect(code).toBe("person.not_found");
+  });
+  it("rejects a wrong password with password.invalid", async () => {
+    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    const code = await run((tx) =>
+      codeOf(() => loginManagerById(tx, { tenantId, personId, password: "wrong" })),
+    );
+    expect(code).toBe("password.invalid");
+  });
+  it("rejects a suspended person with person.suspended", async () => {
+    // Seed an emailless person WITH a password, then suspend — the shared suspension gate fires before
+    // the password check, the same as the email path.
+    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    await run((tx) =>
+      tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
+    );
+    const code = await run((tx) =>
+      codeOf(() => loginManagerById(tx, { tenantId, personId, password: "correct horse" })),
     );
     expect(code).toBe("person.suspended");
   });

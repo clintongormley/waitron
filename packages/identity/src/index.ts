@@ -11,7 +11,7 @@ export {
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
-export { loginManager, authorizeManager } from "./manager-login.js";
+export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
   beginPasskeyAuthentication,
