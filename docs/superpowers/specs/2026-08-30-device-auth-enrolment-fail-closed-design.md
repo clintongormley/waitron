@@ -110,6 +110,16 @@ firewall for the cash tender only); **card via a mobile reader is deferred**. Un
 lands, a handheld's card tender (manual or integrated `/api/pay`) stays fenced, and a handheld does not
 open a cash drawer (a table waiter has a pocket float, not a register).
 
+> **Update (2026-08-30, branch `feat/handheld-cash-at-table`, as shipped):** the sell-card row above is
+> now too coarse. The `POST /api/sales` **card** tender is the *manual* datáfono leg (`recordManualCardPayment`
+> makes no network call — the operator charges a separate terminal the POS never talks to), so it is
+> fiscally identical to cash and needs no reader. It shipped as **`till`, `handheld`**, and `POST /api/sales`
+> carries no handheld fence at all. Only the **integrated** reader (`POST /api/pay`, a real card terminal
+> via a provider — the native-app "mobile reader" slice, see `2026-08-30-native-app-capabilities.md`) stays
+> **`till`** only, alongside reprint / drawer-open / place / collect / cancel. So when this allowlist is
+> built, the sell rows are: **sell via `/api/sales` (cash or manual card) = `till`, `handheld`**;
+> **integrated `/api/pay` = `till`**.
+
 `device.forbidden_action` (shipped PR #173) carries over; the new default-deny path needs one code
 (candidate `device.enrolment_required`, 400/401 — grep the `device.*` siblings before minting, never
 renamed once shipped — CLAUDE.md §3). The full `requireSession`-route classification already recorded
