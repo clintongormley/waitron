@@ -69,6 +69,22 @@ async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
   return row.rows[0]!.id;
 }
 
+/**
+ * Insert an ACTIVE dining table in a SECOND location of the SAME tenant, and return its id. RLS scopes
+ * only by tenant, so this cross-LOCATION table is visible to the app role — the exact shape the
+ * location-scope guard must refuse (a booking in location A must not be assigned a table in location B).
+ */
+async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
+  const loc = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${cfg.tenantId}, 'Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
+  const otherLocationId = loc.rows[0]!.id;
+  const row = await db.execute<{ id: string }>(sql`
+    insert into dining_tables (tenant_id, location_id, label, active)
+    values (${cfg.tenantId}, ${otherLocationId}, 'B-1', true) returning id`);
+  return row.rows[0]!.id;
+}
+
 /** Run `fn` inside the venue's tenant scope as `app_user`, exactly as production routes do. */
 function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(db, cfg.tenantId, async (tx) => {
@@ -246,6 +262,23 @@ describe("createBooking — optional table link", () => {
       ),
     ).rejects.toMatchObject({ code: "table.not_found" });
   });
+
+  it("rejects an ACTIVE table in ANOTHER location of the same tenant with table.not_found", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const tableId = await makeTableInOtherLocation(cfg);
+    await expect(
+      scoped(cfg, (tx) =>
+        createBooking(tx, cfg, {
+          bookingDate: "2026-08-20",
+          bookingTime: "20:00",
+          partySize: 2,
+          contactName: "García",
+          tableId,
+          createdBy,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "table.not_found" });
+  });
 });
 
 describe("updateBooking", () => {
@@ -327,6 +360,23 @@ describe("updateBooking", () => {
     );
     await expect(
       scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: randomUUID() })),
+    ).rejects.toMatchObject({ code: "table.not_found" });
+  });
+
+  it("rejects an edit that assigns a table in ANOTHER location with table.not_found", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const tableId = await makeTableInOtherLocation(cfg);
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        createdBy,
+      }),
+    );
+    await expect(
+      scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId })),
     ).rejects.toMatchObject({ code: "table.not_found" });
   });
 });
@@ -461,6 +511,23 @@ describe("seatBooking", () => {
     const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId }));
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
+  });
+
+  it("rejects a req.tableId in ANOTHER location of the same tenant with table.not_found", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const otherTableId = await makeTableInOtherLocation(cfg);
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Ruiz",
+        createdBy,
+      }),
+    );
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId: otherTableId })),
+    ).rejects.toMatchObject({ code: "table.not_found" });
   });
 
   it("requires a table: booking.table_required when neither the booking nor req has one", async () => {
