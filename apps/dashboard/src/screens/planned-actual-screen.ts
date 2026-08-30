@@ -1,6 +1,10 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+// Value import (not `import type`): registers `<dashboard-location-picker>` before this screen renders
+// it; `resolveLocationSelection` is its shared selection helper.
+import "../widgets/location-picker.js";
+import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/client.js";
@@ -23,7 +27,6 @@ function weekEnd(monday: string): string {
 export class PlannedActualScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -37,12 +40,15 @@ export class PlannedActualScreen extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-4);
-        margin-bottom: var(--wt-space-4);
       }
+      /* The bottom gap lives on the pickers themselves (not the pickers row) so the week picker here
+       * matches the shared dashboard-location-picker widget's own bottom margin and the two align in
+       * the flex row — the location picker moved into that widget, which carries the same margin. */
       .picker {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
+        margin-bottom: var(--wt-space-4);
         color: var(--wt-color-text);
       }
       input[type="date"] {
@@ -105,7 +111,7 @@ export class PlannedActualScreen extends LitElement {
         this.rows = [];
         return;
       }
-      if (!locations.some((l) => l.id === this.locationId)) this.locationId = locations[0]!.id;
+      this.locationId = resolveLocationSelection(locations, this.locationId);
       await this.#loadRows();
     } catch (error) {
       this.#fail(error);
@@ -127,9 +133,9 @@ export class PlannedActualScreen extends LitElement {
     this.errorKey = codeOf(error);
   }
 
-  async #onSelectLocation(event: Event): Promise<void> {
+  async #onSelectLocation(event: CustomEvent<{ locationId: string }>): Promise<void> {
     event.stopPropagation();
-    this.locationId = (event.target as HTMLSelectElement).value;
+    this.locationId = event.detail.locationId;
     this.errorKey = null;
     try {
       await this.#loadRows();
@@ -181,20 +187,13 @@ export class PlannedActualScreen extends LitElement {
   #renderBody(): TemplateResult {
     return html`
       <div class="pickers">
-        <label class="picker"
-          >${t("planned.location")}
-          <select
-            data-test="location-select"
-            @change=${(e: Event) => void this.#onSelectLocation(e)}
-          >
-            ${this.locations.map(
-              (l) =>
-                html`<option value=${l.id} .selected=${l.id === this.locationId}>
-                  ${l.name}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <dashboard-location-picker
+          .locations=${this.locations}
+          .selected=${this.locationId}
+          .label=${t("planned.location")}
+          @location-changed=${(e: CustomEvent<{ locationId: string }>) =>
+            void this.#onSelectLocation(e)}
+        ></dashboard-location-picker>
         <label class="picker"
           >${t("planned.week")}
           <input

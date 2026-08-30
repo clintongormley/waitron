@@ -32,6 +32,13 @@ const sellable = (el: LocationMenusScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=location-menu-${id}-sellable]`)!;
 const defaultRadio = (el: LocationMenusScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=location-menu-${id}-default]`)!;
+// The location select now lives in the shared `<dashboard-location-picker>` widget's shadow root, so
+// reach through that boundary rather than the screen's own shadow root. Null when the widget renders
+// nothing (a single location) — the assertion the single-location test relies on.
+const locationSelect = (el: LocationMenusScreen) =>
+  el
+    .shadowRoot!.querySelector("dashboard-location-picker")!
+    .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]");
 
 afterEach(cleanupWidgets);
 
@@ -53,7 +60,7 @@ describe("location-menus-screen", () => {
       api,
     });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=location-select]")).toBeNull();
+    expect(locationSelect(el)).toBeNull();
   });
 
   it("renders the location select for more than one location and reloads on change", async () => {
@@ -67,7 +74,7 @@ describe("location-menus-screen", () => {
       api,
     });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el)!;
     expect(select).not.toBeNull();
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
@@ -204,7 +211,7 @@ describe("location-menus-screen", () => {
       api,
     });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el)!;
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
@@ -257,7 +264,7 @@ describe("location-menus-screen", () => {
     });
     await flush(el);
     // Select loc-1, then force a full reload where loc-1 is gone.
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el)!;
     select.value = "loc-1";
     select.dispatchEvent(new Event("change"));
     await flush(el);

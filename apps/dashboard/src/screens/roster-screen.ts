@@ -1,11 +1,15 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 // Value import (not `import type`): pulls in the widget module for its `@customElement` side effect,
 // so `<dashboard-shift-dialog>` is registered before this screen renders it (the widget-registration
 // pattern the catalogue screen follows).
 import "../widgets/shift-dialog.js";
+// Same side-effect import for the shared location picker (`<dashboard-location-picker>`), plus its
+// pure selection helper.
+import "../widgets/location-picker.js";
+import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { breachKindName } from "../i18n/domain.js";
@@ -57,7 +61,6 @@ function localDate(instant: string, offsetMinutes: number): string {
 export class RosterScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -70,12 +73,15 @@ export class RosterScreen extends LitElement {
       .pickers {
         display: flex;
         gap: var(--wt-space-4);
-        margin-bottom: var(--wt-space-4);
       }
+      /* The bottom gap lives on the pickers themselves (not the pickers row) so the week picker here
+       * matches the shared dashboard-location-picker widget's own bottom margin and the two align in
+       * the flex row — the location picker moved into that widget, which carries the same margin. */
       .picker {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
+        margin-bottom: var(--wt-space-4);
         color: var(--wt-color-text);
       }
       table {
@@ -178,9 +184,7 @@ export class RosterScreen extends LitElement {
         this.snapshot = { version: null, shifts: [] };
         return;
       }
-      if (!locations.some((l) => l.id === this.locationId)) {
-        this.locationId = locations[0]!.id;
-      }
+      this.locationId = resolveLocationSelection(locations, this.locationId);
       await this.#loadRoster();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -192,11 +196,11 @@ export class RosterScreen extends LitElement {
     this.snapshot = await this.api.getRoster(this.locationId, this.weekMonday);
   }
 
-  /** The location picker changed. Native `change` is `composed:false`; `stopPropagation` is defensive
-   * consistency with the composed handlers (the catalogue-screen pattern). Reload the roster. */
-  async #onSelectLocation(event: Event): Promise<void> {
+  /** The location picker emitted `location-changed`. `stopPropagation` keeps the composed event inside
+   * this screen (the catalogue-screen pattern). Reload the roster. */
+  async #onSelectLocation(event: CustomEvent<{ locationId: string }>): Promise<void> {
     event.stopPropagation();
-    this.locationId = (event.target as HTMLSelectElement).value;
+    this.locationId = event.detail.locationId;
     this.errorKey = null;
     // The breaches belong to the roster we're leaving — clear them so a new location's grid never
     // shows the prior roster's advisory warnings (they reappear only on a fresh publish).
@@ -350,20 +354,13 @@ export class RosterScreen extends LitElement {
     const published = version !== null && version.status !== "draft";
     return html`
       <div class="pickers">
-        <label class="picker"
-          >${t("roster.location")}
-          <select
-            data-test="location-select"
-            @change=${(e: Event) => void this.#onSelectLocation(e)}
-          >
-            ${this.locations.map(
-              (l) =>
-                html`<option value=${l.id} .selected=${l.id === this.locationId}>
-                  ${l.name}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <dashboard-location-picker
+          .locations=${this.locations}
+          .selected=${this.locationId}
+          .label=${t("roster.location")}
+          @location-changed=${(e: CustomEvent<{ locationId: string }>) =>
+            void this.#onSelectLocation(e)}
+        ></dashboard-location-picker>
         <label class="picker"
           >${t("roster.week")}
           <input
