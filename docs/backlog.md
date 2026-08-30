@@ -535,8 +535,9 @@ Provisioning/build*).
   single `WAITRON_TILL_TENANT_ID`, targeting `role='admin'` (0 → error, N → refuse + `--person`).
   Gate: physical shell + the box's `DATABASE_URL`; the new credential rides **env, never argv**; the
   ungated reset is **confined to the CLI command** (no reusable identity export), runs `withTenant`
-  under the app role's RLS, and logs `break_glass.admin_reset` (never the secret) — **no chain
-  impact.** Passkey-revocation out of scope (noted). **Factory reset stays design-only**
+  under the app role's RLS, and prints a `break-glass: reset admin <id> …` line to stdout (never the
+  secret) — **no chain impact.** Passkey-revocation out of scope; a durable admin-action audit record
+  (the CLI only writes stdout today) is a noted follow-up. **Factory reset stays design-only**
   (chain-destructive; `docs/superpowers/plans/2026-08-30-onboarding-slice4c-factory-reset-design.md`).
   **→ Slice 4 (onboarding backup / status / break-glass) is now COMPLETE: 4a #159, 4b-i #161, 4b-ii
   #163, 4b-iii runbook, 4c. Remaining onboarding slices 5–7 (AP-mode firmware / OS image / paid

@@ -58,8 +58,11 @@ Whichever mechanism ships, it must:
 4. **Refuse on a `production` box unless the operator additionally attests the box is being disposed
    of** — the same care the disposal design (`promotion-failover-and-node-lifecycle` §5.1) applies to
    *voluntary* retirement. A production chain is never discarded casually.
-5. **Emit a durable record** of the reset (at minimum a structured log line, like break-glass's
-   `break_glass.admin_reset`) so the destruction is attributable.
+5. **Emit a durable, attributable record** of the reset. (Note the gap: the shipped break-glass CLI
+   only prints a `break-glass: reset admin <id> …` line to **stdout** — it is a console tool, not an
+   HTTP route with the server's structured `Logger`, so there is no queryable audit row today. A
+   factory reset — more destructive still — should do at least as much, and a durable admin-action
+   audit trail is a worthwhile follow-up for both.)
 
 ## Cross-references
 
