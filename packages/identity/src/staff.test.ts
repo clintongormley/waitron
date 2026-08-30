@@ -254,6 +254,10 @@ describe("setPassword", () => {
   it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const target = await seedPerson(suite.db, tenantId, "supervisor");
+    // The target needs an email to sign in on the dashboard: loginManager now resolves by email.
+    await run((tx) =>
+      tx.execute(sql`update persons set email = 'granted@x.com' where id = ${target}`),
+    );
     await run((tx) =>
       setPassword(tx, {
         managementSessionId: sessionId,
@@ -262,7 +266,7 @@ describe("setPassword", () => {
       }),
     );
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, personId: target, password: "second horse" }),
+      loginManager(tx, { tenantId, email: "granted@x.com", password: "second horse" }),
     );
     expect(session.personId).toBe(target);
   });
