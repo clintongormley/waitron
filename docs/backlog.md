@@ -120,7 +120,13 @@ demo or behind-the-scenes".
    (`2026-08-17-bookings-1*`). MISSING today (only a "Reserved" floor *status* exists). Supervised.
 7. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
    (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. **Pairs
-   with tableside ordering (#4).** NEW.
+   with tableside ordering (#4).** NEW. In design (2026-08-30): reusable option groups (min/max/required)
+   + priced options, each *selected* option filed as its own fiscal sub-line linked to its parent line
+   — so it **touches the unrepairable fiscal core** (own amount + VAT into the desglose/huella),
+   dedicated fiscal review, supervised, never landed unattended. **Deferred niceties (out of the first
+   slice):** *per-option quantity* ("extra shot ×2") — the first slice expresses "up to N of a group"
+   via the group's `max_select`, but not a count on a single option; and a per-option **VAT-class
+   override** ships but is expected to be rarely used (options inherit the dish's rate by default).
 8. **Menu-management depth.** The **live multi-menu till foundation landed**: a location has a
    **default catalogue plus other accessible catalogues** (`location_catalogues`), and the till lists
    the **union** of their products and **switches menus live, client-side**. Missing the pieces that
