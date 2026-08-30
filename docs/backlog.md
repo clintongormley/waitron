@@ -88,9 +88,9 @@ demo or behind-the-scenes".
    id-based **`loginManagerById`** sibling (shared `completeManagerLogin`) for the emailless
    mirror/provisioned admin, a `setEmail` mutator, the login screen (roster dropdown → email field) +
    the Users form (create/edit email), and demo-seeded credentials (`owner@demo.waitron.local` /
-   `dashPass123`). **Open decision (follow-up under *Open threads*):** the `venue`-provisioned admin is
-   seeded emailless and email-only login gives it no dashboard path — decide `venue --admin-email` vs
-   mirror-only.
+   `dashPass123`). **Resolved follow-up (owner, 2026-08-30; not yet built):** the production admin's
+   dashboard email is captured **during onboarding via the setup UI** (add an email field to
+   `apps/setup`'s admin step, threaded to provisioning's `seed-admin`) — see *Open threads*.
 3. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
    **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
    one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
@@ -953,14 +953,17 @@ here is the cross-cutting or genuinely-decision-bearing work.
 - **The €0 comped-sale settles at the settlement instant, not backdated to `issued_at`.** Till-UX
   question (is a comp ever finalised long after the invoice printed, in invoice-first mode?) — bears
   on the till design, nothing to decide until then.
-- **The `venue`-provisioned admin has no dashboard sign-in path.** Email-only dashboard login (Tier A
-  #2) resolves the person by email, but `venue`'s `seed-admin` insert seeds the admin **emailless**
-  (tenant_id/display_name/pin_hash/password_hash/role only) and `setEmail` needs an already-authenticated
-  management session — so a production-bootstrapped admin cannot log in until an email is set out-of-band
-  (today only the demo `dev-setup.ts` does so). Decide: give `venue` an `--admin-email` for production
-  bootstrap, or treat the provisioned admin as deliberately **mirror-only** (it authenticates by id via
-  `loginManagerById`, the mirror-bundle path, never by email). Surfaced by the whole-branch review of the
-  email-login branch; blocks nothing pre-demo.
+- **Admin dashboard email captured during onboarding (RESOLVED — owner, 2026-08-30; not yet built).**
+  Email-only dashboard login (Tier A #2) resolves the admin by email, but `venue`'s `seed-admin` insert
+  seeds the admin **emailless** (tenant_id/display_name/pin_hash/password_hash/role only), so a
+  production-bootstrapped admin has no dashboard sign-in path — today only the demo `dev-setup.ts` sets
+  one out-of-band. **Decision:** the admin account is set up **during onboarding via the setup UI** (NOT
+  a `venue --admin-email` CLI flag, and NOT mirror-only). The wizard's `admin-screen.ts` already captures
+  displayName/password/pin; **add an email field** and thread it through: `AdminDraft`
+  (`apps/setup/src/api/client.ts`) → `setup-api.ts` (validate/normalize with the identity email helpers)
+  → provisioning's admin shape (`venue-plan.ts` `{displayName,pinHash,passwordHash}` + the `seed-admin`
+  action) → the insert writes `email`. Then the onboarding-provisioned admin signs in by email + password
+  immediately. Uniqueness is already enforced (`persons_tenant_email_uq`). Blocks nothing pre-demo.
 - **No UI path to REMOVE a person's email (Tier A #2 follow-up).** The Users form's Save-email is
   disabled when the field is blank, and clearing an existing email would be rejected by `setEmail`
   (`person.email_invalid`), so an operator can add/change but not clear an email. Trivial; add a
