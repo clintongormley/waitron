@@ -37,23 +37,27 @@ export async function runBreakGlassReset(deps: {
   out: (line: string) => void;
   connect: (url: string) => Promise<Database>;
 }): Promise<number> {
-  const databaseUrl = deps.env.DATABASE_URL;
-  if (databaseUrl === undefined || databaseUrl === "") {
-    deps.out("DATABASE_URL must be set to the box's database connection string");
-    return 2;
-  }
-  const tenantId = deps.env.WAITRON_TILL_TENANT_ID;
-  if (tenantId === undefined || tenantId === "") {
-    deps.out("WAITRON_TILL_TENANT_ID must be set to the box's tenant id");
-    return 2;
-  }
-  const newPassword = deps.env.WAITRON_BREAKGLASS_PASSWORD;
-  if (newPassword === undefined || newPassword === "") {
-    // The dashboard lockout IS the password, so a reset with no new password is meaningless. Read
-    // from env only — never argv, which `ps` exposes.
-    deps.out("WAITRON_BREAKGLASS_PASSWORD must be set to the new dashboard password");
-    return 2;
-  }
+  // Every required value is read from env only — never argv, which `ps` exposes. A blank value is
+  // treated as unset (the empty-string trap, CLAUDE.md §3): `requireEnv` fails closed with a usage
+  // message. The dashboard lockout IS the password, so a reset with no new password is meaningless.
+  const databaseUrl = requireEnv(
+    deps,
+    "DATABASE_URL",
+    "DATABASE_URL must be set to the box's database connection string",
+  );
+  if (databaseUrl === undefined) return 2;
+  const tenantId = requireEnv(
+    deps,
+    "WAITRON_TILL_TENANT_ID",
+    "WAITRON_TILL_TENANT_ID must be set to the box's tenant id",
+  );
+  if (tenantId === undefined) return 2;
+  const newPassword = requireEnv(
+    deps,
+    "WAITRON_BREAKGLASS_PASSWORD",
+    "WAITRON_BREAKGLASS_PASSWORD must be set to the new dashboard password",
+  );
+  if (newPassword === undefined) return 2;
   try {
     // Reuse identity's floor so the break-glass password cannot be weaker than a gated reset's.
     assertPasswordLength(newPassword);
@@ -69,6 +73,9 @@ export async function runBreakGlassReset(deps: {
   // always produces a non-empty hash, so any provided value is storable. (A caller who wants the
   // policy floor uses the gated `resetPin`.)
   const newPin = deps.env.WAITRON_BREAKGLASS_PIN;
+  // One named condition, used by both the UPDATE (whether to set `pin_hash`) and the log line, so the
+  // two can never drift on what "a PIN was given" means.
+  const resetPin = newPin !== undefined && newPin !== "";
 
   const parsedPerson = parsePersonArg(deps.argv);
   if (!parsedPerson.ok) {
@@ -95,12 +102,11 @@ export async function runBreakGlassReset(deps: {
 
       let targetId: string;
       if (personArg !== undefined) {
-        const match = admins.find((a) => a.id === personArg);
-        if (match === undefined) {
+        if (!admins.some((a) => a.id === personArg)) {
           deps.out(`break-glass: --person ${personArg} is not an admin of tenant ${tenantId}`);
           return 1;
         }
-        targetId = match.id;
+        targetId = personArg;
       } else if (admins.length > 1) {
         deps.out("break-glass: multiple admins found; re-run with --person <id>:");
         for (const a of admins) deps.out(`  ${a.id}`);
@@ -114,7 +120,8 @@ export async function runBreakGlassReset(deps: {
         .update(persons)
         .set({
           passwordHash: hashPassword(newPassword),
-          ...(newPin !== undefined && newPin !== "" ? { pinHash: hashPin(newPin) } : {}),
+          // `newPin!` is sound: `resetPin` is exactly `newPin` being a non-empty string.
+          ...(resetPin ? { pinHash: hashPin(newPin!) } : {}),
           status: "active",
         })
         .where(and(eq(persons.id, targetId), eq(persons.role, "admin")))
@@ -127,7 +134,7 @@ export async function runBreakGlassReset(deps: {
         return 1;
       }
 
-      const resets = newPin !== undefined && newPin !== "" ? "password, pin" : "password";
+      const resets = resetPin ? "password, pin" : "password";
       // NEVER echo the new secret — name the admin and WHAT was reset only.
       deps.out(`break-glass: reset admin ${targetId} (${resets}, reactivated)`);
       return 0;
@@ -135,6 +142,21 @@ export async function runBreakGlassReset(deps: {
   } finally {
     await db.close();
   }
+}
+
+/** Read a REQUIRED env var, treating a blank value as unset (CLAUDE.md §3). On miss, emits `message`
+ * and returns `undefined` (the caller returns exit code 2); otherwise returns the value. */
+function requireEnv(
+  deps: { env: Env; out: (line: string) => void },
+  key: string,
+  message: string,
+): string | undefined {
+  const value = deps.env[key];
+  if (value === undefined || value === "") {
+    deps.out(message);
+    return undefined;
+  }
+  return value;
 }
 
 /** Pull the value of an optional `--person <id>` flag out of argv. `ok:false` means the flag was
