@@ -190,6 +190,24 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return fn(tx);
     });
 
+  // The (tenantId, nodeId, clock) triple every reporting route below derives identically — extracted
+  // so overview/daily-close/period cannot drift on branding or on how the venue clock is resolved.
+  // Closes over `deps` (unlike `resolveVenueClock`, which is a top-level function taking `nodeId`
+  // explicitly); the modelo-303 route above does NOT use this, since it derives its own `tenantId`
+  // from the authoritative `tenants` row rather than from `deps.cfg`.
+  const buildReportContext = async (
+    tx: Transaction,
+  ): Promise<{
+    tenantId: TenantId;
+    nodeId: NodeId;
+    clock: { timeZone: string; dayCutover: string };
+  }> => {
+    const tenantId = brandTenantId(deps.cfg.tenantId);
+    const nodeId = brandNodeId(deps.cfg.nodeId);
+    const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+    return { tenantId, nodeId, clock };
+  };
+
   app.get("/management-api/reports/modelo-303", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -250,9 +268,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const tenantId = brandTenantId(deps.cfg.tenantId);
-        const nodeId = brandNodeId(deps.cfg.nodeId);
-        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
         const businessDay = await currentBusinessDay(tx, clock);
         const input = {
           tenantId,
@@ -299,9 +315,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const businessDay = requireBusinessDay(c.req.query("businessDay"), "businessDay");
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const tenantId = brandTenantId(deps.cfg.tenantId);
-        const nodeId = brandNodeId(deps.cfg.nodeId);
-        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
         const input = {
           tenantId,
           nodeId,
@@ -341,9 +355,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         throw new AppError("management.request_invalid", { field: "range" });
       }
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const tenantId = brandTenantId(deps.cfg.tenantId);
-        const nodeId = brandNodeId(deps.cfg.nodeId);
-        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
         const common = {
           tenantId,
           nodeId,

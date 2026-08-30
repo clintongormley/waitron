@@ -93,7 +93,10 @@ function businessDayLocalDate(column: SQL, input: { timeZone: string; dayCutover
  * behind `currentBusinessDay` — split out so the cutover-shift maths can be tested against a LITERAL
  * timestamptz (a fixed, wall-clock-independent instant) rather than the live `now()` the public entry
  * passes. Package-internal, deliberately NOT in the public barrel (`index.ts`); the route consumes
- * `currentBusinessDay`. Assumes `nowSql` is validated by the caller.
+ * `currentBusinessDay`. `nowSql` is not something to "validate" — it is a safely-constructed SQL
+ * fragment (`sql\`now()\`` or a literal timestamptz), never raw user input. The real caller
+ * precondition is that `input.timeZone`/`input.dayCutover` are validated first; `currentBusinessDay`
+ * does that (via `validateTimeZone`/`validateCutover`) before calling this.
  */
 export async function businessDayOf(
   tx: Transaction,

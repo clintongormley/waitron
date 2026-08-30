@@ -276,7 +276,8 @@ describe("dashboard-app", () => {
   it("a STAFF-role session opens on the self-service my-schedule screen, never the manager staff screen", async () => {
     // The whole point of the fast-follow: a staff person (empty permission set) resolves via role-blind
     // getMe and lands on the self-service view, not the manager screens. Proven by deletion: dropping
-    // the `role === "staff" ? "my-schedule" : "staff"` branch in #applyMe lands them on `staff` instead.
+    // the `role === "staff" ? "my-schedule" : "overview"` branch in #applyMe lands them on `overview`
+    // instead — the non-staff default screen.
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);

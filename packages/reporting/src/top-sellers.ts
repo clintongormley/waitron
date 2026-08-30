@@ -36,9 +36,10 @@ export async function computeTopSellers(
     );
   }
   const nodeClause = input.nodeId ? sql`and s.node_id = ${input.nodeId}` : sql``;
-  // `descriptions` comes back as a parsed object, not a string: node-postgres parses a jsonb column,
-  // and PGlite (the test target) does too — confirmed empirically against `'{…}'::jsonb`, which
-  // `tx.execute` returns as `typeof === "object"`. So no JSON.parse is needed on the read path.
+  // `descriptions` comes back as a parsed object, not a string, on the test target: verified by
+  // top-sellers.test.ts's "returns the frozen descriptions map intact (jsonb → object)", which reads a
+  // live `'{…}'::jsonb` column back via `tx.execute` and asserts `typeof === "object"`. So no
+  // JSON.parse is needed on the read path.
   // Deterministic order: quantity desc, then the descriptions text as a stable tiebreak for ties.
   const { rows } = await tx.execute<{
     descriptions: Record<string, string>;

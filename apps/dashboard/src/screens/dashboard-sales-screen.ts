@@ -28,8 +28,8 @@ import { today } from "../date-utils.js";
  * (there is no client-side currency formatter in this app). Top-seller names come from a per-locale
  * `descriptions` map resolved through the shared {@link localizedName} helper. Every async path is
  * `try/catch`ed into the `errorKey` banner (the roster/overview-screen pattern); a `from > to` range
- * is left for the server to reject (400 `report.range`), which surfaces the same way. Read-only: it
- * authors nothing.
+ * is left for the server to reject (400 `management.request_invalid`, per report-api.ts's `from > to`
+ * guard), which surfaces the same way. Read-only: it authors nothing.
  */
 @customElement("dashboard-sales-screen")
 export class SalesScreen extends LitElement {
@@ -127,9 +127,9 @@ export class SalesScreen extends LitElement {
 
   /** Load the current range: a single-day close (`from === to`) or a period roll-up (`from !== to`).
    * BOTH branches' state is cleared up-front, BEFORE the request — so a rejection (including the
-   * server's `report.range` 400 for `from > to`) can never leave a stale close or period rendering
-   * beside the error banner. Clearing before the `await` also avoids showing the previous view during
-   * a slow fetch. A rejection anywhere becomes the banner. */
+   * server's `management.request_invalid` 400 for `from > to`) can never leave a stale close or period
+   * rendering beside the error banner. Clearing before the `await` also avoids showing the previous
+   * view during a slow fetch. A rejection anywhere becomes the banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     this.close = null;
@@ -220,7 +220,7 @@ export class SalesScreen extends LitElement {
         ${this.#renderVat(period.vat)}
         <h2>${t("sales.top_sellers_title")}</h2>
         ${this.#renderTopSellers(period.topSellers)}
-        <p class="muted" data-test="period-note">${t("sales.periodNote")}</p>
+        <p class="muted" data-test="period-note">${t("sales.period_note")}</p>
       </div>
     `;
   }

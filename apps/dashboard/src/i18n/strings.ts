@@ -395,7 +395,7 @@ export const en = {
   "sales.quantity": "Qty",
   "sales.total": "Total",
   "sales.empty_sellers": "No sales in this range.",
-  "sales.periodNote":
+  "sales.period_note":
     "Per-till tender detail is available for a single day only. Pick one day to see the cash-up.",
 } as const;
 
@@ -747,7 +747,7 @@ export const es: Record<StringKey, string> = {
   "sales.quantity": "Cant.",
   "sales.total": "Total",
   "sales.empty_sellers": "No hay ventas en este intervalo.",
-  "sales.periodNote":
+  "sales.period_note":
     "El detalle de cobros por caja solo está disponible para un único día. Elige un día para ver el arqueo.",
 };
 
