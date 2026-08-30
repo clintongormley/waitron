@@ -135,7 +135,11 @@ full-tag `invoice_locales` at the single point content enters a fiscal line**:
   `sale_lines` (the same `priced` is returned and filed). Inherited/locked paths (move/transfer,
   `priceLockedLines`) already carry full tags and are untouched.
 - **Reads `locations.invoice_locales` FRESH from the DB** inside `priceOrderLines`, not the env-derived
-  `cfg.invoiceLocales` (which can drift from what the trigger checks) — closing a pre-existing latent bug.
+  `cfg.invoiceLocales` (which can drift from what the trigger checks) — closing that drift **for the line
+  descriptions only**. The sale HEADER's locale fields (`sales.locale`/`sales.invoice_locales`) are still
+  stamped by `recordSale` from boot-time `cfg`, so a config-vs-env drift can still file a `sales` header
+  inconsistent with its `sale_lines` keys. That residual write-side gap is **not** closed here (backlog
+  follow-up: source the whole filed record's locale from the DB location config).
 - The demo seed authors bare content (`SeedLocale = "en" | "es"`) and maps to full-tag config via
   `SEED_INVOICE_LOCALE` — content authored bare, filed full.
 

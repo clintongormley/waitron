@@ -749,7 +749,13 @@ here is the cross-cutting or genuinely-decision-bearing work.
   follow-up:** authoring-time locale-completeness validation — a product missing a venue invoice-locale's
   translation currently graceful-fills (receipt shows the primary language in that column, sale never
   blocked per §5) rather than being caught at save time; a save-time check would make the receipt
-  genuinely complete.
+  genuinely complete. **Second deferred follow-up (write-side header drift):** the line re-key reads
+  `locations.invoice_locales` DB-fresh, but the sale HEADER's locale fields
+  (`sales.locale`/`sales.invoice_locales`) are still stamped by `recordSale` from boot-time `cfg`, so a
+  config-vs-env drift can file a `sales` header inconsistent with its `sale_lines` keys (immutable
+  record, §5). Fix: every `recordSale`/`recordCorrection` site should take `sales.locale`/`invoice_locales`
+  from `locations.invoice_locales` (as the line re-key now does), so the whole filed record's locale comes
+  from the DB location config, not from `cfg`.
 
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across

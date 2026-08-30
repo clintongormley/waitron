@@ -146,11 +146,20 @@ async function priceOrderLines(
   // the BARE language tag (`es` = "our Spanish"); the `working_order_lines_check_locales` trigger (and
   // the receipt) require the per-line map to hold EXACTLY this location's full-tag `invoice_locales`
   // (`es-ES`). Use the location's DB `invoice_locales`, NOT `cfg.invoiceLocales` — the latter is
-  // env-derived and can drift from what the trigger actually checks, which is the location row. That
+  // env-derived and can drift from what the trigger actually checks, which is the location row. This
+  // closes that drift FOR THE LINE DESCRIPTIONS ONLY: the sale HEADER's locale fields
+  // (`sales.locale`/`sales.invoice_locales`, stamped by `recordSale` from `cfg`) are still sourced from
+  // boot-time config, so a config-vs-env drift can still file a header inconsistent with these lines
+  // (immutable record, §5) — a residual gap tracked in the backlog, not closed here. That `invoice_locales`
   // value comes from the SAME `listAvailableProducts` read above (it projects `locations.invoice_locales`
   // alongside the products via `resolveAccessibleCatalogueIds`, one read), so no second `locations`
-  // query is issued here. `cfg.locationId` is the till's own configured location, so that read always
-  // resolves (the same invariant `readInvoiceNumber` relies on). `toInvoiceLineDescriptions`
+  // query is issued here — and it reflects a REAL `locations` row whenever this loop runs: the loop
+  // iterates `priced.lines`, which are non-empty only if every input line resolved a product from that
+  // read, which returns products only when `resolveAccessibleCatalogueIds` found ≥1 accessible catalogue
+  // for `cfg.locationId` — i.e. the `locations` row exists (an absent location yields no products, so
+  // every line would have thrown `sale.unknown_product` above, and `invoiceLocales` would be the `?? []`
+  // empty fallback). So if the loop body runs, `invoiceLocales` is the genuine row value, not the
+  // absent-location default. `toInvoiceLineDescriptions`
   // graceful-fills and NEVER throws (§5: nothing may block a sale), and mutating `priced.lines` in place
   // propagates the re-key to BOTH the `working_order_lines` rows built below AND the filed `sale_lines`
   // (the same `priced` is threaded back out and fed to `recordSale`). The inherited/locked paths

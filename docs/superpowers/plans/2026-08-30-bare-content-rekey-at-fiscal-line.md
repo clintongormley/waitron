@@ -120,5 +120,8 @@ re-keyed value), not `es`. Do NOT weaken an assertion — update it to the new c
 
 Covers: re-key helper (T1) · wired at the one choke point reading fresh invoice_locales (T2) · catalogue
 content + seed to bare with the type-split (T3) · docs (T4). §5 honoured via graceful-fill (no sale-path
-throw). Inherited/locked paths untouched. Downstream readers improve to exact-hit (per trace §4), no
-resolver change needed.
+throw). Inherited/locked paths untouched. Downstream readers of FULL-tag `working_order_lines`/`sale_lines`
+content (KDS, station queue, receipt) stay exact-hit. NOT every reader was no-change, though: the till's
+`descriptionFor` (`apps/till/src/widgets/dish-format.ts`) reads BARE-keyed `/api/products` content under a
+full-tag UI locale (`es-ES`), so it needed a region-strip tier added (full tag → bare language → any) —
+without it a bilingual product rendered the first-authored (English) value on a Spanish till.
