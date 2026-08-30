@@ -5,7 +5,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS, hashPassword, loginManager } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPassword, loginManagerById } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -181,11 +181,13 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
   });
 });
 
-describe("the seeded admin can perform a first dashboard login", () => {
-  it("loginManager succeeds with the provisioned password and rejects a wrong one", async () => {
-    // The gap this whole feature closes: `venue` now seeds the admin's dashboard password, so a first
-    // management-dashboard login is possible with no already-authenticated session. A distinct obligado
-    // (B33333333) so this test's admin is its own (the PGlite suite shares one database).
+describe("the provisioned admin authenticates by id with its password", () => {
+  it("loginManagerById succeeds with the provisioned password and rejects a wrong one", async () => {
+    // `venue` seeds the admin's password but NO email, so the email-based dashboard login
+    // (`loginManager`) has no address to resolve. The emailless admin authenticates by id via
+    // `loginManagerById` — the same path the C2b mirror-bundle route uses to adopt from the primary.
+    // A distinct obligado (B33333333) so this test's admin is its own (the PGlite suite shares one
+    // database).
     const venue = await applyVenue(planVenue(request("B33333333")), { db: suite.db });
 
     // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
@@ -195,11 +197,11 @@ describe("the seeded admin can perform a first dashboard login", () => {
     expect(personId).toBeDefined();
 
     // The provisioned password logs in and mints a management session — run as the app role under the
-    // tenant (asAppUser), the same role constraints production's loginManager runs under, so this also
-    // proves app_user can SELECT the seeded password_hash and INSERT the management session.
+    // tenant (asAppUser), the same role constraints production's login runs under, so this also proves
+    // app_user can SELECT the seeded password_hash and INSERT the management session.
     const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      return loginManager(tx, {
+      return loginManagerById(tx, {
         tenantId: venue.tenantId,
         personId: personId!,
         password: "dashPass123",
@@ -211,7 +213,7 @@ describe("the seeded admin can perform a first dashboard login", () => {
     await expect(
       withTenant(suite.db, venue.tenantId, async (tx) => {
         await asAppUser(tx);
-        return loginManager(tx, {
+        return loginManagerById(tx, {
           tenantId: venue.tenantId,
           personId: personId!,
           password: "wrongpass1",
