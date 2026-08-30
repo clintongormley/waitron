@@ -3254,7 +3254,7 @@ describe("till-app", () => {
       expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
       expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
       // The grid shows ONLY the default menu's product — the guard-by-deletion assertion: drop the
-      // screen's `#gridProducts` `.filter` (grid shows all products) and this fails on "Cerveza".
+      // screen's `filterProductsByMenu` `.filter` (grid shows all products) and this fails on "Cerveza".
       expect(gridNames(el)).toEqual(["Bocadillo"]);
     });
 

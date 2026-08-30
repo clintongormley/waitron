@@ -54,8 +54,11 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
   if (kitchen === undefined) {
     throw new Error(`seedCatalogues: no "Cocina" station found for location ${locationId}`);
   }
-  // Create "Barra" for drinks — NOT the default (the partial unique allows one default per location,
-  // which "Cocina" already holds). `current_tenant_id()` satisfies the FORCE-RLS WITH CHECK.
+  // Create "Barra" for drinks via a raw insert because `createStation` (apps/server/src/kitchen.ts) is
+  // management-session-gated (`withVenueAuth`), which a seed script has no session for — the same
+  // raw-insert-past-a-gated-helper pattern `seedFloor`/`seedStaff` use. NOT the default (the partial
+  // unique allows one default per location, which "Cocina" already holds). `current_tenant_id()`
+  // satisfies the FORCE-RLS WITH CHECK.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
     values (current_tenant_id(), ${locationId}, 'Barra', 1, false, true)

@@ -205,8 +205,10 @@ export class TillApp extends LitElement {
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** ALL sellable products across the location's accessible menus, loaded at login. The counter/table
-   * screens are handed the DERIVED {@link #visibleProducts} (only the selected menu's), never this whole
-   * set — a menu switch re-filters this in place, it never re-fetches. */
+   * screens are handed this WHOLE set plus {@link selectedCatalogueId}, and each narrows its OWN grid to
+   * the selected menu via `filterProductsByMenu` (`menu-filter.ts`). The full set is threaded down
+   * deliberately — a screen resolves a tab line's name and an allergen lookup against every menu's
+   * products, not just the shown one — so a menu switch only re-filters the grid, never re-fetches. */
   @state() private products: TillProduct[] = [];
   /** The location's accessible menus (default first), loaded at login beside {@link products}. Drives the
    * `<till-menu-switcher>`; with one menu the switcher renders nothing and the till looks as before. */

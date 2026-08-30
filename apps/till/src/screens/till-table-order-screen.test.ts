@@ -401,7 +401,7 @@ describe("till-table-order-screen", () => {
 
     it("filters the round grid to the selected menu; removing the filter shows every menu's products", async () => {
       const { el } = await mount({ ...bothMenus, selectedMenuId: "cat-food" });
-      // Guard-by-deletion: drop `#gridProducts`'s `.filter` and this drops "Cerveza" in beside Bocadillo.
+      // Guard-by-deletion: drop `filterProductsByMenu`'s `.filter` and this drops "Cerveza" in beside Bocadillo.
       expect(gridNames(el)).toEqual(["Bocadillo"]);
       expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
 

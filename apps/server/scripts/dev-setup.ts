@@ -50,6 +50,17 @@ export function resolveSeedLocale(): SeedLocale {
   return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es-ES" : "en-GB";
 }
 
+/**
+ * The historical-sales horizon, resolved from the environment at each run: `WAITRON_SEED_SALES_DAYS`
+ * days of back-dated preproduction sales, defaulting to 28 (0 skips sales entirely). Read at call time
+ * (not module load) so the default lives in one place and a one-shot `WAITRON_SEED_SALES_DAYS=… pnpm
+ * dev:reset` takes effect — mirrors {@link resolveSeedLocale}. Both `devSetup` (the seed horizon) and
+ * `main` (the human summary line) read it, so the `"28"` default is not duplicated.
+ */
+export function resolveSalesDays(): number {
+  return Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+}
+
 /** The exact env contract `apps/server` boots against (config.ts + till-config.ts), in write order. */
 export interface DevEnv {
   DATABASE_URL: string;
@@ -368,7 +379,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   // Resolve the seed shape ONCE per run: the locale (English default, Spanish via WAITRON_SEED_LOCALE)
   // and the historical-sales horizon (WAITRON_SEED_SALES_DAYS, default 28; 0 skips sales entirely).
   const seedLocale = resolveSeedLocale();
-  const salesDays = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  const salesDays = resolveSalesDays();
 
   const db = await createPostgresDb(databaseUrl);
   let ids;
@@ -417,7 +428,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`  demo PIN (every login):   ${ADMIN_PIN}`);
   console.log(`  locale:                   ${result.env.WAITRON_TILL_LOCALE}`);
-  const salesDays = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(
       salesDays > 0

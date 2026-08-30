@@ -351,12 +351,14 @@ export async function addCatalogueToLocation(
  * The catalogue ids a location may sell from: its default (`locations.catalogue_id`, when non-null)
  * unioned with every `location_catalogues` member, de-duplicated (a `Set`, since the default may also
  * appear as a member). Order is not meaningful — {@link listAvailableProducts} sorts by catalogue
- * name — so the returned array is just the set's insertion order.
+ * name — so `ids` is just the set's insertion order. `defaultId` is the same `locations.catalogue_id`
+ * the union already read (or `null` when the location has none): returned alongside so a caller that
+ * needs to flag the default menu ({@link listAccessibleCatalogues}) does not re-read `locations`.
  */
 export async function resolveAccessibleCatalogueIds(
   tx: Transaction,
   locationId: string,
-): Promise<string[]> {
+): Promise<{ ids: string[]; defaultId: string | null }> {
   const [def] = await tx
     .select({ id: locations.catalogueId })
     .from(locations)
@@ -368,7 +370,7 @@ export async function resolveAccessibleCatalogueIds(
   const ids = new Set<string>();
   if (def?.id != null) ids.add(def.id);
   for (const m of members) ids.add(m.id);
-  return [...ids];
+  return { ids: [...ids], defaultId: def?.id ?? null };
 }
 
 export interface AccessibleCatalogue {
@@ -389,18 +391,14 @@ export async function listAccessibleCatalogues(
   tx: Transaction,
   locationId: string,
 ): Promise<AccessibleCatalogue[]> {
-  const [loc] = await tx
-    .select({ defaultId: locations.catalogueId })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  const ids = await resolveAccessibleCatalogueIds(tx, locationId);
+  const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx, locationId);
   if (ids.length === 0) return [];
   const rows = await tx
     .select({ id: catalogues.id, name: catalogues.name })
     .from(catalogues)
     .where(and(inArray(catalogues.id, ids), eq(catalogues.active, true)));
   return rows
-    .map((r) => ({ id: r.id, name: r.name, isDefault: r.id === loc?.defaultId }))
+    .map((r) => ({ id: r.id, name: r.name, isDefault: r.id === defaultId }))
     .sort((a, b) =>
       a.isDefault === b.isDefault ? a.name.localeCompare(b.name) : a.isDefault ? -1 : 1,
     );
@@ -418,7 +416,7 @@ export async function listAvailableProducts(
   tx: Transaction,
   locationId: string,
 ): Promise<AvailableProduct[]> {
-  const accessible = await resolveAccessibleCatalogueIds(tx, locationId);
+  const { ids: accessible } = await resolveAccessibleCatalogueIds(tx, locationId);
   if (accessible.length === 0) return [];
   const rows = await tx
     .select({
