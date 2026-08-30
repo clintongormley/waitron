@@ -1063,7 +1063,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 // and is a false pass for a device-authentication guard, CLAUDE.md §4). The handheld here holds BOTH a
 // device cookie AND a valid operator session — exactly the bypass this server-side guard exists to
 // refuse, because a compromised or hacked-together client could present both.
-describe("POST /api/sales order-only firewall (a handheld may not settle a sale)", () => {
+describe("order-only firewall (a handheld may not settle, pay, reprint, or open the drawer)", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
    * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
@@ -1144,4 +1144,34 @@ describe("POST /api/sales order-only firewall (a handheld may not settle a sale)
     });
     expect(res.status).toBe(200);
   });
+
+  // The SAME firewall fences the other fiscal/cash routes a handheld must never reach: paying over the
+  // integrated terminal, reprinting a filed sale's ticket, and opening the cash drawer. Each guard runs
+  // immediately after the route's `requireSession` — BEFORE the pay provider guard, the reprint id parse,
+  // and the drawer printer resolution — so an active handheld binding is refused 403 regardless of card
+  // config, order existence, or printer state. Plain `apiDeps(cfg)` (no card provider) suffices for the
+  // pay case precisely because the guard short-circuits ahead of the provider check.
+  it.each([
+    ["POST /api/pay", "/api/pay", { id: randomUUID() }],
+    ["POST /api/sales/:id/reprint", `/api/sales/${randomUUID()}/reprint`, {}],
+    ["POST /api/drawer/open", "/api/drawer/open", {}],
+  ])(
+    "refuses %s from a handheld with 403 device.forbidden_action even with a valid operator session",
+    async (_label, path, body) => {
+      const { cfg, operatorId } = await setupVenue();
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+
+      const deviceCookie = await enrolHandheldCookie(cfg);
+      const sessionPair = await loginOperator(app, operatorId);
+
+      const res = await app.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("device.forbidden_action");
+    },
+  );
 });

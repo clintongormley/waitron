@@ -693,6 +693,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
+      // Order-only firewall (spec §5): a handheld takes and fires orders but NEVER settles — the bill is
+      // paid at the fixed till. A handheld cookie throws `device.forbidden_action` (403) here, before the
+      // provider guard and any fiscal write, so order-only holds even if the client were bypassed. An
+      // ordinary till carries no device cookie and passes.
+      await assertNotHandheld(deps, c, "pay");
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
       // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
@@ -1050,6 +1055,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
+      // Order-only firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
+      // `device.forbidden_action` (403) before the id parse. An ordinary till carries no device cookie.
+      await assertNotHandheld(deps, c, "reprint");
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await reprintSale({ db: deps.db, backend: deps.backend }, deps.cfg, id);
       return c.body(null, 200);
@@ -1102,6 +1110,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
+      // Order-only firewall (spec §5): a handheld has no cash drawer to open — refused
+      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries no
+      // device cookie and passes.
+      await assertNotHandheld(deps, c, "drawer_open");
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
