@@ -3,8 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
-import { localizedName } from "../i18n/localized.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { metricStyles, renderMetric } from "../widgets/metric-row.js";
+import { renderTopSellers, type TopSellersLabels } from "../widgets/top-sellers-table.js";
 import type { DashboardApi, SalesOverview } from "../api/client.js";
 
 /**
@@ -22,6 +23,7 @@ import type { DashboardApi, SalesOverview } from "../api/client.js";
 export class OverviewScreen extends LitElement {
   static override styles = [
     baseStyles,
+    metricStyles,
     css`
       :host {
         display: block;
@@ -52,12 +54,6 @@ export class OverviewScreen extends LitElement {
         gap: var(--wt-space-4);
         padding: var(--wt-space-1) 0;
         color: var(--wt-color-text);
-      }
-      .metric .label {
-        color: var(--wt-color-text-muted);
-      }
-      .metric .value {
-        font-weight: var(--wt-font-weight-bold);
       }
       table {
         width: 100%;
@@ -123,21 +119,21 @@ export class OverviewScreen extends LitElement {
       <div class="cards">
         <wt-card data-test="takings">
           <h2 slot="header">${t("overview.takings_title")}</h2>
-          ${this.#metric(t("overview.tender_total"), takings.tenderTotal, "tender-total")}
-          ${this.#metric(t("overview.tips"), takings.tipTotal, "tip-total")}
-          ${this.#metric(t("overview.gross_total"), takings.grossTotal, "gross-total")}
+          ${renderMetric(t("overview.tender_total"), takings.tenderTotal, "tender-total")}
+          ${renderMetric(t("overview.tips"), takings.tipTotal, "tip-total")}
+          ${renderMetric(t("overview.gross_total"), takings.grossTotal, "gross-total")}
         </wt-card>
 
         <wt-card data-test="counts">
           <h2 slot="header">${t("overview.counts_title")}</h2>
-          ${this.#metric(t("overview.sales"), String(counts.sales), "count-sales")}
-          ${this.#metric(t("overview.corrections"), String(counts.corrections), "count-corrections")}
-          ${this.#metric(t("overview.voids"), String(counts.voids), "count-voids")}
+          ${renderMetric(t("overview.sales"), String(counts.sales), "count-sales")}
+          ${renderMetric(t("overview.corrections"), String(counts.corrections), "count-corrections")}
+          ${renderMetric(t("overview.voids"), String(counts.voids), "count-voids")}
         </wt-card>
 
         <wt-card data-test="tables">
           <h2 slot="header">${t("overview.tables_title")}</h2>
-          ${this.#metric(
+          ${renderMetric(
             t("overview.open_tables"),
             `${openTables.open} / ${openTables.total}`,
             "open-tables",
@@ -146,42 +142,22 @@ export class OverviewScreen extends LitElement {
 
         <wt-card data-test="top-sellers">
           <h2 slot="header">${t("overview.top_sellers_title")}</h2>
-          ${this.#renderTopSellers(overview.topSellers)}
+          ${renderTopSellers(overview.topSellers, this.#topSellerLabels())}
         </wt-card>
       </div>
     `;
   }
 
-  #metric(label: string, value: string, test: string): TemplateResult {
-    return html`<div class="metric">
-      <span class="label">${label}</span>
-      <span class="value" data-test=${test}>${value}</span>
-    </div>`;
-  }
-
-  #renderTopSellers(rows: SalesOverview["topSellers"]): TemplateResult {
-    if (rows.length === 0) {
-      return html`<p class="muted" data-test="empty">${t("overview.empty_sellers")}</p>`;
-    }
-    return html`<table>
-      <thead>
-        <tr>
-          <th scope="col">${t("overview.top_sellers_title")}</th>
-          <th scope="col" class="num">${t("overview.quantity")}</th>
-          <th scope="col" class="num">${t("overview.total")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(
-          (row, i) =>
-            html`<tr data-test=${`seller-row-${i}`}>
-              <th scope="row" data-test="seller-name">${localizedName(row.descriptions)}</th>
-              <td class="num">${row.quantity}</td>
-              <td class="num">${row.total}</td>
-            </tr>`,
-        )}
-      </tbody>
-    </table>`;
+  /** This screen's `overview.*` labels for the shared top-sellers table (the namespace is deliberately
+   * not shared with the sales screen's `sales.*` keys). */
+  #topSellerLabels(): TopSellersLabels {
+    return {
+      title: t("overview.top_sellers_title"),
+      quantity: t("overview.quantity"),
+      total: t("overview.total"),
+      empty: t("overview.empty_sellers"),
+      emptyTest: "empty",
+    };
   }
 }
 

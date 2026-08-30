@@ -2,14 +2,14 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import { localizedName } from "../i18n/localized.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { metricStyles, renderMetric } from "../widgets/metric-row.js";
+import { renderTopSellers, type TopSellersLabels } from "../widgets/top-sellers-table.js";
 import type {
   CashUpDto,
   DailyCloseDto,
   DashboardApi,
   SalesPeriodDto,
-  TopSellerRow,
   VatSummaryDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
@@ -35,6 +35,7 @@ import { today } from "../date-utils.js";
 export class SalesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    metricStyles,
     css`
       :host {
         display: block;
@@ -95,12 +96,6 @@ export class SalesScreen extends LitElement {
         gap: var(--wt-space-2);
         color: var(--wt-color-text);
       }
-      .metric .label {
-        color: var(--wt-color-text-muted);
-      }
-      .metric .value {
-        font-weight: var(--wt-font-weight-bold);
-      }
       .muted {
         color: var(--wt-color-text-muted);
         margin-top: var(--wt-space-3);
@@ -145,21 +140,15 @@ export class SalesScreen extends LitElement {
     }
   }
 
-  #onFrom(event: Event): void {
+  /** Handle a change to either date picker — `field` selects which bound to move. The two pickers
+   * differ only in that assignment, so they share one handler. */
+  #onDateChange(field: "from" | "to", event: Event): void {
     event.stopPropagation();
     const value = (event.target as HTMLInputElement).value;
     // A cleared <input type=date> (value "") builds an Invalid Date → NaN; ignore it rather than
     // reloading with a bogus window.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
-    this.from = value;
-    void this.#load();
-  }
-
-  #onTo(event: Event): void {
-    event.stopPropagation();
-    const value = (event.target as HTMLInputElement).value;
-    if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
-    this.to = value;
+    this[field] = value;
     void this.#load();
   }
 
@@ -173,7 +162,7 @@ export class SalesScreen extends LitElement {
             type="date"
             data-test="from-picker"
             .value=${this.from}
-            @change=${(e: Event) => this.#onFrom(e)}
+            @change=${(e: Event) => this.#onDateChange("from", e)}
           />
         </label>
         <label class="picker"
@@ -182,7 +171,7 @@ export class SalesScreen extends LitElement {
             type="date"
             data-test="to-picker"
             .value=${this.to}
-            @change=${(e: Event) => this.#onTo(e)}
+            @change=${(e: Event) => this.#onDateChange("to", e)}
           />
         </label>
       </div>
@@ -203,12 +192,12 @@ export class SalesScreen extends LitElement {
         ${this.#renderTender(close.cash)} ${this.#renderVat(close.vat)}
         <h2>${t("sales.counts_title")}</h2>
         <div class="counts" data-test="counts">
-          ${this.#metric(t("sales.sales"), String(close.counts.sales), "count-sales")}
-          ${this.#metric(t("sales.corrections"), String(close.counts.corrections), "count-corrections")}
-          ${this.#metric(t("sales.voids"), String(close.counts.voids), "count-voids")}
+          ${renderMetric(t("sales.sales"), String(close.counts.sales), "count-sales")}
+          ${renderMetric(t("sales.corrections"), String(close.counts.corrections), "count-corrections")}
+          ${renderMetric(t("sales.voids"), String(close.counts.voids), "count-voids")}
         </div>
         <h2>${t("sales.top_sellers_title")}</h2>
-        ${this.#renderTopSellers(close.topSellers)}
+        ${renderTopSellers(close.topSellers, this.#topSellerLabels())}
       </div>
     `;
   }
@@ -219,7 +208,7 @@ export class SalesScreen extends LitElement {
       <div data-test="period">
         ${this.#renderVat(period.vat)}
         <h2>${t("sales.top_sellers_title")}</h2>
-        ${this.#renderTopSellers(period.topSellers)}
+        ${renderTopSellers(period.topSellers, this.#topSellerLabels())}
         <p class="muted" data-test="period-note">${t("sales.period_note")}</p>
       </div>
     `;
@@ -299,37 +288,16 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  /** The top-sellers table (shared by close + period) — name via the active locale, quantity, total. */
-  #renderTopSellers(rows: TopSellerRow[]): TemplateResult {
-    if (rows.length === 0) {
-      return html`<p class="muted" data-test="empty">${t("sales.empty_sellers")}</p>`;
-    }
-    return html`<table data-test="top-sellers">
-      <thead>
-        <tr>
-          <th scope="col">${t("sales.top_sellers_title")}</th>
-          <th scope="col" class="num">${t("sales.quantity")}</th>
-          <th scope="col" class="num">${t("sales.total")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(
-          (row, i) =>
-            html`<tr data-test=${`seller-row-${i}`}>
-              <th scope="row" data-test="seller-name">${localizedName(row.descriptions)}</th>
-              <td class="num">${row.quantity}</td>
-              <td class="num">${row.total}</td>
-            </tr>`,
-        )}
-      </tbody>
-    </table>`;
-  }
-
-  #metric(label: string, value: string, test: string): TemplateResult {
-    return html`<div class="metric">
-      <span class="label">${label}</span>
-      <span class="value" data-test=${test}>${value}</span>
-    </div>`;
+  /** This screen's `sales.*` labels for the shared top-sellers table (the namespace is deliberately
+   * not shared with the overview's `overview.*` keys). */
+  #topSellerLabels(): TopSellersLabels {
+    return {
+      title: t("sales.top_sellers_title"),
+      quantity: t("sales.quantity"),
+      total: t("sales.total"),
+      empty: t("sales.empty_sellers"),
+      emptyTest: "empty",
+    };
   }
 }
 

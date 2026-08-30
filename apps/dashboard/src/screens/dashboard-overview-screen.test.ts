@@ -67,6 +67,10 @@ describe("dashboard-overview-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
     await flush(el);
+    // The shared table (stable `top-sellers-table` hook) sits inside the overview's `top-sellers` card.
+    const card = el.shadowRoot!.querySelector("[data-test=top-sellers]")!;
+    expect(card).not.toBeNull();
+    expect(card.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
     const names = [...el.shadowRoot!.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );

@@ -110,7 +110,9 @@ describe("dashboard-sales-screen", () => {
     expect(root.querySelector("[data-test=count-corrections]")!.textContent).toContain("1");
     expect(root.querySelector("[data-test=count-voids]")!.textContent).toContain("2");
 
-    // Top sellers, name via the active locale (es).
+    // Top sellers, rendered through the shared table widget (stable `top-sellers-table` hook), name
+    // via the active locale (es).
+    expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
     expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Café");
 
     // No per-day note in single-day mode.
@@ -134,6 +136,7 @@ describe("dashboard-sales-screen", () => {
     expect(root.querySelector("[data-test=vat-gross-total]")!.textContent).toContain("1210.00");
     expect(root.querySelector("[data-test=period-note]")).not.toBeNull();
     expect(root.querySelector("[data-test=tender-table]")).toBeNull();
+    expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
     const names = [...root.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );

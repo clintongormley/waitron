@@ -4,6 +4,7 @@ import { decimal } from "@waitron/shared";
 import {
   activeSalesClause,
   businessDayRangeClause,
+  nodeScopeClause,
   validateBusinessDayRange,
   validateCutover,
   validateTimeZone,
@@ -35,7 +36,7 @@ export async function computeTopSellers(
       `reporting: top-sellers limit must be a positive integer: ${JSON.stringify(input.limit)}`,
     );
   }
-  const nodeClause = input.nodeId ? sql`and s.node_id = ${input.nodeId}` : sql``;
+  const nodeClause = nodeScopeClause(input.nodeId);
   // `descriptions` comes back as a parsed object, not a string, on the test target: verified by
   // top-sellers.test.ts's "returns the frozen descriptions map intact (jsonb → object)", which reads a
   // live `'{…}'::jsonb` column back via `tx.execute` and asserts `typeof === "object"`. So no

@@ -29,18 +29,9 @@ export interface PeriodVatInput {
   dayCutover: string;
 }
 
-export interface TopSellersInput {
-  tenantId: TenantId;
-  /** Omit → aggregate across ALL the tenant's nodes (RLS + the tenant predicate scope it). */
-  nodeId?: NodeId;
-  /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
-  fromBusinessDay: string;
-  /** Inclusive upper bound, local calendar date of the business day, "YYYY-MM-DD". */
-  toBusinessDay: string;
-  /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
-  timeZone: string;
-  /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
-  dayCutover: string;
+/** The top-sellers query: the same (tenant, optional node, business-day range, clock) scope as a
+ * period VAT roll-up, plus how many rows to return. */
+export interface TopSellersInput extends PeriodVatInput {
   /** How many top products to return. Must be a positive integer. */
   limit: number;
 }

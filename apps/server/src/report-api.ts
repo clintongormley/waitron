@@ -23,12 +23,12 @@ import {
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
-  validateBusinessDay,
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
+import { requirePeriod } from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /** Deps for the reporting/export routes: `db` + this venue's `cfg.tenantId` scope every read via
@@ -98,25 +98,6 @@ function requireLiquidationPeriod(raw: string | undefined): {
 function requireDeclarationType(raw: string | undefined): string {
   if (raw === undefined || Array.from(raw).length !== 1) {
     throw new AppError("management.request_invalid", { field: "declarationType" });
-  }
-  return raw;
-}
-
-/** Screen a business-day query param ("YYYY-MM-DD") the SAME way `requireLiquidationPeriod` screens
- * `period`: pre-validate at the request boundary so a bad value becomes `management.request_invalid`
- * {field} (400) here, never a plain `Error` from the reporting layer's own `validateBusinessDay` (which
- * `computeDailyClose`/`computeVatSummaryForPeriod`/`computeTopSellers` call downstream) reaching `run`
- * as an opaque `server.internal` 500. `validateBusinessDay` rejects both a malformed shape and a
- * well-formed-but-impossible date (e.g. "2026-02-30"); its throw is translated, not propagated.
- * `field` distinguishes `businessDay` (daily-close) from `from`/`to` (period). */
-function requireBusinessDay(raw: string | undefined, field: string): string {
-  if (raw === undefined || raw === "") {
-    throw new AppError("management.request_invalid", { field });
-  }
-  try {
-    validateBusinessDay(raw);
-  } catch {
-    throw new AppError("management.request_invalid", { field });
   }
   return raw;
 }
@@ -313,7 +294,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   app.get("/management-api/reports/daily-close", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const businessDay = requireBusinessDay(c.req.query("businessDay"), "businessDay");
+      const businessDay = requirePeriod(c.req.query("businessDay"), "businessDay");
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { tenantId, nodeId, clock } = await buildReportContext(tx);
         const input = {
@@ -345,12 +326,12 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   // node — the period roll-up behind the dashboard's date-range view. Node-scoped, gated on
   // `report.view`. `from`/`to` are each screened to a real "YYYY-MM-DD", and an inverted range
   // (`from > to`) is a request fault (400) — a valid string compare because both passed
-  // `validateBusinessDay`'s fixed-shape check, exactly as `validateBusinessDayRange` orders them.
+  // `requirePeriod`'s fixed-shape check, exactly as `validateBusinessDayRange` orders them.
   app.get("/management-api/reports/period", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const from = requireBusinessDay(c.req.query("from"), "from");
-      const to = requireBusinessDay(c.req.query("to"), "to");
+      const from = requirePeriod(c.req.query("from"), "from");
+      const to = requirePeriod(c.req.query("to"), "to");
       if (from > to) {
         throw new AppError("management.request_invalid", { field: "range" });
       }
