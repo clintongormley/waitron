@@ -107,14 +107,25 @@ The same `descriptions` map is resolved differently by audience:
 2. Route `localizedName`, `lineName`, `product-list`, `recipe-screen`, and `t()`/`pickLocale` through
    it (software terminal = English; content terminal = any). Removes the 3–4 divergent resolvers and
    gives `t()` the missing language tier.
-3. **Normalize the stored key convention to the full BCP-47 tag** (owner decision, 2026-08-30):
-   `es` → `es-ES` (and the sibling short subtags → their full supported tags), so a `descriptions` map
-   and the invoice/receipt path (already `es-ES`) share ONE convention and "any entry" is a true last
-   resort. This spans producers (catalogue/product write paths, demo seeds, test fixtures) **and**
-   consumers that look up a short key (`product-list.ts` `primaryLocale = "es"`, `recipe-screen.ts`
-   `descriptions["es"]`) — trace every consumer before changing the keys. Region-tolerant negotiation
-   still ships (it is what keeps a not-yet-translated product correct), but the stored data is canonical
-   full-tag.
+3. **Two coherent key conventions, bridged by the one resolver** (owner decision, 2026-08-30) — NOT one
+   convention everywhere:
+   - **Software UI catalogues stay keyed by the LANGUAGE subtag** (`{ en, es }` column tables in
+     `apps/dashboard/src/i18n/domain.ts`, `apps/till/src/i18n/allergen-names.ts`, `strings.ts`). UI
+     chrome is per-language, not per-region ("Spanish is Spanish"), so a bare-language key is correct,
+     not sloppy. Region granularity there is YAGNI until a same-language-two-regions UI is ever wanted
+     (`SUPPORTED_LOCALES` is two languages today). Terminal English.
+   - **Venue content `descriptions` maps normalize to the full BCP-47 tag** (`es` → `es-ES`, and any
+     sibling content language → its full supported tag), matching the fiscal/invoice path (already
+     `es-ES`) so "any entry" is a true last resort. Consumers to convert in lockstep: `product-list.ts`
+     `primaryLocale = "es"` and `recipe-screen.ts` `descriptions["es"]`, plus content test
+     fixtures/seeds (no stored data to migrate — pre-production drops-and-recreates, so this is a code
+     convention change). Trace every consumer before changing the keys.
+
+   The region-tolerant resolver bridges a full-tag request to either (strip `es-ES`→`es` for a software
+   field; exact/language match for content). The inconsistency #167 hit was *within* content (mixed
+   `es`/`es-ES`), not the software/content split. **Timing:** do the content normalization together with
+   building the shared resolver, so the two consumers are converted once (to call the resolver), not
+   twice.
 4. A first-class presentational **venue default UI language**, distinct from fiscal `invoiceLocales`.
 
 None of this blocks the demo; single-locale venues are correct today via the first-entry fallback. It
