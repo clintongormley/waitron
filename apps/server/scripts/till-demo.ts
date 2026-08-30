@@ -252,13 +252,16 @@ async function main(): Promise<void> {
     }
     const cookie = login.headers.get("set-cookie")!;
 
-    // 2. Read the menu. The sale lines are built FROM this response — the till never invents ids.
+    // 2. Read the menu. `{ menus, products }` — the sale lines are built FROM `products`, the till
+    // never invents ids.
     const productsRes = await app.request("/api/products", { headers: { cookie } });
-    const products = (await productsRes.json()) as {
-      id: string;
-      pricingUnit: "each" | "weight";
-      descriptions: Record<string, string>;
-    }[];
+    const { products } = (await productsRes.json()) as {
+      products: {
+        id: string;
+        pricingUnit: "each" | "weight";
+        descriptions: Record<string, string>;
+      }[];
+    };
     const jamon = products.find((p) => p.pricingUnit === "weight")!; // 24.90 €/kg reduced(10%)
     const agua = products.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 

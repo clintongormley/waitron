@@ -154,6 +154,38 @@ export interface TillProduct {
    * absent value reads as "no default course", the same as null. NOT imported (the bundle rule).
    */
   courseId?: string | null;
+  /**
+   * The catalogue (menu) this product is sold from — its `catalogues.id`. A location may sell across
+   * several accessible menus (its default plus any joined ones), so each product is tagged with which
+   * one it came from; the till's client-side menu filter shows only the selected menu's products.
+   * Mirrors catalogue's `AvailableProduct.catalogueId`, which `GET /api/products` always sends. OPTIONAL
+   * here (like {@link courseId}) purely so the many pre-multi-menu `TillProduct` fixtures need no update
+   * — an absent value simply never matches a selected menu. NOT imported (the bundle rule).
+   */
+  catalogueId?: string;
+  /** The menu's display name (`catalogues.name`, localised at seed time). Mirrors `AvailableProduct`;
+   * carried for completeness — the switcher renders `TillMenu.name`, not this. OPTIONAL for the same
+   * fixture reason as {@link catalogueId}. */
+  catalogueName?: string;
+}
+
+/**
+ * One menu (catalogue) the till's location may sell from — the `menus[]` half of `GET /api/products`.
+ * Mirrors catalogue's `AccessibleCatalogue` (NOT imported — the bundle rule). Ordered default-first by
+ * the server; `isDefault` flags the location's own catalogue, which the switcher pre-selects.
+ */
+export interface TillMenu {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+/** The `GET /api/products` payload: the location's accessible menus + every sellable product across
+ * them (each tagged with its {@link TillProduct.catalogueId}). The till filters `products` by the
+ * selected menu client-side; a single-menu location renders exactly as before (no switcher). */
+export interface ProductCatalogue {
+  menus: TillMenu[];
+  products: TillProduct[];
 }
 
 /** One basket line the till sends to `POST /api/sales`: never a price — the server re-prices. */
@@ -712,8 +744,14 @@ export class TillApi {
     await this.#request<void>("/api/session/locale", "PUT", { locale: code });
   }
 
-  listProducts(): Promise<TillProduct[]> {
-    return this.#request<TillProduct[]>("/api/products", "GET");
+  /**
+   * `GET /api/products` — the location's accessible menus + every sellable product across them (each
+   * tagged with its `catalogueId`). Returns the whole {@link ProductCatalogue}; the till holds all the
+   * products and filters them by the selected menu client-side (a menu switch never re-fetches). SESSION
+   * -guarded server-side — the app calls this only after login.
+   */
+  listProducts(): Promise<ProductCatalogue> {
+    return this.#request<ProductCatalogue>("/api/products", "GET");
   }
 
   /**

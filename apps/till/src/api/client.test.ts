@@ -5,10 +5,10 @@ import {
   type MyAbsence,
   type MyShift,
   type MySwap,
+  type ProductCatalogue,
   type TabLine,
   type TableServiceStatus,
   type TableState,
-  type TillProduct,
 } from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
@@ -248,37 +248,47 @@ describe("TillApi", () => {
     expect(r).toEqual(roster);
   });
 
-  it("listProducts GETs the sellable catalogue, carrying each product's allergens", async () => {
-    // Typed as `TillProduct[]` so the mock is a COMPILE-TIME proof the client shape carries
-    // `allergens` — the EU-14 declaration map keyed by allergen code (menu & allergens, Task 4).
-    // Before that field was added to `TillProduct` this literal failed `tsc` with an excess-property
-    // error; the runtime `.toEqual` then proves the client passes the map through the JSON body
-    // untouched. One product carries a declaration (both presences plus the optional `source`
-    // specificity), a second is unreviewed (`null`), so both shapes round-trip.
-    const products: TillProduct[] = [
-      {
-        id: "p",
-        descriptions: { "es-ES": "Café" },
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-        category: null,
-        allergens: {
-          milk: { presence: "contains" },
-          nuts: { presence: "may_contain", source: "almendra" },
+  it("listProducts GETs the location's menus + products, carrying each product's allergens and menu tag", async () => {
+    // Typed as `ProductCatalogue` so the mock is a COMPILE-TIME proof the client shape carries both the
+    // `menus` half (the switcher's accessible catalogues) and the products' `allergens` (the EU-14
+    // declaration map keyed by allergen code, menu & allergens) plus each product's `catalogueId` menu
+    // tag. The runtime `.toEqual` then proves the client passes the whole payload through untouched. One
+    // product carries a declaration (both presences plus the optional `source` specificity), a second is
+    // unreviewed (`null`), and the two sit on different menus, so all the shapes round-trip.
+    const payload: ProductCatalogue = {
+      menus: [
+        { id: "cat-food", name: "Comida", isDefault: true },
+        { id: "cat-drinks", name: "Bebidas", isDefault: false },
+      ],
+      products: [
+        {
+          id: "p",
+          descriptions: { "es-ES": "Café" },
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+          category: null,
+          allergens: {
+            milk: { presence: "contains" },
+            nuts: { presence: "may_contain", source: "almendra" },
+          },
+          catalogueId: "cat-drinks",
+          catalogueName: "Bebidas",
         },
-      },
-      {
-        id: "q",
-        descriptions: { "es-ES": "Agua mineral" },
-        pricingUnit: "each",
-        unitPrice: "1.20",
-        vatClass: "general",
-        category: "Bebidas",
-        allergens: null,
-      },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(products));
+        {
+          id: "q",
+          descriptions: { "es-ES": "Agua mineral" },
+          pricingUnit: "each",
+          unitPrice: "1.20",
+          vatClass: "general",
+          category: "Bebidas",
+          allergens: null,
+          catalogueId: "cat-drinks",
+          catalogueName: "Bebidas",
+        },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
 
     const r = await new TillApi("", fetchStub).listProducts();
 
@@ -286,13 +296,15 @@ describe("TillApi", () => {
       "/api/products",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(r).toEqual(products);
+    expect(r).toEqual(payload);
+    // The menus half round-trips (default-flagged) for the switcher.
+    expect(r.menus).toEqual(payload.menus);
     // The allergen map survives the round-trip typed — read a declaration off the returned product.
-    expect(r[0]!.allergens).toEqual({
+    expect(r.products[0]!.allergens).toEqual({
       milk: { presence: "contains" },
       nuts: { presence: "may_contain", source: "almendra" },
     });
-    expect(r[1]!.allergens).toBeNull();
+    expect(r.products[1]!.allergens).toBeNull();
   });
 
   it("logout DELETEs the session", async () => {

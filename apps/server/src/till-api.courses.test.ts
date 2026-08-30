@@ -232,10 +232,13 @@ async function queueItemsByDescription(
 
 // The product ids are resolved once (by description) from GET /api/products, so park bodies can name
 // them — the queue serialises descriptions, not productId, so this is the only place ids are needed.
+// The route now returns `{ menus, products }`; only `products` is needed here.
 async function productIdsByDescription(): Promise<Map<string, string>> {
   const res = await app.request("/api/products", { headers: { cookie } });
   expect(res.status).toBe(200);
-  const products = (await res.json()) as { id: string; descriptions: Record<string, string> }[];
+  const { products } = (await res.json()) as {
+    products: { id: string; descriptions: Record<string, string> }[];
+  };
   return new Map(products.map((p) => [p.descriptions["es-ES"]!, p.id]));
 }
 

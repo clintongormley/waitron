@@ -10,6 +10,7 @@ import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron
 import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
 import {
+  addCatalogueToLocation,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -47,11 +48,16 @@ let ana: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
-// The one product seeded into the counter location's catalogue, so `GET /api/products` (Task 6) has
+// The one product seeded into the counter location's DEFAULT catalogue, so `GET /api/products` has
 // something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
 // the route reads back — id, descriptions, unit price, VAT class, the resolved category NAME, and its
-// EU-14 allergen declaration (menu & allergens, Task 4), which the route carries through unchanged.
-let aguaProduct: { id: string };
+// EU-14 allergen declaration, which the route carries through unchanged.
+let aguaProduct: { id: string; catalogueId: string };
+// A SECOND catalogue, attached to the location as a non-default accessible menu via
+// `addCatalogueToLocation` (not `locations.catalogue_id`), with its own product — so the multi-menu
+// `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
+// products drawn from every accessible catalogue, not just the default one.
+let cervezaProduct: { id: string; catalogueId: string };
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -96,11 +102,13 @@ const suite = usePgliteDb({
     await db.execute(sql`
       insert into persons (tenant_id, display_name, pin_hash, role, status)
       values (${tenantId}, 'Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
-    // One product in a catalogue assigned to the counter location, so `GET /api/products` returns a
-    // non-empty list. Seeded on the APP role via the catalogue helpers — the same `withTenant` +
-    // `asAppUser` path the route reads it back through — so the active/assignment filters are real,
-    // not bypassed by a superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
-    const product = await withTenant(db, tenantId, async (tx) => {
+    // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
+    // product in a SECOND catalogue attached as a non-default accessible menu
+    // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
+    // on the APP role via the catalogue helpers — the same `withTenant` + `asAppUser` path the route
+    // reads them back through — so the active/assignment filters are real, not bypassed by a
+    // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
+    const { agua, cerveza } = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -112,14 +120,26 @@ const suite = usePgliteDb({
         unitPrice: "1.50",
         vatClass: "general",
         // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
-        // `allergens` map to carry back — the field this task proves flows through the route unchanged
-        // (no server code change: it rides `c.json(listAvailableProducts(...))`, Task 4).
+        // `allergens` map to carry back — the field this route carries through unchanged.
         allergens: { sulphites: { presence: "may_contain" } },
       });
       await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
-      return p;
+
+      const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
+      const p2 = await createProduct(tx, {
+        catalogueId: cat2.id,
+        categoryId: bebidas.id,
+        descriptions: { "es-ES": "Cerveza" },
+        pricingUnit: "each",
+        unitPrice: "2.50",
+        vatClass: "general",
+      });
+      await addCatalogueToLocation(tx, loc.rows[0]!.id, cat2.id);
+
+      return { agua: { ...p, catalogueId: cat.id }, cerveza: { ...p2, catalogueId: cat2.id } };
     });
-    aguaProduct = { id: product.id };
+    aguaProduct = { id: agua.id, catalogueId: agua.catalogueId };
+    cervezaProduct = { id: cerveza.id, catalogueId: cerveza.catalogueId };
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -862,7 +882,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("RETURNS the location's available products when an open session's cookie is sent", async () => {
+  it("RETURNS the location's menus and available products when an open session's cookie is sent", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -871,22 +891,46 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       headers: { cookie: `${SESSION_COOKIE}=${id}` },
     });
     expect(res.status).toBe(200);
-    // The exact `AvailableProduct` shape the route reads back: the seeded product with its resolved
-    // category NAME (not id), priced from the catalogue, its EU-14 allergen declaration carried
-    // through unchanged, KDS-2's default `courseId` (null — no course assigned), one entry for the one
-    // assigned product.
-    expect(await res.json()).toEqual([
-      {
-        id: aguaProduct.id,
-        descriptions: { "es-ES": "Agua mineral" },
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-        category: "Bebidas",
-        allergens: { sulphites: { presence: "may_contain" } },
-        courseId: null,
-      },
-    ]);
+    // The wrapped `{ menus, products }` shape: `menus` carries BOTH accessible catalogues — the
+    // location's default ("Carta", `isDefault: true`) sorted first, then the non-default one attached
+    // via `addCatalogueToLocation` ("Happy Hour") — and `products` carries a row from EACH of them,
+    // proving the route reads across the whole accessible set rather than just the default catalogue.
+    // The exact `AvailableProduct` shape: the seeded product with its resolved category NAME (not
+    // id), priced from the catalogue, its EU-14 allergen declaration carried through unchanged,
+    // KDS-2's default `courseId` (null — no course assigned), and the menu tag
+    // (`catalogueId`/`catalogueName`) the multi-menu read carries.
+    expect(await res.json()).toEqual({
+      menus: [
+        { id: aguaProduct.catalogueId, name: "Carta", isDefault: true },
+        { id: cervezaProduct.catalogueId, name: "Happy Hour", isDefault: false },
+      ],
+      products: [
+        {
+          id: aguaProduct.id,
+          descriptions: { "es-ES": "Agua mineral" },
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+          category: "Bebidas",
+          allergens: { sulphites: { presence: "may_contain" } },
+          courseId: null,
+          catalogueId: aguaProduct.catalogueId,
+          catalogueName: "Carta",
+        },
+        {
+          id: cervezaProduct.id,
+          descriptions: { "es-ES": "Cerveza" },
+          pricingUnit: "each",
+          unitPrice: "2.50",
+          vatClass: "general",
+          category: "Bebidas",
+          allergens: null,
+          courseId: null,
+          catalogueId: cervezaProduct.catalogueId,
+          catalogueName: "Happy Hour",
+        },
+      ],
+    });
   });
 });
 

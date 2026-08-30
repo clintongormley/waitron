@@ -269,6 +269,10 @@ export const en = {
   // `firstUpdated` with no in-UI retry — so the copy says "reload", not "try again", and stays neutral
   // about the cause ("could not load") rather than naming only the unreachable case.
   "boot.error": "Could not load the till, reload to try again",
+  // Multi-menu till: the accessible name of the menu switcher (the segmented control above the product
+  // grid that picks which of the location's accessible menus the grid shows). The individual menu names
+  // are DATA from the server (`GET /api/products` `menus[].name`, localised at seed time), not keys here.
+  "menu.switcher": "Menu",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -450,6 +454,7 @@ export const es: Record<StringKey, string> = {
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
+  "menu.switcher": "Menú",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

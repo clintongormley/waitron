@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
+import { filterProductsByMenu } from "../menu-filter.js";
 import { LAYOUT_A, type LayoutDef, type WidgetInstance } from "../layout.js";
 // Side-effect imports: registering each widget element so the layout below can render its tag. The
 // screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
@@ -11,6 +12,8 @@ import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
 import "../widgets/station-queue.js";
+// The multi-menu switcher shown above the grid — renders nothing for a single-menu location.
+import "../widgets/menu-switcher.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
 import "./till-allergen-screen.js";
@@ -22,6 +25,7 @@ import type {
   OrderFlow,
   StationQueueGroup,
   TillApi,
+  TillMenu,
   TillProduct,
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -117,8 +121,16 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   /** The shared working order every widget reads and mutates. Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
-  /** The sellable products, handed to the product grid (the only widget that needs them). */
+  /** ALL sellable products across the location's accessible menus. The product grid shows only the
+   * SELECTED menu's (via {@link filterProductsByMenu}); the allergen lookup screen keeps the full set. */
   @property({ attribute: false }) products: TillProduct[] = [];
+  /** The location's accessible menus, handed to the menu switcher above the grid. With one menu (or none)
+   * the switcher renders nothing, so a single-menu location looks exactly as before. */
+  @property({ attribute: false }) menus: TillMenu[] = [];
+  /** The menu (catalogue) the grid currently shows — narrows the grid via {@link filterProductsByMenu}
+   * and marks the active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`
+   * for it to update. */
+  @property() selectedMenuId = "";
   /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /**
@@ -232,7 +244,7 @@ export class TillCounterScreen extends LitElement {
         // doc). The value is validated 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`).
         const columns = instance.config.columns;
         return html`<till-product-grid
-          .products=${this.products}
+          .products=${filterProductsByMenu(this.products, this.selectedMenuId)}
           .store=${this.store}
           .columns=${typeof columns === "number" ? columns : undefined}
         ></till-product-grid>`;
@@ -308,6 +320,11 @@ export class TillCounterScreen extends LitElement {
               ></till-allergen-screen>`
             : html`<div class="body">
                 <div class="region region-main">
+                  <till-menu-switcher
+                    class="menu-switcher"
+                    .menus=${this.menus}
+                    .selectedId=${this.selectedMenuId}
+                  ></till-menu-switcher>
                   ${inRegion("main").map((widget) => this.#widget(widget))}
                 </div>
                 <div class="region region-aside">

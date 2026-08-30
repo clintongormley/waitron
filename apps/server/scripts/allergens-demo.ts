@@ -234,9 +234,10 @@ async function main(): Promise<void> {
     });
 
     // The read the till performs: sellable products at the location, with their allergens, as the app
-    // role under RLS. `listAvailableProducts` orders by (created_at, id); all four are inserted in one
-    // transaction and share a created_at, so the print order falls to the random-uuid id tiebreak, not
-    // seed order. Order is immaterial here — the matrix labels each row's review state explicitly.
+    // role under RLS. `listAvailableProducts` orders by (catalogue.name, created_at, id); all four
+    // share both a catalogue and a created_at, so the print order falls to the random-uuid id
+    // tiebreak, not seed order. Order is immaterial here — the matrix labels each row's review state
+    // explicitly.
     const products = await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       return listAvailableProducts(tx, venue.locationId);

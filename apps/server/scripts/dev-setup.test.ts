@@ -9,10 +9,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import {
+  ADMIN_PIN,
+  buildDevEnv,
   devSetup,
   inspectVenues,
   parseEnvFile,
   renderEnvFile,
+  resolveSeedLocale,
   type DevEnv,
   type DevSetupResult,
 } from "./dev-setup.js";
@@ -28,6 +31,7 @@ const sampleEnv: DevEnv = {
   WAITRON_TILL_NODE_ID: "33333333-3333-3333-3333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-4444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-5555-5555-555555555555",
+  WAITRON_TILL_LOCALE: "en-GB",
 };
 
 describe("renderEnvFile", () => {
@@ -46,7 +50,15 @@ describe("renderEnvFile", () => {
       "WAITRON_TILL_NODE_ID=33333333-3333-3333-3333-333333333333",
       "WAITRON_TILL_SERIES_ID=44444444-4444-4444-4444-444444444444",
       "WAITRON_TILL_LOCATION_ID=55555555-5555-5555-5555-555555555555",
+      "WAITRON_TILL_LOCALE=en-GB",
     ]);
+  });
+
+  it("carries WAITRON_TILL_LOCALE so the till boots against the seeded locale", () => {
+    // The new key round-trips (a dropped key would fail the toEqual below), and the demo default is
+    // English (Spanish is opt-in via WAITRON_SEED_LOCALE=es-ES — see resolveSeedLocale).
+    expect(sampleEnv.WAITRON_TILL_LOCALE).toBe("en-GB");
+    expect(parseEnvFile(renderEnvFile(sampleEnv)).WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
   it("round-trips exactly through parseEnvFile", () => {
@@ -60,6 +72,59 @@ describe("renderEnvFile", () => {
     };
     expect(parseEnvFile(renderEnvFile(withPadding))).toEqual({ ...withPadding });
   });
+});
+
+describe("the demo login PIN + seed locale", () => {
+  const prior = process.env.WAITRON_SEED_LOCALE;
+  afterAll(() => {
+    if (prior === undefined) delete process.env.WAITRON_SEED_LOCALE;
+    else process.env.WAITRON_SEED_LOCALE = prior;
+  });
+
+  it("uses the shared demo PIN 5555 for every login", () => {
+    expect(ADMIN_PIN).toBe("5555");
+  });
+
+  it("defaults the seed locale to English and flips to Spanish only for WAITRON_SEED_LOCALE=es-ES", () => {
+    delete process.env.WAITRON_SEED_LOCALE;
+    expect(resolveSeedLocale()).toBe("en-GB");
+    process.env.WAITRON_SEED_LOCALE = "fr-FR";
+    expect(resolveSeedLocale()).toBe("en-GB");
+    process.env.WAITRON_SEED_LOCALE = "es-ES";
+    expect(resolveSeedLocale()).toBe("es-ES");
+  });
+});
+
+// The env-building step `devSetup` runs to assemble its `.env`. Proving BOTH locales here (pure, no
+// container) closes the gap the review flagged: the real-PG `devSetup` suite only ever exercises the
+// default en-GB path, so nothing else proves the es-ES `seedLocale` reaches `WAITRON_TILL_LOCALE` in
+// the written `.env`. `devSetup` builds its env via exactly this function (dev-setup.ts), and the
+// container suite proves that env is what reaches disk — so en-GB end-to-end there plus both locales
+// here covers the mapping for real (CLAUDE.md §1: the value must reach `.env` through the flow).
+describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
+  const ids = {
+    tenantId: "11111111-1111-1111-1111-111111111111",
+    tillId: "22222222-2222-2222-2222-222222222222",
+    nodeId: "33333333-3333-3333-3333-333333333333",
+    seriesId: "44444444-4444-4444-4444-444444444444",
+    locationId: "55555555-5555-5555-5555-555555555555",
+  };
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "sets WAITRON_TILL_LOCALE=%s and renders it into the .env text",
+    (seedLocale) => {
+      const env = buildDevEnv({
+        databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+        credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
+        ids,
+        seedLocale,
+      });
+      // The load-bearing mapping (dev-setup.ts): the resolved locale becomes WAITRON_TILL_LOCALE…
+      expect(env.WAITRON_TILL_LOCALE).toBe(seedLocale);
+      // …and survives the round-trip out to the written `.env` text and back.
+      expect(parseEnvFile(renderEnvFile(env)).WAITRON_TILL_LOCALE).toBe(seedLocale);
+    },
+  );
 });
 
 // Real Postgres, not PGlite: dev-setup migrates + provisions as the container superuser and its
@@ -83,17 +148,27 @@ describe("devSetup against real Postgres", () => {
 
   let envDir: string;
   let envPath: string;
+  let mediaDir: string;
   let first: DevSetupResult;
+  const priorMediaDir = process.env.WAITRON_MEDIA_DIR;
 
   beforeAll(async () => {
     envDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-"));
     envPath = join(envDir, ".env");
+    // devSetup now seeds media through the whole demo restaurant, resolving `WAITRON_MEDIA_DIR ||
+    // DEFAULT_MEDIA_ROOT`. Point it at a throwaway dir so the seed never writes PNGs into the repo's
+    // source tree (apps/server/src/media, the from-source DEFAULT_MEDIA_ROOT).
+    mediaDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-media-"));
+    process.env.WAITRON_MEDIA_DIR = mediaDir;
     // The FIRST run: a fresh database with no `.env` — provisions.
     first = await devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} });
   }, 180_000);
 
   afterAll(async () => {
+    if (priorMediaDir === undefined) delete process.env.WAITRON_MEDIA_DIR;
+    else process.env.WAITRON_MEDIA_DIR = priorMediaDir;
     if (envDir !== undefined) await rm(envDir, { recursive: true, force: true });
+    if (mediaDir !== undefined) await rm(mediaDir, { recursive: true, force: true });
   });
 
   async function tillsCount(): Promise<number> {
@@ -122,6 +197,9 @@ describe("devSetup against real Postgres", () => {
     }
     expect(first.env.DATABASE_URL).toBe(suite.pg.uri);
     expect(first.env.WAITRON_ENV).toBe("preproduction");
+    // The demo seeds English by default, and the till boots against it.
+    expect(written.WAITRON_TILL_LOCALE).toBe("en-GB");
+    expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
   it("writes a .env that loadConfig and loadKeyRing accept as valid server config", () => {

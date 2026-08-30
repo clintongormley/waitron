@@ -13,7 +13,7 @@ import {
   roleHasPermission,
   setPersonLocale,
 } from "@waitron/identity";
-import { listAvailableProducts } from "@waitron/catalogue";
+import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { getLayout } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
@@ -625,15 +625,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs FIRST, so
   // an unauthenticated request 401s (`session.required`) before any catalogue is read — the operator
   // must be logged in to see prices. The read itself runs as the app role under the till's tenant
-  // (`withTenant` + `asAppUser`), so RLS scopes `listAvailableProducts` to this tenant's own products.
+  // (`withTenant` + `asAppUser`), so RLS scopes both reads to this tenant's own rows. `menus` (the
+  // location's accessible catalogues, default flagged, for the till's menu switcher) and `products`
+  // (tagged with the catalogue each came from) are read in the SAME transaction so they describe one
+  // consistent snapshot of the accessible set.
   app.get("/api/products", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const products = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const { menus, products } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return listAvailableProducts(tx, deps.cfg.locationId);
+        return {
+          menus: await listAccessibleCatalogues(tx, deps.cfg.locationId),
+          products: await listAvailableProducts(tx, deps.cfg.locationId),
+        };
       });
-      return c.json(products);
+      return c.json({ menus, products });
     }),
   );
 

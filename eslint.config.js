@@ -273,5 +273,18 @@ export default tseslint.config(
     },
   },
 
+  {
+    // `apps/server/scripts/demo-seed/gen-media.mjs` is the demo-seed's tile generator (Phase 2, Task
+    // 9): a zero-dependency, built-ins-only PNG encoder that hand-writes chunk bytes with `Buffer`
+    // (`Buffer.alloc`/`concat`/`from`, `writeUInt32BE`, `copy`) on top of `node:zlib`. The scripts
+    // block above deliberately grants only `console` + `process` (its stdout is a machine contract);
+    // this generator additionally needs `Buffer`, so it gets its own one-global widening rather than
+    // loosening that contract for every build-step script.
+    files: ["apps/server/scripts/demo-seed/gen-media.mjs"],
+    languageOptions: {
+      globals: { Buffer: "readonly" },
+    },
+  },
+
   eslintConfigPrettier,
 );
