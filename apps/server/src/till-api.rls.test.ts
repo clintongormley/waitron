@@ -1063,7 +1063,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 // and is a false pass for a device-authentication guard, CLAUDE.md §4). The handheld here holds BOTH a
 // device cookie AND a valid operator session — exactly the bypass this server-side guard exists to
 // refuse, because a compromised or hacked-together client could present both.
-describe("order-only firewall (a handheld may not settle, pay, reprint, or open the drawer)", () => {
+describe("order-only firewall (a handheld may not settle, pay, reprint, open the drawer, place, collect, or cancel)", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
    * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
@@ -1174,4 +1174,192 @@ describe("order-only firewall (a handheld may not settle, pay, reprint, or open 
       expect((await res.json()).error.code).toBe("device.forbidden_action");
     },
   );
+
+  // C1 (whole-branch review): the two ORDER-SETTLEMENT routes a handheld reaches through its own order
+  // screens must be fenced too — they file a CHAINED fiscal record, the unrecoverable one (CLAUDE.md
+  // §5). `POST /:id/place` files a deferred invoice in a Mode-I (invoice-first) venue; `POST /:id/collect`
+  // files the immediate sale (Mode T) or settles the deferred invoice (Mode I). Each test drives a REAL
+  // order end to end: the handheld is refused 403 having filed NOTHING, then the ordinary till (session
+  // only, no device cookie) completes the same order and files exactly one chained record — so removing
+  // the `assertNotHandheld` guard flips the handheld case to a 200 that files the record the guard exists
+  // to prevent (prove-by-deletion).
+  it("refuses a handheld PLACE (Mode I) with 403, filing nothing; an ordinary till places and files one record", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice — the fiscal write the
+    // firewall protects. Same two-part flip (DB column + in-memory cfg) the Mode-T test above makes.
+    await suite.admin.execute(
+      sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
+    );
+    const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(modeCfg), noopLog);
+
+    const deviceCookie = await enrolHandheldCookie(cfg);
+    const sessionPair = await loginOperator(app, operatorId);
+
+    // Park a real order (order-taking IS allowed for a handheld; only settlement is fenced) with the
+    // ordinary-till session, so both actors below operate on a genuine open order.
+    const workingOrderId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+    });
+    expect(park.status).toBe(200);
+
+    // The handheld — valid operator session AND a real handheld cookie — is refused 403 BEFORE the id
+    // parse or any fiscal write.
+    const refused = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie: `${sessionPair}; ${deviceCookie}` },
+    });
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error.code).toBe("device.forbidden_action");
+    // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
+    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(afterRefused.length).toBe(0);
+
+    // The ordinary till (no device cookie) places the SAME order and files exactly one deferred invoice.
+    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie: sessionPair },
+    });
+    expect(placed.status).toBe(200);
+    expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
+    const afterPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(afterPlaced.length).toBe(1);
+  });
+
+  it("refuses a handheld COLLECT (Mode T) with 403, filing nothing; an ordinary till collects and files one record", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    // Mode T (ticket_then_pay): COLLECT files `recordSale` immediate — the chained write. PLACE files
+    // nothing under Mode T, so the pre-collect setup writes no fiscal record.
+    await suite.admin.execute(
+      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
+    );
+    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(modeCfg), noopLog);
+
+    const deviceCookie = await enrolHandheldCookie(cfg);
+    const sessionPair = await loginOperator(app, operatorId);
+
+    // Park + place a real order as the ordinary till (Mode T files nothing at placing).
+    const workingOrderId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+    });
+    expect(park.status).toBe(200);
+    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie: sessionPair },
+    });
+    expect(placed.status).toBe(200);
+
+    // The handheld is refused 403 BEFORE any fiscal write.
+    const refused = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+    });
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error.code).toBe("device.forbidden_action");
+    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(afterRefused.length).toBe(0);
+
+    // The ordinary till collects the SAME order and files exactly one chained record.
+    const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+    });
+    expect(collect.status).toBe(200);
+    expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
+    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return {
+        wo: await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, workingOrderId)),
+        registros: await tx.select().from(registrosFacturacion),
+      };
+    });
+    expect(after.wo).toEqual([{ status: "settled" }]);
+    expect(after.registros.length).toBe(1);
+  });
+
+  // I3 (whole-branch review): `POST /:id/cancel` appends an `order_cancelled` entry to the tamper-evident
+  // hash-chained amendment log — a fiscal-adjacent mutation a handheld must not perform. No fiscal doc is
+  // filed by cancel, so the prove-by-deletion signal is the order's TRANSITION: refused, it stays
+  // `placed`; allowed, the ordinary till drives it to `abandoned`.
+  it("refuses a handheld CANCEL with 403, leaving the order placed; an ordinary till cancels it", async () => {
+    const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const deviceCookie = await enrolHandheldCookie(cfg);
+    const sessionPair = await loginOperator(app, operatorId);
+
+    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel.
+    const workingOrderId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({ id: workingOrderId, lines: [{ productId: each.id, quantity: "2" }] }),
+    });
+    expect(park.status).toBe(200);
+    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie: sessionPair },
+    });
+    expect(placed.status).toBe(200);
+
+    // The handheld is refused 403 BEFORE any transition or amendment write.
+    const refused = await app.request(`/api/working-orders/${workingOrderId}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({ reason: "customer left" }),
+    });
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error.code).toBe("device.forbidden_action");
+    const stillPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, workingOrderId));
+    });
+    expect(stillPlaced).toEqual([{ status: "placed" }]); // no transition — the guard held
+
+    // The ordinary till cancels the SAME order (placed → abandoned).
+    const cancelled = await app.request(`/api/working-orders/${workingOrderId}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({ reason: "customer left" }),
+    });
+    expect(cancelled.status).toBe(200);
+    const abandoned = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, workingOrderId));
+    });
+    expect(abandoned).toEqual([{ status: "abandoned" }]);
+  });
 });

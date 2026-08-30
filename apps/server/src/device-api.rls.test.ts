@@ -812,6 +812,23 @@ describe("Device API over real Postgres", () => {
     expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
   });
 
+  it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
+    // I4 (whole-branch review): before the handheld kind existed, EVERY device was a `kds_station`,
+    // always station-bound, so `GET /api/device/station`'s `stationId === null` branch was unreachable
+    // (and was `/* v8 ignore */`d). A `handheld` binds to no station (`stationId` is null), and
+    // `requireDevice` authenticates ANY active device regardless of kind, so a handheld now REACHES that
+    // branch — it throws `device.unauthorized` (401), the honest "this device has no station queue". The
+    // branch is now genuinely reachable and tested, no longer ignored.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const { jar } = await enrolHandheld(app, venue.managerCookie);
+    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.unauthorized" },
+    });
+  });
+
   it("GET /api/device/me 401s a request with no device cookie", async () => {
     // No cookie folds straight through `requireDevice` to `device.unauthorized` (401) — the route adds no
     // handling of its own.

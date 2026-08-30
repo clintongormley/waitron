@@ -201,11 +201,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
       // A `kds_station` device is ALWAYS station-bound: enrolDevice copies the code's station, itself a
-      // live station `requireLiveStation` confirmed at mint. The null branch is the honest handling of
-      // `DeviceBinding`'s `string | null` for a future non-station kind — unreachable today.
-      /* v8 ignore start */
+      // live station `requireLiveStation` confirmed at mint. But `requireDevice` authenticates ANY active
+      // device regardless of kind, and a `handheld` binds to NO station (`stationId` is null,
+      // `kindRequiresStation("handheld")` is false — device.ts), so a handheld cookie now REACHES this
+      // branch. It throws `device.unauthorized` (401) — the honest "this device has no station queue",
+      // the same 401 a missing/invalid cookie folds to, confirming neither the device's existence nor its
+      // kind. (Previously this was `/* v8 ignore */`d as unreachable, when every device was a station-
+      // bound `kds_station`; the handheld kind makes it reachable and it is now covered by a test.)
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
-      /* v8 ignore stop */
       const stationId = device.stationId;
       const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
