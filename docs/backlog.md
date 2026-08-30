@@ -91,10 +91,16 @@ demo or behind-the-scenes".
    `dashPass123`). **Resolved follow-up (owner, 2026-08-30; not yet built):** the production admin's
    dashboard email is captured **during onboarding via the setup UI** (add an email field to
    `apps/setup`'s admin step, threaded to provisioning's `seed-admin`) — see *Open threads*.
-3. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
-   **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
-   one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
-   planned (`2026-08-17-table-service-ts5-*`).
+3. **Resolve the greyed-out Split/Move buttons.** **Cheap half — wire move/join/merge/transfer into the
+   till — LANDED (#174):** the drawer's disabled "Move · Split" button is now a "Table actions" flow
+   (menu → target picker; transfer adds a whole-line selection step) dispatching
+   `move-tab`/`join-table`/`merge-tabs`/`transfer-lines` to the app, which calls the TS-3/TS-4 routes and
+   reconciles the floor. Pre-fiscal (H2 untouched). **Deferred niceties:** partial-quantity transfer
+   split (v1 moves whole lines; the `#confirmTransfer` partial branch is ready for a stepper); merge
+   hardcodes `freeSourceTable:true` (no 4+4-join-keeping-the-table UI); optional reload-of-floor on a
+   failed action (a stale-floor race). **Remaining: TS-5 split-bill** — the one **fiscal, owner-gated,
+   supervised** slice (each check files its own sale + registro); specced + planned
+   (`2026-08-17-table-service-ts5-*`).
 4. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
    centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
    **Order-only handheld slice — LANDED (#173)** (spec
@@ -231,7 +237,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI; **+ `computeTopSellers`, `currentBusinessDay`, 3 dashboard `/reports/` routes (#167)** | **wired to the dashboard — sales screen + business-overview home LANDED (#167)**; fiscal filing remainder parked |
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
-| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #3** |
+| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, **till action-flow wiring (#174)** | **TS-5 split-bill → demo Tier A #3** (move/transfer into the till LANDED #174) |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
 | 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
