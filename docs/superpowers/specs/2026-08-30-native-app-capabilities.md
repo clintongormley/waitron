@@ -54,27 +54,27 @@ reach** — a standalone handheld, or a single-box venue where the till *is* the
 | N2 | **Phone-as-reader card acceptance — Stripe Tap to Pay** | Same shape: built into the Terminal iOS/Android SDK. Server-driven Terminal API supports smart readers only, not Tap to Pay | [Stripe](https://docs.stripe.com/terminal/payments/setup-reader/tap-to-pay) | **Hard blocker.** The Stripe-side sibling of N1 — confirms this is a property of phone-as-reader, not one vendor |
 | N3 | **Store-and-forward / certified offline card capture on the device** | Certified offline capture lives in the on-device payment SDK; the hardware spec already names this "the expensive answer … a native wrapper and an on-device SDK" | hardware spec §5 | **Hard blocker** — but only relevant if we ever want offline card capture on the device *itself*, rather than the Solo's own standalone mode, which already covers the deli outage path |
 | N4 | **The local print-server agent (LAN→cloud print bridge)** — polls print jobs from the primary node and dispatches each to the right local printer | With the **primary node in the cloud**, the cloud cannot reach a LAN printer (NAT — the printer's IP is private): the bridge must be initiated from inside the shop, and a browser cannot hold it. The web platform has no raw-socket API for TCP:9100, and the HTTP-to-printer exceptions (Epson ePOS-Print / Star WebPRNT) trip mixed-content + iOS Local-Network limits. So a native agent on a LAN device holds the outbound socket to the cloud and forwards jobs to the printer | topology spec §5 three-bridge table — esp. "a till running the agent"; hardware spec §6 | **Hard blocker for the cloud-primary topology.** Escape hatch: a **CloudPRNT / Server-Direct-Print** printer polls the cloud in firmware and needs no local agent — a hardware upgrade, not a requirement. Fully **moot when a local node exists** and bridges the printer for free (the deli's case) |
-| N5 | **Direct Bluetooth (BLE) peripheral from the device** — a BLE receipt printer, reader or scale paired to the handheld itself | Web Bluetooth is unsupported in iOS Safari (Apple declined it, citing fingerprinting) | browser-compat surveys, 2026-08-30 — confirm against MDN `browser-compat-data` as §1 does | **Hard blocker on iOS.** Mostly moot while drivers are server-side |
-| N6 | **Direct NFC read from the device** — staff badge tap, NFC loyalty, product NFC | Web NFC is Chrome-Android-only; unsupported in iOS Safari (Apple ships Core NFC for native apps only) | browser-compat surveys, 2026-08-30 — confirm against MDN | **Hard blocker on iOS** |
-| N7 | **Direct USB / serial peripheral from the till device itself** | WebUSB and Web Serial are unsupported in Safari / iOS (hardware spec §1 receipt: MDN `browser-compat-data`) | hardware spec §1 | **Hard blocker on iOS** — but the server-side driver model is exactly what avoids needing this |
-| N8 | **Single-app kiosk lockdown / MDM-managed handheld** | A device locked to a single app is managed at the OS/MDM layer | unverified — needs a check | Quality/ops, not a payments blocker |
-| N9 | **Reliable background push on the handheld** | Web Push exists on iOS 16.4+, but requires the PWA to be installed to the home screen and has EU/DMA caveats worth confirming for Spain | Web Push on iOS 16.4+ per browser-compat, 2026-08-30 — verify the EU/home-screen conditions | Borderline — verify before counting it as a reason |
-| N10 | **Automatic request routing to the primary, with failover to secondaries** (the `[primary → secondary → cloud]` list) | A browser client points at one origin; failing over to another host mid-session normally loses the auth cookie, cache and session. A **stable local endpoint** (`localhost:agent`) that never changes while the agent swaps its upstream is what keeps the browser's world stable across the switch — and only a native on-device agent can provide it | topology spec §3, "Route B — the on-device agent" | **Strong quality/security argument, not a strict hard blocker.** The browser-only path (Route A, a service worker holding the failover list) ships failover with no native code, but **downgrades auth to an XSS-exfiltratable bearer token**, needs CORS on every server, and can't cold-start on iOS if the origin is gone and the cache was evicted. The topology spec's destination is Route B |
+| N5 | **Single-app kiosk lockdown / MDM-managed handheld** | A device locked to a single app is managed at the OS/MDM layer | unverified — needs a check | Quality/ops, not a payments blocker |
+| N6 | **Reliable background push on the handheld** | Web Push exists on iOS 16.4+, but requires the PWA to be installed to the home screen and has EU/DMA caveats worth confirming for Spain | Web Push on iOS 16.4+ per browser-compat, 2026-08-30 — verify the EU/home-screen conditions | Borderline — verify before counting it as a reason |
+| N7 | **Automatic request routing to the primary, with failover to secondaries** (the `[primary → secondary → cloud]` list) | A browser client points at one origin; failing over to another host mid-session normally loses the auth cookie, cache and session. A **stable local endpoint** (`localhost:agent`) that never changes while the agent swaps its upstream is what keeps the browser's world stable across the switch — and only a native on-device agent can provide it | topology spec §3, "Route B — the on-device agent" | **Strong quality/security argument, not a strict hard blocker.** The browser-only path (Route A, a service worker holding the failover list) ships failover with no native code, but **downgrades auth to an XSS-exfiltratable bearer token**, needs CORS on every server, and can't cold-start on iOS if the origin is gone and the cache was evicted. The topology spec's destination is Route B |
 
 ## Several of these are one component — that is the whole point
 
-The rows are not each a separate app. **N4 (the print bridge) and N10 (the failover routing /
+The rows are not each a separate app. **N4 (the print bridge) and N7 (the failover routing /
 stable local endpoint) are the same native process** — the topology spec's on-device agent, which
 holds the servers' credentials, provides the unchanging `localhost:agent` origin the PWA talks to,
 swaps its upstream on failover, and forwards print jobs to the LAN printer. N3 (on-device
-store-and-forward) and the direct-hardware rows (N5–N7) would fold into that same agent too.
+store-and-forward) folds into that same agent too, and in a serverless / cloud-primary setup it is
+also what would drive any directly-attached local hardware (see "Not on this list" below — the
+browser can't reach USB/serial hardware on iOS, which is why that lives on the server or the agent,
+not as its own row).
 
 This is exactly why the decision must be made **once against the whole set**. Weighed alone, each
 row has a browser-only workaround or a hardware escape hatch and "don't build the app" wins every
-time. Weighed together, one on-device agent discharges N3, N4, N10 and the hardware rows at once —
-and the auth model (N10's Route B) and the cloud-primary printer bridge (N4) both point at building
-it rather than papering over each in the browser. The list exists so that compounding is visible
-instead of being lost across four separate feature decisions.
+time. Weighed together, one on-device agent discharges N3, N4 and N7 at once — and the auth model
+(N7's Route B) and the cloud-primary printer bridge (N4) both point at building it rather than
+papering over each in the browser. The list exists so that compounding is visible instead of being
+lost across separate feature decisions.
 
 ## How to use this list
 
@@ -86,10 +86,13 @@ instead of being lost across four separate feature decisions.
   device.
 - Keep the (a) hard-blocker vs (b) quality distinction honest. Only hard blockers move the "build a
   native app" needle.
-- Several rows are marked *unverified* or *confirm against MDN*. That is deliberate — per the house
-  claim rules, a "the browser can't do X" assertion needs a receipt (MDN `browser-compat-data`, the
-  pattern hardware spec §1 already uses) before it is relied on in a build decision. Verify the row
-  when it becomes load-bearing, not before.
+- **A row needs a real Waitron use case first, and a receipt second — in that order.** "The browser
+  can't do X" is only a reason to build an app if a Waitron feature actually needs X *and* would
+  reach it through the browser. Checking browser support (MDN `browser-compat-data`, the pattern
+  hardware spec §1 uses) for a capability we have no use for, or that would go through a vendor SDK
+  rather than the browser, answers the wrong question. Three such rows (Bluetooth, NFC, USB/serial)
+  were cut on 2026-08-30 for exactly this — see "Not on this list". Some remaining rows are marked
+  *unverified*; verify them when they become load-bearing, not before.
 
 ## Not on this list, on purpose
 
@@ -97,3 +100,20 @@ Capabilities the browser handles well enough that they are **not** a reason to g
 UI itself, camera-based QR/barcode scanning where a networked path exists, receipt display, and
 anything the local server already drives on the till's behalf. Adding one of these here would
 inflate the case for an app we should not build yet.
+
+**Bluetooth, NFC and USB from the browser were considered and cut (2026-08-30).** They were rows in
+the first draft and are not now, because none maps to a Waitron feature that needs them — each was
+checking browser support for the wrong question:
+
+- **Payment NFC** (tap a card) is the Tap to Pay secure-element path through the SumUp/Stripe **SDK**
+  — that is N1/N2, and Web NFC (the browser API) plays no part in it. You cannot and would not read
+  a payment card through Web NFC.
+- **Non-payment NFC** (staff badge, loyalty tag) has **no designed feature.** If one ever appears,
+  add a row then — and on a handheld it would use native NFC, not Web NFC.
+- **Bluetooth** has no use case: printers are ESC/POS over TCP, the Solo is Cloud-API networked, a
+  BLE card reader (e.g. SumUp Air) is paired *inside* the payment SDK (N1/N2, not our code via Web
+  Bluetooth), scales are deferred (D4), and the scanner is HID.
+- **USB / serial** from the till has no designed use either. That WebUSB / Web Serial are
+  unsupported on iOS Safari is the *reason* peripheral drivers live on the local server
+  (hardware spec D3), and in a serverless / cloud-primary setup the N4 agent — not the browser —
+  reaches the hardware. So it **shapes D3 and N4** rather than being its own row.
