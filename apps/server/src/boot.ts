@@ -1093,8 +1093,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `realPgDump` dump with, no SET ROLE and no second role — so a green probe is evidence about the
   // real dump connection, not an adjacent one. It is FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
   // block a sale): a fenced role, an unreachable backup database, or ANY other probe error leaves
-  // `backupEnabled = false` and logs `backup.disabled_rls_fenced` (with the structured `errorCode` so a
-  // connection fault is distinguishable from a fence) rather than throwing out of boot — a bad backup
+  // backup off (`backupWorker` stays undefined) and logs `backup.disabled_probe_failed` (with the
+  // structured `errorCode` so a connection/network fault is distinguishable from an RLS fence — the
+  // event name covers ANY probe failure, not just a fence) rather than throwing out of boot — a bad backup
   // role must not brick the till. The whole open+assert sits inside the `try`, and the probe pool is
   // closed in the `finally` whichever way it settles, so nothing leaks. `backupWorker` is the single
   // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
@@ -1122,7 +1123,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
       );
     } catch (err) {
-      log("error", "backup.disabled_rls_fenced", { errorCode: codeOf(err) });
+      log("error", "backup.disabled_probe_failed", { errorCode: codeOf(err) });
     } finally {
       // `.catch(() => {})`: a throw in this `finally` would ESCAPE the surrounding try/catch, so a
       // pool-close rejection on the strict §5 path must never become a boot-aborting throw. The
@@ -1178,8 +1179,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The backup freshness reader (Task 6): present only when the RLS probe above ENABLED backup, so
       // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
       // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
-      // the SAME dir `runBackupSweep` writes into, scanning for the newest dump per request; `now()` is
-      // the boot clock. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
+      // the SAME dir `runBackupSweep` writes into, scanning for the newest dump per request; `now` is the
+      // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
+      // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
       readBackup:
         backupWorker !== undefined

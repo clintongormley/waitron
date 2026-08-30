@@ -1601,7 +1601,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
     // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).
     // The probe's createPostgresDb therefore throws; boot's fail-safe catch swallows it, logs
-    // backup.disabled_rls_fenced, and leaves backup OFF. What must hold: startServer RESOLVES (a bad backup
+    // backup.disabled_probe_failed, and leaves backup OFF. What must hold: startServer RESOLVES (a bad backup
     // role must not brick the till), /health serves (the box trades), and box-status reports
     // backup.configured:false (backup left off). Uses a real container for the MAIN db as every trading boot
     // here does; only the backup URL is the dead one.
@@ -1620,7 +1620,7 @@ describe("startServer, against a real container as the deployment role", () => {
       });
       // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
       // whose arrival also means startServer got past the probe rather than throwing out of it.
-      const event = await waitForEvent(lines, "backup.disabled_rls_fenced");
+      const event = await waitForEvent(lines, "backup.disabled_probe_failed");
       // Then wait for the first pass to complete (loop.sleeping is logged strictly after onPass ->
       // recordPass, same as the main boot test) so /health has flipped past its pre-first-pass 503 startup
       // grace — the box genuinely trades, and with no due fiscal work seeded both duties report ok.
@@ -1629,10 +1629,10 @@ describe("startServer, against a real container as the deployment role", () => {
     });
     try {
       // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
-      expect(disabled.event).toBe("backup.disabled_rls_fenced");
+      expect(disabled.event).toBe("backup.disabled_probe_failed");
       const health = await fetch(`http://127.0.0.1:${port}/health`);
       expect(health.status).toBe(200);
-      // The captured backup.disabled_rls_fenced line means backupEnabled stayed false, so mountBoxStatusApi
+      // The captured backup.disabled_probe_failed line means backupWorker stayed undefined, so mountBoxStatusApi
       // received readBackup: undefined — and box-status's `backup: { configured: false }` for that exact
       // undefined-reader case is asserted directly (over the management gate) in box-status.route.test.ts, so
       // it is not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
