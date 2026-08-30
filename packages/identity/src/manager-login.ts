@@ -51,9 +51,17 @@ async function completeManagerLogin(
 ): Promise<ManagementSession> {
   if (person.status === "suspended")
     throw new AppError("person.suspended", { personId: person.id });
-  if (person.passwordHash === null || !verifyPassword(input.password, person.passwordHash)) {
-    throw new AppError("password.invalid", {});
+  let passwordOk = false;
+  if (person.passwordHash === null) {
+    // A found person with NO dashboard password (PIN-only) still runs one KDF against the dummy hash
+    // before failing, so it can't be told apart by response time from a wrong-password attempt — the
+    // same enumeration-timing class the not-found branch closes. A short-circuit here would leak "this
+    // email is a PIN-only account" by latency. Result unused: a null-password person can never sign in.
+    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+  } else {
+    passwordOk = verifyPassword(input.password, person.passwordHash);
   }
+  if (!passwordOk) throw new AppError("password.invalid", {});
   if (person.totpSecret !== null) {
     if (input.totp === undefined || !verifyTotp(input.totp, person.totpSecret)) {
       throw new AppError("totp.invalid", {});

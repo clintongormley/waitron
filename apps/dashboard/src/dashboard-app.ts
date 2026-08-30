@@ -259,8 +259,9 @@ export class DashboardApp extends LitElement {
       }
 
       /* The veil behind the open drawer: it dims the main column and closes the drawer on a tap. Only
-         rendered while the drawer is open, and only meaningful on narrow screens (hidden at desktop
-         below). Sits under the sliding sidebar but over the main content. */
+         rendered while the drawer is open, and the drawer only opens on narrow screens — crossing to
+         desktop force-closes it (#onBreakpointChange), so this full-viewport veil never shows at
+         desktop width. Sits under the sliding sidebar but over the main content. */
       .scrim {
         position: fixed;
         inset: 0;
@@ -329,6 +330,10 @@ export class DashboardApp extends LitElement {
   /** The breakpoint listener — a stable bound reference so add/removeEventListener pair up. */
   readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
     this.narrow = e.matches;
+    // Crossing to desktop force-closes the drawer. At desktop the sidebar is in-flow and there is no
+    // hamburger to reopen it, so a drawer left open at narrow width would otherwise leave its
+    // full-viewport scrim veiling the whole desktop layout after a resize/rotate until the next click.
+    if (!e.matches) this.drawerOpen = false;
   };
 
   /** The logged-in person's role, learned from `getMe()`. `undefined` until a probe/login resolves.
@@ -557,7 +562,8 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
-             (and only a non-staff session can open one); the CSS hides it at desktop width regardless.
+             (and only a non-staff session can open one); the drawer is force-closed on the transition
+             to desktop (#onBreakpointChange), so this never renders at desktop width.
              aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
         ${
           hasNav && this.drawerOpen

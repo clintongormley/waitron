@@ -786,6 +786,40 @@ describe("dashboard-app", () => {
     }
   });
 
+  // Task 12 (regression): a drawer opened at narrow width must be force-closed when the viewport
+  // crosses to desktop — otherwise its full-viewport scrim keeps veiling the desktop layout after a
+  // resize/rotate. Proof-by-deletion: dropping `if (!e.matches) this.drawerOpen = false` from
+  // #onBreakpointChange leaves `.drawer-open` + `.scrim` present at desktop, so the last two
+  // assertions go red.
+  it("force-closes the drawer (and drops the scrim) when widened from narrow to desktop", async () => {
+    const mq = stubDrawerMatchMedia();
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+      const scrim = () => el.shadowRoot!.querySelector<HTMLElement>(".scrim");
+
+      // Narrow, then open the drawer via the hamburger: drawer-open class + scrim both present.
+      mq.set(true);
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+      await el.updateComplete;
+      expect(layout().classList.contains("drawer-open")).toBe(true);
+      expect(scrim()).not.toBeNull();
+
+      // Widen to desktop WITHOUT first closing the drawer → the drawer is force-closed and the scrim
+      // (which would otherwise veil the whole desktop app) is gone.
+      mq.set(false);
+      await el.updateComplete;
+      expect(layout().classList.contains("drawer-open")).toBe(false);
+      expect(scrim()).toBeNull();
+    } finally {
+      mq.restore();
+    }
+  });
+
   it("Escape closes an open drawer", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

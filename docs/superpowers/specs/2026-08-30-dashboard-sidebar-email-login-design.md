@@ -113,8 +113,16 @@ All spacing/colour/radius via `--wt-*` tokens per the design system (no hardcode
   or added beside `staff.ts`). Email shape validated only at the **write** boundary.
 - **`loginManager`** (`packages/identity/src/manager-login.ts`) signature changes from
   `{ tenantId, personId, password, totp }` to `{ tenantId, email, password, totp }`. Lookup:
-  `where tenantId = … and lower(email) = normalizeEmail(input.email)`. It is the **only caller** of
-  its old shape (verified — the till uses `loginWithPin`, a separate path), so this is a clean change.
+  `where tenantId = … and lower(email) = normalizeEmail(input.email)`.
+
+  > **Correction (2026-08-30, during implementation).** This bullet originally asserted that the server
+  > session route "is the **only caller** of its old shape (verified — the till uses `loginWithPin`)".
+  > That was **false**: `loginManager` had a SECOND production caller, `apps/server/src/mirror-bundle-api.ts`
+  > (the C2b mirror-bundle admin, seeded emailless), which that "verification" never looked at — a §1
+  > unchecked-"only" claim. The implementation therefore added an id-based sibling **`loginManagerById`**
+  > (sharing `completeManagerLogin`) for that path; the mirror admin keeps authenticating by id. See the
+  > backlog follow-up on whether `venue` should gain an `--admin-email`.
+
   - not found **or** wrong password → `password.invalid` (no enumeration);
   - suspended → `person.suspended`; TOTP enrolled and missing/wrong → `totp.invalid`.
 - **Person mutators** (`packages/identity/src/staff.ts`). There is **no generic `updatePerson`** in

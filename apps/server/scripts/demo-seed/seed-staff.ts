@@ -44,6 +44,8 @@ export async function seedStaff(tx: Transaction): Promise<void> {
   // Give the provisioned admin its dashboard login email. `role = 'admin'` is a fixed enum literal
   // (never user input); `email is null` scopes the UPDATE to the un-emailed provisioned admin and
   // makes it idempotent — a re-run, or a real admin email set elsewhere, is never overwritten.
+  // Invariant: at most one emailless admin per tenant (provisioning mints exactly one; DEMO_STAFF adds
+  // none). Two would both match and collide on persons_tenant_email_uq — fine for the demo as-is.
   await tx.execute(
     sql`update persons set email = ${DEMO_ADMIN_EMAIL}
         where role = 'admin' and email is null`,

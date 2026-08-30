@@ -91,17 +91,23 @@ describe("loginManager", () => {
     );
     expect(code).toBe("password.invalid");
   });
-  it("rejects password.invalid when no password is set", async () => {
+  it("rejects password.invalid when no password is set, and still runs one KDF", async () => {
     // A till-only person with an email but a null password_hash: still cannot sign in on the
     // dashboard, and the code must not distinguish them from a wrong password.
     const personId = await seedPerson(suite.db, tenantId, "manager");
     await run((tx) =>
       tx.execute(sql`update persons set email = 'owner-nopw@x.com' where id = ${personId}`),
     );
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
     const code = await run((tx) =>
       codeOf(() => loginManager(tx, { tenantId, email: "owner-nopw@x.com", password: "anything" })),
     );
     expect(code).toBe("password.invalid");
+    // Timing equalization: the null-password branch still pays for one KDF (against the dummy hash),
+    // so a PIN-only account isn't distinguishable by latency from a wrong password. Proof-by-deletion:
+    // remove the dummy verifyPassword in completeManagerLogin's null branch and this goes red.
+    expect(spy).toHaveBeenCalledTimes(1);
   });
   it("requires a valid TOTP when one is enrolled", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "owner-totp@x.com" });
