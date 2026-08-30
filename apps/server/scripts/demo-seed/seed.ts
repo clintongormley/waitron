@@ -45,7 +45,8 @@ export interface SeedDemoVenue {
 
 export interface SeedDemoInput {
   venue: SeedDemoVenue;
-  /** The locale every menu/floor/status is authored under and every sale is filed in. */
+  /** The BARE content locale every menu/floor/status is authored under; each sale is filed under the
+   *  FULL tag it maps to (`SEED_INVOICE_LOCALE`) — content authored bare, filed full (feature B). */
   locale: SeedLocale;
   /** How many trailing days of historical sales to back-fill. `0` seeds no sales (the catalogue,
    *  floor, staff and media still seed). */

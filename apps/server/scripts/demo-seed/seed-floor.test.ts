@@ -13,7 +13,9 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { seedFloor } from "./seed-floor.js";
 
-const LOCALE = "en-GB";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+
+const LOCALE: SeedLocale = "en";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -36,7 +38,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,

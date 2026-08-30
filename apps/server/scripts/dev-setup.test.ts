@@ -86,21 +86,23 @@ describe("the demo login PIN + seed locale", () => {
   });
 
   it("defaults the seed locale to English and flips to Spanish only for WAITRON_SEED_LOCALE=es-ES", () => {
+    // The returned value is the BARE content locale (`en`/`es`); the env var stays the full tag.
     delete process.env.WAITRON_SEED_LOCALE;
-    expect(resolveSeedLocale()).toBe("en-GB");
+    expect(resolveSeedLocale()).toBe("en");
     process.env.WAITRON_SEED_LOCALE = "fr-FR";
-    expect(resolveSeedLocale()).toBe("en-GB");
+    expect(resolveSeedLocale()).toBe("en");
     process.env.WAITRON_SEED_LOCALE = "es-ES";
-    expect(resolveSeedLocale()).toBe("es-ES");
+    expect(resolveSeedLocale()).toBe("es");
   });
 });
 
 // The env-building step `devSetup` runs to assemble its `.env`. Proving BOTH locales here (pure, no
 // container) closes the gap the review flagged: the real-PG `devSetup` suite only ever exercises the
-// default en-GB path, so nothing else proves the es-ES `seedLocale` reaches `WAITRON_TILL_LOCALE` in
+// default English path, so nothing else proves the Spanish `seedLocale` reaches `WAITRON_TILL_LOCALE` in
 // the written `.env`. `devSetup` builds its env via exactly this function (dev-setup.ts), and the
-// container suite proves that env is what reaches disk — so en-GB end-to-end there plus both locales
-// here covers the mapping for real (CLAUDE.md §1: the value must reach `.env` through the flow).
+// container suite proves that env is what reaches disk — so English end-to-end there plus both locales
+// here covers the mapping for real (CLAUDE.md §1: the value must reach `.env` through the flow). The
+// mapping is bare content locale → full display tag: `WAITRON_TILL_LOCALE` is a `SUPPORTED_LOCALES` code.
 describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
   const ids = {
     tenantId: "11111111-1111-1111-1111-111111111111",
@@ -110,19 +112,23 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     locationId: "55555555-5555-5555-5555-555555555555",
   };
 
-  it.each(["en-GB", "es-ES"] as const)(
-    "sets WAITRON_TILL_LOCALE=%s and renders it into the .env text",
-    (seedLocale) => {
+  it.each([
+    ["en", "en-GB"],
+    ["es", "es-ES"],
+  ] as const)(
+    "maps bare seed locale %s into full-tag WAITRON_TILL_LOCALE and renders it into the .env text",
+    (seedLocale, expectedTillLocale) => {
       const env = buildDevEnv({
         databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
         credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
         ids,
         seedLocale,
       });
-      // The load-bearing mapping (dev-setup.ts): the resolved locale becomes WAITRON_TILL_LOCALE…
-      expect(env.WAITRON_TILL_LOCALE).toBe(seedLocale);
+      // The load-bearing mapping (dev-setup.ts): the bare content locale becomes the full-tag
+      // WAITRON_TILL_LOCALE (a SUPPORTED_LOCALES code)…
+      expect(env.WAITRON_TILL_LOCALE).toBe(expectedTillLocale);
       // …and survives the round-trip out to the written `.env` text and back.
-      expect(parseEnvFile(renderEnvFile(env)).WAITRON_TILL_LOCALE).toBe(seedLocale);
+      expect(parseEnvFile(renderEnvFile(env)).WAITRON_TILL_LOCALE).toBe(expectedTillLocale);
     },
   );
 });

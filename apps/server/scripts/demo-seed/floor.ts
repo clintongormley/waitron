@@ -50,9 +50,9 @@ export interface SeedStatus {
 }
 
 export const DEMO_ZONES: SeedZone[] = [
-  { key: "dining", name: { "en-GB": "Comedor", "es-ES": "Comedor" }, displayOrder: 0 },
-  { key: "terrace", name: { "en-GB": "Terraza", "es-ES": "Terraza" }, displayOrder: 1 },
-  { key: "bar", name: { "en-GB": "Barra", "es-ES": "Barra" }, displayOrder: 2 },
+  { key: "dining", name: { en: "Comedor", es: "Comedor" }, displayOrder: 0 },
+  { key: "terrace", name: { en: "Terraza", es: "Terraza" }, displayOrder: 1 },
+  { key: "bar", name: { en: "Barra", es: "Barra" }, displayOrder: 2 },
 ];
 
 export const DEMO_TABLES: SeedTable[] = [
@@ -182,8 +182,8 @@ export const DEMO_TABLES: SeedTable[] = [
 ];
 
 export const DEMO_STATUSES: SeedStatus[] = [
-  { label: { "en-GB": "Free", "es-ES": "Libre" }, color: "#22c55e" },
-  { label: { "en-GB": "Occupied", "es-ES": "Ocupada" }, color: "#ef4444" },
-  { label: { "en-GB": "Reserved", "es-ES": "Reservada" }, color: "#f59e0b" },
-  { label: { "en-GB": "Bill requested", "es-ES": "Cuenta pedida" }, color: "#3b82f6" },
+  { label: { en: "Free", es: "Libre" }, color: "#22c55e" },
+  { label: { en: "Occupied", es: "Ocupada" }, color: "#ef4444" },
+  { label: { en: "Reserved", es: "Reservada" }, color: "#f59e0b" },
+  { label: { en: "Bill requested", es: "Cuenta pedida" }, color: "#3b82f6" },
 ];

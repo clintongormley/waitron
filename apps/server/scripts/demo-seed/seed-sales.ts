@@ -34,7 +34,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { resolveVatRate } from "@waitron/catalogue";
+import { resolveVatRate, toInvoiceLineDescriptions } from "@waitron/catalogue";
 import type { VatClass } from "@waitron/catalogue";
 import {
   addDecimal,
@@ -52,6 +52,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 /** The venue a seed run files against — the ids `applyVenue` returns (with `seriesId` picked from
  *  its `seriesIds`, the standard series being first). */
@@ -67,7 +68,8 @@ export interface SeedSalesVenue {
  *  `sales`/`sale_lines` carry no product FK and snapshot the description, price and rate instead. */
 export interface SeedSalesProduct {
   id: string;
-  /** locale -> text, snapshotted onto each line's `descriptions`. */
+  /** BARE content locale -> text (e.g. `{ es: "Café" }`), as `listAvailableProducts` returns it.
+   *  Re-keyed to the venue's full invoice tag before it lands on a line's `descriptions`. */
   descriptions: Record<string, string>;
   /** GROSS (VAT-inclusive) unit price — the same figure `products.unit_price` stores. */
   unitPrice: string;
@@ -83,8 +85,9 @@ export interface BackDatingClock {
 
 export interface SeedSalesInput {
   venue: SeedSalesVenue;
-  /** The venue's operating locale, e.g. "es-ES" — the sale/line locale and the sole invoice locale. */
-  locale: string;
+  /** The venue's BARE content locale (e.g. `es`). The sale/line fiscal fields are filed under the
+   *  FULL tag it maps to (`SEED_INVOICE_LOCALE`, e.g. `es-ES`) — content authored bare, filed full. */
+  locale: SeedLocale;
   /** How many trailing days to fill. `0` writes nothing and returns `{ count: 0 }`. */
   days: number;
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
@@ -198,6 +201,11 @@ export async function seedSales(
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
 
+  // Content is authored bare (`es`); a filed sale is fiscal, so its `locale`/`invoice_locales` and its
+  // line `descriptions` are the FULL tag (`es-ES`) that bare content files under — the same re-key the
+  // live sale path applies at `priceOrderLines`, here on the direct `recordSale` path the seed uses.
+  const invoiceLocale = SEED_INVOICE_LOCALE[locale];
+
   const backDating = clock ?? backDatingClock();
   const backend = new VerifactuBackend({
     clock: backDating.clock,
@@ -260,7 +268,7 @@ export async function seedSales(
         const base = baseFromGross(gross, rate);
         lines.push({
           lineNo: l + 1,
-          descriptions: product.descriptions,
+          descriptions: toInvoiceLineDescriptions(product.descriptions, [invoiceLocale]),
           quantity: "1",
           unitPrice: base,
           vatRate: rate,
@@ -279,8 +287,8 @@ export async function seedSales(
         tillId,
         nodeId,
         seriesId,
-        locale,
-        invoiceLocales: [locale],
+        locale: invoiceLocale,
+        invoiceLocales: [invoiceLocale],
         total,
         lines,
         // Supplied verbatim AND derived from the same lines, so `recordSale`'s reconciliation check
