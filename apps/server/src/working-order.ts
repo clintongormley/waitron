@@ -1816,9 +1816,14 @@ export async function splitOffCheck(
   // inherits it, naming the origin tab.
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Lock + validate the origin is an OPEN tab before minting anything (a fresh order number for a
-  // check that would roll back is wasteful; and this is the `tab.not_open` guard design §3 names). The
-  // FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
+  // Lock + validate the origin is an OPEN tab before minting the check — fail fast with the
+  // `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
+  // catalogue read + `allocateOrderNumber`). Ordering is about doing LESS WORK, not saving an order
+  // number: everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the
+  // counter increment together (`allocateOrderNumber` is a transactional UPSERT into
+  // `working_order_counters`, `packages/db/src/allocate-order-number.ts` — a rolled-back allocation
+  // leaves no gap). The FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4
+  // lock discipline).
   await lockOpenTabRow(tx, fromTabId);
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
