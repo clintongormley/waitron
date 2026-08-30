@@ -575,11 +575,24 @@ export class TillApp extends LitElement {
     // in the session response. Convenience only — the placement route re-checks server-side.
     this.canEdit = canConfigureTill;
     this.errorKey = undefined;
-    // A handheld waiter lands on the live floor (the face-set's post-lock face, HANDHELD_FACES[1]) rather
-    // than the counter POS; a normal operator till opens the counter as before.
-    this.screen = this.handheldMode ? HANDHELD_FACES[1] : "counter";
-    await this.#refreshHeldOrders();
-    await this.#refreshStationQueue();
+    // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
+    // (HANDHELD_FACES[1], the live floor); a normal operator till opens the counter POS.
+    const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
+    if (landingFace === "floor") {
+      // LOAD the floor the way counter→floor navigation does — `<till-floor-screen>` renders purely from
+      // the app-owned `.zones`/`.tables`/`.statuses` props, which ONLY `#onShowFloor` fetches (it then
+      // sets `screen = "floor"`). A handheld's face-set has no counter/`@show-floor` affordance and no
+      // populated table to tap, so a bare `this.screen = "floor"` would strand the waiter on an empty,
+      // unusable floor. `#onShowFloor` swallows a failed load (degrade gracefully), so this never blocks.
+      await this.#onShowFloor();
+    } else {
+      this.screen = landingFace;
+      // The counter's cross-till held list + default-station queue — counter concerns a handheld's floor
+      // landing never shows, so they run only on the counter path (mirroring counter→floor nav, which
+      // likewise fetches neither).
+      await this.#refreshHeldOrders();
+      await this.#refreshStationQueue();
+    }
     // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
     // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
     // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,

@@ -18,6 +18,7 @@ import type {
   HeldOrderSummary,
   PayOutcome,
   TabLine,
+  TableServiceStatus,
   TableState,
   TillApi,
   TillProduct,
@@ -493,10 +494,17 @@ describe("till-app", () => {
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
     // The kind-aware probe (Task 7): a `handheld` identity puts the till into handheld mode but STAYS on
     // the lock screen — the waiter PIN-logs-in, then lands on the floor rather than the counter POS.
+    const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+      // The floor's data source (FP-1) — proving the handheld login LOADS the floor via `#onShowFloor`,
+      // not that it merely switches `screen` to an empty one (`<till-floor-screen>` renders purely from
+      // these props, which only `#onShowFloor` fetches).
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+      listStatuses: vi.fn().mockResolvedValue([status]),
     });
     await flush(el);
     // A handheld waits on the lock screen (unlike a kds_station, which skips it) — but in handheld mode.
@@ -509,8 +517,18 @@ describe("till-app", () => {
     // After login the waiter lands on the FLOOR (the face-set's post-lock face), never the counter.
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
     await flush(el);
-    expect(floor(el)).not.toBeNull();
     expect(counter(el)).toBeNull();
+    // The floor was LOADED, not just shown: `#onShowFloor`'s three fetches ran and the screen renders
+    // POPULATED from them — the fix for the empty-floor dead end.
+    expect(currentApi.getTablesState).toHaveBeenCalled();
+    expect(currentApi.listZones).toHaveBeenCalled();
+    expect(currentApi.listStatuses).toHaveBeenCalled();
+    const f = floor(el);
+    expect(f).not.toBeNull();
+    expect(f!.tables).toEqual([freeTable]);
+    expect(f!.zones).toEqual([floorZone]);
+    // Counter concerns a handheld's floor landing never shows are skipped on this path.
+    expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
   it("a normal operator till (401 identity probe) stays on the lock screen with NO boot error", async () => {
