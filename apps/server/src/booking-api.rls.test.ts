@@ -522,6 +522,36 @@ describe("Bookings API over real Postgres (RLS end-to-end)", () => {
     }
   });
 
+  it("400s an out-of-range but well-shaped bookingTime at the screen, never a downstream 500", async () => {
+    // `25:61` is `\d{2}:\d{2}`-shaped but out of range: it must be refused as a clean 400
+    // `management.request_invalid` by `requireTime`'s range-validating regex BEFORE it reaches the
+    // `time` column (where it would `22007` → an opaque `server.internal` 500). A valid `20:00` still
+    // creates (201), so the tightened regex has not broken the accepted shape.
+    const { cfg, managerCookie } = await setupVenue();
+    const app = mountApp(cfg);
+
+    const bad = await send(
+      app,
+      "POST",
+      "/management-api/bookings",
+      managerCookie,
+      bookingBody({ bookingTime: "25:61" }),
+    );
+    expect(bad.status).toBe(400);
+    expect((await bad.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "bookingTime" } },
+    });
+
+    const good = await send(
+      app,
+      "POST",
+      "/management-api/bookings",
+      managerCookie,
+      bookingBody({ bookingTime: "20:00" }),
+    );
+    expect(good.status).toBe(201);
+  });
+
   it("accepts an explicit null for the blank optionals a create body carries (the real-form shape)", async () => {
     // The dashboard's booking form sends `contactPhone`/`notes`/`tableId` as explicit `null` when the
     // field is left blank (booking-form.ts `#confirm`: `trim() === "" ? null : …`), the COMMON case. The

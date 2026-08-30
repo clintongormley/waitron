@@ -3230,10 +3230,6 @@ export interface TableState {
  * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
  * table lives at the venue, not the register). `locationId` defaults to the till's own.
  */
-/** Venue-local wall-clock derived from an instant + IANA time zone, for the reserved-on-floor read
- *  (Bookings-1 §2b/§4). Computed in JS via `Intl` — never in SQL — so no offset is stored: a booking is
- *  a wall-clock intention, and "today"/"now" for the imminence check are the venue's local values at
- *  read time. Returns the local calendar date (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
 /** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
  *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
  *  so a typo or a legacy value can be anything. `Intl.DateTimeFormat({ timeZone })` throws `RangeError`
@@ -3250,6 +3246,10 @@ function safeTimeZone(timeZone: string): string {
   }
 }
 
+/** Venue-local wall-clock derived from an instant + IANA time zone, for the reserved-on-floor read
+ *  (Bookings-1 §2b/§4). Computed in JS via `Intl` — never in SQL — so no offset is stored: a booking is
+ *  a wall-clock intention, and "today"/"now" for the imminence check are the venue's local values at
+ *  read time. Returns the local calendar date (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
 function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,

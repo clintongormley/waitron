@@ -100,12 +100,13 @@ function requireInteger(v: unknown, field: string): number {
   return v as number;
 }
 
-const TIME_HHMM = /^\d{2}:\d{2}(:\d{2})?$/;
+const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
 /** Screen a `HH:MM` / `HH:MM:SS` wall-clock time before it reaches the `time` column (where a malformed
  * value would `22007` → an opaque 500), refusing an absent/wrong-typed/mis-shaped one as
- * `management.request_invalid` naming the field. Range (`25:61`) is left to the `time` column, as
- * `requirePeriod` leaves the impossible-day check split between regex and round-trip. */
+ * `management.request_invalid` naming the field. The regex validates the RANGE at the screen — hours
+ * `00-23`, minutes `00-59`, optional seconds `00-59` — so an out-of-range but well-shaped value like
+ * `25:61` is a clean 400 here, never a downstream `22007` 500. */
 function requireTime(v: unknown, field: string): string {
   if (typeof v !== "string" || !TIME_HHMM.test(v)) {
     throw new AppError("management.request_invalid", { field });
