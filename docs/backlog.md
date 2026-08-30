@@ -88,9 +88,10 @@ demo or behind-the-scenes".
    id-based **`loginManagerById`** sibling (shared `completeManagerLogin`) for the emailless
    mirror/provisioned admin, a `setEmail` mutator, the login screen (roster dropdown → email field) +
    the Users form (create/edit email), and demo-seeded credentials (`owner@demo.waitron.local` /
-   `dashPass123`). **Resolved follow-up (owner, 2026-08-30; not yet built):** the production admin's
-   dashboard email is captured **during onboarding via the setup UI** (add an email field to
-   `apps/setup`'s admin step, threaded to provisioning's `seed-admin`) — see *Open threads*.
+   `dashPass123`). **Admin-email bootstrap follow-up LANDED (#175):** the production admin's dashboard
+   email is now captured **during onboarding via the setup UI** (a required email field on `apps/setup`'s
+   admin step, threaded through `setup-api` to provisioning's `seed-admin`), so an onboarding-provisioned
+   admin signs in by email + password immediately.
 3. **Resolve the greyed-out Split/Move buttons.** **Cheap half — wire move/join/merge/transfer into the
    till — LANDED (#174):** the drawer's disabled "Move · Split" button is now a "Table actions" flow
    (menu → target picker; transfer adds a whole-line selection step) dispatching
@@ -981,17 +982,13 @@ here is the cross-cutting or genuinely-decision-bearing work.
 - **The €0 comped-sale settles at the settlement instant, not backdated to `issued_at`.** Till-UX
   question (is a comp ever finalised long after the invoice printed, in invoice-first mode?) — bears
   on the till design, nothing to decide until then.
-- **Admin dashboard email captured during onboarding (RESOLVED — owner, 2026-08-30; not yet built).**
-  Email-only dashboard login (Tier A #2) resolves the admin by email, but `venue`'s `seed-admin` insert
-  seeds the admin **emailless** (tenant_id/display_name/pin_hash/password_hash/role only), so a
-  production-bootstrapped admin has no dashboard sign-in path — today only the demo `dev-setup.ts` sets
-  one out-of-band. **Decision:** the admin account is set up **during onboarding via the setup UI** (NOT
-  a `venue --admin-email` CLI flag, and NOT mirror-only). The wizard's `admin-screen.ts` already captures
-  displayName/password/pin; **add an email field** and thread it through: `AdminDraft`
-  (`apps/setup/src/api/client.ts`) → `setup-api.ts` (validate/normalize with the identity email helpers)
-  → provisioning's admin shape (`venue-plan.ts` `{displayName,pinHash,passwordHash}` + the `seed-admin`
-  action) → the insert writes `email`. Then the onboarding-provisioned admin signs in by email + password
-  immediately. Uniqueness is already enforced (`persons_tenant_email_uq`). Blocks nothing pre-demo.
+- **Admin dashboard email captured during onboarding — LANDED (#175).** The setup wizard's admin step
+  now captures a **required** email, threaded `AdminDraft` (`apps/setup`) → `setup-api.ts` (validated once
+  via identity's shared `normalizeAndValidateEmail`) → provisioning's `seed-admin` insert (writes an
+  **optional** `email`), and the review/confirm step shows it — so an onboarding-provisioned admin signs in
+  by email + password immediately, closing the Tier A #2 bootstrap gap. The bare `venue` CLI stays
+  emailless by design (existing `applyVenue` callers unaffected; the demo still sets its admin email via
+  `dev-setup`/`seedStaff`). Not a `venue --admin-email` flag, not mirror-only.
 - **No UI path to REMOVE a person's email (Tier A #2 follow-up).** The Users form's Save-email is
   disabled when the field is blank, and clearing an existing email would be rejected by `setEmail`
   (`person.email_invalid`), so an operator can add/change but not clear an email. Trivial; add a
