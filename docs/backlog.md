@@ -132,8 +132,8 @@ demo or behind-the-scenes".
    no reader. `POST /api/sales` is therefore **no longer fenced against a handheld at all** (the earlier
    cash-only tender-split guard is removed), the handheld pay UI **shows both cash and manual card**, and
    **fiscal parity** is proven (a handheld sale files a correct chained registro under the box's node/SIF
-   — same assertions as a counter sale, plus one captured `payments` row for the manual card). **Still
-   fenced** (via `assertNotHandheld`)**:** the **integrated** card reader (`/api/pay`), reprint,
+   — same assertions as a counter sale, plus one captured `payments` row for the manual card).
+   **Still fenced (via `assertNotHandheld`):** the **integrated** card reader (`/api/pay`), reprint,
    `/api/drawer/open` (a table waiter has a pocket float, not a register), `place`/`collect`, and cancel.
    **Deferred siblings:** *handheld card via a mobile reader* (Stripe Terminal / Tap to Pay — the
    integrated `/api/pay` path, its own slice) and *device auth: enrol-all + fail-closed allowlist* (infra,
