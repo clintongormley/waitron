@@ -90,35 +90,56 @@ export function normalizePairingCode(input: string): string {
   return input.toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
 }
 
+/** Whether a device kind binds a kitchen station. A `kds_station` is an always-on screen tied to one
+ * station; a `handheld` is a roving, location-wide waiter device (spec §D2) and carries none. This is
+ * the code-side twin of the Task-1 DB CHECK (`0076`, `kds_station ⇒ station_id NOT NULL`,
+ * `handheld ⇒ station_id NULL`): a kind added here that requires a station must gain that CHECK too. */
+export function kindRequiresStation(kind: DeviceKind): boolean {
+  return kind === "kds_station";
+}
+
 /**
- * Mint a single-use pairing code bound to a station (device-identity-1 §3a). The station must be a LIVE
- * station of THIS venue — `requireLiveStation` (kitchen.ts, `station.not_found` otherwise) is REUSED
- * verbatim so a code can never be minted against a retired, foreign-venue or non-existent station, and
- * that check runs BEFORE any write. Stores only the code's SHA-256 (never the plaintext) plus the
- * kind/station/label to stamp on the enrolled device, and returns the plaintext code ONCE for the
- * operator to read into the pairing screen.
+ * Mint a single-use pairing code (device-identity-1 §3a), station-optional per kind. For a
+ * station-binding kind ({@link kindRequiresStation}) the station must be a LIVE station of THIS venue —
+ * `requireLiveStation` (kitchen.ts, `station.not_found` otherwise) is REUSED verbatim so a code can
+ * never be minted against a retired, foreign-venue or non-existent station, and a null one is rejected
+ * up front with the SAME code; that check runs BEFORE any write. A non-binding kind (a handheld) stores
+ * `station_id = NULL` and never calls `requireLiveStation`. Stores only the code's SHA-256 (never the
+ * plaintext) plus the kind/station/label to stamp on the enrolled device, and returns the plaintext
+ * code ONCE for the operator to read into the pairing screen.
  */
 export async function generatePairingCode(
   tx: Transaction,
   cfg: TillConfig,
-  input: { kind: DeviceKind; stationId: string; label: string },
+  input: { kind: DeviceKind; stationId: string | null; label: string },
   // Injectable code source, defaulting to the real high-entropy generator — the ONLY knob, mirroring the
   // enrol rate-limiter's injectable `now` (enrol-rate-limit.ts). It exists so a test can FORCE a digest
   // collision deterministically (the ~2^-40 duplicate is unreachable by chance); production always uses
   // the default.
   codeSource: () => string = () => encodePairingCode(randomBytes(PAIRING_CODE_BYTES)),
 ): Promise<{ code: string }> {
-  await requireLiveStation(tx, cfg, input.stationId);
+  // A station-binding kind must name a live station; a null one is folded into the SAME `station.not_found`
+  // requireLiveStation raises for an unknown/foreign/retired station, before any write. A non-binding kind
+  // (handheld) carries no station and skips the check, so `stationId` is forced NULL for the insert — the
+  // Task-1 CHECK (`handheld ⇒ station_id IS NULL`) would reject a non-null one anyway.
+  const requiresStation = kindRequiresStation(input.kind);
+  let stationId: string | null = null;
+  if (requiresStation) {
+    if (input.stationId === null) throw new AppError("station.not_found", { stationId: "" });
+    await requireLiveStation(tx, cfg, input.stationId);
+    stationId = input.stationId;
+  }
   const code = codeSource();
   try {
     await tx.insert(devicePairingCodes).values({
       tenantId: cfg.tenantId,
-      // The venue requireLiveStation just confirmed the station belongs to — the scope stamped onto the
-      // enrolled device, so it is fixed here rather than re-derived at redemption.
+      // The venue requireLiveStation just confirmed the station belongs to (or the venue the handheld
+      // roves) — the scope stamped onto the enrolled device, so it is fixed here rather than re-derived
+      // at redemption.
       locationId: cfg.locationId,
       codeSha256: createHash("sha256").update(code).digest("hex"),
       deviceKind: input.kind,
-      stationId: input.stationId,
+      stationId,
       label: input.label,
     });
   } catch (error) {
