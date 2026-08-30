@@ -235,6 +235,43 @@ S700, with an APK uploaded to the Stripe API under a 200 MB limit and 8 GB of de
 POS and consumer-facing halves talking over TCP/IP. If a single-device handheld ever matters more
 than the fee difference, that is the route.
 
+**SumUp Tap to Pay — the phone *as* the reader, and why it is not the Solo's replacement.** SumUp
+offers Tap to Pay on both iPhone (XS or newer, iOS 16.4+) and Android (any NFC phone/tablet on
+Android 11+): the device's own NFC becomes the contactless reader, with no Solo. It is tempting for
+the handheld, since it would drop the Solo that §3 currently pairs alongside it. Two findings,
+sourced 2026-08-30, decide against it for now — recorded so the option is not re-researched from
+scratch, and **nothing is built now**:
+
+- **It is SDK-only — there is no server-driven path, and this is by security design, not a SumUp
+  quirk.** Unlike the Solo, Tap to Pay has no Cloud API: SumUp exposes it only through an on-device
+  iOS SDK and Android Tap-to-Pay SDK
+  (<https://developer.sumup.com/terminal-payments/readers/tap-to-pay>). The intuitive route — read
+  the card on the phone's NFC, POST it to our server, drive the Cloud API — is impossible: when a
+  card is tapped the phone's **Secure Element takes over the NFC controller, reads the card, and
+  encrypts it straight to the payment service provider; no app on the device ever sees card data,
+  only a payment token**
+  (<https://support.apple.com/guide/security/tap-to-pay-on-iphone-sec72cb155f4/web>). There is
+  nothing to POST, and routing PAN through our backend is exactly what PCI forbids. The only
+  integration is Waitron running **as a native app on the phone** with SumUp's SDK linked in — the
+  same "native app on the device" shape as Stripe Apps on Devices above, and a genuinely larger
+  build than the backend HTTPS call the Solo already fits. **Stripe's Tap to Pay is identical in
+  this respect** (built into the Terminal iOS/Android SDK; the server-driven Terminal API supports
+  smart readers only), so this is a property of phone-as-reader, not of one vendor
+  (<https://docs.stripe.com/terminal/payments/setup-reader/tap-to-pay>).
+- **In Spain it is fee-neutral, not a premium.** The 2.75% figure that circulates is SumUp's
+  US/Ireland rate and does **not** apply here. The es-es Tap to Pay page charges the same rate as
+  the card readers — **1.49% pay-as-you-go / 0.75% Pagos Plus** as read 2026-08-30
+  (<https://www.sumup.com/es-es/tap-to-pay/>). So the trade is not fee-for-convenience: per tap it
+  equals the Solo, it saves the Solo's €79 hardware, and it costs a native app build plus the loss
+  of **chip-insert** (Tap to Pay is contactless-only — a card that will not tap cannot be served).
+  Note this 1.49% / 0.75% is **lower** than the 1.69% / 0.99% recorded from the `precios` page on
+  2026-07-30 in §9 — reconcile the two before relying on either; it may be a general rate cut since
+  July or a page-specific figure.
+
+This is the leading entry in the running list of capabilities that would justify a native
+handheld/tablet app — see
+[2026-08-30-native-app-capabilities.md](2026-08-30-native-app-capabilities.md).
+
 ## 9. Provenance of the sourced figures
 
 All read 2026-07-30.
@@ -250,8 +287,19 @@ All read 2026-07-30.
 | Square Terminal API — device-code pairing, `terminal.checkout.updated` webhook or polling, and the four limits in §8 | <https://developer.squareup.com/docs/terminal-api/overview> |
 | Stripe Apps on Devices — custom Android app on S700, 200 MB APK, 8 GB storage, TCP/IP between halves | <https://docs.stripe.com/terminal/features/apps-on-devices/overview> |
 | Solo connectivity and standalone operation — 4G SIM with free unlimited data, WiFi alternative, *"offline mode as a backup if your signal drops"*, on-device product list and refunds | <https://www.sumup.com/en-us/solo-card-reader/> plus SumUp's own Solo FAQ copy |
+| SumUp Tap to Pay — SDK-only (iOS SDK + Android Tap-to-Pay SDK), no Cloud API; iPhone XS+/iOS 16.4+, Android 11+ NFC; read 2026-08-30 | <https://developer.sumup.com/terminal-payments/readers/tap-to-pay> |
+| SumUp Tap to Pay rate (ES) — 1.49% PAYG / 0.75% Pagos Plus, same as readers per that page; read 2026-08-30 | <https://www.sumup.com/es-es/tap-to-pay/> |
+| Tap to Pay security model — Secure Element reads and encrypts the card straight to the PSP; app receives a token, never card data; PCI MPoC validated | <https://support.apple.com/guide/security/tap-to-pay-on-iphone-sec72cb155f4/web> |
+| Stripe Tap to Pay — built into the Terminal iOS/Android SDK; server-driven Terminal API supports smart readers only, not Tap to Pay; read 2026-08-30 | <https://docs.stripe.com/terminal/payments/setup-reader/tap-to-pay> |
 
 Still unsourced, and now the only such claim in this spec: whether standalone and offline operation
 remain available once the reader is paired to a Cloud API integration, and what offline mode's limits
 are (§7 item 2). Note the earlier product URL `www.sumup.com/es-es/datafonos/solo/` 404s; the
 `en-us/solo-card-reader/` path is the one that resolves.
+
+**Rate discrepancy to reconcile (added 2026-08-30).** The Tap to Pay page above shows 1.49% PAYG /
+0.75% Pagos Plus, while the `precios` row recorded on 2026-07-30 shows 1.69% / 0.99%. Both were read
+from SumUp's own es-es pages, five weeks apart. This may be a general rate cut or a page-specific
+figure; confirm against the current `precios` page and the actual contract (§7 item 3) before either
+number is used in a cost decision. §4's math still stands on the 2026-07-30 figures and is not
+re-run here.
