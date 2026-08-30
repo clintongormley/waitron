@@ -43,3 +43,8 @@ docs/handoffs/
 # The dev default is apps/server/src/state (from-source) / apps/server/dist/state (built, already
 # covered by dist/). Never commit secrets. Deployment sets WAITRON_STATE_DIR to a protected path.
 apps/server/src/state/
+
+# Product images the demo seed writes into the from-source DEFAULT_MEDIA_ROOT on `pnpm dev:setup`
+# (~44 content-addressed PNGs). Same from-source/dist split as state/ above; deployment sets
+# WAITRON_MEDIA_DIR to a served path. Never let the dev seed pollute the working tree.
+apps/server/src/media/

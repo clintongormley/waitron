@@ -43,11 +43,14 @@ notice, not by infra completeness. The prior soundness-first ordering still gove
 **The demo is closer than it looks** (frontend maturity + run path verified 2026-08-29):
 `pnpm dev:setup && pnpm dev` boots a real till + dashboard on real Postgres — cash + manual-card
 sales, live fiscal chaining, **no hardware, no cloud, no AEAT cert** (till PIN 5555 / dashboard 1234).
-~25 fleshed-out screens on one enforced design system. Already built and demo-ready: counter +
-table-service ordering, KDS fire/expo, payment, **menu editing with images**, floor-plan editor,
-**layout designer**, rostering, recipes, purchases, **printer** and **device** enrolment, **staff
-CRUD**, and the **server onboarding wizard**. What is missing is a bounded set of gaps an owner will
-hit — not a rough frontend.
+**`dev:setup` now seeds a believable demo restaurant** (was the top Tier-A item; DONE): **two menus** (~44 products)
+with **per-dish images**, a **floor plan** (3 zones / ~16 tables), **staff on PIN 5555**, and **~28
+days of back-dated preproduction sales** so the reports screens aren't blank — **English by default**,
+Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
+Already built and demo-ready: counter + table-service ordering, KDS fire/expo, payment, **menu editing
+with images**, floor-plan editor, **layout designer**, rostering, recipes, purchases, **printer** and
+**device** enrolment, **staff CRUD**, and the **server onboarding wizard**. What is missing is a
+bounded set of gaps an owner will hit — not a rough frontend.
 
 ### Phase 0 — tie off the two self-contained in-flight threads, then pivot (owner, 2026-08-29)
 
@@ -68,26 +71,20 @@ demo or behind-the-scenes".
 
 **Tier A — an owner notices these missing in the first five minutes:**
 
-1. **A believable demo restaurant (seed).** Today `dev:setup` seeds **2 products, 0 tables** — a real
-   till, an empty shop. Seed a realistic menu (with images), a floor plan with zones + tables, staff
-   with roles, and back-dated sales so the reports screen isn't blank. Default the demo to **English**
-   (or a flag). **Cheapest path first: if a one-off Square catalogue import is easy (spike it — see
-   Tier C #10), seed the menu from a real Square export; accuracy doesn't matter, it's demo dressing.
-   Else hand-author.** *Tiny cost, transforms every screen — do first.* NEW.
-2. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
+1. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
    is fully built but has **no dashboard surface**, and login lands on the staff-admin table. Wire it
    to new dashboard routes + a reporting screen, and replace the landing with a business overview
    (takings, covers, open tables, top sellers). *Backend built → biggest value-for-cost.* NEW frontend.
-3. **Admin-site professionalization.** (a) The dashboard's **flat row of 14 tabs**
+2. **Admin-site professionalization.** (a) The dashboard's **flat row of 14 tabs**
    (`dashboard-app.ts:374`) becomes a grouped **sidebar** — also the enabler for every new admin screen
    below without the top bar overflowing; (b) **email + password login**, dropping the prepopulated
    roster dropdown (`login-screen.ts:177`) the owner flagged as wrong (password auth already exists;
    needs an email field on persons + a login-screen change). NEW.
-4. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
+3. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
    **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
    one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
    planned (`2026-08-17-table-service-ts5-*`).
-5. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
+4. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
    centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
    One venue-wide layout today (only CSS stacking on narrow screens); no phone/handheld/till device
    kinds (`device_kind` enum = `kds_station` only). Needs new device kinds + a device→layout
@@ -101,12 +98,14 @@ demo or behind-the-scenes".
    (`2026-08-17-bookings-1*`). MISSING today (only a "Reserved" floor *status* exists). Supervised.
 7. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
    (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. **Pairs
-   with tableside ordering (#5).** NEW.
-8. **Menu-management depth.** Multiple `catalogues` + a switcher already exist; missing the pieces that
-   make it an owner story: a **draft/published** state (only an `active` bool today),
-   **time-of-day / seasonal scheduling**, and the **assign-menu-to-location route**
-   (`assignCatalogueToLocation` exists but is exposed by no route, so which menu a till sells is fixed
-   at provisioning). PARTIAL → complete.
+   with tableside ordering (#4).** NEW.
+8. **Menu-management depth.** The **live multi-menu till foundation landed**: a location has a
+   **default catalogue plus other accessible catalogues** (`location_catalogues`), and the till lists
+   the **union** of their products and **switches menus live, client-side**. Missing the pieces that
+   make it a fuller owner story: a **dashboard route to manage `location_catalogues` membership** (which
+   menus a location may sell is fixed at seed/provisioning today); **per-till persisted menu selection**
+   (the switch is client-side only, not remembered); a **draft/published** state (only an `active` bool
+   today); and **time-of-day / seasonal scheduling**. PARTIAL → complete.
 9. **Order timings — overdue / forgotten-order alerting** (owner-elevated 2026-08-29). The KDS
    station queue **already ages every order** (colour buckets fresh <5 / warm <10 / hot ≥10 min +
    minute label, `station-queue.ts:405-434`), so the base already demos. This adds the *feature*:
@@ -119,9 +118,9 @@ demo or behind-the-scenes".
 
 10. **Square (and generic CSV) menu import — as a product feature.** The full dashboard flow (auth to a
     Square account, map its catalogue, ongoing re-import) — a strong switching-cost story for an owner
-    leaving Square. A **one-off** version of this is also the cheapest route to the demo seed (#1), so
-    spike the import path early even though the polished feature is Tier C. MISSING; greenfield +
-    external API.
+    leaving Square. **Spike outcome (2026-08-29): a one-off Square import is NOT the cheap seed path —
+    the demo menu was hand-authored instead.** The polished product feature remains **deferred** (this
+    tier). MISSING; greenfield + external API.
 11. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
     permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a
     large backend change. Demoable on the fixed roles for now.
@@ -141,7 +140,7 @@ Formerly the numbered top tier; the demo needs none of it.
 - **Sync completion beyond C2b** — fiscal-lane / hash-chain sync (H2, owner-gated), multi-tenant
   transport. See *Open threads → Sync*.
 - **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
-  intra-community 32–39) + two pre-filing caveats. **Distinct from the demo sales screen (Tier A #2):**
+  intra-community 32–39) + two pre-filing caveats. **Distinct from the demo sales screen (Tier A #1):**
   AEAT filing completeness (asesor-gated), not an owner takings view. See *Open threads → Reporting
   fiscal remainder*.
 - **Printing cloud-poll transports + expo device kind** — the subsystem, KDS, receipt + cash-drawer
@@ -186,11 +185,11 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys | mid-shift-suspension enforce, discount gate, till-refund enforce; **encrypt `totp_secret` at rest** |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **backend built but UNWIRED to the dashboard → demo Tier A #2**; fiscal filing remainder parked |
+| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **backend built but UNWIRED to the dashboard → demo Tier A #1**; fiscal filing remainder parked |
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
-| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #4** |
+| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #3** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #5**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
 | 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #6** |
 | 15 | Online ordering | — | not started (Later phase) |
