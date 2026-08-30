@@ -429,14 +429,16 @@ async function parsePasskeyVerifyBody(
  * touch, so RLS scopes each read/write to this dashboard's own tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
-  // Pre-login roster of active persons. Deliberately UNAUTHENTICATED — it exposes no secret, so it
-  // calls `listActiveStaff` under `withTenant` + `asAppUser` (RLS scopes it to this dashboard's tenant)
-  // rather than `requireManagementSession`. The DASHBOARD login no longer uses it: sign-in is by EMAIL
-  // now (`POST /management-api/session`), not by picking a name from a dropdown, so this route feeds no
-  // dashboard login step. It STAYS because the TILL login may use it (spec §4.3), the name-picker shape
-  // the till's `GET /api/staff` parallel still wants. `listActiveStaff` returns `{ personId,
-  // displayName }` only: no password material, role or status, so there is nothing here a bystander
-  // must not see.
+  // Roster of active persons. Deliberately UNAUTHENTICATED — it exposes no secret, so it calls
+  // `listActiveStaff` under `withTenant` + `asAppUser` (RLS scopes it to this dashboard's tenant)
+  // rather than `requireManagementSession`. Two dashboard screens fetch it via `api.getStaffRoster()`
+  // today: the pre-login `login-screen.ts` roster PICKER — which is still the dashboard login flow at
+  // HEAD (its `#submit` POSTs `{ personId }`) until spec §4.4's email-login migration, a LATER task not
+  // yet landed, removes that use — and `my-schedule-screen.ts`'s staff self-service view (the colleague
+  // picker + name resolution), which KEEPS using it. So the route stays. (The till has its OWN
+  // active-staff route, `GET /api/staff` in till-api.ts — not this one.) `listActiveStaff` returns
+  // `{ personId, displayName }` only: no password material, role or status, so there is nothing here a
+  // bystander must not see.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
