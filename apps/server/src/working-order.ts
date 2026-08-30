@@ -1831,6 +1831,18 @@ export async function splitOffCheck(
  * seat, not a payment unit (design §2). Returns the new `tabId` (with items) or `{}` (freed). Runs on
  * the caller's tx scope.
  *
+ * Lock order — the shared `working_orders` tab row `FOR UPDATE` FIRST (via {@link lockOpenTabRow}), THEN
+ * the `dining_tables[tableId]` row. This MATCHES the sale/settle path and {@link mergeTabs}:
+ * `payWorkingOrder` locks the tab's `working_orders` row, then its settle UPDATE fires the 0050
+ * `working_orders_clear_table_status` trigger UPDATE-ing `dining_tables WHERE tab_id = NEW.id` (which
+ * includes `tableId` while it is joined) — i.e. `working_orders` THEN `dining_tables`. Acquiring in that
+ * SAME class order is what PREVENTS an unjoin-vs-pay/settle DEADLOCK: a concurrent unjoin and pay both
+ * take `working_orders` before `dining_tables`, so they cannot cross-lock and trip a 40P01. This is
+ * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.rls.test.ts) asserts no
+ * 40P01, and by deletion the previous `dining_tables`-first order reproduces the 40P01 against the real
+ * trigger. (The status check therefore fires BEFORE the `dining_tables` lock; in every tested scenario
+ * only one guard fails at a time, so the thrown code is unchanged from the old order.)
+ *
  * The with-items branch repoints the detached table BEFORE the move, so both `tabId` (still covered by
  * its origin table(s)) and `newTabId` (now covered by the detached table) are TABS when {@link
  * transferLines} runs — which is exactly why the reuse is `transferLines` here, not `splitOffCheck`'s
@@ -1838,7 +1850,9 @@ export async function splitOffCheck(
  * `transferLines`' `lockOpenTab` back-pointer check, whereas an un-joined table's new tab passes it. So
  * `transferLines` gives the correct is-a-tab validation AND the ascending-id lock ordering for free,
  * over a `newTabId` that is a freshly-minted, uncontended row (no deadlock hazard against the origin
- * lock this verb already holds).
+ * lock this verb already holds). `transferLines` re-locks `tabId` (a no-op — already held above) and
+ * only ever takes further `working_orders` locks over `newTabId`, so the class order stays
+ * working_orders-before-dining_tables throughout.
  */
 export async function unjoinTable(
   tx: Transaction,
@@ -1847,9 +1861,14 @@ export async function unjoinTable(
   tableId: string,
   transfers?: { lineNo: number; quantity?: string }[],
 ): Promise<{ tabId?: string }> {
-  // Lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an absent/
-  // foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and fail
-  // closed, design §3).
+  // Lock the shared tab's working_orders row FIRST (see the docstring's lock-order note): it must be
+  // OPEN — you cannot re-carve a settled/abandoned bill — else `tab.not_open`. Taking this BEFORE the
+  // dining_tables lock is the deadlock-safe order the sale/settle path uses.
+  await lockOpenTabRow(tx, tabId);
+
+  // Then lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
+  // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and
+  // fail closed, design §3).
   const [table] = await tx
     .select({ tabId: diningTables.tabId })
     .from(diningTables)
@@ -1857,16 +1876,6 @@ export async function unjoinTable(
     .for("update");
   if (table?.tabId !== tabId) {
     throw new AppError("table.not_joined", { tableId, tabId });
-  }
-
-  // The shared tab must be open (you cannot re-carve a settled/abandoned bill).
-  const [shared] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (shared?.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
   }
 
   if (transfers === undefined || transfers.length === 0) {
