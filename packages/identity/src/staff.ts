@@ -23,13 +23,19 @@ export function asEmailTaken(err: unknown, email: string): never {
   throw err;
 }
 
-/** Screen an optional email input: `undefined` → `null` (no email); otherwise normalize and validate,
- * throwing `person.email_invalid` on a malformed value BEFORE any write. */
-function screenEmail(raw: string | undefined): string | null {
-  if (raw === undefined) return null;
+/** Normalize a REQUIRED email and validate it, throwing `person.email_invalid` on a malformed value
+ * BEFORE any write. The single source of the email write-boundary rule, shared by `screenEmail`
+ * (create) and `setEmail` (edit) so the two cannot drift. */
+function normalizeAndValidateEmail(raw: string): string {
   const email = normalizeEmail(raw);
   if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
   return email;
+}
+
+/** Screen an OPTIONAL email input: `undefined` → `null` (no email); otherwise
+ * `normalizeAndValidateEmail`. */
+function screenEmail(raw: string | undefined): string | null {
+  return raw === undefined ? null : normalizeAndValidateEmail(raw);
 }
 
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
@@ -150,8 +156,7 @@ export async function setEmail(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  const email = normalizeEmail(input.email);
-  if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
+  const email = normalizeAndValidateEmail(input.email);
   try {
     await tx.update(persons).set({ email }).where(eq(persons.id, input.personId));
   } catch (err) {

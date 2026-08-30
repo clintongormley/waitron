@@ -599,12 +599,6 @@ export class DashboardApp extends LitElement {
     `;
   }
 
-  /** The manager nav — the sixteen-face switcher, shown only for a NON-staff session (a `staff` person
-   * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
-   * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
-   * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
-   * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
-   * Every item keeps its stable `data-test="nav-<screen>"` id. */
   /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating
    * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
@@ -621,6 +615,12 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
+  /** The manager nav — the sixteen-face switcher, shown only for a NON-staff session (a `staff` person
+   * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
+   * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
+   * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
+   * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
+   * Every item keeps its stable `data-test="nav-<screen>"` id. */
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>

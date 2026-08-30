@@ -30,12 +30,15 @@ const PERSON_LOGIN_COLUMNS = {
   passwordHash: persons.passwordHash,
   totpSecret: persons.totpSecret,
 };
-type PersonLoginRow = {
-  id: string;
-  status: string;
-  passwordHash: string | null;
-  totpSecret: string | null;
-};
+// The base SELECT both entry points run (each appends its own WHERE). Extracted so `PersonLoginRow` is
+// INFERRED from the query rather than hand-declared: that keeps `status` as its pgEnum literal union
+// (`"active" | "suspended"`), so `completeManagerLogin`'s `status === "suspended"` gate is checked
+// against the real values — a typo would not compile — rather than a widened `string`. This is the
+// infer-the-row-shape-from-the-query idiom the codebase already uses for such column sets.
+function selectPersonLogin(tx: Transaction) {
+  return tx.select(PERSON_LOGIN_COLUMNS).from(persons);
+}
+type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
 // The credential check + session mint for a person that has ALREADY been found, shared by both entry
 // points. Suspension is checked BEFORE the password so a suspended account is refused without a
@@ -70,10 +73,9 @@ export async function loginManager(
   // case-insensitive unique index (persons_tenant_email_uq), so `lower(email)` here mirrors the index
   // and login is case-insensitive.
   const email = normalizeEmail(input.email);
-  const [person] = await tx
-    .select(PERSON_LOGIN_COLUMNS)
-    .from(persons)
-    .where(and(eq(persons.tenantId, input.tenantId), eq(sql`lower(${persons.email})`, email)));
+  const [person] = await selectPersonLogin(tx).where(
+    and(eq(persons.tenantId, input.tenantId), eq(sql`lower(${persons.email})`, email)),
+  );
   // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
   // login form — both throw `password.invalid`, so the response never reveals which addresses have
   // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the
@@ -99,10 +101,9 @@ export async function loginManagerById(
   // path — the caller is a trusted mirror over the primary's first-contact TLS, sending an id the
   // operator typed — so an unknown id is a straight `person.not_found` (no dummy-KDF equalisation).
   // Everything after the lookup is identical to `loginManager`, via `completeManagerLogin`.
-  const [person] = await tx
-    .select(PERSON_LOGIN_COLUMNS)
-    .from(persons)
-    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)));
+  const [person] = await selectPersonLogin(tx).where(
+    and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)),
+  );
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   return completeManagerLogin(tx, input, person);
 }
