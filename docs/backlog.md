@@ -79,12 +79,18 @@ demo or behind-the-scenes".
    (overview/daily-close/period), and a new `computeTopSellers` reporting query. **Covers was dropped**
    — no guest count is captured anywhere and fabricating one is forbidden (house rule); the home shows
    only real figures. *The menu-import seed (#165) fills every screen.* Grouped **sidebar** + **email
-   login** are still to-do (was bundled here; now item 2).
-2. **Admin-site professionalization.** (a) The dashboard's **flat row of 14 tabs**
-   (`dashboard-app.ts:374`) becomes a grouped **sidebar** — also the enabler for every new admin screen
-   below without the top bar overflowing; (b) **email + password login**, dropping the prepopulated
-   roster dropdown (`login-screen.ts:177`) the owner flagged as wrong (password auth already exists;
-   needs an email field on persons + a login-screen change). NEW.
+   login** (was bundled here) LANDED as item 2 (#172).
+2. **Admin-site professionalization — LANDED (#172).** The flat top nav is now a **data-driven grouped
+   sidebar** (`NAV_GROUPS`: Overview/Sales pinned, then Menu/Service/Team/Purchasing/Configuration) with
+   a **responsive off-canvas drawer** (hamburger + scrim + `inert` gating + Escape-to-close). And
+   dashboard login is **email + password**: a nullable, per-tenant-unique (case-insensitive)
+   `persons.email`, `loginManager` resolving by email with **enumeration + timing hardening**, an
+   id-based **`loginManagerById`** sibling (shared `completeManagerLogin`) for the emailless
+   mirror/provisioned admin, a `setEmail` mutator, the login screen (roster dropdown → email field) +
+   the Users form (create/edit email), and demo-seeded credentials (`owner@demo.waitron.local` /
+   `dashPass123`). **Open decision (follow-up under *Open threads*):** the `venue`-provisioned admin is
+   seeded emailless and email-only login gives it no dashboard path — decide `venue --admin-email` vs
+   mirror-only.
 3. **Resolve the greyed-out Split/Move buttons** (`till-table-order-screen.ts:585`). Cheap half: wire
    **move/transfer** (TS-3/TS-4 backend already built) into the till. Then **TS-5 split-bill** — the
    one **fiscal, owner-gated, supervised** slice (each check files its own sale + registro); specced +
@@ -927,6 +933,10 @@ here is the cross-cutting or genuinely-decision-bearing work.
   bootstrap, or treat the provisioned admin as deliberately **mirror-only** (it authenticates by id via
   `loginManagerById`, the mirror-bundle path, never by email). Surfaced by the whole-branch review of the
   email-login branch; blocks nothing pre-demo.
+- **No UI path to REMOVE a person's email (Tier A #2 follow-up).** The Users form's Save-email is
+  disabled when the field is blank, and clearing an existing email would be rejected by `setEmail`
+  (`person.email_invalid`), so an operator can add/change but not clear an email. Trivial; add a
+  clear-email path (a dedicated `clearEmail`/null-accepting `setEmail`) if a venue ever needs it.
 
 ---
 
