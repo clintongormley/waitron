@@ -159,13 +159,21 @@ demo or behind-the-scenes".
    separately-reviewable, non-supervised slice — but **legally load-bearing** (EU 1169/2011 Annex II,
    food-safety-advisor territory) and must ship add+remove together (an add-only half-version would show
    a "gluten-free" modifier as still containing gluten — worse than nothing).
-8. **Menu-management depth.** The **live multi-menu till foundation landed**: a location has a
-   **default catalogue plus other accessible catalogues** (`location_catalogues`), and the till lists
-   the **union** of their products and **switches menus live, client-side**. Missing the pieces that
-   make it a fuller owner story: a **dashboard route to manage `location_catalogues` membership** (which
-   menus a location may sell is fixed at seed/provisioning today); **per-till persisted menu selection**
-   (the switch is client-side only, not remembered); a **draft/published** state (only an `active` bool
-   today); and **time-of-day / seasonal scheduling**. PARTIAL → complete.
+8. **Menu-management depth.** The **live multi-menu till foundation landed**, and **Slice A — the
+   location↔menu membership dashboard — LANDED (#177)**: a new **Location menus** screen (17th manager
+   face, Menu nav group) lets an owner pick which catalogues a location sells and which is the default
+   (`GET/POST/DELETE/PUT /management-api/locations/:id/catalogues` + `/default-catalogue`, `person.manage`
+   gated, keep-sellable on default change), so membership is no longer fixed at seed/provisioning. A
+   cross-tenant `catalogueId` is refused `catalogue.not_found` (404) — the app-layer guard for the
+   single-column `locations.catalogue_id` FK (composite-FK hardening still the deferred item below).
+   **Per-till persisted menu selection was DROPPED** (owner call): a switch stays temporary, so the
+   remaining owner-facing gaps are a **draft/published** state (only an `active` bool today) and
+   **time-of-day / seasonal scheduling**. PARTIAL → complete. **Follow-ups:** (a) till-side — reset the
+   temporary menu switch to the location default on the next order (the reshaped, non-persisted form of
+   the dropped per-till idea); (b) extract a shared `<location-picker>` widget (the load/select pattern
+   is now triplicated across roster / planned-actual / location-menus); (c) composite `(tenant_id, id)`
+   FK on `locations.catalogue_id` (the deep form of the cross-tenant guard; already noted in
+   `tenants.ts`).
 9. **Order timings — overdue / forgotten-order alerting** (owner-elevated 2026-08-29). The KDS
    station queue **already ages every order** (colour buckets fresh <5 / warm <10 / hot ≥10 min +
    minute label, `station-queue.ts:405-434`), so the base already demos. This adds the *feature*:
@@ -255,7 +263,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images | **ordering modifiers (demo Tier B #7) + menu draft/schedule/assign (Tier B #8)**; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, **location↔menu membership UI (Tier B #8 Slice A, #177)** | **ordering modifiers (demo Tier B #7) + menu draft/publish + schedule (Tier B #8 remainder)**; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked, post-demo); AI forecast deferred |
 
