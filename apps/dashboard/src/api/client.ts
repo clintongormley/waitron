@@ -108,6 +108,14 @@ export interface CatalogueSummary {
   version: number;
 }
 
+/** One `GET /management-api/locations/:id/catalogues` row — mirrors catalogue's `LocationCatalogue`:
+ * a `CatalogueSummary` plus whether this location may sell it (`sellable`) and whether it is the
+ * location's default menu (`isDefault`). */
+export interface LocationCatalogueSummary extends CatalogueSummary {
+  sellable: boolean;
+  isDefault: boolean;
+}
+
 /** One `GET/POST /management-api/categories` row — mirrors catalogue's `Category`. */
 export interface CategorySummary {
   id: string;
@@ -1011,6 +1019,42 @@ export class DashboardApi {
   /** `POST /management-api/catalogues` — create a catalogue by name; returns the created row (201). */
   createCatalogue(name: string): Promise<CatalogueSummary> {
     return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", { name });
+  }
+
+  // ── Location menus (which catalogues a location sells) ─────────────────────────────────────────
+
+  /** `GET /management-api/locations/:id/catalogues` — every tenant catalogue flagged
+   * `sellable`/`isDefault` for this location. */
+  listLocationCatalogues(locationId: string): Promise<LocationCatalogueSummary[]> {
+    return this.#request<LocationCatalogueSummary[]>(
+      `/management-api/locations/${locationId}/catalogues`,
+      "GET",
+    );
+  }
+
+  /** `POST /management-api/locations/:id/catalogues` — add a catalogue to the location's accessible
+   * set (make it sellable there). Answers an empty 204. */
+  addLocationCatalogue(locationId: string, catalogueId: string): Promise<void> {
+    return this.#request<void>(`/management-api/locations/${locationId}/catalogues`, "POST", {
+      catalogueId,
+    });
+  }
+
+  /** `DELETE /management-api/locations/:id/catalogues/:catalogueId` — remove a catalogue from the
+   * location's accessible set (stop selling it there). Never removes the default. Answers 204. */
+  removeLocationCatalogue(locationId: string, catalogueId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/locations/${locationId}/catalogues/${catalogueId}`,
+      "DELETE",
+    );
+  }
+
+  /** `PUT /management-api/locations/:id/default-catalogue` — set the location's default menu; the old
+   * default stays sellable (keep-sellable). Answers 204. */
+  setLocationDefaultCatalogue(locationId: string, catalogueId: string): Promise<void> {
+    return this.#request<void>(`/management-api/locations/${locationId}/default-catalogue`, "PUT", {
+      catalogueId,
+    });
   }
 
   /** `GET /management-api/categories` — every category (id, name). */

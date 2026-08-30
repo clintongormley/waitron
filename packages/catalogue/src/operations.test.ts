@@ -17,8 +17,11 @@ import {
   listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
+  listCataloguesForLocation,
   listCategories,
   listProducts,
+  removeCatalogueFromLocation,
+  setLocationDefaultCatalogue,
   renameCatalogue,
   renameCategory,
   updateProduct,
@@ -581,6 +584,111 @@ describe("catalogue operations", () => {
   it("returns [] from listAccessibleCatalogues for a location with no accessible catalogue", async () => {
     await asTenant(async (tx) => {
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([]);
+    });
+  });
+
+  it("removes a member catalogue from a location's accessible set", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await removeCatalogueFromLocation(tx, locationId, lunch.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  it("removeCatalogueFromLocation is a no-op for a catalogue that is not a member", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const ghost = await createCatalogue(tx, { name: "Ghost" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await removeCatalogueFromLocation(tx, locationId, ghost.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  // The default lives in `locations.catalogue_id`, never as a `location_catalogues` row, so the
+  // member-remove op can never strip a location's default menu — calling it with the default id is a
+  // no-op on the member table. This is the guard that keeps a location from dropping to zero sellable
+  // menus via the remove route.
+  it("removeCatalogueFromLocation never removes the default (it is not a member row)", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await removeCatalogueFromLocation(tx, locationId, main.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  // The management screen's read: EVERY tenant catalogue (sellable here or not), each flagged
+  // `sellable` (in this location's accessible set — default OR member) and `isDefault`. `shelf` is a
+  // catalogue the tenant owns but this location does not sell, so it must appear with `sellable:false`.
+  it("lists every tenant catalogue with sellable + default flags for a location", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const shelf = await createCatalogue(tx, { name: "Shelf" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      const rows = await listCataloguesForLocation(tx, locationId);
+      expect(rows).toHaveLength(3);
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      expect(byId.get(main.id)).toMatchObject({ name: "Main", sellable: true, isDefault: true });
+      expect(byId.get(lunch.id)).toMatchObject({ name: "Lunch", sellable: true, isDefault: false });
+      expect(byId.get(shelf.id)).toMatchObject({
+        name: "Shelf",
+        sellable: false,
+        isDefault: false,
+      });
+    });
+  });
+
+  // Keep-sellable (owner decision): changing the default demotes the OLD default to a member so the
+  // location keeps selling it — "which menus does this location sell?" and "which one opens first?" are
+  // independent choices. Casa was the default, Día a member; after making Día the default, both are
+  // still sellable, Día now flagged default.
+  it("setLocationDefaultCatalogue changes the default and keeps the old default sellable", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      const dia = await createCatalogue(tx, { name: "Día" });
+      await assignCatalogueToLocation(tx, locationId, casa.id);
+      await addCatalogueToLocation(tx, locationId, dia.id);
+      await setLocationDefaultCatalogue(tx, locationId, dia.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: dia.id, name: "Día", isDefault: true },
+        { id: casa.id, name: "Casa", isDefault: false },
+      ]);
+    });
+  });
+
+  // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
+  it("setLocationDefaultCatalogue sets the default when the location had none", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: casa.id, name: "Casa", isDefault: true },
+      ]);
+    });
+  });
+
+  // Re-setting the same catalogue as default is a no-op: it must NOT demote the catalogue to a member
+  // (which would leave it as both default and member) — the old==new branch skips the keep-sellable add.
+  it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      await assignCatalogueToLocation(tx, locationId, casa.id);
+      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: casa.id, name: "Casa", isDefault: true },
+      ]);
     });
   });
 

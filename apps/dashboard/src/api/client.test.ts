@@ -250,6 +250,54 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("listLocationCatalogues GETs a location's menu membership with credentials", async () => {
+    const rows = [
+      { id: "c1", name: "Casa", active: true, version: 1, sellable: true, isDefault: true },
+      { id: "c2", name: "Día", active: true, version: 1, sellable: false, isDefault: false },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listLocationCatalogues("loc1")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("addLocationCatalogue POSTs a catalogueId to the location's accessible set", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.addLocationCatalogue("loc1", "c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ catalogueId: "c2" }),
+    });
+  });
+
+  it("removeLocationCatalogue DELETEs a catalogue from the location's accessible set", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.removeLocationCatalogue("loc1", "c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues/c2", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("setLocationDefaultCatalogue PUTs the default catalogueId for the location", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.setLocationDefaultCatalogue("loc1", "c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/default-catalogue", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ catalogueId: "c2" }),
+    });
+  });
+
   it("listCategories GETs the categories with credentials", async () => {
     const categories = [{ id: "cat1", name: "Entrantes" }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));

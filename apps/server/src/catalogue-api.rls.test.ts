@@ -141,10 +141,10 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
-/** JSON POST/PATCH/GET helper carrying `cookie`. */
+/** JSON helper carrying `cookie`. */
 async function send(
   app: Hono,
-  method: "POST" | "PATCH" | "GET",
+  method: "POST" | "PATCH" | "GET" | "DELETE" | "PUT",
   path: string,
   cookie: string,
   body?: unknown,
@@ -303,9 +303,12 @@ describe("Catalogue API over real Postgres (RLS end-to-end)", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Prove the `person.manage` gate BY DELETION. A `staff`-role management session holds no
     // `person.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
-    // before any catalogue op runs on all four write routes. The list/read routes stay reachable to
+    // before any catalogue op runs on every write route. The list/read routes stay reachable to
     // staff by the same gate (they are gated too, but this test targets the WRITES the design §9
-    // enumerates: POST /catalogues, POST /products, PATCH /products/:id, POST /product-images).
+    // enumerates: POST /catalogues, POST /products, PATCH /products/:id, POST /product-images, plus the
+    // location-menu writes POST/DELETE /locations/:id/catalogues and PUT /locations/:id/default-catalogue).
+    // Every write funnels through the ONE `gated` helper, so a zero-uuid location/catalogue id is enough —
+    // the gate fires before the id reaches any table.
     //
     // GUARD-BY-DELETION (authorizeManager), actually run on 2026-08-11 against postgres:18 via
     // Testcontainers (TESTCONTAINERS_RYUK_DISABLED=true): removed the
@@ -347,6 +350,29 @@ describe("Catalogue API over real Postgres (RLS end-to-end)", () => {
       ),
     );
     await expect403(await uploadRequest(app, staffCookie));
+    const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+    await expect403(
+      await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {
+        catalogueId: ZERO_UUID,
+      }),
+    );
+    await expect403(
+      await send(
+        app,
+        "DELETE",
+        `/management-api/locations/${ZERO_UUID}/catalogues/${ZERO_UUID}`,
+        staffCookie,
+      ),
+    );
+    await expect403(
+      await send(
+        app,
+        "PUT",
+        `/management-api/locations/${ZERO_UUID}/default-catalogue`,
+        staffCookie,
+        { catalogueId: ZERO_UUID },
+      ),
+    );
   });
 
   it("writes and reads the product image under RLS; a cross-tenant read returns nothing (design §5a)", async () => {

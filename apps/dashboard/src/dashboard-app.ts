@@ -17,6 +17,7 @@ import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
+import "./screens/location-menus-screen.js";
 import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/service-status-screen.js";
@@ -38,9 +39,10 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
- * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `layout`, `receipt`,
- * `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`,
- * `devices` and `printers` are the sixteen MANAGER faces the nav switches between — `overview` is also
+ * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
+ * `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`,
+ * `purchases`, `recipe`, `devices` and `printers` are the seventeen MANAGER faces the nav switches
+ * between — `overview` is also
  * the post-login/post-probe LANDING for every non-staff role (Task 9); `my-schedule` is the sole face
  * of a `staff`-role session and carries no nav. All logged-in faces share the same chrome (logout, plus
  * the nav for a non-staff session).
@@ -52,6 +54,7 @@ type Screen =
   | "sales"
   | "staff"
   | "catalogue"
+  | "location-menus"
   | "layout"
   | "receipt"
   | "statuses"
@@ -77,8 +80,8 @@ type NavItem = { screen: Screen; labelKey: StringKey };
 type NavGroup = { headerKey?: StringKey; items: NavItem[] };
 
 /**
- * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the sixteen manager faces are
- * described here once rather than spelled out sixteen times in the template. The pinned first group
+ * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the seventeen manager faces are
+ * described here once rather than spelled out seventeen times in the template. The pinned first group
  * (overview + sales) carries no header — the two reporting faces lead. Each item keeps the stable
  * `data-test="nav-<screen>"` id every downstream consumer (tests included) pins.
  */
@@ -93,6 +96,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
+      { screen: "location-menus", labelKey: "nav.location_menus" },
       { screen: "recipe", labelKey: "nav.recipe" },
     ],
   },
@@ -132,8 +136,8 @@ const NAV_GROUPS: NavGroup[] = [
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `my-schedule` | `overview` | `sales` | `staff` | `catalogue` | `layout` |
- * `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
+ * machine (`login` | `my-schedule` | `overview` | `sales` | `staff` | `catalogue` | `location-menus` |
+ * `layout` | `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
  * `purchases` | `recipe` | `devices` | `printers`) and does the event wiring the screens deliberately
  * do not:
  *
@@ -148,9 +152,9 @@ const NAV_GROUPS: NavGroup[] = [
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `overview` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the sixteen manager faces `overview`, `sales`, `staff`, `catalogue`, `layout`, `receipt`,
- *    `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`,
- *    `devices` and `printers` — a plain local state change, no server call. A `staff` session has no
+ *    the seventeen manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
+ *    `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`,
+ *    `purchases`, `recipe`, `devices` and `printers` — a plain local state change, no server call. A `staff` session has no
  *    nav (the self-service view is its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
@@ -162,6 +166,7 @@ const NAV_GROUPS: NavGroup[] = [
  * sole `<h1>Mi horario</h1>`, `dashboard-overview-screen` the sole `<h1>Hoy de un vistazo</h1>`,
  * `dashboard-sales-screen` the sole `<h1>Ventas y recaudación</h1>`, `dashboard-staff-screen` the sole
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
+ * `dashboard-location-menus-screen` the sole `<h1>Menús por local</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
  * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
  * `dashboard-floor-screen` the sole `<h1>Sala</h1>`, `dashboard-kitchen-screen` the sole
@@ -318,8 +323,8 @@ export class DashboardApp extends LitElement {
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
    * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
-   * render) or its sixteen nav buttons stay in the tab order and a11y tree while translated off-screen,
-   * so a keyboard user would tab through sixteen invisible controls before reaching a visible one. At
+   * render) or its seventeen nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through seventeen invisible controls before reaching a visible one. At
    * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
   @state() private narrow = false;
 
@@ -551,7 +556,7 @@ export class DashboardApp extends LitElement {
       >
         <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
              breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
-             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its sixteen nav buttons
+             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its seventeen nav buttons
              leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
              control; it is interactive at desktop width and whenever the drawer is open. -->
         ${
@@ -621,7 +626,7 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
-  /** The manager nav — the sixteen-face switcher, shown only for a NON-staff session (a `staff` person
+  /** The manager nav — the seventeen-face switcher, shown only for a NON-staff session (a `staff` person
    * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
    * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
    * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
@@ -669,6 +674,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
+      case "location-menus":
+        return html`<dashboard-location-menus-screen
+          .api=${this.api}
+        ></dashboard-location-menus-screen>`;
       case "layout":
         return html`<dashboard-layout-screen .api=${this.api}></dashboard-layout-screen>`;
       case "receipt":

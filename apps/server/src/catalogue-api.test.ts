@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -29,6 +29,7 @@ const noopLog: Logger = () => {};
 const HANDLER_LIMIT = 1024 * 1024;
 
 let tenantId: string;
+let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
 let mediaDir: string;
@@ -38,6 +39,12 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);
+    // One location for the tenant, seeded as the owner (RLS bypassed, pure setup like seedTenant) so
+    // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
+    const loc = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Main', array['es-ES'], 'Venta') returning id`);
+    locationId = loc.rows[0]!.id;
     // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
@@ -92,7 +99,7 @@ function mountApp(maxUploadBytes: number = HANDLER_LIMIT): Hono {
 /** JSON POST/PATCH helper with the manager cookie unless overridden. */
 async function send(
   app: Hono,
-  method: "POST" | "PATCH" | "GET",
+  method: "POST" | "PATCH" | "GET" | "DELETE" | "PUT",
   path: string,
   opts: { body?: unknown; cookie?: string | null } = {},
 ): Promise<Response> {
@@ -201,6 +208,126 @@ describe("mountCatalogueApi — catalogues", () => {
   it("GET /management-api/catalogues unauthenticated → 401", async () => {
     const res = await send(mountApp(), "GET", "/management-api/catalogues", { cookie: null });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("mountCatalogueApi — location menus", () => {
+  // The location's default + member rows are the ONLY state shared across these tests (PGlite is shared
+  // for the file); every catalogue a test creates gets a fresh id. Reset both as the owner so the tests
+  // are order-independent. `locationId` is set by the shared setup, which runs before this beforeEach.
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from location_catalogues where location_id = ${locationId}`);
+    await suite.db.execute(sql`update locations set catalogue_id = null where id = ${locationId}`);
+  });
+
+  const cataloguesPath = () => `/management-api/locations/${locationId}/catalogues`;
+  const defaultPath = () => `/management-api/locations/${locationId}/default-catalogue`;
+
+  it("GET lists every tenant catalogue with sellable + default flags (200)", async () => {
+    const app = mountApp();
+    const casa = await createCatalogueVia(app, "Casa");
+    const dia = await createCatalogueVia(app, "Día");
+    const shelf = await createCatalogueVia(app, "Shelf");
+    await send(app, "PUT", defaultPath(), { body: { catalogueId: casa } });
+    await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
+    const res = await send(app, "GET", cataloguesPath());
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string; sellable: boolean; isDefault: boolean }[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(casa)).toMatchObject({ sellable: true, isDefault: true });
+    expect(byId.get(dia)).toMatchObject({ sellable: true, isDefault: false });
+    expect(byId.get(shelf)).toMatchObject({ sellable: false, isDefault: false });
+  });
+
+  it("POST adds a catalogue to the location's accessible set (204)", async () => {
+    const app = mountApp();
+    const dia = await createCatalogueVia(app, "Día");
+    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
+    expect(res.status).toBe(204);
+    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
+      id: string;
+      sellable: boolean;
+    }[];
+    expect(rows.find((r) => r.id === dia)).toMatchObject({ sellable: true });
+  });
+
+  it("DELETE removes a catalogue from the location's accessible set (204)", async () => {
+    const app = mountApp();
+    const dia = await createCatalogueVia(app, "Día");
+    await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
+    const res = await send(app, "DELETE", `${cataloguesPath()}/${dia}`);
+    expect(res.status).toBe(204);
+    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
+      id: string;
+      sellable: boolean;
+    }[];
+    expect(rows.find((r) => r.id === dia)).toMatchObject({ sellable: false });
+  });
+
+  it("PUT default-catalogue sets the default and keeps the old default sellable (204)", async () => {
+    const app = mountApp();
+    const casa = await createCatalogueVia(app, "Casa");
+    const dia = await createCatalogueVia(app, "Día");
+    await send(app, "PUT", defaultPath(), { body: { catalogueId: casa } });
+    const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: dia } });
+    expect(res.status).toBe(204);
+    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
+      id: string;
+      sellable: boolean;
+      isDefault: boolean;
+    }[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(dia)).toMatchObject({ sellable: true, isDefault: true });
+    expect(byId.get(casa)).toMatchObject({ sellable: true, isDefault: false });
+  });
+
+  it("POST unauthenticated → 401", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", cataloguesPath(), {
+      body: { catalogueId: "11111111-1111-4111-8111-111111111111" },
+      cookie: null,
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("POST as a staff-role session → 403 authorization.not_permitted", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", cataloguesPath(), {
+      body: { catalogueId: "11111111-1111-4111-8111-111111111111" },
+      cookie: staffCookie,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("POST with a missing/non-string catalogueId → management.request_invalid 400", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: 42 } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "catalogueId" } },
+    });
+  });
+
+  it("PUT default-catalogue with a missing/non-string catalogueId → management.request_invalid 400", async () => {
+    const app = mountApp();
+    const res = await send(app, "PUT", defaultPath(), { body: {} });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "catalogueId" } },
+    });
+  });
+
+  it("POST with a malformed-uuid catalogueId → shared.invalid_id 400", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: "not-a-uuid" } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
+  it("GET with a non-uuid locationId → shared.invalid_id 400", async () => {
+    const res = await send(mountApp(), "GET", "/management-api/locations/not-a-uuid/catalogues");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 });
 

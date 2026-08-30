@@ -16,12 +16,16 @@ import { bodyLimit } from "hono/body-limit";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
+  addCatalogueToLocation,
   createCatalogue,
   createCategory,
   createProduct,
   listCatalogues,
+  listCataloguesForLocation,
   listCategories,
   listProducts,
+  removeCatalogueFromLocation,
+  setLocationDefaultCatalogue,
   updateProduct,
   validateImageBytes,
   type ProductAllergens,
@@ -107,6 +111,22 @@ function requireUuidParam(id: string, kind: string): string {
 }
 
 /**
+ * Screen the `{ catalogueId }` body the location-menu POST/PUT routes carry: REQUIRED (a
+ * missing/wrong-typed one is `management.request_invalid` naming the field, the body-screen convention)
+ * and uuid-SHAPED (a malformed string is `shared.invalid_id` before it reaches a `uuid` column, exactly
+ * as `requireUuidParam` screens a path id). A well-formed-but-foreign id passes both and reaches the FK
+ * (23503 → opaque 500), the product routes' posture. `readJsonBody` coerces a null/malformed body to
+ * `{}`, so those land on the typeof screen as a clean 400.
+ */
+async function requireCatalogueIdBody(c: Context): Promise<string> {
+  const body = await readJsonBody<{ catalogueId?: unknown }>(c);
+  if (typeof body.catalogueId !== "string") {
+    throw new AppError("management.request_invalid", { field: "catalogueId" });
+  }
+  return requireUuidParam(body.catalogueId, "CatalogueId");
+}
+
+/**
  * Multipart framing — the boundary lines and the file part's own `Content-Disposition`/`Content-Type`
  * headers — makes the raw request body a little larger than the file bytes it carries. `bodyLimit`
  * guards that RAW body (a coarse DoS ceiling that rejects an oversized upload BEFORE `parseBody`
@@ -165,6 +185,52 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const { name } = body;
       const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
       return c.json(created, 201);
+    }),
+  );
+
+  // ── Location menus ───────────────────────────────────────────────────────────────────────────────
+  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its default
+  // `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY tenant catalogue
+  // flagged sellable/isDefault so the screen can also offer the not-yet-sold ones; POST/DELETE add and
+  // remove a member; PUT sets the default (keep-sellable — the old default is demoted, never dropped).
+  // A well-formed-but-foreign `catalogueId` (a valid uuid naming no catalogue, or one RLS hides) reaches
+  // the FK as PG 23503 → an opaque 500, the same deliberately-opaque posture as the product routes.
+  app.get("/management-api/locations/:locationId/catalogues", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const rows = await gated(sessionId, (tx) => listCataloguesForLocation(tx, locationId));
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/locations/:locationId/catalogues", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = await requireCatalogueIdBody(c);
+      await gated(sessionId, (tx) => addCatalogueToLocation(tx, locationId, catalogueId));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.delete("/management-api/locations/:locationId/catalogues/:catalogueId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
+      await gated(sessionId, (tx) => removeCatalogueFromLocation(tx, locationId, catalogueId));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/locations/:locationId/default-catalogue", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = await requireCatalogueIdBody(c);
+      await gated(sessionId, (tx) => setLocationDefaultCatalogue(tx, locationId, catalogueId));
+      return c.body(null, 204);
     }),
   );
 
