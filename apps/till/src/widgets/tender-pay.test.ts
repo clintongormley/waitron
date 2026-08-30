@@ -475,11 +475,12 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
-  it("both idle views (pay + collect) render the Card button by default — the #renderCardButton dedup", async () => {
-    // The Card (manual datáfono) button is shared verbatim by both idle views via `#renderCardButton`.
-    // Every settling face renders it — the counter/fixed till AND the handheld: a handheld settles a
-    // MANUAL card tender on `POST /api/sales` (the server fences only the INTEGRATED reader, `/api/pay`),
-    // and the handheld table-order screen threads no `cardProvider`, so Card stays the #62 manual path.
+  it("both idle views (pay + collect) render the Card button by default", async () => {
+    // Asserts BOTH idle views show the Card button by default (they share `#renderCardButton`, but this
+    // pins the observable behaviour, not the extraction itself). Every settling face renders it — the
+    // counter/fixed till AND the handheld: a handheld settles a MANUAL card tender on `POST /api/sales`
+    // (the server fences only the INTEGRATED reader, `/api/pay`), and the handheld table-order screen
+    // threads no `cardProvider`, so Card stays the #62 manual path.
     const payStore = new WorkingOrderStore();
     payStore.addProduct(cafe, "2");
     const pay = await mountWidget<TillTenderPay>("till-tender-pay", { store: payStore });

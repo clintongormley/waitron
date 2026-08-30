@@ -133,12 +133,13 @@ demo or behind-the-scenes".
    cash-only tender-split guard is removed), the handheld pay UI **shows both cash and manual card**, and
    **fiscal parity** is proven (a handheld sale files a correct chained registro under the box's node/SIF
    — same assertions as a counter sale, plus one captured `payments` row for the manual card). **Still
-   fenced:** the **integrated** card reader (`/api/pay`), `/api/drawer/open` (a table waiter has a pocket
-   float, not a register), and `place`/`collect`. **Deferred siblings:** *handheld card via a mobile
-   reader* (Stripe Terminal / Tap to Pay — the integrated `/api/pay` path, its own slice) and *device
-   auth: enrol-all + fail-closed allowlist* (infra, post-demo — spec
-   `docs/superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md`, whose §3 allowlist
-   already encodes "sell-cash = till + handheld").
+   fenced** (via `assertNotHandheld`)**:** the **integrated** card reader (`/api/pay`), reprint,
+   `/api/drawer/open` (a table waiter has a pocket float, not a register), `place`/`collect`, and cancel.
+   **Deferred siblings:** *handheld card via a mobile reader* (Stripe Terminal / Tap to Pay — the
+   integrated `/api/pay` path, its own slice) and *device auth: enrol-all + fail-closed allowlist* (infra,
+   post-demo — spec `docs/superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md`, whose
+   §3 allowlist — as amended by its 2026-08-30 dated pointer — puts selling via `/api/sales` (cash or
+   manual card) at till+handheld and the integrated `/api/pay` at till-only).
 
 **Tier B — an owner will ask; product-defining:**
 
