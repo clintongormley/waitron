@@ -529,6 +529,14 @@ appliance image (runs on any Node+Postgres host). 5–6 make it a true appliance
 - **iOS `.local` reliability** (§7) — measure; decide whether the IP-QR fallback is primary on iOS.
 - **Break-glass mechanism** (§12) — console vs held-button vs recovery-boot; how to reset the admin
   credential without enabling casual chain-destructive resets.
+  - **Resolved 2026-08-30 (slice 4c):** the admin-credential break-glass ships as an **on-box loopback
+    CLI**, `waitron-break-glass` (the "local console" option; held-button / recovery-boot are
+    firmware-dependent and parked with slices 5–7). Physical shell access to the box + its
+    `DATABASE_URL` is the gate; it resets the admin's dashboard password (and PIN) and reactivates a
+    suspended admin, `withTenant` under the app role's RLS, **with no chain impact** — so it never
+    enables a casual chain-destructive reset. The chain-destructive **factory reset** stays
+    **design-only** (it re-provisions a fresh SIF / new chain, fiscal §5): see
+    `docs/superpowers/plans/2026-08-30-onboarding-slice4c-factory-reset-design.md`.
 - **Secret custody hardening / passphrase mechanism** (§9) — TPM-sealed vs keyfile auto-unlock for
   the default; and for the optional passphrase, encrypt-the-whole-data-volume (LUKS + web-unlock) vs
   wrap-only-the-secrets-file. What the first real box ships with, and the web-unlock-page UX.
