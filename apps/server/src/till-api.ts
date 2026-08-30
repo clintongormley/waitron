@@ -730,8 +730,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       // Handheld firewall (spec §5): integrated card pay settles at the fixed till — a handheld never
-      // settles THROUGH pay (it may settle a cash sale on `/api/sales`, node-keyed, but not the card
-      // leg here). A handheld cookie throws `device.forbidden_action` (403) here, before the provider
+      // settles THROUGH pay (it may settle a cash or manual-card sale on `/api/sales`, node-keyed, but not
+      // the INTEGRATED card leg here — that drives a real reader). A handheld cookie throws
+      // `device.forbidden_action` (403) here, before the provider
       // guard and any fiscal write, so the fence holds even if the client were bypassed. An ordinary
       // till carries no device cookie and passes.
       await assertNotHandheld(deps, c, "pay");
@@ -874,7 +875,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Handheld firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
       // (`placeOrder` → `recordSale`) — the unrecoverable fiscal record (CLAUDE.md §5) — so a handheld,
       // which never settles THROUGH place (that deferred invoice settles at the fixed till; a handheld's
-      // one settlement is a cash sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
+      // settlement is a cash or manual-card sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
       // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
       // device cookie and passes.
       await assertNotHandheld(deps, c, "place");
@@ -1215,7 +1216,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Handheld firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
       // Mode I settles the deferred invoice (`collectOrder`) — a chained fiscal write, the unrecoverable
       // record (CLAUDE.md §5). A handheld never settles THROUGH collect (that stays fenced even for cash;
-      // a handheld's one settlement path is a cash sale on `/api/sales`), so it is refused
+      // a handheld's settlement path is a cash or manual-card sale on `/api/sales`), so it is refused
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
       await assertNotHandheld(deps, c, "collect");
