@@ -12,6 +12,7 @@ const staff: PersonSummary[] = [
     status: "active",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
   {
     personId: "p2",
@@ -20,6 +21,7 @@ const staff: PersonSummary[] = [
     status: "active",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
 ];
 const swaps: PendingSwap[] = [

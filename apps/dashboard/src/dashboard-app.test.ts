@@ -12,6 +12,7 @@ const people: PersonSummary[] = [
     status: "active",
     hasPassword: true,
     hasTotp: true,
+    email: null,
   },
 ];
 
