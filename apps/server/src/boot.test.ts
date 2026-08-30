@@ -1023,6 +1023,71 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("setup mode: POST /setup-api/adopt is REFUSED (server.config_missing) when WAITRON_SYNC_DATABASE_URL is unset — fail loud at adopt, not at the mirror reboot", async () => {
+    // Ruling 1 (Task 1): an adopted mirror MUST end up with WAITRON_SYNC_DATABASE_URL in trading.env,
+    // because the next (mirror) boot's `loadMirrorSyncConfig` reads it back — without it the reboot
+    // throws `server.config_missing` and the box never enters mirror mode. The POST /setup-api/adopt
+    // request is the ONE interactive moment the operator can fix the deploy env, so boot's adopt
+    // closure refuses HERE when `config.syncDatabaseUrl` is undefined (env lacks the var), BEFORE any
+    // bundle fetch or DB write. Boot omits WAITRON_SYNC_DATABASE_URL here (the setup box was never
+    // given it) and the guard fires. The body is a VALID adopt request (primaryUrl + credential), so
+    // the refusal is the sync-URL guard, not a request-shape 400 (`setup.request_invalid`) — proven
+    // by the `server.config_missing` code + `variable` param, not merely the 400 status. No primary is
+    // ever contacted (the guard short-circuits before `fetchMirrorBundle`), and no restart is
+    // requested. `databaseUrl` is the shared suite's probe role: the guard throws before any write, so
+    // this test mutates nothing and needs no fresh clone.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-adopt-nosync-state-"));
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          DATABASE_URL: databaseUrl,
+          WAITRON_MIGRATIONS_DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+          // Deliberately NO WAITRON_SYNC_DATABASE_URL.
+        });
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        const { via, close } = httpsVia(ca);
+        try {
+          const body = {
+            primaryUrl: "https://primary.test/",
+            credential: {
+              personId: "99999999-9999-9999-9999-999999999999",
+              password: "dashPass123",
+            },
+          };
+          const response = await fetch(`https://127.0.0.1:${port}/setup-api/adopt`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          // An AppError not in ADOPT_STATUS is re-emitted at the default 400 with its own structured
+          // code + params (error-boundary.ts), so this pins the CODE, not just the status.
+          expect(response.status).toBe(400);
+          expect(await response.json()).toEqual({
+            error: {
+              code: "server.config_missing",
+              params: { variable: "WAITRON_SYNC_DATABASE_URL" },
+            },
+          });
+          // The guard fired before the persist-then-restart transition, so no SIGTERM was requested
+          // and no trading.env was written.
+          expect(kills).toEqual([]);
+          expect(existsSync(join(stateDir, "trading.env"))).toBe(false);
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode: a DEMO provision carrying an AEAT cert is REFUSED (400) — nothing provisioned or sealed", async () => {
     // Defense-in-depth over the full boot (CLAUDE.md §5): the AEAT signing cert is meaningful ONLY for
     // a LIVE ES-common venue, so a demo/preproduction body carrying one is an invalid request that the

@@ -30,6 +30,16 @@ export interface ServerConfig {
    * long-lived pool below is ever opened.
    */
   migrationsDatabaseUrl: string;
+  /**
+   * The mirror's OWN least-privileged sync-pool connection (a `sync_applier` LOGIN role), from
+   * `WAITRON_SYNC_DATABASE_URL`. OPTIONAL at setup boot — the primary provision path never needs it,
+   * and a setup box may not have it set yet — so it is read via `isUnset` (absent OR empty →
+   * undefined), NOT `required`. It becomes `trading.env`'s `WAITRON_SYNC_DATABASE_URL` at adopt, the
+   * value the next (mirror) boot's `loadMirrorSyncConfig` reads back. `boot.ts`'s adopt closure
+   * REFUSES an unset value at adopt time (`server.config_missing`, Ruling 1) — the one interactive
+   * moment the operator can supply it — rather than persist nothing and let the reboot fail.
+   */
+  syncDatabaseUrl?: string;
   environment: DeploymentEnvironment;
   httpPort: number;
   /** Defaults to loopback. `/health` (spec §9) is deliberately unauthenticated, which is fine on a
@@ -593,6 +603,13 @@ export function loadConfig(
   return {
     databaseUrl,
     migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
+    // The mirror's own sync pool — OPTIONAL at setup boot (the primary provision path never needs
+    // it), so an unset OR empty value is undefined here via `isUnset`, never `""` reaching a sync
+    // pool (CLAUDE.md §3). Adopt refuses an unset value at adopt time (boot's guard, Ruling 1); this
+    // present-but-undefined shape matches `settlementLagMs`/`tillAppDir` above.
+    syncDatabaseUrl: isUnset(env.WAITRON_SYNC_DATABASE_URL)
+      ? undefined
+      : env.WAITRON_SYNC_DATABASE_URL,
     environment,
     httpPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,

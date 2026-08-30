@@ -152,6 +152,21 @@ declare module "@waitron/shared" {
      */
     "server.internal": Record<string, never>;
     /**
+     * A MIRROR node was asked to bind its HTTP listener to a NON-loopback host without the explicit
+     * `WAITRON_MIRROR_ALLOW_EXPOSED` opt-in. A mirror serves an UNAUTHENTICATED admin dashboard
+     * (`ensureMirrorViewer` seeds a full-admin viewer, `mirrorSession` auto-injects its cookie), so
+     * the ONLY thing keeping that surface off the network is the loopback default of
+     * `WAITRON_HTTP_HOST`. The boot FAILS CLOSED here (`assertMirrorBindSafe`, before `serve`) rather
+     * than expose it. `server.*` — a fact about the PROCESS refusing to bind, not about a sale,
+     * payment or credential; the guard is a property of THIS host's configuration.
+     *
+     * `host` is the operator's own `WAITRON_HTTP_HOST` value, echoed to name the unsafe bind — it is
+     * this host's own config, never attacker-supplied and never a secret, exactly as
+     * `server.config_missing`'s `variable` and `server.listen_failed`'s `port` are. Never renamed
+     * once shipped.
+     */
+    "server.mirror_bind_exposed": { host: string };
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
@@ -1121,5 +1136,28 @@ declare module "@waitron/shared" {
      * failure surfaces as one clear boot-time cause and no silently-truncated fiscal backup can ship.
      * No params. */
     "backup.role_rls_fenced": Record<string, never>;
+    /**
+     * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
+     * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
+     * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a
+     * non-loopback host over plain http). `POST /setup-api/adopt` is UNAUTHENTICATED, so this validation
+     * is the choke point that stops an attacker driving the mirror to POST its admin credential at a
+     * private/metadata literal IP (e.g. `169.254.169.254`) or a non-https target. It covers LITERAL-IP
+     * SSRF only: a public DNS hostname over https is still trusted (no resolve-time IP pinning), so
+     * DNS-rebinding to an internal address is NOT blocked here — that is the deferred first-contact
+     * trust-bootstrap concern (C2b #4; the adjacent TRUST BOOTSTRAP note in `mirror-bundle-fetch.ts`
+     * carries the same caveat), out of scope until real hosting. A CLIENT fault — the request is malformed —
+     * so it is reported as HTTP 400 by the adopt route's local STATUS map (`ADOPT_STATUS` in setup-api.ts),
+     * the declare-here / status-in-route split every code in this file follows. Distinct from
+     * `mirror.bundle_fetch_failed` (a well-formed request whose UPSTREAM primary then failed, a 502).
+     *
+     * NO params: the URL is attacker-controlled and is NEVER echoed — it can carry a credential in its
+     * userinfo or an internal host that a log line would leak — the same `sync.*`/`tunnel.*` no-leak
+     * discipline `mirror.bundle_fetch_failed`/`node.read_only` follow. `mirror.*` names the DOMAIN CONCEPT
+     * — a read-only mirror node — never the throwing package (`tenant.not_found`'s note gives the rule);
+     * `server.*` is reserved for facts about the process itself, and "the primary URL is invalid" is a
+     * fact about the adopt request, not the process. Never renamed once shipped.
+     */
+    "mirror.primary_url_invalid": Record<string, never>;
   }
 }

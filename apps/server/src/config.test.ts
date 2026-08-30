@@ -67,6 +67,11 @@ describe("loadConfig", () => {
       // WAITRON_MIGRATIONS_DATABASE_URL keeps a single connection string for both jobs, matching
       // this package's behaviour before the split.
       migrationsDatabaseUrl: "postgres://u@h/d",
+      // No WAITRON_SYNC_DATABASE_URL set — OPTIONAL at setup boot (the primary provision path never
+      // needs it), so it is present-but-undefined here, asserted explicitly the same way
+      // settlementLagMs below is. An adopt REQUEST is where its absence is refused (boot's guard),
+      // not setup boot.
+      syncDatabaseUrl: undefined,
       // Production numbering can never be reused, so the safe environment is the default and
       // production must be typed out. This assertion is the guard on that.
       environment: "preproduction",
@@ -335,6 +340,34 @@ describe("loadConfig", () => {
       STATE_ROOT,
     );
     expect(config.migrationsDatabaseUrl).toBe(config.databaseUrl);
+  });
+
+  // WAITRON_SYNC_DATABASE_URL is the mirror's OWN least-privileged sync pool (a `sync_applier` role),
+  // read back at mirror boot by `loadMirrorSyncConfig`. It is OPTIONAL at setup boot — the primary
+  // provision path never needs it — so `loadConfig` reads it via `isUnset` (NOT `required`): present
+  // when set, undefined when absent OR empty. Adopt is where an unset value is REFUSED (boot's guard,
+  // Ruling 1), because that is the one interactive moment the operator can supply it.
+  it("reads WAITRON_SYNC_DATABASE_URL into config.syncDatabaseUrl when set, and leaves it undefined when absent or empty", () => {
+    const set = loadConfig(
+      { ...MIN_ENV, WAITRON_SYNC_DATABASE_URL: "postgres://sync@h/d" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(set.syncDatabaseUrl).toBe("postgres://sync@h/d");
+
+    // Absent → undefined.
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).syncDatabaseUrl).toBeUndefined();
+
+    // Empty string is unset (config.ts's own `isUnset`), so `WAITRON_SYNC_DATABASE_URL=` is undefined,
+    // never a blank connection string reaching a sync pool as `""` (CLAUDE.md §3).
+    const empty = loadConfig(
+      { ...MIN_ENV, WAITRON_SYNC_DATABASE_URL: "" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(empty.syncDatabaseUrl).toBeUndefined();
   });
 
   it("accepts the highest real TCP port, 65535 — the boundary the rejection test just above it lives one past", () => {

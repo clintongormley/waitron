@@ -8,14 +8,32 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * DASHBOARD read surface found no read behind a non-safe verb (C2a design §5). HEAD is a bodyless GET and
  * OPTIONS is a CORS preflight — neither mutates, so both pass.
  *
- * IMPORTANT — this is NOT "no write behind any GET on the whole mounted surface". Decision 5 mounts the
- * full trading surface (till/device/print) too, and a few OPERATIONAL GET handlers DO write — notably
- * `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking UPDATE. Those paths are inert on a
- * mirror only because their backing tables (`print_agents`/`print_jobs`, `devices`, …) are not in the 17
- * synced tables and are not provisioned on a mirror, so the caller 401s before the write — the read-only
- * guarantee for them rests on that, not on this method gate. A later slice that syncs or provisions those
- * tables (kitchen-sync, promotion) MUST revisit this gate (allow-list the write-GETs, or don't mount those
- * groups on a mirror). The dashboard read surface this mirror actually serves is fully covered. */
+ * IMPORTANT — this is NOT "no write behind any GET". It gates by HTTP VERB, so an INTERNAL SQL write
+ * inside a GET handler still runs — e.g. the management-session keepalive (`mirror-session.ts`) does
+ * `update management_sessions set last_seen_at = now()` on a mirror's own GETs. That is intended: the gate
+ * refuses a CLIENT'S write verb, not the server's own bookkeeping (`mirror-session.ts:49` spells this out).
+ *
+ * The operational agent/device groups are no longer mounted under `mode='mirror'`: boot.ts wraps both
+ * `mountDeviceApi`/`mountPrintApi` in its `if (!isMirror)` mount guard (boot.ts). That closes the one actual
+ * write-behind-a-GET on this surface — `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking
+ * `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/runtime.ts:145-179) that the verb
+ * gate cannot catch. (The device group's own writes are all non-safe verbs the gate already refuses; it is
+ * dropped from a mirror as part of the same operational surface, not because it hid a write behind a GET.)
+ * So on a mirror that print write-GET is UNREACHABLE (404 — no route), not merely inert because its backing
+ * tables (`print_*`) are unprovisioned. This gate is unchanged; only the surface behind it shrank. A future
+ * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
+ * concern — keep them gated by `if (!isMirror)`, or allow-list the write-GETs here. The dashboard read
+ * surface this mirror serves stays fully covered.
+ *
+ * ALTITUDE (deliberate, deferred to promotion Slice 3): the landed promotion design
+ * (docs/superpowers/specs/2026-08-29-promotion-runbook-design.md §3a "Mount-and-gate everything") sets the
+ * eventual direction — mount the whole surface in BOTH modes and gate at REQUEST time, so a live
+ * mirror→primary promotion re-mounts nothing and needs no restart. Boot-time un-mounting is chosen HERE
+ * because (a) it is the tighter read-only-mirror posture — no operational agent/device surface is exposed
+ * at all — and (b) the verb-based request gate cannot catch a write-behind-a-GET without adding a new
+ * path-level deny-list. Converting this to the §3a request-time form belongs with Slice 3, which already
+ * has to convert the analogous boot-`const isMirror` worker gates (sync source / retention / tunnel, §3c)
+ * to runtime-startable — so this gate rides with that work rather than adding standalone debt. */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
