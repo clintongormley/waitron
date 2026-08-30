@@ -70,43 +70,46 @@ export interface DeviceBinding {
 }
 
 /**
- * Authenticates the request's device cookie against the database, or throws `device.unauthorized`
- * (device-identity-1 §3c) — the guard every device-authenticated route runs first.
+ * Reads and authenticates the request's device cookie against the database, returning the binding on
+ * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
+ * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
+ * know WHETHER a device is present (the order-only firewall) branches on the `null`.
  *
  * The cookie is `${deviceId}.${token}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
- * needed to fetch the salt) and the token VALIDATES it. Every failure — a missing or malformed cookie,
- * an unknown or REVOKED (`active = false`) device, or a token that does not `verifySecret` against the
- * stored hash — folds into the SAME `device.unauthorized`, so the response confirms neither a device's
- * existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
+ * needed to fetch the salt) and the token VALIDATES it. Every miss — a missing or malformed cookie, an
+ * unknown or REVOKED (`active = false`) device, or a token that does not `verifySecret` against the
+ * stored hash — returns the SAME `null`, so `requireDevice`'s `device.unauthorized` confirms neither a
+ * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
  *
  * The lookup runs as `app_user` inside `withTenant`, so RLS hides another tenant's devices exactly as a
  * missing cookie would, and the `active = true` filter is what makes revocation INSTANT: a revoked row
  * is simply not found, with no token lifetime to expire. `verifySecret` (scrypt, `@waitron/identity`)
  * is constant-time — the token is NEVER compared with `===`. On success the sighting is recorded
  * (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the binding
- * returned; nothing is logged, and the token never leaves this function.
+ * returned; nothing is logged, and the token never leaves this function. The `last_seen_at` write
+ * happens ONLY on the success path, so a firewall probe on a non-device request is a pure read.
  *
  * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
  * group carrying only `{ tenantId }` can gate on it without contriving a full config.
  */
-export async function requireDevice(
+export async function tryReadDevice(
   deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
-): Promise<DeviceBinding> {
+): Promise<DeviceBinding | null> {
   const raw = readDeviceCookie(c);
-  if (raw === null) throw new AppError("device.unauthorized", {});
+  if (raw === null) return null;
   // Split on the FIRST `.` only: the id is a UUID (no dots) and a base64url token has none either, but
   // splitting on the first separator keeps a token that somehow carried one intact rather than truncated.
   const dot = raw.indexOf(".");
   // `dot <= 0` rejects both a missing separator (indexOf → -1) and an empty selector (dot at index 0);
-  // `dot === raw.length - 1` rejects an empty token. Either malformed shape is `device.unauthorized`.
-  if (dot <= 0 || dot === raw.length - 1) throw new AppError("device.unauthorized", {});
+  // `dot === raw.length - 1` rejects an empty token. Either malformed shape is a miss.
+  if (dot <= 0 || dot === raw.length - 1) return null;
   const deviceId = raw.slice(0, dot);
   const token = raw.slice(dot + 1);
   // Screen the selector's SHAPE before the DB: a non-UUID id looked up against the `uuid` column would
   // raise `22P02` → an opaque 500 (the `isUuid` reasoning in `till-session.ts`), so a forged cookie
-  // stays a clean `device.unauthorized` instead.
-  if (!isUuid(deviceId)) throw new AppError("device.unauthorized", {});
+  // stays a clean miss instead.
+  if (!isUuid(deviceId)) return null;
 
   return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -120,12 +123,12 @@ export async function requireDevice(
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
       // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated.
       .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
-    if (row === undefined) throw new AppError("device.unauthorized", {});
+    if (row === undefined) return null;
     // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.
-    if (!verifySecret(token, row.tokenHash)) throw new AppError("device.unauthorized", {});
+    if (!verifySecret(token, row.tokenHash)) return null;
 
     // Record the sighting, but SKIP the write when `last_seen_at` is already within the last minute:
-    // `requireDevice` runs on EVERY authenticated request (the auth hot path), and the sole consumer
+    // this read runs on EVERY authenticated request (the auth hot path), and the sole consumer
     // renders last-seen only to the MINUTE (`devices-screen.ts`'s `#lastSeen` slices to `HH:MM`), so a
     // sub-minute re-write is invisible write amplification. The gate keeps the FIRST sighting (NULL →
     // written, the differential proof the test pins) and one write per minute thereafter. Deferring the
@@ -143,4 +146,40 @@ export async function requireDevice(
       );
     return { deviceId, kind: row.kind, stationId: row.stationId };
   });
+}
+
+/**
+ * Authenticates the request's device cookie, or throws `device.unauthorized` (device-identity-1 §3c) —
+ * the guard every device-authenticated route runs first. A thin throwing wrapper over
+ * {@link tryReadDevice}: every miss the core returns `null` for folds into the SAME
+ * `device.unauthorized`, so the response confirms neither a device's existence nor its revocation state.
+ * All the authentication and the `last_seen_at` book-keeping live in `tryReadDevice`.
+ */
+export async function requireDevice(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+): Promise<DeviceBinding> {
+  const device = await tryReadDevice(deps, c);
+  if (device === null) throw new AppError("device.unauthorized", {});
+  return device;
+}
+
+/**
+ * The ORDER-ONLY firewall (spec §5, decision 0.1): a handheld device may not reach a fiscal/cash route.
+ * A handheld takes and fires orders but NEVER settles — the bill is paid at the fixed till. Enforced ON
+ * THE SERVER so order-only holds even if the client were bypassed, guarding an UNRECOVERABLE fiscal
+ * record (CLAUDE.md §5). Called AFTER the route's session guard, on the SAME request.
+ *
+ * Absence of a device cookie — an ordinary till, which authenticates by operator SESSION and carries no
+ * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which
+ * never posts to a sale route anyway) also passes. ONLY an active `handheld` binding is refused, with
+ * `device.forbidden_action` naming the attempted `action`.
+ */
+export async function assertNotHandheld(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+  action: string,
+): Promise<void> {
+  const device = await tryReadDevice(deps, c);
+  if (device?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
 }

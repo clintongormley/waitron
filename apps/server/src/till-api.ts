@@ -80,6 +80,7 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
+import { assertNotHandheld } from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -146,6 +147,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
   "person.not_found": 401,
   "person.suspended": 403,
+  // The order-only firewall (spec §5): a handheld device presented its cookie on `POST /api/sales`. A
+  // handheld takes and fires orders but never SETTLES — `assertNotHandheld` refuses it here so the
+  // order-only rule holds server-side even if the client is bypassed. 403: authenticated but forbidden.
+  "device.forbidden_action": 403,
   "session.not_open": 401,
   "session.required": 401,
   // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
@@ -652,6 +657,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
+      // Order-only firewall (spec §5): a handheld device may take and fire orders but must NEVER settle
+      // a sale — the bill is paid at the fixed till. Enforced HERE, on the server, so it holds even if
+      // the client were bypassed; a handheld cookie makes this throw `device.forbidden_action` (403)
+      // before any fiscal record — the unrecoverable one (CLAUDE.md §5) — could be written. An ordinary
+      // till carries no device cookie and passes.
+      await assertNotHandheld(deps, c, "record_sale");
       const body = await c.req.json<TillSaleRequest>();
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it

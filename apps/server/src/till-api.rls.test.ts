@@ -32,6 +32,8 @@ import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 
 // Real Postgres, not PGlite: this drives `POST /api/sales` and the `/api/working-orders` routes
 // through the HTTP surface to a GENUINE chained fiscal record written by the app role under RLS.
@@ -1050,5 +1052,96 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     expect(await refused.json()).toMatchObject({
       error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
     });
+  });
+});
+
+// The order-only firewall (spec §5, decision 0.1): a handheld device takes and fires orders but must
+// NEVER settle a sale — the bill is paid at the fixed till. Enforced ON THE SERVER
+// (`assertNotHandheld` in `POST /api/sales`) so order-only holds even if the client were bypassed.
+// Real Postgres because the guard reads the enrolled device as `app_user` inside `withTenant` — the
+// same reason the rest of this file cannot run on PGlite (a superuser PGlite connection bypasses RLS
+// and is a false pass for a device-authentication guard, CLAUDE.md §4). The handheld here holds BOTH a
+// device cookie AND a valid operator session — exactly the bypass this server-side guard exists to
+// refuse, because a compromised or hacked-together client could present both.
+describe("POST /api/sales order-only firewall (a handheld may not settle a sale)", () => {
+  /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
+   * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
+   * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
+   * binding rather than folding into a miss. */
+  async function enrolHandheldCookie(cfg: TillConfig): Promise<string> {
+    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return generatePairingCode(tx, cfg, {
+        kind: "handheld",
+        stationId: null,
+        label: "Waiter phone",
+      });
+    });
+    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return enrolDevice(tx, cfg, { code });
+    });
+    return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+  }
+
+  /** Log in through the HTTP surface and return just the `name=value` session cookie pair (stripping
+   * the Set-Cookie attributes), so it can be combined with a device cookie in one `Cookie` header. */
+  async function loginOperator(app: Hono, operatorId: string): Promise<string> {
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    return login.headers.get("set-cookie")!.split(";")[0]!;
+  }
+
+  it("refuses a handheld sale with 403 device.forbidden_action even with a valid operator session, filing nothing", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const deviceCookie = await enrolHandheldCookie(cfg);
+    const sessionPair = await loginOperator(app, operatorId);
+
+    // A VALID basket, so the ONLY reason to refuse is the firewall: were the guard removed the sale
+    // would SETTLE (200), which is exactly what the prove-by-deletion experiment confirms.
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("device.forbidden_action");
+
+    // The refusal filed NOTHING — no chained fiscal record for this tenant, the unrecoverable one the
+    // guard protects (CLAUDE.md §5).
+    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(registros.length).toBe(0);
+  });
+
+  it("allows a sale from an ordinary till — operator session, NO device cookie — 200", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const sessionPair = await loginOperator(app, operatorId);
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: sessionPair },
+      body: JSON.stringify({
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(res.status).toBe(200);
   });
 });
