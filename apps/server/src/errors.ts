@@ -801,20 +801,27 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A handheld device tried to reach a fiscal/cash route — here, to RECORD A SALE (`POST /api/sales`).
-     * A handheld is ORDER-ONLY by design (spec §5, decision 0.1): it takes and fires orders but NEVER
-     * settles — the bill is paid at the fixed till. `assertNotHandheld` (`device-session.ts`) enforces
-     * this ON THE SERVER, so order-only holds even if the client were bypassed; this guards an
-     * UNRECOVERABLE fiscal record (CLAUDE.md §5 — `registros_facturacion` is append-only and
-     * hash-chained). `action` names the refused operation (e.g. `record_sale`) — a within-app symbol the
-     * caller passes, not a secret, echoed so the refusal is actionable, the same non-secret-param shape
+     * A handheld device tried a fiscal/cash action it may not perform. A handheld takes and fires orders,
+     * and — since the owner reversal (2026-08-30, widened same day) — may SETTLE a sale on `POST /api/sales`
+     * for cash OR a manual card tender, because the fiscal chain is keyed by the submitting NODE (`nodeId`),
+     * not the till (record-sale.ts:79-82), so a handheld sale files under its node's SIF exactly like the
+     * fixed till's (the manual card is the datáfono leg — a separate bank terminal the POS never talks to,
+     * no reader). What a handheld may NOT do still throws THIS: the INTEGRATED card reader (`/api/pay`,
+     * `pay`), reprint, drawer open, place, collect, cancel — every fiscal/cash route settled at the fixed
+     * till other than the node-keyed sale. `assertNotHandheld` (`device-session.ts`) enforces this ON THE
+     * SERVER, so the boundary holds even if the client were bypassed; it guards an UNRECOVERABLE fiscal
+     * record (CLAUDE.md §5 — `registros_facturacion` is append-only and hash-chained). `action` names the
+     * refused operation (e.g. `pay`, `reprint`) — a within-app symbol the caller passes, not a
+     * secret, echoed so the refusal is actionable, the same non-secret-param shape
      * `device.forbidden_station` uses for its `stationId`.
      *
      * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
      * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 403 by `till-api.ts`'s local STATUS map,
      * not here — the route layer owns the status, the split every other code in this file follows.
      * Distinct from `device.forbidden_station` (a device touching another station's item, KDS least
-     * privilege): this is the ORDER-ONLY fiscal boundary. Never renamed once shipped.
+     * privilege): this is the fiscal boundary — a handheld is fenced on the integrated reader
+     * (`/api/pay`), reprint, drawer, place, collect and cancel but may settle a cash or manual-card sale.
+     * Never renamed once shipped.
      */
     "device.forbidden_action": { action: string };
     /**

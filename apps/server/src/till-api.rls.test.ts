@@ -25,6 +25,7 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { MANUAL_PROVIDER } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
@@ -1055,15 +1056,21 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   });
 });
 
-// The order-only firewall (spec §5, decision 0.1): a handheld device takes and fires orders but must
-// NEVER settle a sale — the bill is paid at the fixed till. Enforced ON THE SERVER
-// (`assertNotHandheld` in `POST /api/sales`) so order-only holds even if the client were bypassed.
-// Real Postgres because the guard reads the enrolled device as `app_user` inside `withTenant` — the
-// same reason the rest of this file cannot run on PGlite (a superuser PGlite connection bypasses RLS
-// and is a false pass for a device-authentication guard, CLAUDE.md §4). The handheld here holds BOTH a
-// device cookie AND a valid operator session — exactly the bypass this server-side guard exists to
-// refuse, because a compromised or hacked-together client could present both.
-describe("order-only firewall (a handheld may not settle, pay, reprint, open the drawer, place, collect, or cancel)", () => {
+// The handheld firewall (spec §5, decision 0.1; owner reversal 2026-08-30, widened same day): a handheld
+// device takes and fires orders and settles a sale on `POST /api/sales` for CASH or a MANUAL card tender,
+// because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till (record-sale.ts:79-82),
+// so a handheld files a sale under its node's SIF exactly like the fixed till (the manual card is the
+// datáfono leg — a separate bank terminal the POS never talks to, no reader). What a handheld must NEVER
+// do stays fenced: the INTEGRATED card reader (`POST /api/pay`), reprint, drawer, place, collect and
+// cancel — every fiscal/cash write settled at the fixed till other than the node-keyed sale. Enforced ON
+// THE SERVER (`assertNotHandheld` on the fenced routes; `POST /api/sales` runs no handheld guard) so the
+// boundary holds even if the client were bypassed. Real Postgres because the guard reads the enrolled
+// device as `app_user` inside `withTenant` — the same reason the rest of this file cannot run on PGlite (a
+// superuser PGlite connection bypasses RLS and is a false pass for a device-authentication guard,
+// CLAUDE.md §4). The handheld here holds BOTH a device cookie AND a valid operator session — exactly the
+// bypass this server-side guard exists to police, because a compromised or hacked-together client could
+// present both.
+describe("handheld firewall (a handheld may settle a cash or manual-card sale, but not integrated pay, reprint, open the drawer, place, collect, or cancel)", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
    * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
@@ -1096,7 +1103,7 @@ describe("order-only firewall (a handheld may not settle, pay, reprint, open the
     return login.headers.get("set-cookie")!.split(";")[0]!;
   }
 
-  it("refuses a handheld sale with 403 device.forbidden_action even with a valid operator session, filing nothing", async () => {
+  it("allows a handheld CASH sale (200) and files exactly one chained registro under the node/SIF — parity with a counter cash sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -1105,8 +1112,12 @@ describe("order-only firewall (a handheld may not settle, pay, reprint, open the
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, operatorId);
 
-    // A VALID basket, so the ONLY reason to refuse is the firewall: were the guard removed the sale
-    // would SETTLE (200), which is exactly what the prove-by-deletion experiment confirms.
+    // The owner reversed the order-only firewall for the CASH tender (2026-08-30): a handheld may SETTLE a
+    // cash sale because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till
+    // (record-sale.ts:79-82 — "Which node processes and chains the sale — the SIF/chain/series key"), so a
+    // handheld files under its node's SIF exactly like a till. The handheld holds BOTH a valid operator
+    // session AND a real handheld cookie. Prove-by-deletion: add an `assertNotHandheld` back onto
+    // `POST /api/sales` and this same request 403s instead.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1115,16 +1126,91 @@ describe("order-only firewall (a handheld may not settle, pay, reprint, open the
         tender: { method: "cash", amount: "5.00" },
       }),
     });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error.code).toBe("device.forbidden_action");
+    expect(res.status).toBe(200);
+    const ticket = await res.json();
+    expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
-    // The refusal filed NOTHING — no chained fiscal record for this tenant, the unrecoverable one the
-    // guard protects (CLAUDE.md §5).
+    // Exactly ONE chained fiscal record for this (own) tenant, INDISTINGUISHABLE from a counter cash
+    // record: the same chain-opening shape the "ordinary till" mixed-cash test above asserts (own tenant,
+    // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
+    // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
+    // separate device metadata; it never keys the chain.
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
-    expect(registros.length).toBe(0);
+    expect(registros).toHaveLength(1);
+    const [only] = registros;
+    expect(only!.tenantId).toBe(cfg.tenantId);
+    expect(only!.nodeId).toBe(cfg.nodeId);
+    expect(only!.secuencia).toBe(1);
+    expect(only!.primerRegistro).toBe(true);
+    expect(only!.anteriorHuella).toBeNull();
+    expect(only!.huella).toMatch(/^[0-9A-F]{64}$/);
+    expect(only!.entorno).toBe(deploymentEnvironment(process.env));
+  });
+
+  it("allows a handheld MANUAL CARD sale (200) and files one chained registro under the node/SIF plus one captured payment — parity with a counter card sale", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const deviceCookie = await enrolHandheldCookie(cfg);
+    const sessionPair = await loginOperator(app, operatorId);
+
+    // The reversal was widened (2026-08-30) from cash to cash OR a MANUAL card tender: the `card` tender
+    // on `POST /api/sales` is the datáfono / unintegrated tender — the operator charges the card on a
+    // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes NO network call), so
+    // it is fiscally identical to a cash sale: the SAME chained registro under the node's SIF (`nodeId`,
+    // record-sale.ts:79-82), differing only by the one captured `payments` row it adds. `/api/sales` is
+    // therefore no longer fenced against a handheld at all — only the INTEGRATED reader (`POST /api/pay`)
+    // stays fenced. The handheld holds BOTH a valid operator session AND a real handheld cookie.
+    // Prove-by-deletion: re-add an `assertNotHandheld(deps, c, "record_sale_card")` on `POST /api/sales`
+    // and this same request 403s instead.
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "card", amount: "3.00" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const ticket = await res.json();
+    expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
+
+    // Exactly ONE chained fiscal record, INDISTINGUISHABLE from a counter card record: the SAME
+    // chain-opening shape the handheld cash parity test above asserts (own tenant, node = cfg.nodeId — the
+    // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
+    // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
+    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+    });
+    expect(registros).toHaveLength(1);
+    const [only] = registros;
+    expect(only!.tenantId).toBe(cfg.tenantId);
+    expect(only!.nodeId).toBe(cfg.nodeId);
+    expect(only!.secuencia).toBe(1);
+    expect(only!.primerRegistro).toBe(true);
+    expect(only!.anteriorHuella).toBeNull();
+    expect(only!.huella).toMatch(/^[0-9A-F]{64}$/);
+    expect(only!.entorno).toBe(deploymentEnvironment(process.env));
+
+    // The manual-card side effect a cash sale does NOT have: exactly one CAPTURED `payments` row for the
+    // sale, under the sentinel `manual` provider with a freshly minted `manual-…` ref — no reader, no
+    // network call (`recordManualCardPayment` commits inline in the sale transaction). Read on the
+    // superuser admin (RLS bypassed) — the `paymentsFor`/`paymentCount` shape in `working-order.rls.test.ts`.
+    const paymentRows = await suite.admin.execute<{
+      provider: string;
+      state: string;
+      payment_ref: string;
+    }>(sql`select provider, state, payment_ref from payments where tenant_id = ${cfg.tenantId}`);
+    expect(paymentRows.rows).toHaveLength(1);
+    expect(paymentRows.rows[0]!.provider).toBe(MANUAL_PROVIDER);
+    expect(paymentRows.rows[0]!.state).toBe("captured");
+    expect(paymentRows.rows[0]!.payment_ref).toMatch(/^manual-/);
   });
 
   it("allows a sale from an ordinary till — operator session, NO device cookie — 200", async () => {

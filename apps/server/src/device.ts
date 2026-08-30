@@ -27,7 +27,11 @@ import { requireLiveStation } from "./kitchen.js";
 /** The kind of device an enrolment produces. Derived from the `device_kind` pgEnum so it stays in
  * lockstep with the schema. Two kinds are wired end-to-end (mint, enrol, session, firewall): a
  * `kds_station` (an always-on kitchen screen, station-bound) and a `handheld` (a roving, station-less
- * waiter phone — the order-only tableside device). */
+ * waiter phone that takes/fires tableside orders and settles sales at the table for cash or a MANUAL
+ * card tender — the datáfono leg, no integrated reader. A handheld stays fenced from the INTEGRATED card
+ * reader (`/api/pay`) and the other fiscal/cash routes — reprint, drawer-open, place, collect, cancel;
+ * the authoritative fenced/allowed surface is the till-api firewall, `assertNotHandheld` in
+ * device-session.ts and the FENCED/ALLOWED table atop till-api.ts). */
 export type DeviceKind = (typeof deviceKind.enumValues)[number];
 
 /**

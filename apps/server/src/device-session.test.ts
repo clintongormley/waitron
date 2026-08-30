@@ -181,8 +181,9 @@ async function probeTry(
   return (await res.json()) as DeviceBinding | null;
 }
 
-/** Run `assertNotHandheld` behind the shared scaffold: `{ ok: true }` when it passes (no throw), or the
- * thrown code when it refuses. */
+/** Run `assertNotHandheld` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
+ * the thrown code when it refuses. The one firewall guard left after the tender-split was removed, so the
+ * scaffold is inlined here rather than factored across probes. */
 async function probeAssert(
   cfg: TillConfig,
   cookieValue: string | null,

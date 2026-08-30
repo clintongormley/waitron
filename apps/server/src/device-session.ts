@@ -73,7 +73,8 @@ export interface DeviceBinding {
  * Reads and authenticates the request's device cookie against the database, returning the binding on
  * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
  * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
- * know WHETHER a device is present (the order-only firewall) branches on the `null`.
+ * know WHETHER (and what KIND of) device is present — the handheld firewall guard `assertNotHandheld` —
+ * branches on the `null`.
  *
  * The cookie is `${deviceId}.${token}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the token VALIDATES it. Every miss — a missing or malformed cookie, an
@@ -165,10 +166,14 @@ export async function requireDevice(
 }
 
 /**
- * The ORDER-ONLY firewall (spec §5, decision 0.1): a handheld device may not reach a fiscal/cash route.
- * A handheld takes and fires orders but NEVER settles — the bill is paid at the fixed till. Enforced ON
- * THE SERVER so order-only holds even if the client were bypassed, guarding an UNRECOVERABLE fiscal
- * record (CLAUDE.md §5). Called AFTER the route's session guard, on the SAME request.
+ * The handheld firewall (spec §5, decision 0.1; owner reversal 2026-08-30, widened same day): a handheld
+ * device may not reach THIS fiscal/cash route at all. A handheld takes and fires orders, and settles a
+ * sale on `POST /api/sales` for cash OR a manual card tender — both file under the node's SIF (`nodeId`),
+ * not the till (record-sale.ts:79-82), so that route runs NO handheld guard. But every route that runs
+ * THIS guard — the INTEGRATED card reader (`/api/pay`), reprint, drawer, place, collect, cancel — settles
+ * at the fixed till and is refused outright. Enforced ON THE SERVER so the fence holds even if the client
+ * were bypassed, guarding an UNRECOVERABLE fiscal record (CLAUDE.md §5). Called AFTER the route's session
+ * guard, on the SAME request.
  *
  * Absence of a device cookie — an ordinary till, which authenticates by operator SESSION and carries no
  * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which

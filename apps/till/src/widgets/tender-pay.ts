@@ -566,6 +566,28 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
+   * The Card (manual datáfono) tender button, shared verbatim by both idle views (pay + collect).
+   * Extracted so a change to the button lives in one place and the two views cannot drift, matching this
+   * file's own `#renderCardExtras` idiom. A handheld renders it too: it settles a manual card tender on
+   * `POST /api/sales` (the datáfono leg, no reader), which the server firewall permits — only the
+   * INTEGRATED reader (`/api/pay`) is fenced, and the handheld table-order screen threads no provider so
+   * the Card button stays on the manual `#62` path.
+   */
+  #renderCardButton(disabled: boolean) {
+    return html`
+      <wt-button
+        class="pay-card"
+        variant="primary"
+        size="lg"
+        ?disabled=${disabled}
+        @click=${() => this.#onCardTap()}
+      >
+        ${t("tender.card")}
+      </wt-button>
+    `;
+  }
+
+  /**
    * Modes I/T at the collect stage (7c): the order is already placed, so this collects its tender —
    * reusing the SAME cash/card screens Mode P's Pay/Card open (`#startPaying`/`#startCard`); only the
    * cash button's label changes (Collect, not Pay) and the terminal Confirm emits `collect-order`
@@ -584,15 +606,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.collect")}
         </wt-button>
-        <wt-button
-          class="pay-card"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#onCardTap()}
-        >
-          ${t("tender.card")}
-        </wt-button>
+        ${this.#renderCardButton(disabled)}
       </div>
     `;
   }
@@ -614,15 +628,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.pay")}
         </wt-button>
-        <wt-button
-          class="pay-card"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#onCardTap()}
-        >
-          ${t("tender.card")}
-        </wt-button>
+        ${this.#renderCardButton(disabled)}
         <wt-button
           class="hold"
           variant="secondary"

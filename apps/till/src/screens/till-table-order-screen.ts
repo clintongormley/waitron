@@ -329,10 +329,13 @@ export class TillTableOrderScreen extends LitElement {
   /** A tab settlement is in flight (the app's `submitting`), threaded to the embedded pay widget so it
    * disables its confirm affordance — the visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
-  /** Whether this face may SETTLE the tab. A counter/fixed till pays (default `true`); an ORDER-ONLY
-   * handheld does not — the app threads `!handheldMode`, and when `false` the embedded pay section is
-   * not rendered. UI honesty only: the server firewall (handheld-tableside Tasks 5–6) is the real
-   * guarantee that a handheld cannot take payment. The tab total stays visible either way. */
+  /** Whether this face may SETTLE the tab. Both the counter/fixed till and the handheld pay, so this
+   * DEFAULTS to `true` and the app leaves it unset — the embedded pay section renders with BOTH the cash
+   * and manual-card tenders (the handheld screen threads no `cardProvider`, so Card stays the manual
+   * datáfono path). A caller that passes `false` (a future non-settling face) hides the pay section
+   * entirely. UI honesty only: the server firewall (`/api/sales` node-keyed sale) is the real guarantee —
+   * it permits a handheld cash or manual-card tender and fences only the INTEGRATED reader (`/api/pay`).
+   * The tab total stays visible either way. */
   @property({ type: Boolean }) canSettle = true;
   /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
    * the floor screen renders. The move/join/merge/transfer action flow (TS-3/TS-4) reads it for its

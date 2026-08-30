@@ -475,6 +475,27 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
+  it("both idle views (pay + collect) render the Card button by default", async () => {
+    // Asserts BOTH idle views show the Card button by default (they share `#renderCardButton`, but this
+    // pins the observable behaviour, not the extraction itself). Every settling face renders it — the
+    // counter/fixed till AND the handheld: a handheld settles a MANUAL card tender on `POST /api/sales`
+    // (the server fences only the INTEGRATED reader, `/api/pay`), and the handheld table-order screen
+    // threads no `cardProvider`, so Card stays the #62 manual path.
+    const payStore = new WorkingOrderStore();
+    payStore.addProduct(cafe, "2");
+    const pay = await mountWidget<TillTenderPay>("till-tender-pay", { store: payStore });
+    expect(query(pay.el, ".pay-card")).not.toBeNull(); // Mode P (prepay) pay view
+
+    const collectStore = new WorkingOrderStore();
+    collectStore.addProduct(cafe, "2");
+    const collect = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store: collectStore,
+      mode: "invoice_first",
+      stage: "collect",
+    });
+    expect(query(collect.el, ".pay-card")).not.toBeNull(); // Modes I/T collect view
+  });
+
   it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

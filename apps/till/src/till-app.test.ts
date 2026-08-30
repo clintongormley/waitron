@@ -2001,20 +2001,23 @@ describe("till-app", () => {
         expect(screen.products).toEqual([cafe]);
       });
 
-      it("lets a normal (counter/fixed) till settle the tab — canSettle threads through as true", async () => {
+      it("a counter till can settle the tab — canSettle true (default)", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue([tabLine]),
         });
         const screen = await toTableOrder(el, openTable);
-        // A fixed till is not in handheld mode ⇒ the pay widget is available.
+        // The pay section is available. The screen threads no `cardProvider`, so the embedded pay widget
+        // offers BOTH tenders — cash and the manual (datáfono) card.
         expect(screen.canSettle).toBe(true);
       });
 
-      it("an order-only handheld cannot settle — canSettle threads through as false", async () => {
+      it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
         // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
-        // table reaches the table-order screen. It is ORDER-ONLY, so the pay section must be hidden.
+        // table reaches the table-order screen. It may settle at `POST /api/sales` for cash OR a manual
+        // card tender (the server firewall permits both, fencing only the INTEGRATED reader, `/api/pay`),
+        // so the pay section SHOWS with both tenders.
         const { el } = await mountApp({
           getDeviceIdentity: vi
             .fn()
@@ -2035,7 +2038,7 @@ describe("till-app", () => {
         await flush(el);
         const screen = tableOrder(el)!;
         expect(screen).not.toBeNull();
-        expect(screen.canSettle).toBe(false);
+        expect(screen.canSettle).toBe(true);
       });
 
       it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {

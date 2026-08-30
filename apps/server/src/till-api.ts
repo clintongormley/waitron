@@ -147,9 +147,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
   "person.not_found": 401,
   "person.suspended": 403,
-  // The order-only firewall (spec §5): a handheld device presented its cookie on `POST /api/sales`. A
-  // handheld takes and fires orders but never SETTLES — `assertNotHandheld` refuses it here so the
-  // order-only rule holds server-side even if the client is bypassed. 403: authenticated but forbidden.
+  // The handheld firewall (spec §5; owner reversal 2026-08-30): a handheld device tried a fiscal/cash
+  // action it may not perform — the INTEGRATED card reader (`POST /api/pay`), reprint, drawer, place,
+  // collect or cancel. (`POST /api/sales` is NOT here: a handheld settles cash or a manual card there,
+  // both node-keyed, record-sale.ts:79-82.) `assertNotHandheld` refuses it server-side even if the client
+  // is bypassed. 403: authenticated but forbidden.
   "device.forbidden_action": 403,
   "session.not_open": 401,
   "session.required": 401,
@@ -415,25 +417,32 @@ function mountCourseVerb(
  * `POST /api/sales` to THIS same function, each handler wrapped in `run` (above) so the whole surface
  * maps errors identically.
  *
- * ORDER-ONLY FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1;
- * `assertNotHandheld`, device-session.ts). A `handheld` device may TAKE and FIRE orders but must NEVER
- * write a fiscal record, a chain link, an invoice number, a cash-drawer row, or an amendment-log entry —
- * those settle at the fixed till. Every route that can do any of those runs `assertNotHandheld` right
- * after `requireSession`; the rest do not. When you add a route, decide which side it is on and, if it
- * touches ANY of the above, FENCE it (fail-safe for fiscal — when in doubt, fence). The full split
- * (whole-branch review, 2026-08-30):
+ * HANDHELD FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1; owner reversal
+ * 2026-08-30, widened same day). A `handheld` device may TAKE and FIRE orders, and may SETTLE a sale on
+ * `POST /api/sales` for CASH or a MANUAL card tender — both file under the submitting NODE's SIF
+ * (`nodeId`), not the till (record-sale.ts:79-82), so a handheld registro is indistinguishable from a
+ * counter one; the manual card is the datáfono leg (a SEPARATE bank terminal the POS never talks to,
+ * `recordManualCardPayment` makes no network call), so it needs no reader. What stays fenced is the
+ * INTEGRATED card reader (`POST /api/pay`) and the deferred-settlement / amendment-log / drawer writers —
+ * every other fiscal record, chain link, invoice number, cash-drawer row or amendment-log entry settles at
+ * the fixed till. The fenced routes run `assertNotHandheld` right after `requireSession`; the sale route
+ * and the rest run neither. When you add a route, decide which side it is on and, if it touches ANY
+ * fiscal/cash write NOT reachable through the node-keyed sale path, FENCE it (fail-safe for fiscal — when
+ * in doubt, fence). The full split:
  *
- *   FENCED (fiscal / cash / amendment-log writers — `assertNotHandheld`):
- *     POST /api/sales                      record_sale  — files a chained registro
- *     POST /api/pay                        pay          — integrated-card settlement
+ *   FENCED (integrated card + deferred-settlement / cash / amendment-log writers — `assertNotHandheld`):
+ *     POST /api/pay                        pay          — integrated-card reader settlement
  *     POST /api/sales/:id/reprint          reprint      — reprints a FILED fiscal ticket
  *     POST /api/drawer/open                drawer_open  — cash-drawer open + audit row
  *     POST /api/working-orders/:id/place   place        — Mode I files a deferred chained invoice
  *     POST /api/working-orders/:id/collect collect      — Mode T immediate sale / Mode I settlement
  *     POST /api/working-orders/:id/cancel  cancel       — appends `order_cancelled` to the amendment log
  *
- *   ALLOWED (order-taking, floor-ops, reads, config — NO fiscal/cash/amendment write): the session/
- *     locale/roster/boot routes; GET /api/products; the park/list/retrieve/edit/abandon working-order
+ *   ALLOWED (order-taking, the node-keyed sale, floor-ops, reads, config — NO fenced fiscal/cash/amendment
+ *     write): the session/locale/roster/boot routes; GET /api/products;
+ *     POST /api/sales itself (a handheld settles cash or a manual card there — both file a chained registro
+ *     under the node's SIF, no reader, exactly like a counter walk-up sale); the
+ *     park/list/retrieve/edit/abandon working-order
  *     routes; send-to-prep and every kitchen/expo verb (fire/ready/away, per-line + whole-ticket bump,
  *     `GET /api/stations`+queues, `GET /api/expo/queue`); the NON-fiscal kitchen handover
  *     `POST /api/orders/:id/collect` (stamps only `collected_at`) and reprint `POST /api/orders/:id/reprint`
@@ -684,12 +693,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld device may take and fire orders but must NEVER settle
-      // a sale — the bill is paid at the fixed till. Enforced HERE, on the server, so it holds even if
-      // the client were bypassed; a handheld cookie makes this throw `device.forbidden_action` (403)
-      // before any fiscal record — the unrecoverable one (CLAUDE.md §5) — could be written. An ordinary
-      // till carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "record_sale");
+      // NOT fenced against a handheld (owner reversal, widened 2026-08-30): `POST /api/sales` settles a
+      // cash OR a manual-card tender, and both file under the submitting node's SIF (`nodeId`), not the
+      // till (record-sale.ts:79-82). The manual `card` tender is the datáfono leg — the operator charges a
+      // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes no network call), so
+      // it is fiscally identical to cash and needs no reader. Only the INTEGRATED reader (`POST /api/pay`,
+      // below) stays fenced (`assertNotHandheld`). An ordinary till carries no device cookie either way.
       const body = await c.req.json<TillSaleRequest>();
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
@@ -720,10 +729,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld takes and fires orders but NEVER settles — the bill is
-      // paid at the fixed till. A handheld cookie throws `device.forbidden_action` (403) here, before the
-      // provider guard and any fiscal write, so order-only holds even if the client were bypassed. An
-      // ordinary till carries no device cookie and passes.
+      // Handheld firewall (spec §5): integrated card pay settles at the fixed till — a handheld never
+      // settles THROUGH pay (it may settle a cash or manual-card sale on `/api/sales`, node-keyed, but not
+      // the INTEGRATED card leg here — that drives a real reader). A handheld cookie throws
+      // `device.forbidden_action` (403) here, before the provider
+      // guard and any fiscal write, so the fence holds even if the client were bypassed. An ordinary
+      // till carries no device cookie and passes.
       await assertNotHandheld(deps, c, "pay");
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
@@ -861,11 +872,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
+      // Handheld firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
       // (`placeOrder` → `recordSale`) — the unrecoverable fiscal record (CLAUDE.md §5) — so a handheld,
-      // which may take and fire orders but NEVER settle, is refused `device.forbidden_action` (403) HERE,
-      // before the id parse and any fiscal write, exactly as the sale/pay routes are. An ordinary till
-      // carries no device cookie and passes.
+      // which never settles THROUGH place (that deferred invoice settles at the fixed till; a handheld's
+      // settlement is a cash or manual-card sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
+      // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
+      // device cookie and passes.
       await assertNotHandheld(deps, c, "place");
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const result = await placeOrder(
@@ -1088,7 +1100,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
+      // Handheld firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
       // `device.forbidden_action` (403) before the id parse. An ordinary till carries no device cookie.
       await assertNotHandheld(deps, c, "reprint");
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
@@ -1143,7 +1155,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld has no cash drawer to open — refused
+      // Handheld firewall (spec §5): a handheld has no cash drawer to open — refused
       // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries no
       // device cookie and passes.
       await assertNotHandheld(deps, c, "drawer_open");
@@ -1201,9 +1213,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
+      // Handheld firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
       // Mode I settles the deferred invoice (`collectOrder`) — a chained fiscal write, the unrecoverable
-      // record (CLAUDE.md §5). A handheld may take and fire orders but NEVER settle, so it is refused
+      // record (CLAUDE.md §5). A handheld never settles THROUGH collect (that stays fenced even for cash;
+      // a handheld's settlement path is a cash or manual-card sale on `/api/sales`), so it is refused
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
       await assertNotHandheld(deps, c, "collect");
@@ -1228,7 +1241,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): cancelling a placed order APPENDS an `order_cancelled` entry to the
+      // Handheld firewall (spec §5): cancelling a placed order APPENDS an `order_cancelled` entry to the
       // tamper-evident hash-chained amendment log (`cancelPlacedOrder`) — a fiscal-adjacent mutation a
       // handheld must not perform. Refused `device.forbidden_action` (403) HERE, before the reason/id
       // parse and any amendment write. An ordinary till carries no device cookie and passes.
