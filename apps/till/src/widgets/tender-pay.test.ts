@@ -475,6 +475,43 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
+  it("cashOnly hides the Card button in the pay view, keeping cash and Hold", async () => {
+    // A handheld settles CASH only — a card tender is fenced client- AND server-side (Task 1's
+    // /api/sales firewall). `cashOnly` is the honest affordance: no Card button anywhere.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, cashOnly: true });
+    expect(query(el, ".pay")).not.toBeNull(); // cash stays
+    expect(query(el, ".hold")).not.toBeNull(); // Hold stays
+    expect(query(el, ".pay-card")).toBeNull(); // Card is hidden
+    expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("tender.card"));
+  });
+
+  it("default (cashOnly false) keeps the Card button in the pay view (counter behaviour)", async () => {
+    // Prove-by-deletion control for the gate above: with the gate removed, this would still pass but
+    // the cashOnly test would fail — so this pins the counter/fixed-till Card button.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    expect(query(el, ".pay-card")).not.toBeNull();
+  });
+
+  it("cashOnly hides the Card button in the collect view too (Modes I/T)", async () => {
+    // Gate BOTH idle views so `cashOnly` means "no card, anywhere" — a future Mode-I handheld cannot
+    // leak a Card button through the collect view.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+      stage: "collect",
+      cashOnly: true,
+    });
+    expect(query(el, ".pay")).not.toBeNull(); // Collect (cash) stays
+    expect(query(el, ".pay-card")).toBeNull(); // Card is hidden
+  });
+
   it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

@@ -329,11 +329,18 @@ export class TillTableOrderScreen extends LitElement {
   /** A tab settlement is in flight (the app's `submitting`), threaded to the embedded pay widget so it
    * disables its confirm affordance — the visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
-  /** Whether this face may SETTLE the tab. A counter/fixed till pays (default `true`); an ORDER-ONLY
-   * handheld does not — the app threads `!handheldMode`, and when `false` the embedded pay section is
-   * not rendered. UI honesty only: the server firewall (handheld-tableside Tasks 5–6) is the real
-   * guarantee that a handheld cannot take payment. The tab total stays visible either way. */
+  /** Whether this face may SETTLE the tab. Both the counter/fixed till and the handheld pay (the app
+   * threads `true`), so the embedded pay section renders; a handheld is narrowed to cash by
+   * {@link cashOnly} below rather than hidden outright. When `false` the pay section is not rendered
+   * at all. UI honesty only: the server firewall (Task 1's tender-aware `/api/sales`) is the real
+   * guarantee — it permits a handheld cash tender and fences a handheld card. The tab total stays
+   * visible either way. */
   @property({ type: Boolean }) canSettle = true;
+  /** Whether this face may settle CASH ONLY — hide the embedded pay widget's Card button. A handheld
+   * settles cash but not card (the server `/api/sales` firewall fences a handheld card), so the app
+   * threads `handheldMode`; the counter/fixed till leaves this `false` and keeps both tenders. UI
+   * honesty only — the server guard is the real boundary. */
+  @property({ type: Boolean }) cashOnly = false;
   /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
    * the floor screen renders. The move/join/merge/transfer action flow (TS-3/TS-4) reads it for its
    * target lists: FREE tables to move/join onto, and OTHER open tabs to merge/transfer with. Empty until
@@ -653,7 +660,11 @@ export class TillTableOrderScreen extends LitElement {
                 @park-order=${(event: Event) => this.#onTenderPark(event)}
               >
                 <h2>${t("table.pay_title")}</h2>
-                <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
+                <till-tender-pay
+                  .store=${this.#payStore}
+                  .busy=${this.busy}
+                  .cashOnly=${this.cashOnly}
+                ></till-tender-pay>
               </section>`
             : nothing
         }

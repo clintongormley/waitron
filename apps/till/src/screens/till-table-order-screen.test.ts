@@ -212,6 +212,17 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
   });
 
+  it("threads cashOnly to the embedded pay widget (a handheld settles cash only)", async () => {
+    // A handheld shows the pay section (canSettle true) but cash only — the Card button is hidden.
+    // `cashOnly` threads screen → till-tender-pay, which drops `.pay-card`.
+    const { el } = await mount({ lines: [pendingLine], canSettle: true, cashOnly: true });
+    await openDrawer(el);
+    const widget = tender(el);
+    expect(widget.cashOnly).toBe(true);
+    await widget.updateComplete;
+    expect(widget.shadowRoot!.querySelector(".pay-card")).toBeNull();
+  });
+
   it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);

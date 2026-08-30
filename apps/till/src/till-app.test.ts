@@ -2008,13 +2008,17 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue([tabLine]),
         });
         const screen = await toTableOrder(el, openTable);
-        // A fixed till is not in handheld mode ⇒ the pay widget is available.
+        // A fixed till is not in handheld mode ⇒ the pay widget is available, with BOTH tenders
+        // (Card too — cashOnly is false at the counter).
         expect(screen.canSettle).toBe(true);
+        expect(screen.cashOnly).toBe(false);
       });
 
-      it("an order-only handheld cannot settle — canSettle threads through as false", async () => {
+      it("a handheld settles cash — canSettle true, cashOnly true", async () => {
         // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
-        // table reaches the table-order screen. It is ORDER-ONLY, so the pay section must be hidden.
+        // table reaches the table-order screen. Since Task 1 it may settle a CASH tender (the server
+        // /api/sales firewall permits handheld cash, fences handheld card), so the pay section SHOWS,
+        // cash only — the Card button is hidden (cashOnly true).
         const { el } = await mountApp({
           getDeviceIdentity: vi
             .fn()
@@ -2035,7 +2039,8 @@ describe("till-app", () => {
         await flush(el);
         const screen = tableOrder(el)!;
         expect(screen).not.toBeNull();
-        expect(screen.canSettle).toBe(false);
+        expect(screen.canSettle).toBe(true);
+        expect(screen.cashOnly).toBe(true);
       });
 
       it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {

@@ -229,6 +229,14 @@ export class TillTenderPay extends LitElement {
    * `willUpdate`.
    */
   @property() cardOutcome?: CardOutcome;
+  /**
+   * Cash only — hide the Card button in every idle view. Set for a handheld, which may settle a CASH
+   * tender but not a card one: the server `/api/sales` firewall fences a handheld card 403
+   * `device.forbidden_action` (Task 1's tender-aware route), so offering Card here would be a dead
+   * affordance. The counter/fixed till leaves this `false` and keeps both tenders. UI honesty only —
+   * the server guard is the real boundary; this widget hides what the server would reject.
+   */
+  @property({ type: Boolean }) cashOnly = false;
 
   @state() private view: View = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
@@ -584,15 +592,21 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.collect")}
         </wt-button>
-        <wt-button
-          class="pay-card"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#onCardTap()}
-        >
-          ${t("tender.card")}
-        </wt-button>
+        ${
+          this.cashOnly
+            ? nothing
+            : html`
+                <wt-button
+                  class="pay-card"
+                  variant="primary"
+                  size="lg"
+                  ?disabled=${disabled}
+                  @click=${() => this.#onCardTap()}
+                >
+                  ${t("tender.card")}
+                </wt-button>
+              `
+        }
       </div>
     `;
   }
@@ -614,15 +628,21 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.pay")}
         </wt-button>
-        <wt-button
-          class="pay-card"
-          variant="primary"
-          size="lg"
-          ?disabled=${disabled}
-          @click=${() => this.#onCardTap()}
-        >
-          ${t("tender.card")}
-        </wt-button>
+        ${
+          this.cashOnly
+            ? nothing
+            : html`
+                <wt-button
+                  class="pay-card"
+                  variant="primary"
+                  size="lg"
+                  ?disabled=${disabled}
+                  @click=${() => this.#onCardTap()}
+                >
+                  ${t("tender.card")}
+                </wt-button>
+              `
+        }
         <wt-button
           class="hold"
           variant="secondary"
