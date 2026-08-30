@@ -429,8 +429,9 @@ async function parsePasskeyVerifyBody(
 }
 
 /**
- * Mounts the dashboard's management-session routes on an existing Hono app: the pre-login staff
- * roster, login and logout. Task 4 adds the gated staff CRUD routes to THIS same function, each
+ * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster (read
+ * post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff CRUD routes
+ * to THIS same function, each
  * handler wrapped in `run` (above) so the whole surface maps errors identically. Mirrors
  * `mountTillApi`'s shape — `withTenant(deps.db, deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB
  * touch, so RLS scopes each read/write to this dashboard's own tenant.
