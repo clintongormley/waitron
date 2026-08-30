@@ -708,6 +708,22 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const axes = await readDeploymentAxes(db);
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
+  // The four primary-only SINGLETON duties below (sync SOURCE, retention sweep, scheduled backup, outbound
+  // tunnel client) gate on THIS, not on `isMirror`: they must run on the ONE `singleton_role='primary'`
+  // node, never on every non-mirror node (promotion runbook design §2/§3c — the same axis `singletonPass`
+  // already gates the fiscal drain/reconcile pass on, #158). The bug this fixes: a SELL-ONLY LOCAL
+  // SECONDARY (`mode='primary'`, `singleton_role='secondary'`) is NOT a mirror, so the old `!isMirror`
+  // gate ran all four on it — a second node pruning the shared `sync_log`, dialing the one outbound tunnel,
+  // writing scheduled backups and serving the authoritative sync source, duplicating the primary
+  // (active-active). Because `deployment_role_valid_ck` rejects `(mirror, primary)`, `singleton_role='primary'`
+  // already implies `mode='primary'`, so this predicate alone is correct and a mirror is always 'secondary'.
+  //
+  // BOOT decision, captured once like `isMirror` — DELIBERATELY not live. An in-process promotion (#160
+  // `promoteLocalSecondaryToPrimary` flips `singleton_role` live and starts the fiscal pass next tick) will
+  // NOT start these four without a restart; the live worker-lifecycle manager that would is promotion
+  // Slice 3 (runbook §3c), deferred behind reserved-SIF staging. This change only moves the gate from `mode`
+  // to `singleton_role` (fixing the active-active duplication) — it does not make the four start live.
+  const isSingletonPrimary = holders.singletonRole.current === "primary";
   // FAIL CLOSED before we even seed the mirror's UNAUTHENTICATED admin surface: a mirror auto-logs a
   // full-admin viewer in (`ensureMirrorViewer` + `mirrorSession` below), so the ONLY thing keeping it
   // off the network is the loopback default of `config.httpHost`. Refuse a non-loopback bind under
@@ -1021,10 +1037,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   let retentionWorker: Promise<void> | undefined;
   if (syncConfig !== undefined) {
     syncDb = await createPostgresDb(syncConfig.databaseUrl);
-    // A mirror is a SUBSCRIBER, not a source (C2a design §8): it pulls + applies and never serves the
-    // peer-authenticated source group, so `mountSyncApi` is primary-only. The pull worker below still
-    // runs on a mirror — pulling is the mirror's whole job — but through the tunnel HTTP client.
-    if (!isMirror) {
+    // The authoritative replication SOURCE — only the SINGLETON primary serves it (a mirror is a
+    // subscriber that pulls + applies and never sources, C2a design §8; a sell-only local secondary must
+    // not duplicate the primary's source either). So `mountSyncApi` gates on `isSingletonPrimary`. The
+    // pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
+    // pulls through the tunnel HTTP client, a secondary pulls too), so it stays outside this gate.
+    if (isSingletonPrimary) {
       mountSyncApi(
         app,
         {
@@ -1101,9 +1119,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires under a
     // mocked worker in the test, but an unhandled rejection in the pre-close() window would be silent
     // otherwise.
-    // Retention is primary-only: a mirror holds no `sync_log` (it applies, never captures), so it
-    // prunes nothing — no sweep, and no `sync.retention_unconfigured` warn either (C2a design §8).
-    if (!isMirror && syncConfig.retentionDatabaseUrl !== undefined) {
+    // Retention is a SINGLETON duty: only the singleton primary prunes the shared `sync_log`. A mirror
+    // holds no `sync_log` (it applies, never captures) and a sell-only local secondary must not run a
+    // SECOND pruner against the primary's log — so both skip the sweep AND the `sync.retention_unconfigured`
+    // warn (C2a design §8). Gates on `isSingletonPrimary`, not `!isMirror`.
+    if (isSingletonPrimary && syncConfig.retentionDatabaseUrl !== undefined) {
       retentionDb = await createPostgresDb(syncConfig.retentionDatabaseUrl);
       retentionWorker = runRetentionSweep({
         db: retentionDb,
@@ -1119,19 +1139,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       retentionWorker.catch((err) =>
         log("error", "sync.worker_rejected", { errorCode: codeOf(err) }),
       );
-    } else if (!isMirror) {
-      // A primary with sync on but no retention role configured: the log will grow unpruned. Loud, not
-      // fatal (spec §3.2/§8 — opt-in, documented-required-in-prod), so an existing sync host that has
-      // not provisioned the role still boots unchanged. A mirror skips this warn too (it prunes nothing).
+    } else if (isSingletonPrimary) {
+      // A singleton primary with sync on but no retention role configured: the log will grow unpruned.
+      // Loud, not fatal (spec §3.2/§8 — opt-in, documented-required-in-prod), so an existing sync host that
+      // has not provisioned the role still boots unchanged. A non-singleton node (mirror or local secondary)
+      // skips this warn too — it prunes nothing, so an unconfigured retention role is not its concern.
       log("warn", "sync.retention_unconfigured", {});
     }
   }
 
   // The scheduled local pg_dump backup (onboarding slice 4b-ii). OPT-IN on WAITRON_BACKUP_DIR
-  // (`loadBackupConfig` → undefined otherwise), and PRIMARY-only: a mirror is a read replica whose
-  // primary owns the backup duty, so it takes the SAME `!isMirror` gate the retention sweep and the
-  // tunnel client take (a mirror holds a pulled copy, not the source of record it must dump; and the
-  // RLS probe below needs a SUPERUSER/BYPASSRLS role the mirror is not provisioned with). It MIRRORS
+  // (`loadBackupConfig` → undefined otherwise), and a SINGLETON duty: the singleton primary owns the
+  // backup, so it takes the SAME `isSingletonPrimary` gate the retention sweep and the tunnel client take
+  // (a mirror holds a pulled copy, not the source of record it must dump, and its RLS probe below needs a
+  // SUPERUSER/BYPASSRLS role it is not provisioned with; a sell-only local secondary must not run a SECOND
+  // backup writer against the same dir/source either). It MIRRORS
   // the retention worker's shape exactly: its OWN AbortController + worker promise (declared beside the
   // sync/tunnel ones so close() below tears it down), a `.catch` logging `codeOf`, and a teardown that
   // aborts + awaits. `runBackupSweep` shells out to `pg_dump` and holds no long-lived pool of its own,
@@ -1153,12 +1175,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // closed in the `finally` whichever way it settles, so nothing leaks. `backupWorker` is the single
   // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
   // unreachable role leaves it `undefined`), and the box-status wiring and teardown below both gate on
-  // `backupWorker !== undefined`. When `backupConfig` is set on a mirror the config is simply not
-  // consulted (the `!isMirror` gate), matching retention/tunnel.
+  // `backupWorker !== undefined`. When `backupConfig` is set on a non-singleton node (mirror or local
+  // secondary) the config is simply not consulted (the `isSingletonPrimary` gate), matching retention/tunnel.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
   let backupWorker: Promise<void> | undefined;
-  if (!isMirror && backupConfig !== undefined) {
+  if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
@@ -1183,7 +1205,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // probe's own errors are already handled by the `catch` above.
       if (probeDb !== undefined) await probeDb.close().catch(() => {});
     }
-  } else if (!isMirror) {
+  } else if (isSingletonPrimary) {
     log("info", "backup.disabled", {});
   }
 
@@ -1276,10 +1298,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const tunnelConfig = loadTunnelConfig(env);
   const tunnelController = new AbortController();
   let tunnelWorker: Promise<void> | undefined;
-  // The tunnel CLIENT dials OUT from the box to the relay (C2a design §8) — a mirror never does (it is
-  // the cloud side, which the box dials INTO, not a box). So the tunnel is primary-only: a mirror
-  // starts no client and logs nothing here (it is not a tunnel-client host).
-  if (!isMirror && tunnelConfig !== undefined) {
+  // The tunnel CLIENT dials OUT from the box to the relay (C2a design §8) — a SINGLETON duty: only the
+  // singleton primary keeps the one outbound tunnel. A mirror is the cloud side the box dials INTO (never a
+  // client), and a sell-only local secondary must not open a SECOND tunnel beside the primary's — so both
+  // start no client and log nothing here. Gates on `isSingletonPrimary`, not `!isMirror`.
+  if (isSingletonPrimary && tunnelConfig !== undefined) {
     tunnelWorker = runTunnelClient({
       relayHost: tunnelConfig.relayHost,
       relayPort: tunnelConfig.relayPort,
@@ -1297,7 +1320,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       log,
     });
     tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
-  } else if (!isMirror) {
+  } else if (isSingletonPrimary) {
     log("info", "tunnel.disabled", {});
   }
 
@@ -1309,7 +1332,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses `mirror.no_relay`
   // before minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
   // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
-  if (!isMirror && retentionDb !== undefined) {
+  // Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now only opened on the
+  // singleton primary, so the `!== undefined` already implies it, but gating explicitly on
+  // `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as the sweep it depends on.
+  if (isSingletonPrimary && retentionDb !== undefined) {
     mountMirrorBundleApi(
       app,
       {
