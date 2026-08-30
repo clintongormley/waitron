@@ -528,8 +528,7 @@ Provisioning/build*).
     installation number), so the design's "disjoint series on re-mint" is unmet — a same-day post-backup
     invoice-number **collision** risk (non-catastrophic, backstopped by AEAT error `3000`; NOT the chain
     fork). **Follow-up: a disjoint-series option for the cold-restore re-registration path.**
-- **4c — break-glass — implemented on `feat/onboarding-4c-break-glass`** (a post-merge docs commit
-  flips this to LANDED). An on-box **`waitron-break-glass`** CLI (the "local console" of spec §12/§17,
+- **4c — break-glass — LANDED #166**. An on-box **`waitron-break-glass`** CLI (the "local console" of spec §12/§17,
   resolved 2026-08-30 to a loopback CLI; held-button/recovery-boot are firmware, parked) resets a
   locked-out admin's dashboard **password (+ PIN) and reactivates** a suspended admin, for the box's
   single `WAITRON_TILL_TENANT_ID`, targeting `role='admin'` (0 → error, N → refuse + `--person`).
