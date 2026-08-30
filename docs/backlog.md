@@ -152,8 +152,11 @@ demo or behind-the-scenes".
 
 **Tier B — an owner will ask; product-defining:**
 
-6. **Reservations (Bookings-1).** Staff-entered, day-list; specced + planned
-   (`2026-08-17-bookings-1*`). MISSING today (only a "Reserved" floor *status* exists). Supervised.
+6. **Reservations (Bookings-1). LANDED (#PR pending).** Staff-entered day-list: `bookings` table
+   (FORCE RLS), CRUD/lifecycle verbs, seat-opens-a-tab (TS-1), `booking.manage` management routes,
+   "Reserved HH:MM" on the floor, dashboard day-list screen. **Future:** public/online/QR booking,
+   availability/double-booking prevention, reminders (SMS/email), a customer/CRM entity, recurring
+   bookings, a calendar grid, deposits.
 7. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
    (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. **Pairs
    with tableside ordering (#4).** NEW. In design (2026-08-30): reusable option groups (min/max/required)
@@ -274,7 +277,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
 | 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
-| 14 | Bookings | Bookings-1 specced + planned | **build it → demo Tier B #6** |
+| 14 | Bookings | **Bookings-1 BUILT (#PR pending)** — staff-entered reservations: `bookings` table (FORCE RLS) + CRUD/lifecycle verbs + seat-opens-a-tab (TS-1) + `booking.manage` management routes + "Reserved HH:MM" on the floor + dashboard day-list screen | FUTURE: public/online/QR booking, availability/double-booking prevention, reminders (SMS/email), a customer/CRM entity, recurring bookings, a calendar grid, deposits |
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
@@ -662,7 +665,7 @@ recipe-authoring UI are built.
   demand-forecast reorder is deferred** — build the deterministic system first. Received supplier
   invoices are already captured (`@waitron/purchasing`) and feed the accounting/modelo-303 side.
 
-### Table-service completion (TS-5 + Bookings-1 pulled into the demo; rest parked)
+### Table-service completion (Bookings-1 LANDED; TS-5 pulled into the demo; rest parked)
 
 The table-service core (TS-1..TS-4), the floor plan (FP-1/FP-2), and the KDS displays (KDS-1/2/3) are
 built. Remaining, greenfield + product-heavy → **specced with the owner, run supervised, never landed
@@ -672,9 +675,11 @@ unattended**:
   sale + `registro`); dedicated fiscal review done; a real-PG `unjoinTable` lock-order deadlock caught in
   review and fixed. Two small followups LANDED (#181): `table.not_shared` for a sole-anchor unjoin;
   `priceOrderLines` skips the catalogue read for empty lines. Spec/plan `2026-08-17-table-service-ts5-*`.
-- **Bookings-1** — staff-entered reservations (local date+time wall-clock, `booking.manage`-gated,
-  dashboard day-list). Core is independent; the seat-opens-a-tab + reserved-on-floor integrations
-  build on TS-1 + FP-1. Spec/plan `2026-08-17-bookings-1*`.
+- **Bookings-1 — LANDED (#PR pending).** Staff-entered reservations (local date+time wall-clock,
+  `booking.manage`-gated): `bookings` table (FORCE RLS), CRUD/lifecycle, seat-opens-a-tab (TS-1),
+  "Reserved HH:MM" on the floor (FP-1), dashboard day-list screen. **Future:** public/online/QR
+  booking, availability/double-booking prevention, reminders, a customer/CRM entity, recurring
+  bookings, a calendar grid, deposits.
 - **Device-scoped fire/collect routes** — a KDS device is advance-only today; a `fire_control=kitchen`
   or expo *device* needs server-side `/api/device/*` fire + collect routes.
 - **Owner-added, not yet designed** (each reopens a settled decision — do not read the earlier
