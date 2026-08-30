@@ -28,9 +28,10 @@ import { requireLiveStation } from "./kitchen.js";
  * lockstep with the schema. Two kinds are wired end-to-end (mint, enrol, session, firewall): a
  * `kds_station` (an always-on kitchen screen, station-bound) and a `handheld` (a roving, station-less
  * waiter phone that takes/fires tableside orders and settles sales at the table for cash or a MANUAL
- * card tender — the datáfono leg, no integrated reader; only the INTEGRATED card reader (`/api/pay`) and
- * the amendment/drawer routes stay fenced — the boundary lives in the till-api firewall,
- * `assertNotHandheld` in device-session.ts). */
+ * card tender — the datáfono leg, no integrated reader. A handheld stays fenced from the INTEGRATED card
+ * reader (`/api/pay`) and the other fiscal/cash routes — reprint, drawer-open, place, collect, cancel;
+ * the authoritative fenced/allowed surface is the till-api firewall, `assertNotHandheld` in
+ * device-session.ts and the FENCED/ALLOWED table atop till-api.ts). */
 export type DeviceKind = (typeof deviceKind.enumValues)[number];
 
 /**
