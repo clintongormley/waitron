@@ -504,10 +504,22 @@ Provisioning/build*).
     docker-exec `pg_dump` smoke, not the wrapper itself — same posture `time-health.ts`'s `defaultRun`
     takes); and the boot probe has **no connect-timeout**, so a hung backup DB would stall boot exactly
     as any boot-time DB query does — worth a bounded connect later.
-  - **4b-iii — cold-restore / fresh-chain runbook.** Per the owner + #158's cold-restore runbook:
-    **restore + a FRESH chain must let a no-hot-failover venue go live unblocked**, month-end AEAT
-    `consultar` reconciling the lost tail.
-- **4c — break-glass.** Loopback-only admin reset; factory-reset design-only.
+  - **4b-iii — cold-restore / fresh-chain runbook — WRITTEN** (docs-only, lands direct to main):
+    `docs/superpowers/plans/2026-08-30-onboarding-slice4b-iii-cold-restore-runbook.md` turns
+    promotion-runbook §5d into a concrete operator procedure against the *built* tooling — restore the
+    4b-ii `pg_dump` (`pg_restore`), unpack the 4b-i recovery bundle (`waitron-recovery unpack`), pass
+    the environment handshake, then **mint a FRESH SIF via `register-till` (NOT the wizard, which
+    `setup.already_provisioned` blocks) BEFORE the first sale** so the box cannot resume the restored
+    chain (the one unrecoverable huella fork), go live `(primary,primary)`, reconcile the lost tail at
+    month-end (`consultar`, not a go-live gate). Confirmed: no code needed — the box cannot self-detect
+    a restore (a normal restart also continues the chain), so the fresh-SIF ordering is
+    operator-enforced by design, and the fresh-chain machinery (`registerSif` — new installation number
+    + chain-head reset) already exists. **Gap surfaced (follow-up):** `register-till`/`registerSif` do
+    NOT freshen the invoice **series**, but AEAT dedup keys on `(NIF, series, date, número)` (not the
+    installation number), so the design's "disjoint series on re-mint" is unmet — a same-day post-backup
+    invoice-number **collision** risk (non-catastrophic, backstopped by AEAT error `3000`; NOT the chain
+    fork). **Follow-up: a disjoint-series option for the cold-restore re-registration path.**
+- **4c — break-glass.** Loopback-only admin reset; factory-reset design-only. **← next.**
 
 **Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid
 real-cert):**
