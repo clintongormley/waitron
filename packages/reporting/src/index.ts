@@ -1,5 +1,7 @@
+export { currentBusinessDay, validateBusinessDay } from "./business-day.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
+export { computeTopSellers } from "./top-sellers.js";
 export { computeVatReturn } from "./vat-return.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
@@ -37,6 +39,8 @@ export type {
   TenderMethod,
   TenderMethodLine,
   TillCashUp,
+  TopSeller,
+  TopSellersInput,
   VatRateLine,
   VatReturn,
   VatReturnInput,

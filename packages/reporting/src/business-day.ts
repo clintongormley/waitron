@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import type { TenantId } from "@waitron/shared";
+import type { Transaction } from "@waitron/db";
+import type { NodeId, TenantId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 const CUTOVER_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -87,6 +88,43 @@ function businessDayLocalDate(column: SQL, input: { timeZone: string; dayCutover
 }
 
 /**
+ * Evaluates the venue-local business DATE of an arbitrary `timestamptz` SQL expression, returning it
+ * as a `"YYYY-MM-DD"` string (node-postgres renders a `::date` OID as that text). The executing core
+ * behind `currentBusinessDay` — split out so the cutover-shift maths can be tested against a LITERAL
+ * timestamptz (a fixed, wall-clock-independent instant) rather than the live `now()` the public entry
+ * passes. Package-internal, deliberately NOT in the public barrel (`index.ts`); the route consumes
+ * `currentBusinessDay`. `nowSql` is not something to "validate" — it is a safely-constructed SQL
+ * fragment (`sql\`now()\`` or a literal timestamptz), never raw user input. The real caller
+ * precondition is that `input.timeZone`/`input.dayCutover` are validated first; `currentBusinessDay`
+ * does that (via `validateTimeZone`/`validateCutover`) before calling this.
+ */
+export async function businessDayOf(
+  tx: Transaction,
+  nowSql: SQL,
+  input: { timeZone: string; dayCutover: string },
+): Promise<string> {
+  const { rows } = await tx.execute<{ day: string }>(
+    sql`select ${businessDayLocalDate(nowSql, input)} as day`,
+  );
+  return rows[0]!.day;
+}
+
+/**
+ * Today's venue-local business day (cutover-shifted) as `"YYYY-MM-DD"`, evaluated from the database's
+ * `now()` so the venue's own clock and DST rules decide it — never Node's. Anchors the `/reports`
+ * overview's default period. Invalid inputs are a caller precondition and throw a plain `Error`
+ * (matching this file's validators — no registered error code), before any query runs.
+ */
+export async function currentBusinessDay(
+  tx: Transaction,
+  input: { timeZone: string; dayCutover: string },
+): Promise<string> {
+  validateTimeZone(input.timeZone);
+  validateCutover(input.dayCutover);
+  return businessDayOf(tx, sql`now()`, input);
+}
+
+/**
  * The DST-aware business-day predicate, reused by every aggregate. `column` is a `timestamptz`
  * (`sales.issued_at` or `tenders.settled_at`); a row belongs to `businessDay` when its venue-local
  * business date (above) equals that date.
@@ -117,4 +155,16 @@ export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL 
 export function activeSalesClause(input: { tenantId: TenantId }): SQL {
   return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
       and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})`;
+}
+
+/**
+ * The optional node predicate every sales aggregate applies: `and s.node_id = <nodeId>` when a node is
+ * fixed (a node-grain view — the dashboard overview/daily-close/period), an empty fragment when it is
+ * omitted (a tenant-wide aggregate — e.g. modelo 303 — relying on RLS + the tenant predicate). Assumes
+ * the outer query aliases `sales` as `s`, and carries its own leading `and`, so the caller writes it
+ * inline as `${nodeScopeClause(input.nodeId)}` — the `activeSalesClause` convention. Shared by
+ * `aggregateVatByRate` and `computeTopSellers` so the two cannot drift on how a node is scoped.
+ */
+export function nodeScopeClause(nodeId?: NodeId): SQL {
+  return nodeId ? sql`and s.node_id = ${nodeId}` : sql``;
 }

@@ -111,7 +111,14 @@ export async function seedSale(
     invoiceNumber: number;
     issuedAt: string;
     total: string;
-    lines: Array<{ vatRate: string; lineTotal: string }>;
+    lines: Array<{
+      vatRate: string;
+      lineTotal: string;
+      /** Frozen analytics label; defaults to `{ "es-ES": "Item" }`. Top-sellers groups by it. */
+      descriptions?: Record<string, string>;
+      /** numeric(12,3) line quantity; defaults to "1.000". May be negative on a rectificativa. */
+      quantity?: string;
+    }>;
     correctsSaleId?: SaleId;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
@@ -148,8 +155,8 @@ export async function seedSale(
       tenantId: seed.tenantId,
       saleId,
       lineNo: i + 1,
-      descriptions: { "es-ES": "Item" },
-      quantity: "1.000",
+      descriptions: line.descriptions ?? { "es-ES": "Item" },
+      quantity: line.quantity ?? "1.000",
       unitPrice: line.lineTotal,
       vatRate: line.vatRate,
       lineTotal: line.lineTotal,

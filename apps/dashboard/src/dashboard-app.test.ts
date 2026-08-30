@@ -88,6 +88,30 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
+    // The overview screen is the non-staff LANDING (Task 9), so it loads on connect for almost every
+    // manager/supervisor/admin session in this suite; resolve it so booting leaves no stray rejection.
+    getSalesOverview: vi.fn().mockResolvedValue({
+      businessDay: "2026-08-30",
+      takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      counts: { sales: 0, corrections: 0, voids: 0 },
+      openTables: { open: 0, total: 0 },
+      topSellers: [],
+    }),
+    // The sales screen the nav mounts loads a single-day close by default (from === to === today());
+    // resolve both report calls so navigating to it leaves no stray rejection.
+    getDailyClose: vi.fn().mockResolvedValue({
+      businessDay: "2026-08-30",
+      vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
+      cash: { byTill: [], tenderTotal: "0.00", tipTotal: "0.00" },
+      counts: { sales: 0, corrections: 0, voids: 0 },
+      topSellers: [],
+    }),
+    getSalesPeriod: vi.fn().mockResolvedValue({
+      from: "2026-08-30",
+      to: "2026-08-30",
+      vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
+      topSellers: [],
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -101,6 +125,8 @@ async function flush(el: DashboardApp): Promise<void> {
 const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
 const mySchedule = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-my-schedule-screen");
+const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-overview-screen");
+const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const layout = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-layout-screen");
@@ -118,6 +144,10 @@ const screenPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-printers-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
+const navOverview = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]");
+const navSales = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-sales]");
 const navStaff = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]");
 const navCatalogue = (el: DashboardApp) =>
@@ -153,6 +183,8 @@ const loginChooser = (el: DashboardApp) =>
  * manager faces the shell test navigates). */
 const SCREEN_TAGS = [
   "dashboard-my-schedule-screen",
+  "dashboard-overview-screen",
+  "dashboard-sales-screen",
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
   "dashboard-layout-screen",
@@ -207,9 +239,11 @@ describe("dashboard-app", () => {
     expect(customElements.get("dashboard-app")).toBe(DashboardApp);
   });
 
-  it("shows login when no session, manager staff screen after a manager logs in", async () => {
+  it("shows login when no session, business overview after a manager logs in", async () => {
     // getMe rejects at boot (no session) then resolves as a MANAGER after login — the real shape: the
-    // whoami 401s before login and resolves once the cookie is set.
+    // whoami 401s before login and resolves once the cookie is set. Since Task 9 a non-staff login
+    // lands on the business `overview` screen (was the manager `staff` screen — still one nav click
+    // away, see the "navigates between the staff and catalogue screens" test).
     const api = stubApi({
       getMe: vi
         .fn()
@@ -219,19 +253,22 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(login(el)).toBeTruthy();
-    expect(staff(el)).toBeNull();
+    expect(overview(el)).toBeNull();
 
     emitLoggedIn(login(el)!);
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
     expect(login(el)).toBeNull();
   });
 
-  it("starts on the manager staff screen when a manager session already exists", async () => {
-    // Default getMe resolves as a manager → the shell lands on the manager `staff` screen.
+  it("starts on the business overview screen when a manager session already exists", async () => {
+    // Default getMe resolves as a manager → the shell lands on the business `overview` screen (Task 9's
+    // non-staff landing).
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
     expect(mySchedule(el)).toBeNull();
     expect(login(el)).toBeNull();
   });
@@ -239,7 +276,8 @@ describe("dashboard-app", () => {
   it("a STAFF-role session opens on the self-service my-schedule screen, never the manager staff screen", async () => {
     // The whole point of the fast-follow: a staff person (empty permission set) resolves via role-blind
     // getMe and lands on the self-service view, not the manager screens. Proven by deletion: dropping
-    // the `role === "staff" ? "my-schedule" : "staff"` branch in #applyMe lands them on `staff` instead.
+    // the `role === "staff" ? "my-schedule" : "overview"` branch in #applyMe lands them on `overview`
+    // instead — the non-staff default screen.
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -314,7 +352,7 @@ describe("dashboard-app", () => {
     emitLoggedIn(login(el)!);
     await flush(el);
 
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
     expect(escaped).not.toHaveBeenCalled();
   });
 
@@ -327,32 +365,39 @@ describe("dashboard-app", () => {
     expect(logoutBtn(el)).toBeNull();
   });
 
-  it("logout: ends the session and returns to login (staff → login)", async () => {
+  it("logout: ends the session and returns to login (manager → login)", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
 
     logoutBtn(el)!.click();
     await flush(el);
 
     expect(api.logout).toHaveBeenCalledOnce();
     expect(login(el)).toBeTruthy();
-    expect(staff(el)).toBeNull();
+    expect(overview(el)).toBeNull();
   });
 
-  // The logged-in shell gains a nav between the staff and catalogue screens. It opens on staff (the
-  // probe's landing), and the nav switches the mounted screen — exactly one shows at a time.
+  // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
+  // probe's landing, Task 9), and the nav switches the mounted screen — exactly one shows at a time.
   it("navigates between the staff and catalogue screens", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
-    // Opens on staff, with both nav controls present.
-    expect(staff(el)).toBeTruthy();
+    // Opens on overview, with both nav controls present.
+    expect(overview(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
     expect(catalogue(el)).toBeNull();
     expect(navStaff(el)).toBeTruthy();
     expect(navCatalogue(el)).toBeTruthy();
+
+    // To staff.
+    navStaff(el)!.click();
+    await flush(el);
+    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeNull();
 
     // To catalogue.
     navCatalogue(el)!.click();
@@ -365,6 +410,32 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(staff(el)).toBeTruthy();
     expect(catalogue(el)).toBeNull();
+  });
+
+  // Task 9: the two new reporting faces. The shell opens on overview (Task 9's landing), navigating to
+  // sales mounts the sales screen, and navigating back to overview mounts it again (proving the "home"
+  // nav button also works as a plain switch, not just the boot-time default).
+  it("navigates to the sales screen and back to overview", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    expect(navOverview(el)).toBeTruthy();
+    expect(navSales(el)).toBeTruthy();
+
+    navSales(el)!.click();
+    await flush(el);
+    expect(sales(el)).toBeTruthy();
+    expect(overview(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual(["dashboard-sales-screen"]);
+    expect(countH1(el)).toBe(1);
+
+    navOverview(el)!.click();
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    expect(sales(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
+    expect(countH1(el)).toBe(1);
   });
 
   it("navigates to the roster (shifts) screen", async () => {
@@ -473,13 +544,20 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
-    // Opens on staff, with all four nav controls present.
-    expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
+    // Opens on overview (Task 9's non-staff landing), with all four nav controls present.
+    expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
     expect(countH1(el)).toBe(1);
     expect(navStaff(el)).toBeTruthy();
     expect(navCatalogue(el)).toBeTruthy();
     expect(navLayout(el)).toBeTruthy();
     expect(navReceipt(el)).toBeTruthy();
+
+    // To staff.
+    navStaff(el)!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
+    expect(staff(el)).toBeTruthy();
+    expect(countH1(el)).toBe(1);
 
     // To layout.
     navLayout(el)!.click();
@@ -517,6 +595,8 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(login(el)).toBeTruthy();
+    expect(navOverview(el)).toBeNull();
+    expect(navSales(el)).toBeNull();
     expect(navStaff(el)).toBeNull();
     expect(navCatalogue(el)).toBeNull();
     expect(navLayout(el)).toBeNull();
@@ -619,7 +699,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
     expect(currentLocale()).toBe("es-ES");
   });
 
@@ -644,7 +724,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
     emitLoggedIn(login(el)!);
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
     expect(currentLocale()).toBe("en-GB");
   });
 
@@ -672,7 +752,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       api: stubApi({ putLocale }),
     });
     await flush(el);
-    expect(staff(el)).toBeTruthy();
+    expect(overview(el)).toBeTruthy();
     expect(headerChooser(el)).toBeTruthy(); // the logged-in header renders the chooser
     expect(currentLocale()).toBe("es-ES"); // manager, no stored preference, es-ES venue
 

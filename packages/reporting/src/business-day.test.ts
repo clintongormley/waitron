@@ -4,7 +4,9 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   businessDayClause,
+  businessDayOf,
   businessDayRangeClause,
+  currentBusinessDay,
   validateBusinessDay,
   validateCutover,
   validateTimeZone,
@@ -79,5 +81,46 @@ describe("businessDayRangeClause", () => {
       expect(rows[0]!.range).toBe(rows[0]!.eq);
       expect(rows[0]!.range).toBe(expected);
     }
+  });
+});
+
+describe("currentBusinessDay / businessDayOf", () => {
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+
+  it("shifts a pre-cutover instant to the PREVIOUS business day (deterministic literal clock)", async () => {
+    // 2026-03-01 04:30 UTC = 05:30 Madrid (CET, UTC+1 in winter, before the last-Sunday-of-March DST
+    // change). With a 06:00 cutover, 05:30 local still belongs to the PREVIOUS business day. Without
+    // the cutover shift the ::date would be 2026-03-01, so this literal case pins the shift maths and
+    // never touches the wall clock — the day is fixed by the literal, not by `now()`.
+    const day = await suite.db.transaction((tx) =>
+      businessDayOf(tx, sql`timestamptz '2026-03-01 04:30:00+00'`, {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+      }),
+    );
+    expect(day).toBe("2026-02-28");
+  });
+
+  it("returns a valid YYYY-MM-DD business day against real now()", async () => {
+    const day = await suite.db.transaction((tx) =>
+      currentBusinessDay(tx, { timeZone: "Europe/Madrid", dayCutover: "06:00" }),
+    );
+    expect(() => validateBusinessDay(day)).not.toThrow();
+  });
+
+  it("validates the time zone before querying (caller precondition, plain Error)", async () => {
+    await expect(
+      suite.db.transaction((tx) =>
+        currentBusinessDay(tx, { timeZone: "Mars/Olympus", dayCutover: "06:00" }),
+      ),
+    ).rejects.toThrow(/time zone/i);
+  });
+
+  it("validates the cutover before querying (caller precondition, plain Error)", async () => {
+    await expect(
+      suite.db.transaction((tx) =>
+        currentBusinessDay(tx, { timeZone: "Europe/Madrid", dayCutover: "6:00" }),
+      ),
+    ).rejects.toThrow(/cutover/i);
   });
 });

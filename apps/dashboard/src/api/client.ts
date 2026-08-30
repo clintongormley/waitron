@@ -770,6 +770,96 @@ export interface Till {
   receiptPrinterId: string | null;
 }
 
+// ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
+// LOCAL copies of the reporting routes' JSON shapes (`apps/server/src/report-api.ts`, wrapping
+// `@waitron/reporting`), deliberately NOT imported from `@waitron/reporting`/`@waitron/db` — a runtime
+// import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as every shape
+// above does). Money fields cross the wire as decimal STRINGS: the server's branded `Decimal`
+// JSON-stringifies as-is, so every amount is typed `string` here (never `number`). If the server shapes
+// change these follow, and a mismatch surfaces as a runtime shape error a view test catches, not a
+// compile break.
+
+/** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`) — the frozen per-line
+ * `descriptions` snapshot (locale → label) plus its summed quantity and total, both decimal strings. */
+export interface TopSellerRow {
+  descriptions: Record<string, string>;
+  quantity: string;
+  total: string;
+}
+
+/** One VAT rate row (mirrors `VatRateLine`) — the rate literal (e.g. "21.00") with its net base + tax. */
+export interface VatRateRow {
+  rate: string;
+  base: string;
+  tax: string;
+}
+
+/** The VAT summary (mirrors `VatSummary`) — per-rate breakdown plus the base/tax/gross totals. */
+export interface VatSummaryDto {
+  byRate: VatRateRow[];
+  baseTotal: string;
+  taxTotal: string;
+  grossTotal: string;
+}
+
+/** One tender-method row within a till's cash-up (mirrors `TenderMethodLine`) — total collected via
+ * this method (tip-inclusive) and the tip portion of it. */
+export interface TenderMethodRow {
+  method: string;
+  amount: string;
+  tip: string;
+}
+
+/** One till's cash-up (mirrors `TillCashUp`) — its per-method breakdown and its cash takings. */
+export interface TillCashUpRow {
+  tillId: string;
+  byMethod: TenderMethodRow[];
+  cashTakings: string;
+}
+
+/** The cash-up (mirrors `CashUp`) — per-till breakdown plus the tender + tip totals. */
+export interface CashUpDto {
+  byTill: TillCashUpRow[];
+  tenderTotal: string;
+  tipTotal: string;
+}
+
+/** The record counts for a business day (mirrors `CloseCounts`). */
+export interface SalesCounts {
+  sales: number;
+  corrections: number;
+  voids: number;
+}
+
+/** `GET /management-api/reports/overview` — this node's takings/counts/open-tables/top-sellers for
+ * TODAY (the venue clock decides "today"). Takings amounts are decimal strings. */
+export interface SalesOverview {
+  businessDay: string;
+  takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
+  counts: SalesCounts;
+  openTables: { open: number; total: number };
+  topSellers: TopSellerRow[];
+}
+
+/** `GET /management-api/reports/daily-close?businessDay=` — the full daily close for ONE explicit
+ * business day: VAT summary, cash-up, record counts and top sellers. */
+export interface DailyCloseDto {
+  businessDay: string;
+  vat: VatSummaryDto;
+  cash: CashUpDto;
+  counts: SalesCounts;
+  topSellers: TopSellerRow[];
+}
+
+/** `GET /management-api/reports/period?from=&to=` — a VAT summary + top sellers over an inclusive
+ * business-day range. */
+export interface SalesPeriodDto {
+  from: string;
+  to: string;
+  vat: VatSummaryDto;
+  topSellers: TopSellerRow[];
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -1662,6 +1752,32 @@ export class DashboardApi {
    * cascade). Answers an empty 204. */
   deletePurchaseInvoice(id: string): Promise<void> {
     return this.#request<void>(`/management-api/purchase-invoices/${id}`, "DELETE");
+  }
+
+  // ── Reporting (sales & takings) ─────────────────────────────────────────────────────────────────
+
+  /** `GET /management-api/reports/overview` — this node's sales/takings overview for TODAY (the venue
+   * clock decides "today"): takings, record counts, the open-tables tile and the top sellers. */
+  getSalesOverview(): Promise<SalesOverview> {
+    return this.#request<SalesOverview>("/management-api/reports/overview", "GET");
+  }
+
+  /** `GET /management-api/reports/daily-close?businessDay=` — the full daily close for ONE explicit
+   * business day (`YYYY-MM-DD`): VAT summary, cash-up, record counts and that day's top sellers. */
+  getDailyClose(businessDay: string): Promise<DailyCloseDto> {
+    return this.#request<DailyCloseDto>(
+      `/management-api/reports/daily-close?businessDay=${businessDay}`,
+      "GET",
+    );
+  }
+
+  /** `GET /management-api/reports/period?from=&to=` — a VAT summary + top sellers over an inclusive
+   * business-day range (`from`..`to`, each `YYYY-MM-DD`). */
+  getSalesPeriod(from: string, to: string): Promise<SalesPeriodDto> {
+    return this.#request<SalesPeriodDto>(
+      `/management-api/reports/period?from=${from}&to=${to}`,
+      "GET",
+    );
   }
 
   /**

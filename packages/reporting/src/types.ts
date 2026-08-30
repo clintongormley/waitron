@@ -29,6 +29,23 @@ export interface PeriodVatInput {
   dayCutover: string;
 }
 
+/** The top-sellers query: the same (tenant, optional node, business-day range, clock) scope as a
+ * period VAT roll-up, plus how many rows to return. */
+export interface TopSellersInput extends PeriodVatInput {
+  /** How many top products to return. Must be a positive integer. */
+  limit: number;
+}
+
+/** One product in the top-sellers list, keyed on the frozen per-line `descriptions` snapshot. */
+export interface TopSeller {
+  /** The frozen `sale_lines.descriptions` map (locale → label), returned intact for the frontend. */
+  descriptions: Record<string, string>;
+  /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
+  quantity: Decimal;
+  /** Σ line_total over the range (numeric(12,2)); corrections net in. */
+  total: Decimal;
+}
+
 export interface VatReturnInput {
   /** The obligado — a modelo 303 aggregates ALL nodes of the legal entity (no node predicate). */
   tenantId: TenantId;

@@ -7,6 +7,7 @@ import {
   activeSalesClause,
   businessDayClause,
   businessDayRangeClause,
+  nodeScopeClause,
   validateBusinessDayRange,
   validateCutover,
   validateTimeZone,
@@ -30,7 +31,7 @@ export async function aggregateVatByRate(
   tx: Transaction,
   scope: { tenantId: TenantId; nodeId?: NodeId; dateFilter: SQL },
 ): Promise<VatSummary> {
-  const nodeClause = scope.nodeId ? sql`and s.node_id = ${scope.nodeId}` : sql``;
+  const nodeClause = nodeScopeClause(scope.nodeId);
   // The rate is grouped as `numeric(5,2)::text`, not the raw jsonb string, so two spellings of the
   // same rate ("21" vs "21.00") can never split into two byRate lines. Every production rate is
   // already a fixed 2-dp literal (`buildVatBreakdown`/`priceRows`), so this is defensive normalisation.

@@ -5,11 +5,21 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { eq, sql } from "drizzle-orm";
+import {
+  AppError,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+  type NodeId,
+  type TenantId,
+} from "@waitron/shared";
 import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
+  computeDailyClose,
+  computeTopSellers,
   computeVatReturn,
+  computeVatSummaryForPeriod,
+  currentBusinessDay,
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
@@ -18,20 +28,25 @@ import {
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
+import { requirePeriod } from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /** Deps for the reporting/export routes: `db` + this venue's `cfg.tenantId` scope every read via
- * `withTenant` (RLS confines it to this server's one tenant). Same minimal shape as PurchasingApiDeps
- * — no nodeId, no card provider, no clock: the routes are pure reads over the filed record. */
+ * `withTenant` (RLS confines it to this server's one tenant). `cfg.nodeId` is THIS server's own node —
+ * the dashboard overview is node-scoped (today's takings/counts/open-tables/top-sellers for this node),
+ * unlike the modelo 303 export, which aggregates ALL of the obligado's nodes and ignores it. */
 export interface ReportApiDeps {
   db: Database;
-  cfg: { tenantId: string };
+  cfg: { tenantId: string; nodeId: string };
 }
 
-/** The ONE permission gating the modelo 303 export — a NEW domain-named reporting seam (spec D7),
- * mapped to manager + admin. One constant, referenced at the route, so a future re-map is a one-line
- * swap here. */
+/** The permissions gating the reporting routes, referenced through these constants (never an inline
+ * literal — the catalogue-api `CATALOGUE_WRITE_PERMISSION` pattern). `report.export` gates the modelo
+ * 303 DR303 export (manager + admin); `report.view` gates the dashboard reporting reads — overview,
+ * daily-close and period (supervisor, manager + admin). Two DISTINCT seams: viewing the takings
+ * dashboard is not exporting the fiscal file (a supervisor holds view but not export). */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
+const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
 /** Every AppError CODE these routes answer + its HTTP status (the purchasing-api STATUS parallel).
  * CLIENT faults only; a genuine SERVER fault reaches `run` as a non-AppError → an opaque 500. No new
@@ -87,27 +102,111 @@ function requireDeclarationType(raw: string | undefined): string {
   return raw;
 }
 
+/** Reads THIS server's venue clock — the `time_zone`/`day_cutover` of the node's location — the inputs
+ * `currentBusinessDay`/`computeDailyClose` consume (spec D9). `day_cutover` is a `time` ("HH:MM:SS"),
+ * sliced to the "HH:MM" the reporting validators expect. A missing node is not user input: `cfg.nodeId`
+ * is this server's OWN node (from `till.nodeId`), and `nodes.location_id` is `NOT NULL` with an FK to
+ * `locations.id` (`nodes_location_id_locations_id_fk`, migration 0015_nodes), so the expected invariant
+ * is that its location row is present; a missing one is an invariant break → an opaque 500 via `run`,
+ * never a registered code (the `tenants`-row guard in the modelo 303 route below does the same). The
+ * `l.tenant_id = n.tenant_id` join predicate is satisfied under RLS, which scopes both tables to this
+ * server's one tenant. The explicit `n.tenant_id` predicate is belt-and-suspenders over RLS, matching
+ * `countOpenTables` below. */
+async function resolveVenueClock(
+  tx: Transaction,
+  tenantId: TenantId,
+  nodeId: string,
+): Promise<{ timeZone: string; dayCutover: string }> {
+  const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
+    select l.time_zone, l.day_cutover
+    from nodes n join locations l on l.tenant_id = n.tenant_id and l.id = n.location_id
+    where n.id = ${nodeId} and n.tenant_id = ${tenantId}
+  `);
+  const row = rows[0];
+  /* v8 ignore start */
+  if (row === undefined) {
+    // Expected-unreachable: this server's own node exists and `nodes.location_id` (NOT NULL, FK to
+    // locations.id — 0015_nodes) guarantees its location row (mirrors the modelo 303 route's
+    // whoami-style tenant guard). A misconfigured node becomes an opaque 500 via `run`.
+    throw new Error(`report-api: no node/location row for ${nodeId}`);
+  }
+  /* v8 ignore stop */
+  return { timeZone: row.time_zone, dayCutover: row.day_cutover.slice(0, 5) };
+}
+
+/** Counts THIS node's dining tables and how many carry an open tab, for the overview's open-tables tile.
+ * `dining_tables` is LOCATION-scoped, not node-scoped, so it is scoped by the node's location (join
+ * `nodes` on the tenant-consistent `location_id`); `tab_id is not null` is the open flag (design §2b).
+ * Inactive tables (deactivated, `active = false`) are excluded. The explicit `tenant_id` predicate is
+ * belt-and-suspenders over RLS, the aggregate idiom the reporting reads use. */
+async function countOpenTables(
+  tx: Transaction,
+  tenantId: TenantId,
+  nodeId: NodeId,
+): Promise<{ open: number; total: number }> {
+  const { rows } = await tx.execute<{ total: string; open: string }>(sql`
+    select count(*)::text as total,
+           count(*) filter (where dt.tab_id is not null)::text as open
+    from dining_tables dt
+    join nodes n on n.tenant_id = dt.tenant_id and n.location_id = dt.location_id
+    where dt.tenant_id = ${tenantId} and n.id = ${nodeId} and dt.active = true
+  `);
+  return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
+}
+
 /**
- * Mounts the gated modelo 303 export route on an existing Hono app — `mountPurchasingApi`'s sibling,
- * attached to the SAME app. `GET /management-api/reports/modelo-303?year&period&declarationType`
- * returns the AEAT DR303 fixed-layout file (ISO-8859-1) for the period. Every DB touch funnels
- * through `gated` (withTenant + asAppUser + authorizeManager(report.export)), so RLS scopes the read
- * to this server's one tenant and the gate runs in one place.
+ * Mounts the gated reporting routes on an existing Hono app — `mountPurchasingApi`'s sibling, attached
+ * to the SAME app. Four `GET /management-api/reports/*` routes, each funnelling every DB touch through
+ * `gated` (withTenant + asAppUser + authorizeManager) so RLS scopes the read to this server's one
+ * tenant and the gate runs in one place:
  *
- * PRE-FILING CAVEATS (unchanged from dr303.ts §29-38): the produced file is a CANDIDATE, not a proven
- * submission-ready one — página 2 is omitted (validate once against the real sede uploader), and under
- * prorrata the base is emitted unscaled pending an asesor confirmation.
+ * - `/reports/modelo-303?year&period&declarationType` — gated on `report.export` (manager + admin).
+ *   The AEAT DR303 fixed-layout file (ISO-8859-1) for the period; aggregates ALL of the obligado's
+ *   nodes (ignores `cfg.nodeId`).
+ * - `/reports/overview` — gated on `report.view` (supervisor, manager + admin). THIS node's
+ *   sales/takings for TODAY (venue-clock business day): takings, record counts, open-tables tile,
+ *   top sellers.
+ * - `/reports/daily-close?businessDay` — gated on `report.view`. The full daily close (VAT summary,
+ *   cash-up, counts) plus top sellers for ONE explicit business day, THIS node.
+ * - `/reports/period?from&to` — gated on `report.view`. A VAT summary + top sellers over a closed
+ *   business-day RANGE (inclusive), THIS node.
+ *
+ * The `report.export` seam is DISTINCT from `report.view`: viewing the takings dashboard is not
+ * exporting the fiscal file (a supervisor holds view but not export).
+ *
+ * PRE-FILING CAVEATS for the modelo 303 route (unchanged from dr303.ts §29-38): the produced file is a
+ * CANDIDATE, not a proven submission-ready one — página 2 is omitted (validate once against the real
+ * sede uploader), and under prorrata the base is emitted unscaled pending an asesor confirmation.
  */
 export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): void {
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+  const gated = <T>(
+    sessionId: string,
+    permission: Permission,
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: REPORT_EXPORT_PERMISSION,
-      });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
+
+  // The (tenantId, nodeId, clock) triple every reporting route below derives identically — extracted
+  // so overview/daily-close/period cannot drift on branding or on how the venue clock is resolved.
+  // Closes over `deps` (unlike `resolveVenueClock`, which is a top-level function taking `nodeId`
+  // explicitly); the modelo-303 route above does NOT use this, since it derives its own `tenantId`
+  // from the authoritative `tenants` row rather than from `deps.cfg`.
+  const buildReportContext = async (
+    tx: Transaction,
+  ): Promise<{
+    tenantId: TenantId;
+    nodeId: NodeId;
+    clock: { timeZone: string; dayCutover: string };
+  }> => {
+    const tenantId = brandTenantId(deps.cfg.tenantId);
+    const nodeId = brandNodeId(deps.cfg.nodeId);
+    const clock = await resolveVenueClock(tx, tenantId, deps.cfg.nodeId);
+    return { tenantId, nodeId, clock };
+  };
 
   app.get("/management-api/reports/modelo-303", (c) =>
     run(c, log, async () => {
@@ -116,7 +215,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const { period, token } = requireLiquidationPeriod(c.req.query("period"));
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
-      const record = await gated(sessionId, async (tx) => {
+      const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
         // The obligado identity comes from the authoritative tenant row (RLS-scoped), not a client
         // param — the till-api whoami idiom. Structurally present: cfg.tenantId is this server's own.
         const [issuer] = await tx
@@ -158,6 +257,120 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         "Content-Disposition": `attachment; filename="modelo-303-${year}-${token}.txt"`,
         "Cache-Control": "no-store",
       });
+    }),
+  );
+
+  // The dashboard's sales/takings overview for THIS node, TODAY: takings (tender + tip + gross), the
+  // record counts, the open-tables tile and the top sellers — the venue clock (node's location) decides
+  // "today". Node-scoped (unlike the tenant-wide modelo 303 export), gated on `report.view`. Money
+  // crosses the wire as decimal STRINGS (the branded `Decimal` JSON-stringifies as-is).
+  app.get("/management-api/reports/overview", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const businessDay = await currentBusinessDay(tx, clock);
+        const input = {
+          tenantId,
+          nodeId,
+          businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [close, topSellers, openTables] = await Promise.all([
+          computeDailyClose(tx, input),
+          computeTopSellers(tx, {
+            tenantId,
+            nodeId,
+            fromBusinessDay: businessDay,
+            toBusinessDay: businessDay,
+            timeZone: clock.timeZone,
+            dayCutover: clock.dayCutover,
+            limit: 5,
+          }),
+          countOpenTables(tx, tenantId, nodeId),
+        ]);
+        return {
+          businessDay,
+          takings: {
+            tenderTotal: close.cash.tenderTotal,
+            tipTotal: close.cash.tipTotal,
+            grossTotal: close.vat.grossTotal,
+          },
+          counts: close.counts,
+          openTables,
+          topSellers,
+        };
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The full daily close for ONE explicit business day (unlike overview, which anchors on TODAY): the
+  // VAT summary, the cash-up and record counts (`computeDailyClose`) plus that day's top sellers.
+  // Node-scoped, gated on `report.view`. `businessDay` is screened to a real "YYYY-MM-DD" at the
+  // boundary; money crosses the wire as decimal STRINGS.
+  app.get("/management-api/reports/daily-close", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const businessDay = requirePeriod(c.req.query("businessDay"), "businessDay");
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const input = {
+          tenantId,
+          nodeId,
+          businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [close, topSellers] = await Promise.all([
+          computeDailyClose(tx, input),
+          computeTopSellers(tx, {
+            tenantId,
+            nodeId,
+            fromBusinessDay: businessDay,
+            toBusinessDay: businessDay,
+            timeZone: clock.timeZone,
+            dayCutover: clock.dayCutover,
+            limit: 10,
+          }),
+        ]);
+        return { businessDay, vat: close.vat, cash: close.cash, counts: close.counts, topSellers };
+      });
+      return c.json(result);
+    }),
+  );
+
+  // A VAT summary + top sellers over a closed business-day RANGE (`from`..`to`, inclusive) for THIS
+  // node — the period roll-up behind the dashboard's date-range view. Node-scoped, gated on
+  // `report.view`. `from`/`to` are each screened to a real "YYYY-MM-DD", and an inverted range
+  // (`from > to`) is a request fault (400) — a valid string compare because both passed
+  // `requirePeriod`'s fixed-shape check, exactly as `validateBusinessDayRange` orders them.
+  app.get("/management-api/reports/period", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const from = requirePeriod(c.req.query("from"), "from");
+      const to = requirePeriod(c.req.query("to"), "to");
+      if (from > to) {
+        throw new AppError("management.request_invalid", { field: "range" });
+      }
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const common = {
+          tenantId,
+          nodeId,
+          fromBusinessDay: from,
+          toBusinessDay: to,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+        };
+        const [vat, topSellers] = await Promise.all([
+          computeVatSummaryForPeriod(tx, common),
+          computeTopSellers(tx, { ...common, limit: 10 }),
+        ]);
+        return { from, to, vat, topSellers };
+      });
+      return c.json(result);
     }),
   );
 }

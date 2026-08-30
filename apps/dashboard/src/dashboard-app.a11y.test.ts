@@ -69,6 +69,29 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
+    // The overview screen is now the non-staff LANDING (Task 9), so it loads on connect for every
+    // manager-role state below; resolve it so booting leaves no stray rejection. getDailyClose /
+    // getSalesPeriod back the sales screen (reachable via the nav) for the same reason.
+    getSalesOverview: vi.fn().mockResolvedValue({
+      businessDay: "2026-08-30",
+      takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      counts: { sales: 0, corrections: 0, voids: 0 },
+      openTables: { open: 0, total: 0 },
+      topSellers: [],
+    }),
+    getDailyClose: vi.fn().mockResolvedValue({
+      businessDay: "2026-08-30",
+      vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
+      cash: { byTill: [], tenderTotal: "0.00", tipTotal: "0.00" },
+      counts: { sales: 0, corrections: 0, voids: 0 },
+      topSellers: [],
+    }),
+    getSalesPeriod: vi.fn().mockResolvedValue({
+      from: "2026-08-30",
+      to: "2026-08-30",
+      vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
+      topSellers: [],
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -109,11 +132,30 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("the business overview screen renders accessibly with a single, well-ordered heading", async () => {
+    // A resolved probe for a non-staff role lands on the business `overview` screen (Task 9's landing;
+    // its own <h1> "Hoy de un vistazo" is the sole heading, alongside the nav + logout chrome).
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p1", role: "manager" }) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-overview-screen");
+    expect(screen).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(screen!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
   it("the staff screen renders accessibly with a single, well-ordered heading", async () => {
-    // A resolved probe lands on staff. The staff screen renders the ONLY <h1> ("Usuarios"); the
-    // shell's own chrome (the logout button) carries no competing heading, so the outline stays clean.
+    // The shell now opens on `overview` (Task 9), so reach the staff screen via the nav. It renders the
+    // ONLY <h1> ("Usuarios"); the shell's own chrome (nav + logout button) carries no competing
+    // heading, so the outline stays clean.
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]")!.click();
     await flush(el);
     const staff = el.shadowRoot!.querySelector("dashboard-staff-screen");
     expect(staff).toBeTruthy();
