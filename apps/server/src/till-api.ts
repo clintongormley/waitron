@@ -429,8 +429,8 @@ function mountCourseVerb(
  * cash write, FENCE it (fail-safe for fiscal — when in doubt, fence). The full split:
  *
  *   TENDER-SPLIT (`assertHandheldTenderAllowed` — handheld cash allowed, handheld card fenced):
- *     POST /api/sales                      record_sale       — cash files a chained registro (handheld OK)
- *                                          record_sale_card  — manual card tender (handheld refused 403)
+ *     POST /api/sales   cash → passes with NO guard action (a handheld files a chained registro like a till)
+ *                       card → refused 403, action `record_sale_card` (a handheld's manual card tender)
  *
  *   FENCED (fiscal / cash / amendment-log writers — `assertNotHandheld`):
  *     POST /api/pay                        pay          — integrated-card settlement

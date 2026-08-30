@@ -1131,8 +1131,8 @@ describe("handheld firewall (a handheld may settle CASH, but not a card tender, 
     // Exactly ONE chained fiscal record for this (own) tenant, INDISTINGUISHABLE from a counter cash
     // record: the same chain-opening shape the "ordinary till" mixed-cash test above asserts (own tenant,
     // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
-    // pointer, a 64-hex huella, and the deployment `entorno`). `tillId` is separate device metadata; it
-    // never keys the chain.
+    // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
+    // separate device metadata; it never keys the chain.
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
