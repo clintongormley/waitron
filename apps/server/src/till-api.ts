@@ -636,7 +636,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await asAppUser(tx);
         return {
           menus: await listAccessibleCatalogues(tx, deps.cfg.locationId),
-          products: await listAvailableProducts(tx, deps.cfg.locationId),
+          products: (await listAvailableProducts(tx, deps.cfg.locationId)).products,
         };
       });
       return c.json({ menus, products });

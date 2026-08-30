@@ -354,13 +354,16 @@ export async function addCatalogueToLocation(
  * name — so `ids` is just the set's insertion order. `defaultId` is the same `locations.catalogue_id`
  * the union already read (or `null` when the location has none): returned alongside so a caller that
  * needs to flag the default menu ({@link listAccessibleCatalogues}) does not re-read `locations`.
+ * `invoiceLocales` is that SAME `locations` row's `invoice_locales` (empty only when the location does
+ * not exist), projected here so the sale path ({@link listAvailableProducts} → `priceOrderLines`) gets
+ * it from this ONE read rather than issuing a second single-row `locations` query.
  */
 export async function resolveAccessibleCatalogueIds(
   tx: Transaction,
   locationId: string,
-): Promise<{ ids: string[]; defaultId: string | null }> {
+): Promise<{ ids: string[]; defaultId: string | null; invoiceLocales: string[] }> {
   const [def] = await tx
-    .select({ id: locations.catalogueId })
+    .select({ id: locations.catalogueId, invoiceLocales: locations.invoiceLocales })
     .from(locations)
     .where(eq(locations.id, locationId));
   const members = await tx
@@ -370,7 +373,7 @@ export async function resolveAccessibleCatalogueIds(
   const ids = new Set<string>();
   if (def?.id != null) ids.add(def.id);
   for (const m of members) ids.add(m.id);
-  return { ids: [...ids], defaultId: def?.id ?? null };
+  return { ids: [...ids], defaultId: def?.id ?? null, invoiceLocales: def?.invoiceLocales ?? [] };
 }
 
 export interface AccessibleCatalogue {
@@ -409,15 +412,20 @@ export async function listAccessibleCatalogues(
  * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each
  * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only active products of an
  * active catalogue, with the category NAME resolved via a left join (null when the product has no
- * category). Returns `[]` when the location has no accessible catalogue at all. Ordered by catalogue
- * name, then product `created_at`, then `id` so the result is stable and grouped by menu.
+ * category). `products` is `[]` when the location has no accessible catalogue at all. Ordered by
+ * catalogue name, then product `created_at`, then `id` so the result is stable and grouped by menu.
+ *
+ * Returns the location's `invoiceLocales` ALONGSIDE the products — both derived from the single
+ * `resolveAccessibleCatalogueIds` read of `locations` — so the sale path (`priceOrderLines`) re-keys
+ * catalogue content to the fiscal line's full tags without a SECOND `locations` query. `[]` when the
+ * location does not exist (which is also when `products` is empty).
  */
 export async function listAvailableProducts(
   tx: Transaction,
   locationId: string,
-): Promise<AvailableProduct[]> {
-  const { ids: accessible } = await resolveAccessibleCatalogueIds(tx, locationId);
-  if (accessible.length === 0) return [];
+): Promise<{ products: AvailableProduct[]; invoiceLocales: string[] }> {
+  const { ids: accessible, invoiceLocales } = await resolveAccessibleCatalogueIds(tx, locationId);
+  if (accessible.length === 0) return { products: [], invoiceLocales };
   const rows = await tx
     .select({
       id: products.id,
@@ -442,7 +450,8 @@ export async function listAvailableProducts(
       ),
     )
     .orderBy(catalogues.name, products.createdAt, products.id);
-  return rows.map((row) => ({
+  // `products` is the imported table, so the mapped rows take a local name of their own.
+  const available = rows.map((row) => ({
     id: row.id,
     descriptions: row.descriptions,
     pricingUnit: row.pricingUnit as PricingUnit,
@@ -454,4 +463,5 @@ export async function listAvailableProducts(
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
   }));
+  return { products: available, invoiceLocales };
 }

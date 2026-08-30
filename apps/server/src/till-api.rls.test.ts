@@ -189,7 +189,7 @@ async function setupVenue(): Promise<{
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
     return {
-      available: await listAvailableProducts(tx, cfg.locationId),
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
       operatorId: person.rows[0]!.id,
     };
   });

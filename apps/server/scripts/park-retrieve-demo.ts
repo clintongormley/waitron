@@ -199,7 +199,7 @@ async function main(): Promise<void> {
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-      return listAvailableProducts(tx, caja1.locationId);
+      return (await listAvailableProducts(tx, caja1.locationId)).products;
     });
     const jamon = available.find((p) => p.pricingUnit === "weight")!;
     const agua = available.find((p) => p.pricingUnit === "each")!;

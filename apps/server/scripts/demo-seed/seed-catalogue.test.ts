@@ -72,7 +72,7 @@ describe("seedCatalogues", () => {
       await asAppUser(tx);
       const out = await seedCatalogues(tx, { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
-      const products = await listAvailableProducts(tx, locationId);
+      const { products } = await listAvailableProducts(tx, locationId);
       // Read back the two stations and one category's route per menu, as app_user, to prove routing.
       const { rows: stations } = await tx.execute<{ name: string; is_default: boolean }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);

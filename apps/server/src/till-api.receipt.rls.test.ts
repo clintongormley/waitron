@@ -168,7 +168,7 @@ async function setupVenue(): Promise<{
       const supervisor = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (current_tenant_id(), 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
-      const available = await listAvailableProducts(tx, cfg.locationId);
+      const { products: available } = await listAvailableProducts(tx, cfg.locationId);
       return {
         each: available.find((p) => p.pricingUnit === "each")!,
         operatorId: staff.rows[0]!.id,

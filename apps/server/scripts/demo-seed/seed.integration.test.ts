@@ -154,7 +154,7 @@ describe("demo seed end-to-end", () => {
     const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const products = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: imageRows } = await tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );

@@ -115,7 +115,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       // The till's read → pricing → fiscal write, all from catalogue data. `listAvailableProducts`'
       // `AvailableProduct` is fed straight into `priceBasket`, which only typechecks because it is
       // structurally assignable to `PriceableProduct` (Task 5).
-      const [ham] = await listAvailableProducts(tx, locationId);
+      const [ham] = (await listAvailableProducts(tx, locationId)).products;
       expect(ham).toBeDefined();
       priced = priceBasket([{ product: ham!, quantity: "0.320" }]);
 

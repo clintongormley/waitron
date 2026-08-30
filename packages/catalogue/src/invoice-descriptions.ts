@@ -32,12 +32,15 @@ export function toInvoiceLineDescriptions(
 
   for (const tag of invoiceLocales) {
     const lang = bareLanguage(tag);
-    const byLanguageKey = Object.keys(catalogue).find((key) => bareLanguage(key) === lang);
-    result[tag] =
-      catalogue[tag] ??
-      catalogue[lang] ??
-      (byLanguageKey !== undefined ? catalogue[byLanguageKey] : undefined) ??
-      primary;
+    // The full-tag and bare-language direct lookups are the common path; only when BOTH miss do we scan
+    // the keys for another region of the same language (the graceful-fill path), so the `.find()` runs
+    // just there rather than on every iteration.
+    let text = catalogue[tag] ?? catalogue[lang];
+    if (text === undefined) {
+      const byLanguageKey = Object.keys(catalogue).find((key) => bareLanguage(key) === lang);
+      if (byLanguageKey !== undefined) text = catalogue[byLanguageKey];
+    }
+    result[tag] = text ?? primary;
   }
 
   return result;

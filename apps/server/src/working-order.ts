@@ -25,7 +25,6 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
-  locations,
   products,
   sales,
   ticketItems,
@@ -108,7 +107,7 @@ async function priceOrderLines(
   // value today (a future course picker); park/update pass none, so their lines take the product default.
   lines: { productId: string; quantity: string; courseId?: string | null }[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
-  const available = await listAvailableProducts(tx, cfg.locationId);
+  const { products: available, invoiceLocales } = await listAvailableProducts(tx, cfg.locationId);
   const byId = new Map(available.map((p) => [p.id, p]));
   const items = lines.map((line) => {
     const product = byId.get(line.productId);
@@ -146,20 +145,18 @@ async function priceOrderLines(
   // Feature B — re-key catalogue content to the fiscal line. Catalogue descriptions are authored under
   // the BARE language tag (`es` = "our Spanish"); the `working_order_lines_check_locales` trigger (and
   // the receipt) require the per-line map to hold EXACTLY this location's full-tag `invoice_locales`
-  // (`es-ES`). Read those FRESH from the DB, NOT `cfg.invoiceLocales` — the latter is env-derived and
-  // can drift from what the trigger actually checks, which is the location row. `cfg.locationId` is the
-  // till's own configured location, so this single-row read always resolves (the same invariant
-  // `readInvoiceNumber` relies on). `toInvoiceLineDescriptions` graceful-fills and NEVER throws (§5:
-  // nothing may block a sale), and mutating `priced.lines` in place propagates the re-key to BOTH the
-  // `working_order_lines` rows built below AND the filed `sale_lines` (the same `priced` is threaded
-  // back out and fed to `recordSale`). The inherited/locked paths (`priceLockedLines`, move/transfer)
-  // already carry full tags and are untouched.
-  const [loc] = await tx
-    .select({ invoiceLocales: locations.invoiceLocales })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
+  // (`es-ES`). Use the location's DB `invoice_locales`, NOT `cfg.invoiceLocales` — the latter is
+  // env-derived and can drift from what the trigger actually checks, which is the location row. That
+  // value comes from the SAME `listAvailableProducts` read above (it projects `locations.invoice_locales`
+  // alongside the products via `resolveAccessibleCatalogueIds`, one read), so no second `locations`
+  // query is issued here. `cfg.locationId` is the till's own configured location, so that read always
+  // resolves (the same invariant `readInvoiceNumber` relies on). `toInvoiceLineDescriptions`
+  // graceful-fills and NEVER throws (§5: nothing may block a sale), and mutating `priced.lines` in place
+  // propagates the re-key to BOTH the `working_order_lines` rows built below AND the filed `sale_lines`
+  // (the same `priced` is threaded back out and fed to `recordSale`). The inherited/locked paths
+  // (`priceLockedLines`, move/transfer) already carry full tags and are untouched.
   for (const line of priced.lines) {
-    line.descriptions = toInvoiceLineDescriptions(line.descriptions, loc!.invoiceLocales);
+    line.descriptions = toInvoiceLineDescriptions(line.descriptions, invoiceLocales);
   }
 
   const lineRows = priced.lines.map((line, i) => ({

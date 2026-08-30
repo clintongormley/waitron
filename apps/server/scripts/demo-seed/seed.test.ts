@@ -112,7 +112,7 @@ describe("seedDemoRestaurant", () => {
     const read = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const products = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
         sql`select count(*)::int as n from dining_tables`,
       );

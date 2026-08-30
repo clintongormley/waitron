@@ -240,7 +240,7 @@ async function main(): Promise<void> {
     // explicitly.
     const products = await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      return listAvailableProducts(tx, venue.locationId);
+      return (await listAvailableProducts(tx, venue.locationId)).products;
     });
 
     console.log("allergens-demo: allergens authored on the catalogue, read back for the till");

@@ -74,7 +74,7 @@ export async function seedDemoRestaurant(
     await seedFloor(tx, { tenantId, locationId, locale });
     await seedStaff(tx);
     await seedMedia(tx, { mediaDir, productsByImage });
-    return listAvailableProducts(tx, locationId);
+    return (await listAvailableProducts(tx, locationId)).products;
   });
 
   // AFTER the tx commits: seedSales opens its own per-sale `withTenant`, so it must see the committed
