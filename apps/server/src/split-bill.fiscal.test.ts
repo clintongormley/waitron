@@ -383,10 +383,13 @@ describe("split-bill: pay each check files its own registro", () => {
       splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    // Pay the SAME check twice (a lost-response retry). A check is a working order, so the #61
-    // `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes the second pay a REPLAY of
-    // the first filing, not a second one — exactly the idempotency `till-sale.ts` gives every retrieved
-    // order. The whole point of the split-bill split is that this key applies to a check as to any tab.
+    // Pay the SAME check twice (a lost-response retry), SEQUENTIALLY. A check is a working order (it
+    // already has a `working_orders` row), so the second pay locks it `FOR UPDATE`, sees `settled`, and
+    // `payWorkingOrder` returns the EXISTING ticket (till-sale.ts ~line 290) — a replay, not a second
+    // filing. The #61 `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) is the
+    // CONCURRENCY backstop for the shape that has no pre-existing row to lock (till-sale.ts ~line 356);
+    // this sequential retry never reaches it. The whole point of the split-bill split is that a check
+    // gets the same settled-status replay as any tab.
     const first = await payWorkingOrder(deps, cfg, {
       id: checkId,
       tender: { method: "cash", amount: "2.00" },
