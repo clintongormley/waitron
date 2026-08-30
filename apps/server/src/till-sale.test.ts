@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, saleLines, sales, withTenant, workingOrderLines } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -28,7 +30,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
-import { recordTillSale } from "./till-sale.js";
+import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 
 // Real Postgres, not PGlite: the whole point is a genuine chained fiscal record written by the app
 // role under RLS. PGlite runs every connection as a superuser, which bypasses RLS and cannot prove
@@ -281,5 +283,129 @@ describe("recordTillSale", () => {
     expect(result.qr).toBe("");
     expect(result.total).toBe("1.50");
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
+  });
+});
+
+/**
+ * Feature B: catalogue content is authored under the BARE language tag (`es` = "our Spanish"), and a
+ * write-side transform (`toInvoiceLineDescriptions`, wired into `priceOrderLines`) re-keys it to the
+ * location's full-tag `invoice_locales` at the single point content enters a fiscal line — so the
+ * `working_order_lines_check_locales` trigger (which requires the per-line `descriptions` map to hold
+ * EXACTLY the venue's `invoice_locales`) passes on the insert, and the same re-keyed `priced` flows on
+ * to `sale_lines`. Real Postgres, exactly like the sales above: the trigger and the chained record are
+ * the point. A bare-`es` product on a `{es-ES}` venue would otherwise be REJECTED by the trigger.
+ */
+describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
+  async function setupBareVenue(
+    invoiceLocales: string[],
+    descriptions: Record<string, string>,
+  ): Promise<{ cfg: TillConfig; productId: string }> {
+    const venue = await applyVenue(
+      planVenue({
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Deli Bare SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales,
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
+      }),
+      { db: suite.admin },
+    );
+    const cfg = tillConfigFromVenue(venue);
+    const productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const product = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        descriptions,
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+      return product.id;
+    });
+    return { cfg, productId };
+  }
+
+  it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
+    // The venue's DB `invoice_locales` is {es-ES}; the catalogue product carries BARE `es`. We
+    // deliberately DRIFT `cfg.invoiceLocales` to a WRONG value — if the re-key read cfg (env-derived)
+    // rather than the DB, it would produce `ca-ES` and the trigger (checking the DB's {es-ES}) would
+    // REJECT the insert. That it succeeds with `es-ES` proves the re-key reads the location fresh.
+    const { cfg, productId } = await setupBareVenue(["es-ES"], { es: "Café" });
+    const driftedCfg: TillConfig = { ...cfg, invoiceLocales: ["ca-ES"], locale: "ca-ES" };
+    const workingOrderId = randomUUID();
+
+    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, driftedCfg, {
+      id: workingOrderId,
+      lines: [{ productId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
+
+    const { woLines, slLines } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const woLines = await tx
+        .select({ descriptions: workingOrderLines.descriptions })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId));
+      const slLines = await tx
+        .select({ descriptions: saleLines.descriptions })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, sale!.id));
+      return { woLines, slLines };
+    });
+
+    // The working_order_lines insert SUCCEEDED (the trigger would reject bare `es`) with the re-keyed map…
+    expect(woLines).toHaveLength(1);
+    expect(woLines[0]!.descriptions).toEqual({ "es-ES": "Café" });
+    // …and the same re-keyed `priced` flowed on to the filed sale_lines.
+    expect(slLines).toHaveLength(1);
+    expect(slLines[0]!.descriptions).toEqual({ "es-ES": "Café" });
+  });
+
+  it("re-keys a bilingual bare product to both venue locales", async () => {
+    const { cfg, productId } = await setupBareVenue(["es-ES", "ca-ES"], { es: "Café", ca: "Cafè" });
+    const workingOrderId = randomUUID();
+
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: workingOrderId,
+      lines: [{ productId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+
+    const lines = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({ descriptions: workingOrderLines.descriptions })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    });
+    expect(lines[0]!.descriptions).toEqual({ "es-ES": "Café", "ca-ES": "Cafè" });
   });
 });

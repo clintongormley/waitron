@@ -25,6 +25,7 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
+  locations,
   products,
   sales,
   ticketItems,
@@ -35,7 +36,12 @@ import {
   workingOrderStatus,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
+import {
+  listAvailableProducts,
+  priceBasket,
+  priceLockedLines,
+  toInvoiceLineDescriptions,
+} from "@waitron/catalogue";
 import type { LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -136,6 +142,26 @@ async function priceOrderLines(
   }
 
   const priced = priceBasket(items);
+
+  // Feature B — re-key catalogue content to the fiscal line. Catalogue descriptions are authored under
+  // the BARE language tag (`es` = "our Spanish"); the `working_order_lines_check_locales` trigger (and
+  // the receipt) require the per-line map to hold EXACTLY this location's full-tag `invoice_locales`
+  // (`es-ES`). Read those FRESH from the DB, NOT `cfg.invoiceLocales` — the latter is env-derived and
+  // can drift from what the trigger actually checks, which is the location row. `cfg.locationId` is the
+  // till's own configured location, so this single-row read always resolves (the same invariant
+  // `readInvoiceNumber` relies on). `toInvoiceLineDescriptions` graceful-fills and NEVER throws (§5:
+  // nothing may block a sale), and mutating `priced.lines` in place propagates the re-key to BOTH the
+  // `working_order_lines` rows built below AND the filed `sale_lines` (the same `priced` is threaded
+  // back out and fed to `recordSale`). The inherited/locked paths (`priceLockedLines`, move/transfer)
+  // already carry full tags and are untouched.
+  const [loc] = await tx
+    .select({ invoiceLocales: locations.invoiceLocales })
+    .from(locations)
+    .where(eq(locations.id, cfg.locationId));
+  for (const line of priced.lines) {
+    line.descriptions = toInvoiceLineDescriptions(line.descriptions, loc!.invoiceLocales);
+  }
+
   const lineRows = priced.lines.map((line, i) => ({
     tenantId: cfg.tenantId,
     workingOrderId,
