@@ -614,15 +614,19 @@ local secondary → primary, in-process — LANDED (#160).** C2a built the
 in-process `promoteLocalSecondaryToPrimary` (`promote.ts`), so a fence-attested local-secondary promote
 flips `singleton_role` live and the fiscal drain/reconcile pass starts on the next tick with **no restart**
 (a real-PG e2e proves the tills answer throughout). Still deferred: the mirror→primary **mode** flip that
-opens the read-only gate live, and starting the mode-gated workers at runtime (later slices).
+opens the read-only gate live, and starting the singleton-role-gated workers (sync source / retention /
+backup / tunnel, re-gated onto `singleton_role` in #168) at runtime (Slice 3).
 
 - **Promotion + fencing tooling and the till-side failover list** — the promotion-runbook *design* is done
   (its own spec, above), and its **foundation slice LANDED (#158)**: the `deployment.singleton_role` axis
   (migration `0071` + accessors + the `(mirror, primary)` CHECK + the `setDeploymentMode('mirror')`
   co-set) and the `singletonPass` helper gating the fiscal drain/reconcile pass on it (read per-pass, so a
-  future promotion flips it with no restart). Only the fiscal pass moved to the new axis; the read-only
-  gate / sync source / retention / tunnel stay on `mode`. Fixes the active-active correctness bug (a local
-  secondary would otherwise run the AEAT submitter); today's primary + C2a mirror are byte-identical.
+  future promotion flips it with no restart). The fiscal pass moved to the new axis first (#158); the sync
+  source / retention / backup / tunnel + the mirror-bundle endpoint followed (#168, below). The read-only
+  gate / ambient viewer / device+print mounts stay on `mode` (a mirror serves read-only; a sell-only
+  secondary still sells). Fixes the active-active correctness bug (a local secondary would otherwise run
+  the AEAT submitter — and, before #168, duplicate the source/retention/backup/tunnel duties); today's
+  primary + C2a mirror are byte-identical.
   The promote *action* is being built slice by slice (plan:
   `docs/superpowers/plans/2026-08-29-promote-action-slice-1-local-secondary.md`). **Slice 1 — local
   secondary → primary, in-process — LANDED (#160):** the fence-attestation
@@ -633,11 +637,16 @@ opens the read-only gate live, and starting the mode-gated workers at runtime (l
   today uses `migrationsDatabaseUrl`, dev-correct only — see spec §4); Slice 3 — mirror→primary + the
   worker-lifecycle manager (gated on reserved-SIF staging, §3f.1); Slice 4 — cold restore (gated on the
   backup regime, §5d/§9); Slice 5 — rejoin-as-secondary + the conflict watcher (gated on the membership
-  wire-protocol, §9.1). **One follow-on from the #158 reviews remains** (the other — a `(primary,
-  secondary)` sell-only boot integration assertion — is **now e2e-proven** by Slice 1's
-  `boot.promote.test.ts`): revisiting
-  whether a sell-only secondary should keep mounting the sync source / retention / tunnel (all on `mode`
-  today — correct for this slice, but the active-active *serving* decision isn't built). The rest of the
+  wire-protocol, §9.1). **The #158 follow-on — re-gating the singleton duties — LANDED (#168):** the sync
+  source, retention sweep, scheduled backup, tunnel client, and the retention-dependent mirror-bundle
+  endpoint now gate on a boot-time `isSingletonPrimary` (`singleton_role='primary'`), not on `mode`, so a
+  sell-only local secondary (`primary`,`secondary`) runs NONE of them — fixing the active-active
+  duplication for those duties (the other #158 follow-on, the `(primary, secondary)` boot assertion, was
+  already e2e-proven by `boot.promote.test.ts`, and `boot.singleton.rls.test.ts` now pins the duty gates
+  directly). Still boot-time, not live: starting these on an in-process promotion is Slice 3's
+  worker-lifecycle manager. **Follow-up (odd job):** consolidate the duplicated `boot.*.test.ts` helpers
+  (`withCapturedStdout`/`waitForEvent`, and the pre-existing `freePort`/`poll`/`seedIdentity`) into a
+  shared `apps/server/src/testing/` module. The rest of the
   tooling is still gated on the lifecycle spec's other §9 open items — the membership/rejoin wire-protocol
   (§9.1) and the till-failover detail (§9.5). Boot-time role resolution, continuous conflict-detection,
   the "one primary" invariant.
