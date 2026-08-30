@@ -335,4 +335,25 @@ describe("till-lock-screen", () => {
     // In PIN mode the operator is logging in — the display set-up affordance is gone.
     expect(query(el, "[data-setup-device]")).toBeNull();
   });
+
+  // Handheld (handheld-tableside Task 8): the roster view carries a SECOND set-up affordance beside the
+  // kitchen-display one, so a FRESH phone can reach the handheld enrol view; it emits `setup-handheld`,
+  // which the app turns into the handheld enrol screen. Same roster-only placement as `setup-device`.
+  it("emits setup-handheld from the waiter-handheld set-up affordance (roster view)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const spy = vi.fn();
+    el.addEventListener("setup-handheld", spy);
+    click(el, "[data-setup-handheld]");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("hides the handheld set-up affordance in PIN mode (roster view only, like setup-device)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(query(el, "[data-setup-handheld]")).not.toBeNull();
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    expect(query(el, "[data-setup-handheld]")).toBeNull();
+  });
 });

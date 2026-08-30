@@ -118,6 +118,18 @@ export const en = {
   "device.enrol_hint": "Enter the pairing code shown on the dashboard",
   "device.enrol_code": "Pairing code",
   "device.enrol_submit": "Set up",
+  // Handheld enrol (handheld-tableside Task 8) — the twin of `device.setup`/the `device.enrol_*` keys
+  // above, for a waiter's PHONE rather than a kitchen display. `device.setup_handheld` is the lock
+  // screen's second affordance (beside `device.setup`) that routes a FRESH phone to the handheld enrol
+  // view; `device.handheld_enrol_*` are that view's title/hint/submit (the code-field label reuses
+  // `device.enrol_code`, which names no device type). A refused code shows the ONE generic
+  // `device.enrol_failed` — the phone shell has no per-code recovery, so "invalid" vs "expired" would
+  // read the same to the waiter (contrast the station screen, which maps codes via i18n/codes.ts).
+  "device.setup_handheld": "Set up as waiter handheld",
+  "device.handheld_enrol_title": "Set up this waiter handheld",
+  "device.handheld_enrol_hint": "Enter the pairing code shown on the dashboard",
+  "device.handheld_enrol_submit": "Set up",
+  "device.enrol_failed": "That pairing code was not accepted. Ask a manager for a new one.",
   // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
   // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
   // names the screen. The three per-course levers name the state they ADVANCE the course to: `expo.fire`
@@ -346,6 +358,12 @@ export const es: Record<StringKey, string> = {
   "device.enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
   "device.enrol_code": "Código de emparejamiento",
   "device.enrol_submit": "Configurar",
+  "device.setup_handheld": "Configurar como terminal de camarero",
+  "device.handheld_enrol_title": "Configurar este terminal de camarero",
+  "device.handheld_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
+  "device.handheld_enrol_submit": "Configurar",
+  "device.enrol_failed":
+    "No se aceptó ese código de emparejamiento. Pide uno nuevo a un responsable.",
   "expo.open": "Pase",
   "expo.title": "Pase",
   "expo.back": "Volver al mostrador",

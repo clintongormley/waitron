@@ -17,6 +17,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
+import "./screens/till-handheld-enrol-screen.js";
 import "./screens/till-expo-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
@@ -215,6 +216,15 @@ export class TillApp extends LitElement {
    * unchanged.
    */
   @state() private handheldMode = false;
+  /**
+   * Whether the lock screen's "set up as waiter handheld" affordance has opened the handheld ENROL view
+   * (handheld-tableside Task 8) — the twin of {@link deviceMode}'s station-screen enrol path, but for a
+   * FRESH phone that holds no device cookie yet. Set `true` by {@link #onSetupHandheld}; while set,
+   * `render` shows `<till-handheld-enrol-screen>` in place of the normal screen. Cleared by
+   * {@link #onHandheldEnrolled} once the code is redeemed, which then re-runs {@link #boot} so the now-set
+   * `handheld` cookie routes the app into the phone shell.
+   */
+  @state() private handheldEnrolling = false;
   /**
    * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
    * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
@@ -946,6 +956,31 @@ export class TillApp extends LitElement {
     this.screen = "station";
   }
 
+  /**
+   * Route a FRESH phone into the handheld enrol view from the lock screen's "set up as waiter handheld"
+   * affordance (handheld-tableside Task 8) — the twin of {@link #onSetupDevice}. State-only switch: while
+   * `handheldEnrolling` is set, `render` shows `<till-handheld-enrol-screen>` instead of the lock screen,
+   * so the operator can pair the phone with a code. Unlike the KDS path this does NOT touch `screen` —
+   * the enrol screen is an overlay on the boot state, and a successful enrol re-boots into the shell
+   * rather than navigating within this session.
+   */
+  #onSetupHandheld(): void {
+    this.errorKey = undefined;
+    this.handheldEnrolling = true;
+  }
+
+  /**
+   * The handheld enrol view redeemed a pairing code (handheld-tableside Task 8): the device cookie is now
+   * set, so leave the enrol view and re-run {@link #boot}. The boot's device probe reads the fresh cookie
+   * as `handheld`, sets {@link handheldMode}, and keeps the app on the lock screen — the phone shell — for
+   * the waiter to PIN-log-in. Re-boot (not a bare state flip) so the phone picks up its shell exactly as a
+   * cold load of an already-enrolled handheld would, one code path for both.
+   */
+  async #onHandheldEnrolled(): Promise<void> {
+    this.handheldEnrolling = false;
+    await this.#boot();
+  }
+
   /** Show the expo/pass display screen (KDS-3) — the expediter's cross-station board, reached from the
    * counter's "Pass" nav. Basket-preserving like the station/schedule/floor nav (the basket is
    * till-owned); the screen owns its own fetching + levers via `.api`, so this just switches. */
@@ -1473,6 +1508,8 @@ export class TillApp extends LitElement {
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
         @setup-device=${() => this.#onSetupDevice()}
+        @setup-handheld=${() => this.#onSetupHandheld()}
+        @handheld-enrolled=${() => void this.#onHandheldEnrolled()}
         @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
@@ -1509,10 +1546,18 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        <!-- keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
-             the whole screen subtree, repainting every child in the new language (the screens hold no
-             LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it. -->
-        ${keyed(currentLocale(), this.#renderScreen())}
+        <!-- The handheld enrol view (handheld-tableside Task 8) overlays the boot/lock state when the
+             lock screen's "set up as waiter handheld" affordance opened it — a FRESH phone pairing
+             itself. Its handheld-enrolled event (wired above) re-boots into the phone shell. Shown ahead
+             of the normal screen so it takes precedence over whatever screen the boot left set. -->
+        ${
+          this.handheldEnrolling
+            ? html`<till-handheld-enrol-screen .api=${this.api}></till-handheld-enrol-screen>`
+            : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
+              // the whole screen subtree, repainting every child in the new language (the screens hold no
+              // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+              keyed(currentLocale(), this.#renderScreen())
+        }
       </div>
     `;
   }

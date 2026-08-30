@@ -290,6 +290,9 @@ const schedule = (el: TillApp) =>
 const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
 const station = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen");
+/** The handheld enrol screen (handheld-tableside Task 8), present only while `handheldEnrolling` is set;
+ * queried by tag (its class is not imported here — the app only needs to know it is mounted). */
+const handheldEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-handheld-enrol-screen");
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
@@ -554,6 +557,45 @@ describe("till-app", () => {
     const s = station(el);
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
+  });
+
+  // Handheld enrol (handheld-tableside Task 8): the lock screen's "set up as waiter handheld" affordance
+  // opens the enrol view, and a redeemed code re-boots the app into the phone shell.
+  it("the set-up-handheld affordance opens the handheld enrol view (lock screen gone)", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    // The lock screen emits `setup-handheld`; the app overlays the handheld enrol screen so a fresh phone
+    // can pair itself, and the lock screen it replaces is no longer rendered.
+    emit(lock(el)!, "setup-handheld");
+    await flush(el);
+    expect(handheldEnrol(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+  });
+
+  it("a redeemed handheld enrol re-boots into the phone shell (handheld mode, back on the lock screen)", async () => {
+    const { el } = await mountApp({
+      // The FIRST boot (at mount) is a normal 401 — not-a-device. AFTER enrol the cookie is set, so the
+      // re-boot's SECOND identity probe resolves `handheld`. `mockRejectedValueOnce` then default-resolve
+      // gives the two-call sequence the one mock must serve across both boots.
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    emit(lock(el)!, "setup-handheld");
+    await flush(el);
+    expect(handheldEnrol(el)).not.toBeNull();
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `handheld-enrolled`.
+    emit(handheldEnrol(el)!, "handheld-enrolled");
+    await flush(el);
+    // The re-boot read the fresh cookie as `handheld`: the enrol view is gone, the app is back on the lock
+    // screen (the phone shell — a handheld waits for the PIN login), and handheld mode is on.
+    expect(handheldEnrol(el)).toBeNull();
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
+    expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
   });
 
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {

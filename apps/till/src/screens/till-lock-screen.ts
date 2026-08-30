@@ -130,8 +130,15 @@ export class TillLockScreen extends LitElement {
         border-top: 1px solid var(--wt-color-border);
       }
 
-      .setup-device {
+      .setup-device,
+      .setup-handheld {
         width: 100%;
+      }
+
+      /* Space the handheld twin off the kitchen-display affordance above it so the two full-width
+         secondary buttons read as a stack of choices, not one control. */
+      .setup-handheld {
+        margin-top: var(--wt-space-2);
       }
     `,
   ];
@@ -232,6 +239,14 @@ export class TillLockScreen extends LitElement {
         >
           ${t("device.setup")}
         </wt-button>
+        <wt-button
+          class="setup-handheld"
+          data-setup-handheld
+          variant="secondary"
+          @click=${() => this.#setupHandheld()}
+        >
+          ${t("device.setup_handheld")}
+        </wt-button>
         <!-- Pre-login language chooser (per-user-language-preference). It only EMITS a bubbling,
              composed locale-selected event; till-app turns a pre-login pick into a transient setLocale
              (never a preference write). The lock screen neither handles the event nor switches locale. -->
@@ -247,6 +262,14 @@ export class TillLockScreen extends LitElement {
    * off the PIN view (roster mode only), so an operator logging in never sees it. */
   #setupDevice(): void {
     this.dispatchEvent(new CustomEvent("setup-device", { bubbles: true, composed: true }));
+  }
+
+  /** Route a FRESH phone into the handheld enrol view (handheld-tableside Task 8) — the twin of
+   * {@link #setupDevice}: emit a composed, bubbling `setup-handheld` the app turns into the handheld
+   * enrol screen. Kept in roster mode beside "set up as kitchen display", off the PIN view, so an
+   * operator logging in never sees it. */
+  #setupHandheld(): void {
+    this.dispatchEvent(new CustomEvent("setup-handheld", { bubbles: true, composed: true }));
   }
 
   #renderRoster() {
