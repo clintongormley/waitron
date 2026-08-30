@@ -34,6 +34,7 @@ export {
   listPersons,
   reactivatePerson,
   resetPin,
+  setEmail,
   setPassword,
   setPersonLocale,
   setRole,

@@ -1,12 +1,36 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
+import { isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
+import { normalizeEmail, isValidEmail } from "./email.js";
 import { authorizeManager } from "./manager-login.js";
 import { hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
+
+/**
+ * Translate the ONE driver error the email write paths care about — a `persons_tenant_email_uq`
+ * collision — into the domain `person.email_taken`, and re-throw anything else untouched. The
+ * duplicate surfaces as SQLSTATE 23505 wrapped in Drizzle's `DrizzleQueryError`, so detection goes
+ * through `@waitron/db`'s `isUniqueViolation` (a cause-chain walk), not a top-level `.code` read.
+ * `email` is normalized before it reaches here, so the error carries the value that actually
+ * collided. Exported for the crafted-error unit test in staff.test.ts, NOT from the package barrel.
+ */
+export function asEmailTaken(err: unknown, email: string): never {
+  if (isUniqueViolation(err)) throw new AppError("person.email_taken", { email });
+  throw err;
+}
+
+/** Screen an optional email input: `undefined` → `null` (no email); otherwise normalize and validate,
+ * throwing `person.email_invalid` on a malformed value BEFORE any write. */
+function screenEmail(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const email = normalizeEmail(raw);
+  if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
+  return email;
+}
 
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
 export const MIN_PIN_LENGTH = 4;
@@ -31,6 +55,7 @@ export async function createPerson(
     displayName: string;
     role: PersonRoleValue;
     pin: string;
+    email?: string;
   },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
@@ -38,16 +63,23 @@ export async function createPerson(
     permission: "person.manage",
   });
   assertPinLength(input.pin);
-  const [row] = await tx
-    .insert(persons)
-    .values({
-      tenantId: input.tenantId,
-      displayName: input.displayName,
-      pinHash: hashPin(input.pin),
-      role: input.role,
-    })
-    .returning({ id: persons.id });
-  return { id: row!.id };
+  const email = screenEmail(input.email);
+  try {
+    const [row] = await tx
+      .insert(persons)
+      .values({
+        tenantId: input.tenantId,
+        displayName: input.displayName,
+        pinHash: hashPin(input.pin),
+        role: input.role,
+        email,
+      })
+      .returning({ id: persons.id });
+    return { id: row!.id };
+  } catch (err) {
+    // A `persons_tenant_email_uq` collision → person.email_taken; email is non-null on this path.
+    asEmailTaken(err, email!);
+  }
 }
 
 /** Changes a person's role. Gated on `person.manage`. authorizeManager reads a role live (via
@@ -97,6 +129,28 @@ export async function setPassword(
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
     .where(eq(persons.id, input.personId));
+}
+
+/** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
+ * `person.manage`, mirroring `setPassword`: `authorizeManager` runs FIRST, so a caller without the
+ * permission is rejected before any write. The email is normalized then screened (malformed →
+ * `person.email_invalid`) before the UPDATE; a collision with another person's email in the same
+ * tenant (the `persons_tenant_email_uq` index) surfaces as `person.email_taken`. */
+export async function setEmail(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string; email: string },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
+  try {
+    await tx.update(persons).set({ email }).where(eq(persons.id, input.personId));
+  } catch (err) {
+    asEmailTaken(err, email);
+  }
 }
 
 /**
@@ -196,6 +250,8 @@ export async function listActivePersonsWithPermission(
 export interface PersonSummary {
   personId: string;
   displayName: string;
+  /** The person's login email (dashboard sign-in identifier), or null for till-only PIN staff. */
+  email: string | null;
   role: PersonRoleValue;
   status: "active" | "suspended";
   hasPassword: boolean;
@@ -223,6 +279,7 @@ export async function listPersons(
     .select({
       personId: persons.id,
       displayName: persons.displayName,
+      email: persons.email,
       role: persons.role,
       status: persons.status,
       passwordHash: persons.passwordHash,
@@ -233,6 +290,7 @@ export async function listPersons(
   return rows.map((r) => ({
     personId: r.personId,
     displayName: r.displayName,
+    email: r.email,
     role: r.role as PersonRoleValue,
     status: r.status as "active" | "suspended",
     hasPassword: r.passwordHash !== null,
