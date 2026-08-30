@@ -90,6 +90,8 @@ export class SetupReviewScreen extends LitElement {
           </dd>
           <dt>Operator</dt>
           <dd data-test="summary-admin">${venue?.admin?.displayName ?? "—"}</dd>
+          <dt>Operator email</dt>
+          <dd data-test="summary-admin-email">${venue?.admin?.email ?? "—"}</dd>
           <dt>AEAT certificate</dt>
           <dd data-test="summary-cert">${certAttached ? "attached" : "not attached"}</dd>
         </dl>

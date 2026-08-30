@@ -29,7 +29,12 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       },
       seriesCode: "FA",
       rectificativeSeriesCode: "RF",
-      admin: { displayName: "Alba", pin: SAMPLE_PIN, password: SAMPLE_PASSWORD },
+      admin: {
+        displayName: "Alba",
+        email: "alba@example.com",
+        pin: SAMPLE_PIN,
+        password: SAMPLE_PASSWORD,
+      },
     },
     aeatCert: { pfxBase64: SAMPLE_PFX, passphrase: SAMPLE_PASSPHRASE, certKind: "sello" },
   };
@@ -50,6 +55,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
     expect(text(el, "[data-test=summary-rectificativeSeriesCode]")).toBe("RF");
     expect(text(el, "[data-test=summary-admin]")).toBe("Alba");
+    expect(text(el, "[data-test=summary-admin-email]")).toBe("alba@example.com");
   });
 
   it("shows the certificate as attached, and NEVER renders any secret value", async () => {
@@ -85,6 +91,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-country]")).toBe("—");
     expect(text(el, "[data-test=summary-location]")).toBe("—");
     expect(text(el, "[data-test=summary-admin]")).toBe("—");
+    expect(text(el, "[data-test=summary-admin-email]")).toBe("—");
     expect(text(el, "[data-test=summary-cert]")).toBe("not attached");
   });
 
