@@ -742,6 +742,14 @@ here is the cross-cutting or genuinely-decision-bearing work.
   presentational venue-default UI language distinct from fiscal `invoiceLocales`. Latent (matters for
   bilingual / non-Spanish venues, region overlays like en-US); harmless today. **Design:**
   `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`.
+  **Write-side LANDED (feature B):** venues now author catalogue content bare (`es`) and it is re-keyed
+  to the location's full-tag `invoice_locales` at the fiscal-line write (`toInvoiceLineDescriptions` @
+  `priceOrderLines`, reading `locations.invoice_locales` fresh), satisfying the receipt-completeness
+  trigger; demo seed authors bare, files full. The four read-side items above remain. **New deferred
+  follow-up:** authoring-time locale-completeness validation — a product missing a venue invoice-locale's
+  translation currently graceful-fills (receipt shows the primary language in that column, sale never
+  blocked per §5) rather than being caught at save time; a save-time check would make the receipt
+  genuinely complete.
 
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
