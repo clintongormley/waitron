@@ -70,7 +70,14 @@ export async function runBreakGlassReset(deps: {
   // policy floor uses the gated `resetPin`.)
   const newPin = deps.env.WAITRON_BREAKGLASS_PIN;
 
-  const personArg = parsePersonArg(deps.argv);
+  const parsedPerson = parsePersonArg(deps.argv);
+  if (!parsedPerson.ok) {
+    // `--person` with nothing after it is an operator typo. Fail loudly rather than silently
+    // degrading to "no --person", which would reset the sole admin the operator did not name.
+    deps.out("--person requires an id, e.g. `--person <id>`");
+    return 2;
+  }
+  const personArg = parsedPerson.id;
 
   const db = await deps.connect(databaseUrl);
   try {
@@ -130,10 +137,14 @@ export async function runBreakGlassReset(deps: {
   }
 }
 
-/** Pull the value of an optional `--person <id>` flag out of argv. Returns `undefined` when the flag
- * is absent. Everything else in argv is ignored — the secret NEVER travels there. */
-function parsePersonArg(argv: string[]): string | undefined {
+/** Pull the value of an optional `--person <id>` flag out of argv. `ok:false` means the flag was
+ * given with no following value (a usage error, not "flag absent"); on `ok:true`, `id` is the value
+ * or `undefined` when the flag is absent. Everything else in argv is ignored — the secret NEVER
+ * travels there. */
+function parsePersonArg(argv: string[]): { ok: true; id: string | undefined } | { ok: false } {
   const i = argv.indexOf("--person");
-  if (i === -1) return undefined;
-  return argv[i + 1];
+  if (i === -1) return { ok: true, id: undefined };
+  const value = argv[i + 1];
+  if (value === undefined || value === "") return { ok: false };
+  return { ok: true, id: value };
 }

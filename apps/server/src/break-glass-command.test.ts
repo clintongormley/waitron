@@ -262,6 +262,18 @@ describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
     );
   });
 
+  it("--person as the last token (no following id) → returns 2 (usage), nothing reset", async () => {
+    const { tenantId, adminId } = await setupTenant();
+    const before = await readPerson(tenantId, adminId);
+    // `--person` with nothing after it must not silently degrade to "no --person" and reset the
+    // sole admin — it is an operator typo, so fail as a usage error and touch nothing.
+    const { code, out } = await run(baseEnv(tenantId), ["--person"]);
+    expect(code).toBe(2);
+    expect(out.join("\n")).toMatch(/--person/);
+    const after = await readPerson(tenantId, adminId);
+    expect(after!.passwordHash).toBe(before!.passwordHash);
+  });
+
   it("--person naming a non-admin/absent id → returns 1, nothing reset", async () => {
     const { tenantId, adminId } = await setupTenant();
     const { code } = await run(baseEnv(tenantId), [
