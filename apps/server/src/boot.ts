@@ -867,8 +867,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // "Mount-and-gate everything") makes REQUEST-time gating the eventual form so live mirror→primary
   // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
   // and the verb gate can't catch a write-behind-a-GET without a new path deny-list — and converting it
-  // to the §3a form belongs with promotion Slice 3, which already converts the analogous mode-gated
-  // workers (sync source / retention / tunnel, §3c) to runtime-startable. See read-only-gate.ts's header.
+  // to the §3a form belongs with promotion Slice 3, which already converts the analogous
+  // `singleton_role`-gated workers (sync source / retention / backup / tunnel, §3c — re-gated in #168) to
+  // runtime-startable. See read-only-gate.ts's header.
   if (!isMirror) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
     // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and

@@ -434,9 +434,10 @@ export function loadMirrorSyncConfig(env: Env): SyncTransportConfig {
     // `sync.mirror_token`, never from env — see boot.ts's mirror path.
     peers: [],
     fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
-    // Never read on a mirror (the retention sweep is `!isMirror`-gated in boot — a mirror holds no
-    // `sync_log` to prune), but the shared `SyncTransportConfig` shape requires it; defaulted so the
-    // type is honest rather than asserted.
+    // Never read on a mirror (the retention sweep gates on `singleton_role='primary'` in boot since #168,
+    // and a mirror is always `secondary` — the `deployment_role_valid_ck` CHECK forbids `(mirror, primary)`
+    // and `setDeploymentMode('mirror')` co-sets `secondary` — so it holds no `sync_log` to prune), but the
+    // shared `SyncTransportConfig` shape requires it; defaulted so the type is honest rather than asserted.
     retentionTickMs: positiveInt(
       env,
       "WAITRON_SYNC_RETENTION_TICK_MS",
