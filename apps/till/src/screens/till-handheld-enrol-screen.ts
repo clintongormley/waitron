@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, type WtInput } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { TillApi } from "../api/client.js";
 
@@ -17,8 +17,10 @@ import type { TillApi } from "../api/client.js";
  *    station screen surfaces — the waiter's only recovery is a fresh code from the manager either way,
  *    so distinguishing "invalid" from "expired" buys the phone nothing.
  *
- * The submitted code is read LIVE off the field at click time (not from tracked state), so the browser
- * autofill / paste path a waiter uses reaches `enrolDevice` even without an intervening input event.
+ * The submit button enables once `this.code` becomes non-empty, which happens on `wt-change`, so a
+ * `wt-change` (input, paste or autofill that fires one) is what unlocks it. At click time the handler
+ * then reads the code LIVE off the field rather than from that tracked state, so it always submits the
+ * exact current field contents even if the value changed after the last tracked `wt-change`.
  * `enrolDevice`'s resolved {@link DeviceEnrolment} is intentionally ignored: the trusted-device token
  * rides its Set-Cookie, never the body, and `#boot` re-reads the identity — this view only needs to
  * know the redemption SUCCEEDED, which is the resolve.
@@ -83,14 +85,15 @@ export class TillHandheldEnrolScreen extends LitElement {
   }
 
   /**
-   * Redeem the entered pairing code. Reads the code LIVE off the field so an autofill/paste with no
-   * input event still enrols. Guarded so an empty code (or a double-tap past the disabled button) never
+   * Redeem the entered pairing code. Reads the code LIVE off the field at submit time so it always uses
+   * the exact current field contents, covering a paste/autofill that changed the value after the last
+   * tracked `wt-change`. Guarded so an empty code (or a double-tap past the disabled button) never
    * calls the API. On success — and only if still connected, so a torn-down view never announces — it
    * emits the composed `handheld-enrolled` the app turns into a re-boot; on a rejected `{ code }` it
    * shows the generic `device.enrol_failed` banner (never the raw code).
    */
   async #enrol(): Promise<void> {
-    const code = this.shadowRoot!.querySelector<HTMLInputElement>("[data-code]")!.value;
+    const code = this.shadowRoot!.querySelector<WtInput>("[data-code]")!.value;
     if (code === "" || this.enrolling) return;
     this.enrolling = true;
     this.failed = false;

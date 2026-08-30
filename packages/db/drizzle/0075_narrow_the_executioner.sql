@@ -1,1 +1,1 @@
-ALTER TYPE "public"."device_kind" ADD VALUE 'handheld';
+ALTER TYPE "public"."device_kind" ADD VALUE 'handheld';--> statement-breakpoint
