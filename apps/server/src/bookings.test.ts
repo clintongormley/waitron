@@ -498,6 +498,38 @@ describe("seatBooking", () => {
     });
   });
 
+  // The terminal write is a compare-and-swap on the `booked` predecessor (matching `advanceStatus`),
+  // not a bare id write — the concurrency backstop for the window between the lock-free `getBooking`
+  // read and the write. A true race needs real Postgres (PGlite serialises on one backend, §4), so this
+  // pins the guard the way `advanceStatus`'s tests do: a booking that is no longer `booked` is refused
+  // with `booking.invalid_transition`, stays `cancelled`, and leaves NO open tab behind. (Removing the
+  // pre-`openTab` `booked` check leaves this green: the CAS then opens a tab, matches nothing on the
+  // predecessor, throws, and the tx rollback undoes the tab — proven by deletion, 2026-08-30.)
+  it("CAS guard: seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "3" }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Núñez",
+        tableId,
+        createdBy,
+      }),
+    );
+    await scoped(cfg, (tx) => cancelBooking(tx, cfg, id));
+    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}))).rejects.toMatchObject({
+      code: "booking.invalid_transition",
+    });
+    const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+    expect(b).toMatchObject({ status: "cancelled", tabId: null });
+    const tabs = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
+    );
+    expect(tabs.rows[0]!.n).toBe(0);
+  });
+
   it("refuses an absent booking with booking.not_found", async () => {
     const { cfg } = await setupTillVenue();
     await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, randomUUID(), {}))).rejects.toMatchObject(

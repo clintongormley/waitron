@@ -282,6 +282,19 @@ export async function seatBooking(
     throw new AppError("booking.table_required", {});
   }
   const { tabId } = await openTab(tx, cfg, { tableId });
-  await tx.update(bookings).set({ tableId, tabId, status: "seated" }).where(eq(bookings.id, id));
+  // Compare-and-swap on the `booked` predecessor (the `advanceStatus` shape), NOT a bare id write. The
+  // pre-`openTab` check above is the fast common-path error; this is the concurrency backstop for the
+  // window between that lock-free `getBooking` read and here — a concurrent cancel (would be silently
+  // overwritten back to `seated`) or a second seat onto another table (last-write-wins, orphaning a
+  // tab). An empty match means the row left `booked` under us; the throw rolls back the whole caller tx
+  // INCLUDING this `openTab`, so no orphan tab survives.
+  const seated = await tx
+    .update(bookings)
+    .set({ tableId, tabId, status: "seated" })
+    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
+    .returning({ id: bookings.id });
+  if (seated.length === 0) {
+    throw new AppError("booking.invalid_transition", { bookingId: id });
+  }
   return { tabId };
 }

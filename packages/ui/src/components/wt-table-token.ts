@@ -12,8 +12,8 @@ import type { FloorTable } from "../floor.js";
 export interface TableTokenLabels {
   covers?: string;
   toServe?: string;
-  /** The PREFIX word for the reserved chip ("Reservada"/"Reserved"), rendered before the "HH:MM" time
-   *  ("Reservada 20:30"), unlike the count-suffix labels above. Absent ⇒ just the time. */
+  /** The PREFIX word for the reserved chip (the localised "Reserved"), rendered before the "HH:MM" time
+   *  ("Reserved 20:30"), unlike the count-suffix labels above. Absent ⇒ just the time. */
   reserved?: string;
 }
 
@@ -132,7 +132,7 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reservada HH:MM" (Bookings-1 §4) — the table's imminent booking. Distinguished from the service
+      /* "Reserved HH:MM" (Bookings-1 §4) — the table's imminent booking. Distinguished from the service
          hints by a PRIMARY border on a neutral chip (theme text on a neutral fill, so the token-fixed
          contrast holds and no arbitrary colour is involved): distinct from the ready chip's success
          border and the status chip's neutral border. It is an independent signal — it sits beside the

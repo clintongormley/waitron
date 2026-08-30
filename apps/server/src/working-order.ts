@@ -3207,7 +3207,7 @@ export interface TableState {
   rotation: number | null;
   /** The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — the earliest
    *  reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
-   *  renders "Reservada HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
+   *  renders "Reserved HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
    *  `locations.time_zone` at read time (§2b), computed in JS from the injected clock — never in SQL.
    *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present. */
   nextReservation: { time: string; partySize: number; contactName: string } | null;
@@ -3392,7 +3392,7 @@ export async function listTablesWithState(
       shape: r.shape,
       rotation: r.rotation,
       // Reserved-on-floor (§4): the imminent booking, or null. The DB `time` arrives as `HH:MM:SS`;
-      // normalise to `HH:MM` at the presentation edge (controller ruling) so the floor reads "Reservada
+      // normalise to `HH:MM` at the presentation edge (controller ruling) so the floor reads "Reserved
       // HH:MM" straight off it.
       nextReservation:
         r.next_reservation_time !== null

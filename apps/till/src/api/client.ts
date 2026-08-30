@@ -612,7 +612,7 @@ export interface TableState {
   /**
    * The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — its earliest
    * reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
-   * renders "Reservada HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
+   * renders "Reserved HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
    * `TableState.nextReservation` (`apps/server/src/working-order.ts`'s `listTablesWithState`), NOT
    * imported — the same bundle-decoupling rationale as the siblings here. Non-optional `| null`,
    * unconditionally present, matching `status`/`posX`.

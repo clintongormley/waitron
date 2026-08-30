@@ -215,7 +215,7 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reservada HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
+      /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
          chip (theme text on a neutral fill, so contrast stays token-fixed): distinct from the ready
          chip's success border, the status chip's neutral border, and the en-route chip's filled primary.
          An independent signal that sits beside the one service hint and the manual status, never in their
@@ -401,7 +401,7 @@ export class TillFloorScreen extends LitElement {
   #toFloorTable(table: TableState): FloorTable {
     // The occupancy half carries the live read-model AND the reserved-on-floor time (Bookings-1 §4):
     // the shared `FloorOccupancyInput` names it `reservedTime`, so derive it from `nextReservation.time`
-    // (the till's shape) here — the token then draws "Reservada HH:MM" on the map exactly as the list card.
+    // (the till's shape) here — the token then draws "Reserved HH:MM" on the map exactly as the list card.
     return toFloorTable(table, { ...table, reservedTime: table.nextReservation?.time ?? null });
   }
 

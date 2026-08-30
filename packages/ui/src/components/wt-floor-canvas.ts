@@ -27,7 +27,7 @@ export interface FloorCanvasCopy {
   floor: string;
   covers: string;
   toServe: string;
-  /** The reserved chip's prefix word ("Reservada"/"Reserved"), threaded into each token (Bookings-1 §4). */
+  /** The reserved chip's prefix word (the localised "Reserved"), threaded into each token (Bookings-1 §4). */
   reserved: string;
   zone: string;
   rotate: string;
