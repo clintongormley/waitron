@@ -25,7 +25,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable, setTableStatus } from "./tables.js";
 import { joinTable, openTab, splitOffCheck, unjoinTable } from "./working-order.js";
 import "./errors.js";
 
@@ -48,6 +48,8 @@ interface Seeded {
   tableId: string;
   /** A second table — unused by Task 1's asserts, seeded so the fixture is stable for later tasks. */
   tableId2: string;
+  /** An ACTIVE `table_service_statuses` row, so a test can give a table a non-null manual status. */
+  activeStatusId: string;
 }
 
 async function setupVenue(): Promise<Seeded> {
@@ -94,7 +96,16 @@ async function setupVenue(): Promise<Seeded> {
     await assignCatalogueToLocation(tx, locationId, cat.id);
     const t1 = await createTable(tx, cfg, { label: "T1" });
     const t2 = await createTable(tx, cfg, { label: "T2" });
-    return { aguaId: agua.id, jamonId: jamon.id, tableId: t1.id, tableId2: t2.id };
+    const status = await tx.execute<{ id: string }>(
+      sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, 'Bill requested', '#ef4444') returning id`,
+    );
+    return {
+      aguaId: agua.id,
+      jamonId: jamon.id,
+      tableId: t1.id,
+      tableId2: t2.id,
+      activeStatusId: status.rows[0]!.id,
+    };
   });
   return { cfg, ...seeded };
 }
@@ -273,11 +284,22 @@ describe("unjoinTable", () => {
   });
 
   it("without items: frees the table (tab_id → NULL) and clears its TS-2 status", async () => {
-    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { cfg, aguaId, tableId, tableId2, activeStatusId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
+    // Give the joined table a NON-NULL manual status FIRST, so the post-unjoin null assertion below can
+    // tell "unjoinTable cleared it" apart from "it was never set". joinTable sets only tab_id and never a
+    // status, so without this the clear would be untested (a §4 pass-for-the-wrong-reason).
+    await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId2, activeStatusId));
+    const [before] = await asApp(cfg, (tx) =>
+      tx
+        .select({ statusId: diningTables.statusId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId2)),
+    );
+    expect(before?.statusId).toBe(activeStatusId); // pre-condition: the status IS set going in.
 
     const result = await asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2));
 
