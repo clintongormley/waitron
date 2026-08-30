@@ -20,6 +20,7 @@ import {
   appendOrderAmendment,
   asAppUser,
   categories,
+  DEFAULT_TIME_ZONE,
   diningTables,
   invoiceSeries,
   isUniqueViolation,
@@ -3242,7 +3243,7 @@ function safeTimeZone(timeZone: string): string {
     new Intl.DateTimeFormat(undefined, { timeZone });
     return timeZone;
   } catch {
-    return "Europe/Madrid";
+    return DEFAULT_TIME_ZONE;
   }
 }
 
@@ -3284,7 +3285,7 @@ export async function listTablesWithState(
   );
   // `?? default` covers a missing/RLS-hidden row; `safeTimeZone` covers a STORED value `Intl` rejects
   // (the column is unvalidated free text) — either way the read never throws on bad tz config.
-  const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? "Europe/Madrid");
+  const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? DEFAULT_TIME_ZONE);
   const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
   const result = await tx.execute<{
     id: string;

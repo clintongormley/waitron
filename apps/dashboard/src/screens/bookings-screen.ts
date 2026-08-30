@@ -225,10 +225,18 @@ export class BookingsScreen extends LitElement {
   }
 
   /** The Seat row action: a booking with a table seats straight away; one without arms the inline
-   * table picker (design §6 — "prompts for a table if none is assigned"). */
+   * table picker (design §6 — "prompts for a table if none is assigned"). A booking with NO table AND
+   * no tables to offer cannot pick one, so seating it could only ever fail server-side with
+   * `booking.table_required`; rather than present a confirm guaranteed to fail after a round trip,
+   * surface that code locally (the screen's own error path) and arm no picker. */
   #onSeatClick(b: Booking): void {
     if (b.tableId !== null) {
       void this.#seat(b.id);
+      return;
+    }
+    if (this.tables.length === 0) {
+      this.seatingId = null;
+      this.errorKey = "booking.table_required";
       return;
     }
     this.errorKey = null;

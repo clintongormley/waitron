@@ -401,14 +401,20 @@ describe("bookings-screen", () => {
     expect(form(el).busy).toBe(false);
   });
 
-  it("seats without a table argument when the picker has no tables to offer", async () => {
+  it("surfaces table_required (no API call, no confirm) when a table-less booking has no tables to offer", async () => {
+    // A booking with NO assigned table AND no tables loaded cannot pick one, so seating it can only
+    // ever fail server-side with `booking.table_required`. The screen refuses to present a
+    // guaranteed-to-fail confirm: clicking Seat surfaces the error locally and arms no picker.
     const api = stubApi({ listTables: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
     await flush(el);
-    await click(el, "seat-bk-late"); // no table assigned, and no tables loaded → picker armed, empty
-    await click(el, "confirm-seat-bk-late");
+    await click(el, "seat-bk-late"); // no table assigned, and no tables to offer
     await flush(el);
-    expect(api.seatBooking).toHaveBeenCalledWith("bk-late");
+    expect(api.seatBooking).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-seat-bk-late]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("booking.table_required", "es-ES"),
+    );
   });
 
   it("renders exactly one h1 (its own title)", async () => {
