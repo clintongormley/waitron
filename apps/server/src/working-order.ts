@@ -536,23 +536,41 @@ export async function openTab(
 }
 
 /**
+ * Lock a working order's row `FOR UPDATE` and confirm it is `open`, else `tab.not_open` (naming `tabId`) —
+ * the shared locked-open-status primitive. An absent id (or another tenant's, RLS-hidden) matches no row
+ * and fails closed the same way. This checks ONLY the `working_orders` row; it does NOT require a
+ * `dining_tables` back-pointer, so it accepts a table-LESS open order (a split-off check) as well as a
+ * tab — {@link lockOpenTab} layers the is-a-tab back-pointer assertion on top.
+ *
+ * Lock ORDER: this takes the `working_orders` row lock and nothing else. Callers that ALSO lock
+ * `dining_tables` must take THIS lock FIRST, then `dining_tables` — the class order the sale/settle path
+ * uses (`payWorkingOrder` locks `working_orders`, then its settle UPDATE fires the 0050
+ * `working_orders_clear_table_status` trigger touching `dining_tables`), so a concurrent op and pay
+ * cannot cross-lock into a 40P01 (see {@link mergeTabs}/{@link unjoinTable}).
+ */
+async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
+  const [row] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (row?.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
  * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
  * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
  * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
  * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
  * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
  * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
- * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side.
+ * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side. This is
+ * {@link lockOpenTabRow} (the locked-open-status check) PLUS the is-a-tab back-pointer assertion.
  */
 async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
-  const [tab] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (tab === undefined || tab.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
-  }
+  await lockOpenTabRow(tx, tabId);
   const [pointer] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -1482,6 +1500,30 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
 }
 
 /**
+ * Refuse a carve-off batch that names the same source `line_no` more than once, BEFORE any lock, mint or
+ * write (`tab.transfer_duplicate_line`, naming the FIRST line_no that repeats). A repeated line_no does
+ * NOT conserve quantity: every entry is validated against the STATIC pre-batch snapshot of the line's
+ * quantity (never updated between entries) and the split write sets the source to `original − q` (a plain
+ * set, not a cumulative decrement), so two partial "1"s off a café×3 line both pass and the destination
+ * gains 1.000+1.000 while the source only drops to 2.000 — 4 from an original 3. A whole-line + partial
+ * pair on one line is worse and contradictory: the whole-line path DELETEs the line while the split's
+ * `UPDATE … WHERE line_no=…` then matches zero rows and its INSERT still fabricates a destination line.
+ * Neither shape folds into a cumulative decrement, so a duplicate is simply refused (a 400 request-shape
+ * fault). Shared by {@link transferLines} (both ends tabs) and {@link splitOffCheck} (detached check); a
+ * duplicate WHOLE-line pair — already harmless via `moveTabLines`' `inArray` set semantics — is refused
+ * too, which is fine/stricter.
+ */
+function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
+  const seenLineNos = new Set<number>();
+  for (const { lineNo } of transfers) {
+    if (seenLineNos.has(lineNo)) {
+      throw new AppError("tab.transfer_duplicate_line", { tabId, lineNo });
+    }
+    seenLineNos.add(lineNo);
+  }
+}
+
+/**
  * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
  * `transfers` names a source `line_no` and optionally a `quantity`:
  *
@@ -1573,24 +1615,10 @@ export async function transferLines(
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
 
-  // A batch may name each source line_no AT MOST once — refused before any lock or write. A repeated
-  // line_no does NOT conserve quantity: every entry is validated against the STATIC `byLineNo` snapshot
-  // of `line.quantity` below (never updated between entries) and the split write sets the source to
-  // `original − q` (a plain set, not a cumulative decrement), so two partial "1"s off a café×3 line
-  // both pass and the destination gains 1.000+1.000 while the source only drops to 2.000 — 4 from an
-  // original 3. A whole-line + partial pair on one line is worse and contradictory: `moveTabLines`
-  // DELETEs the line (moving it whole) and the split's `UPDATE ... WHERE line_no=…` then matches zero
-  // rows while its INSERT still fabricates a destination line. Neither shape folds into a cumulative
-  // decrement, so a duplicate is simply refused (a 400 request-shape fault), naming the FIRST line_no
-  // that repeats. This up-front guard also covers a duplicate WHOLE-line pair — already harmless via
-  // `moveTabLines`' `inArray` set semantics — which is fine/stricter.
-  const seenLineNos = new Set<number>();
-  for (const { lineNo } of transfers) {
-    if (seenLineNos.has(lineNo)) {
-      throw new AppError("tab.transfer_duplicate_line", { tabId: fromTabId, lineNo });
-    }
-    seenLineNos.add(lineNo);
-  }
+  // A batch may name each source line_no AT MOST once — refused before any lock or write (the same
+  // pre-lock rejection this verb has always made; see {@link assertDistinctTransferLines} for why a
+  // repeated line_no cannot conserve quantity).
+  assertDistinctTransferLines(fromTabId, transfers);
 
   // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the
   // canonical lowercase uuids `randomUUID()`/`gen_random_uuid()` emit matches PostgreSQL's own byte
@@ -1602,6 +1630,30 @@ export async function transferLines(
     await lockOpenTab(tx, tabId);
   }
 
+  // The origin and destination row locks are held; carry the items over (whole lines + partial splits).
+  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
+}
+
+/**
+ * Carry `transfers` (whole lines and/or partial-quantity splits) from `fromTabId` onto `toTabId`, keeping
+ * each unit's LOCKED price columns (no catalogue re-read) and CONSERVING quantity — the shared move/split
+ * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It performs NO locking of its
+ * own: the CALLER must already hold the `FOR UPDATE` row locks on both orders (`transferLines` via its
+ * `lockOpenTab` loop, requiring both ends to be TABS; `splitOffCheck` via its own origin lock, its
+ * destination being a freshly-minted, uncontended check). Every transfer is VALIDATED before any move or
+ * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
+ * quantity outside `0 < q ≤ line.quantity` or a malformed literal), so one bad entry leaves both orders
+ * untouched. The whole-line path delegates to {@link moveTabLines} (which accepts any OPEN destination,
+ * so a table-less check is a valid target — unlike `lockOpenTab`); the split path appends new destination
+ * lines after the moves. `cfg` supplies the `tenant_id` stamped on each split-inserted line.
+ */
+async function carveOffLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<void> {
   // Read every named source line ONCE, under the lock, into a map. The per-unit locked values a split
   // INHERITS come from here — never a catalogue re-read.
   const named = transfers.map((t) => t.lineNo);
@@ -1719,6 +1771,156 @@ export async function transferLines(
       });
     }
   }
+}
+
+/**
+ * Spin selected items off an OPEN tab into a NEW, separately-filing CHECK (split-bill, TS-5). A check
+ * is an ordinary `open` working order — created lineless via `createOpenOrder` (inheriting the origin's
+ * node/till and, at pay, `cfg.seriesId`) — that NO table points at: it is a payment unit, not a seat
+ * (design §2), so unlike a tab there is no `dining_tables.tab_id` back-pointer to set. Because the check
+ * is table-less, the items are carried over by {@link carveOffLines} directly (TS-4's whole/partial
+ * move/split core, which delegates whole lines to `moveTabLines`) rather than by `transferLines` — whose
+ * `lockOpenTab` loop requires BOTH ends to be tabs and would reject a detached check. The move keeps each
+ * unit's LOCKED `unit_price_gross` (no catalogue re-look-up) and CONSERVES quantity, so the check and the
+ * origin remainder each stay internally consistent and each files its OWN correct desglose on its own pay
+ * (design §4), and it raises TS-4's inherited `tab.transfer_quantity_invalid` / `tab.line_not_found`.
+ *
+ * Pay the check with the EXISTING `payWorkingOrder` (till-sale.ts) — there is NO new pay verb, and the
+ * `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes it file AT MOST ONE sale.
+ * Called once per check; the origin holds the remainder (emptied ⇒ abandon it with the existing
+ * `abandonHeldOrder`, or pay it as the last check — design §3). Runs on the CALLER's tx/tenant scope.
+ *
+ * Refuses an EMPTY `transfers` array with `sale.empty_basket`, BEFORE minting the check: `carveOffLines`
+ * renders `inArray(col, [])` as `false`, a no-op WHERE clause, so without this guard the call would
+ * otherwise succeed and leave an orphan — a table-less `open` working order with zero lines and a
+ * consumed order_number.
+ */
+export async function splitOffCheck(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<{ checkId: string }> {
+  // Refuse an EMPTY transfers array BEFORE minting anything. carveOffLines' `inArray(col, [])` renders
+  // `false` — a no-op WHERE clause — so without this guard the call below would SUCCEED after
+  // createOpenOrder had already minted a check: a table-less `open` working order, zero lines, a
+  // consumed order_number. An orphan. Same "nothing to work with" shape as the walk-up/park/round paths'
+  // `sale.empty_basket` (see this file's own doc comment at line ~221).
+  if (transfers.length === 0) {
+    throw new AppError("sale.empty_basket", {});
+  }
+
+  // Refuse a batch naming a source line_no twice BEFORE locking, minting the check, or moving anything —
+  // the same up-front guard `transferLines` makes (a duplicate does not conserve quantity: two "1"s off a
+  // 3× line would leave 2 on the origin AND 2 on the check, 4 from an original 3). Reused so split-bill
+  // inherits it, naming the origin tab.
+  assertDistinctTransferLines(fromTabId, transfers);
+
+  // Lock + validate the origin is an OPEN TAB (table-anchored) before minting the check — fail fast
+  // with the `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
+  // catalogue read + `allocateOrderNumber`). The origin MUST be a tab, not merely any open order: the
+  // spec §3 and the `/api/tabs/:id/split` route require a table-anchored tab, so a detached CHECK (a
+  // table-less open order minted by a prior split) must NOT be a split origin. `lockOpenTab` adds the
+  // is-a-tab `dining_tables` back-pointer assertion `lockOpenTabRow` (status-only) lacks; it holds NO
+  // `dining_tables` lock (the pointer read is a plain SELECT, {@link lockOpenTab}), so this reintroduces
+  // no lock-order/deadlock concern. Ordering is about doing LESS WORK, not saving an order number:
+  // everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the counter
+  // increment together (`allocateOrderNumber` is a transactional UPSERT into `working_order_counters`,
+  // `packages/db/src/allocate-order-number.ts` — a rolled-back allocation leaves no gap). The FOR UPDATE
+  // also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
+  await lockOpenTab(tx, fromTabId);
+
+  // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
+  // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
+  const checkId = randomUUID();
+  await createOpenOrder(tx, cfg, checkId, [], null);
+
+  // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
+  // core, which keeps the locked gross, conserves quantity, and raises the inherited
+  // `tab.transfer_quantity_invalid` / `tab.line_not_found` guards. The origin row is already locked
+  // above and the check is a fresh, uncontended row, so no further lock is needed here. A failure rolls
+  // back the whole tx, check included — no orphan.
+  await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
+
+  return { checkId };
+}
+
+/**
+ * Detach a table from a joined tab (TS-5, deferred from TS-3). WITH items: the table keeps running its
+ * OWN bill — create a new `open` tab ANCHORED to it (its `tab_id` repointed) and move the items over
+ * (TS-4's {@link transferLines}). WITHOUT items: just free it (`tab_id → NULL`) and clear its TS-2
+ * manual `status_id` (a turnover — the same "clear on turnover" TS-3's `moveTab` applies at the move
+ * boundary). Unlike a split-off CHECK, an un-joined table's new tab IS table-anchored: it is still a
+ * seat, not a payment unit (design §2). Returns the new `tabId` (with items) or `{}` (freed). Runs on
+ * the caller's tx scope.
+ *
+ * Lock order — the shared `working_orders` tab row `FOR UPDATE` FIRST (via {@link lockOpenTabRow}), THEN
+ * the `dining_tables[tableId]` row. This MATCHES the sale/settle path and {@link mergeTabs}:
+ * `payWorkingOrder` locks the tab's `working_orders` row, then its settle UPDATE fires the 0050
+ * `working_orders_clear_table_status` trigger UPDATE-ing `dining_tables WHERE tab_id = NEW.id` (which
+ * includes `tableId` while it is joined) — i.e. `working_orders` THEN `dining_tables`. Acquiring in that
+ * SAME class order is what PREVENTS an unjoin-vs-pay/settle DEADLOCK: a concurrent unjoin and pay both
+ * take `working_orders` before `dining_tables`, so they cannot cross-lock and trip a 40P01. This is
+ * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.rls.test.ts) asserts no
+ * 40P01, and by deletion the previous `dining_tables`-first order reproduces the 40P01 against the real
+ * trigger. (The status check therefore fires BEFORE the `dining_tables` lock; in every tested scenario
+ * only one guard fails at a time, so the thrown code is unchanged from the old order.)
+ *
+ * The with-items branch repoints the detached table BEFORE the move, so both `tabId` (still covered by
+ * its origin table(s)) and `newTabId` (now covered by the detached table) are TABS when {@link
+ * transferLines} runs — which is exactly why the reuse is `transferLines` here, not `splitOffCheck`'s
+ * bare `carveOffLines`: `splitOffCheck`'s destination is table-LESS and would be rejected by
+ * `transferLines`' `lockOpenTab` back-pointer check, whereas an un-joined table's new tab passes it. So
+ * `transferLines` gives the correct is-a-tab validation AND the ascending-id lock ordering for free,
+ * over a `newTabId` that is a freshly-minted, uncontended row (no deadlock hazard against the origin
+ * lock this verb already holds). `transferLines` re-locks `tabId` (a no-op — already held above) and
+ * only ever takes further `working_orders` locks over `newTabId`, so the class order stays
+ * working_orders-before-dining_tables throughout.
+ */
+export async function unjoinTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  tableId: string,
+  transfers?: { lineNo: number; quantity?: string }[],
+): Promise<{ tabId?: string }> {
+  // Lock the shared tab's working_orders row FIRST (see the docstring's lock-order note): it must be
+  // OPEN — you cannot re-carve a settled/abandoned bill — else `tab.not_open`. Taking this BEFORE the
+  // dining_tables lock is the deadlock-safe order the sale/settle path uses.
+  await lockOpenTabRow(tx, tabId);
+
+  // Then lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
+  // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and
+  // fail closed, design §3).
+  const [table] = await tx
+    .select({ tabId: diningTables.tabId })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId))
+    .for("update");
+  if (table?.tabId !== tabId) {
+    throw new AppError("table.not_joined", { tableId, tabId });
+  }
+
+  if (transfers === undefined || transfers.length === 0) {
+    // Free it: null the back-pointer AND the TS-2 status in ONE statement (turnover — the tab left this
+    // table, the same idiom `moveTab`/`openTab` use). Files nothing (pre-fiscal). Other tables joined to
+    // the tab keep pointing at it.
+    await tx
+      .update(diningTables)
+      .set({ tabId: null, statusId: null })
+      .where(eq(diningTables.id, tableId));
+    return {};
+  }
+
+  // With items: create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
+  // with `transferLines` — repointing FIRST makes `newTabId` a real tab (back-pointer set) so
+  // `transferLines`' is-a-tab lock passes. `transferLines` re-locks `tabId` (a no-op — already held
+  // above) and `newTabId` (fresh), in ascending-id order.
+  const newTabId = randomUUID();
+  await createOpenOrder(tx, cfg, newTabId, [], null);
+  await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
+  await transferLines(tx, cfg, tabId, newTabId, transfers);
+  return { tabId: newTabId };
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */

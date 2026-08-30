@@ -65,7 +65,9 @@ import {
   placeOrder,
   readTabLines,
   sendToPrep,
+  splitOffCheck,
   transferLines,
+  unjoinTable,
   unmarkLineServed,
   updateHeldOrder,
   voidTabLine,
@@ -245,6 +247,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
+  // Split-bill un-join (TS-5). Un-joining a table that is not currently joined to the named tab — an
+  // absent/foreign table, a free table, or one joined to a DIFFERENT tab (all read as tab_id ≠ tabId) —
+  // is `table.not_joined` (409): the ids may be valid, but the table's STATE (not joined here) forbids
+  // the detach, the same 409 shape `table.occupied`/`tab.not_open` use. Thrown by `unjoinTable`. (Split's
+  // `splitOffCheck` throws only already-mapped codes — `tab.not_open`, the reused transfer codes.)
+  "table.not_joined": 409,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
@@ -1669,6 +1677,92 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
       });
       return c.body(null, 200);
+    }),
+  );
+
+  // Split-bill (TS-5, design §3): spin SELECTED items off this open tab (`:id` = fromTabId) into a NEW
+  // separately-filing check — a detached, table-LESS open working order the till then pays via the
+  // existing pay path. SESSION-GUARDED. The tab `:id` is `requireTabParam`-screened (a malformed id →
+  // `tab.not_open` 409, the SAME fail-closed code the sibling tab routes use — a malformed id passed into
+  // `eq(workingOrders.id, …)` would 22P02 → an opaque 500). The body is shape-screened (non-object/null/
+  // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
+  // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
+  // tx-level, so this route opens the `withTenant`/`asAppUser` transaction around it. Returns 200
+  // `{ checkId }`; no fiscal write happens here (the check files only when it is later paid), so this
+  // stays on the ALLOWED side of the order-only firewall like the other tab verbs.
+  app.post("/api/tabs/:id/split", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const fromTabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{
+        transfers: { lineNo: number; quantity?: string }[];
+      }>();
+      // Screen the body shape BEFORE any field access: a literal JSON `null` body parses successfully
+      // (no SyntaxError — `c.req.json()` just returns `null`), so `body.transfers` below would throw
+      // `Cannot read properties of null` and escape as an opaque 500, the exact class the id screen above
+      // exists to prevent. Same object/null/array guard as the `/api/tables/:id/placement` sibling
+      // (till-api.ts, PUT placement route above), naming "body" — checked on the RAW parse result (no
+      // `?? {}` first), because coalescing null to `{}` before this check would make it unreachable for
+      // a null body (proven: `null ?? {}` is `{}`, so `body === null` never fires downstream of that).
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      // A non-array `transfers` ({}/5) reaches `splitOffCheck`'s `transfers.length` as a TypeError →
+      // opaque 500. Refused here as `management.request_invalid` naming the field (the generic
+      // request-shape 400, `requireCapacity`'s discipline). Only the array shape is screened — the verb +
+      // `assertDistinctTransferLines` + `carveOffLines` raise the domain errors for bad contents.
+      if (!Array.isArray(body.transfers)) {
+        throw new AppError("management.request_invalid", { field: "transfers" });
+      }
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
+      });
+      return c.json(result);
+    }),
+  );
+
+  // Un-join (TS-5, deferred from TS-3): detach a joined table (`:id` = the shared tabId) from its tab —
+  // WITH items into its own new table-anchored bill, or WITHOUT into a free table (turnover). SESSION-
+  // GUARDED; both the path `:id` (the shared tab) and the body `tableId` are `isUuid`-screened before any
+  // query. A malformed tab id → `tab.not_open` (409, via `requireTabParam`); a malformed `tableId` →
+  // `table.not_joined` (409) — the SAME code `unjoinTable` throws for a table not currently joined to this
+  // tab, so a malformed target fails closed to the honest "that table is not joined here" rather than an
+  // opaque 500. The body is shape-screened (non-object/null/array → `management.request_invalid` naming
+  // "body") BEFORE the `tableId` check — a literal JSON `null` body used to reach `body.tableId` as a
+  // TypeError → opaque 500 (Copilot); screening it first also keeps a missing body out of the
+  // domain-specific `table.not_joined`, since "no body" is a request-shape fault, not a claim about a
+  // table. The verb is tx-level, so this route opens the `withTenant`/`asAppUser` transaction around
+  // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
+  app.post("/api/tabs/:id/unjoin", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const tabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{
+        tableId: string;
+        transfers?: { lineNo: number; quantity?: string }[];
+      }>();
+      // Screen the body shape BEFORE any field access — same reasoning as `/split` above: a literal
+      // JSON `null` body parses successfully, so `body.tableId` would throw before `isUuid` ever ran,
+      // escaping as an opaque 500. This ALSO keeps a null body out of the domain-specific
+      // `table.not_joined` a well-formed-but-wrong `tableId` gets below — a missing body is a request-
+      // shape fault, not a claim about a table.
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (!isUuid(body.tableId))
+        throw new AppError("table.not_joined", { tableId: body.tableId, tabId });
+      // `transfers` is OPTIONAL here (absent = free the table, a turnover), so screen only a PRESENT
+      // non-array before the verb: a present non-array reaches `unjoinTable`'s `transferLines` as
+      // `.length` → opaque 500. Same request-shape 400 as `/split`, naming the field.
+      if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
+        throw new AppError("management.request_invalid", { field: "transfers" });
+      }
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
+      });
+      return c.json(result);
     }),
   );
 }

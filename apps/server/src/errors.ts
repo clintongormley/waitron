@@ -420,6 +420,19 @@ declare module "@waitron/shared" {
      */
     "table.occupied": { tableId: string };
     /**
+     * A table this caller tried to UN-JOIN is not part of the named tab — its `tab_id` points at a
+     * different open tab, at a settled/abandoned one, or is NULL (a free table), or the id names none
+     * at all (absent, or another tenant's table that RLS hides). All report THIS one code, the same
+     * fail-closed shape `tab.not_open`/`table.occupied` use: to an operator un-joining a table, "not
+     * joined to this tab" and "no such table here" are the same fact, and a distinct code would confirm
+     * a foreign/other-tab table exists. Mapped to 409 in the route layer (the id may be valid, but the
+     * table's join state forbids the un-join). `tableId`/`tabId` are caller-supplied uuids the till
+     * already holds, not secrets. `table.*`, not `server.*`: it is a fact about a table, not the process
+     * (the rule `tenant.not_found`'s note gives); destined for `@waitron/core` once a package other than
+     * this host throws it, the note the `working_order.*` family carries.
+     */
+    "table.not_joined": { tableId: string; tabId: string };
+    /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
      * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
      * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
