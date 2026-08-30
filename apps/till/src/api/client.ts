@@ -411,7 +411,10 @@ export interface StationQueueGroup {
 export interface DeviceEnrolment {
   deviceId: string;
   kind: string;
-  stationId: string;
+  // `null` for a station-less kind (a `handheld`); a `kds_station` enrolment carries its station id.
+  // The server's POST /api/device/enrol returns `null` here for a handheld; both callers ignore the
+  // resolved value (they re-boot off the device cookie), so this widening is documentation-accuracy.
+  stationId: string | null;
   label: string;
 }
 
