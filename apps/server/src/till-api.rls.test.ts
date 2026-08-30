@@ -169,7 +169,7 @@ async function setupVenue(): Promise<{
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
-      descriptions: { [LOCALE]: "Jamón cortado" },
+      descriptions: { es: "Jamón cortado" },
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
@@ -177,7 +177,7 @@ async function setupVenue(): Promise<{
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
+      descriptions: { es: "Agua mineral" },
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -189,7 +189,7 @@ async function setupVenue(): Promise<{
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
     return {
-      available: await listAvailableProducts(tx, cfg.locationId),
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
       operatorId: person.rows[0]!.id,
     };
   });
@@ -351,7 +351,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     };
     // The two seeded, sellable products come back — the reduced-rate weighed one and the
     // general-rate each one — so the basket below genuinely mixes VAT rates.
-    expect(products.map((p) => p.descriptions[LOCALE]).sort()).toEqual([
+    expect(products.map((p) => p.descriptions.es).sort()).toEqual([
       "Agua mineral",
       "Jamón cortado",
     ]);
@@ -785,6 +785,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             state: "queued",
             // The dish name + quantity the kitchen display renders, carried end to end from the fired
             // working-order line's snapshot through the HTTP route (KDS-1 Gap 2): "2× Agua mineral".
+            // Full-tag `es-ES`: the line snapshot is re-keyed from the bare-`es` catalogue content to
+            // the location's `invoice_locales` at `priceOrderLines` before the working-order line insert.
             descriptions: { "es-ES": "Agua mineral" },
             quantity: "2.000",
             // KDS-2: this product carries no course, so the item serialises `course: null` and fires

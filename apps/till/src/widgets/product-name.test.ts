@@ -24,6 +24,13 @@ describe("productName", () => {
     expect(productName(product({ "es-ES": "Café", en: "Coffee" }))).toBe("Café");
   });
 
+  it("region-strips es-ES to bare es for BARE-keyed catalogue content (Feature B)", () => {
+    // /api/products returns bare-keyed content ({ en, es }); `en` is first, so without the
+    // region-strip tier this would resolve Object.values()[0] = "Coffee" under the es-ES till.
+    setLocale("es-ES");
+    expect(productName(product({ en: "Coffee", es: "Café" }))).toBe("Café");
+  });
+
   it("falls back to any available description when the current locale is missing", () => {
     setLocale("es-ES");
     expect(productName(product({ en: "Coffee" }))).toBe("Coffee");

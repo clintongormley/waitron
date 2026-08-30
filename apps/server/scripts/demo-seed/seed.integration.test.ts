@@ -44,7 +44,9 @@ import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { MEDIA_FILENAME } from "../../src/media-api.js";
 import { seedDemoRestaurant } from "./seed.js";
 
-const LOCALE = "en-GB";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+
+const LOCALE: SeedLocale = "en";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -76,7 +78,7 @@ async function provisionVenue(): Promise<Venue> {
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
@@ -115,8 +117,9 @@ function tillConfigFor(venue: Venue): TillConfig {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),
     locationId: brandLocationId(venue.locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
+    // Fiscal config takes the FULL tag the bare content locale files under (feature B).
+    locale: SEED_INVOICE_LOCALE[LOCALE],
+    invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     // The park/retrieve path reads neither a card provider nor tips; fresh safe values keep the shape whole.
     cardProvider: "none",
     tipsEnabled: false,
@@ -151,7 +154,7 @@ describe("demo seed end-to-end", () => {
     const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const products = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: imageRows } = await tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );

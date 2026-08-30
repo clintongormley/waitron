@@ -22,7 +22,9 @@ import { seedMedia } from "./seed-media.js";
 // The exact regex the public `GET /media/:filename` route accepts — the produced names MUST pass it.
 import { MEDIA_FILENAME } from "../../src/media-api.js";
 
-const LOCALE = "en-GB";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+
+const LOCALE: SeedLocale = "en";
 const SRC_DIR = fileURLToPath(new URL("media", import.meta.url));
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -45,7 +47,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,

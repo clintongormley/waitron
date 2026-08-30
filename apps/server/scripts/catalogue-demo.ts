@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     // figure originating in the catalogue. Run as the application role, in one transaction.
     const { saleId, priced } = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const available = await listAvailableProducts(tx, venue.locationId);
+      const { products: available } = await listAvailableProducts(tx, venue.locationId);
       // 0.320 kg of ham + 2 waters — quantities a till would capture (a scale reading and a count).
       const priced = priceBasket([
         { product: available.find((p) => p.pricingUnit === "weight")!, quantity: "0.320" },

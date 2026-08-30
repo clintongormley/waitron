@@ -24,7 +24,9 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { seedDemoRestaurant } from "./seed.js";
 
-const LOCALE = "en-GB";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+
+const LOCALE: SeedLocale = "en";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -55,7 +57,7 @@ async function provisionVenue(): Promise<Venue> {
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
@@ -110,7 +112,7 @@ describe("seedDemoRestaurant", () => {
     const read = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const products = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
         sql`select count(*)::int as n from dining_tables`,
       );

@@ -24,7 +24,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
-import type { SeedLocale } from "./demo-seed/menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
 
 // Re-exported so `dev-setup.test.ts`'s round-trip assertion keeps importing it from here; the parser
 // itself is the shared, dependency-free `env-file.ts` one (split on the first `=`, skip blank/`#`).
@@ -40,14 +40,16 @@ export const ADMIN_PIN = "5555";
 const ADMIN_PASSWORD = "dashPass123";
 
 /**
- * The demo's seed locale, resolved from the environment at each run: English by default, Spanish only
- * when `WAITRON_SEED_LOCALE=es-ES` is set explicitly. It drives the location's `invoiceLocales`, every
- * seeded menu/floor/status/staff string, the historical sales' locale, and the `WAITRON_TILL_LOCALE`
- * the server boots the till against. Read at call time (not module load) so it is testable and so a
- * one-shot `WAITRON_SEED_LOCALE=es-ES pnpm dev:reset` takes effect.
+ * The demo's BARE content locale, resolved from the environment at each run: English by default,
+ * Spanish only when `WAITRON_SEED_LOCALE=es-ES` is set explicitly (the env var stays the familiar
+ * full tag; the returned value is the bare content key). It drives every seeded menu/floor/status/
+ * staff string; the full tag it maps to (`SEED_INVOICE_LOCALE`) drives the location's `invoiceLocales`,
+ * the historical sales' fiscal locale, and the `WAITRON_TILL_LOCALE` the server boots the till against.
+ * Read at call time (not module load) so it is testable and so a one-shot
+ * `WAITRON_SEED_LOCALE=es-ES pnpm dev:reset` takes effect.
  */
 export function resolveSeedLocale(): SeedLocale {
-  return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es-ES" : "en-GB";
+  return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es" : "en";
 }
 
 /**
@@ -142,10 +144,10 @@ export interface DevVenueIds {
 /**
  * Assemble the server's `.env` contract from a run's varying inputs — the database url, the generated
  * credentials key, the provisioned venue's ids, and the resolved seed locale. Pure (no I/O, no env
- * reads), so the `seedLocale → WAITRON_TILL_LOCALE` mapping is proven for BOTH locales in a unit test
- * without a container — the container-backed `devSetup` suite then proves this env is what reaches
- * disk (CLAUDE.md §1/§4: the es-ES value must reach `.env` through the real flow, not only via
- * `resolveSeedLocale`, and `devSetup` builds its env here).
+ * reads), so the bare-`seedLocale` → full-tag `WAITRON_TILL_LOCALE` mapping (`SEED_INVOICE_LOCALE`) is
+ * proven for BOTH locales in a unit test without a container — the container-backed `devSetup` suite
+ * then proves this env is what reaches disk (CLAUDE.md §1/§4: the es-ES value must reach `.env` through
+ * the real flow, not only via `resolveSeedLocale`, and `devSetup` builds its env here).
  */
 export function buildDevEnv(input: {
   databaseUrl: string;
@@ -165,7 +167,7 @@ export function buildDevEnv(input: {
     WAITRON_TILL_NODE_ID: ids.nodeId,
     WAITRON_TILL_SERIES_ID: ids.seriesId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
-    WAITRON_TILL_LOCALE: seedLocale,
+    WAITRON_TILL_LOCALE: SEED_INVOICE_LOCALE[seedLocale],
   };
 }
 
@@ -270,8 +272,9 @@ export async function inspectVenues(
 
 /** Provision one preproduction venue + SIF, then seed the full demo restaurant (two menus, floor,
  * staff, media, and `salesDays` of back-dated preproduction sales) via `seedDemoRestaurant`. Returns
- * the five fiscal ids the server boots against. `seedLocale` drives the location's `invoiceLocales`
- * and every seeded string; `salesDays` is the historical-sales horizon (0 skips sales). */
+ * the five fiscal ids the server boots against. The bare `seedLocale` drives every seeded string; the
+ * full tag it maps to (`SEED_INVOICE_LOCALE`) drives the location's `invoiceLocales`; `salesDays` is
+ * the historical-sales horizon (0 skips sales). */
 async function provisionVenue(
   db: Database,
   seedLocale: SeedLocale,
@@ -291,7 +294,7 @@ async function provisionVenue(
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [seedLocale],
+        invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,

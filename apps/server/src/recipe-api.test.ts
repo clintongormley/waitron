@@ -60,7 +60,7 @@ const suite = usePgliteDb({
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { "es-ES": "Tostada" },
+        descriptions: { es: "Tostada" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

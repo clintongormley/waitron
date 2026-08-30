@@ -112,3 +112,49 @@ non-Spanish venue, and for adding a new primary UI language cleanly.
    venue-default tier.
 5. **Region overlays** (`en-US`, `es-PE`) as an optional later capability: partial catalogues that
    inherit from the bare language — the negotiation already supports them, so this is additive.
+
+## Write-side: re-key at the fiscal line — LANDED (feature B, 2026-08-30)
+
+The read-side above is about *displaying* content. There is a separate write-side concern: a filed
+line's `descriptions` must satisfy the `working_order_lines_check_locales` trigger
+(`packages/db/drizzle/0004_working_orders.sql`), which requires the map keys to equal the location's
+full-tag `invoice_locales` **exactly**. This is **our** receipt-completeness guard, NOT fiscal law.
+Receipts (verified 2026-08-30):
+
+- **AEAT's record carries a single `DescripcionOperacion` STRING, not a locale map.**
+  `packages/verifactu/src/types.ts:149` types it `DescripcionOperacion: string`;
+  `packages/verifactu/src/validate.ts:289` caps it at 500 chars;
+  `packages/fiscal-verifactu/src/backend.ts:285` builds it from the sale's single
+  `sale.descriptionOfOperation` (the seed value is the generic `"Venta en establecimiento"`,
+  `packages/fiscal-verifactu/src/testing/seed.ts:307`). The per-line `descriptions` MAP is never
+  serialized into the AEAT XML (`packages/verifactu/src/xml/serialize.ts:213` emits only the string) —
+  it drives the customer RECEIPT only.
+- **No AEAT language mandate for descriptions.** The AEAT developer FAQ
+  (`1784456130925_FAQs-Desarrolladores.pdf`, 52 pp) contains no `idioma`/`lengua`/multi-language
+  requirement for the operation description — grepped 2026-08-30 (the only two `descripci*` hits are a
+  test-data note and an unrelated code-table row). Sourced from the FAQ; if a stronger receipt is
+  wanted it is the Orden HAC/1177/2024 layout, not checked here.
+
+So venues author catalogue content **bare** (`{ es: … }`), and it is **re-keyed to the location's
+full-tag `invoice_locales` at the single point content enters a fiscal line**:
+
+- **`toInvoiceLineDescriptions(catalogue, invoiceLocales)`** (`@waitron/catalogue`): for each full tag,
+  region-strip to its language, take the catalogue's text for it, else graceful-fill from any entry —
+  **never throws** (§5 "nothing may block a sale"), and yields exactly the `invoice_locales` keys.
+- Applied in **`priceOrderLines`** (`apps/server/src/working-order.ts`), right after `priceBasket`,
+  mutating each `priced.lines[i].descriptions` — which propagates to BOTH `working_order_lines` and
+  `sale_lines` (the same `priced` is returned and filed). Inherited/locked paths (move/transfer,
+  `priceLockedLines`) already carry full tags and are untouched.
+- **Reads `locations.invoice_locales` FRESH from the DB** inside `priceOrderLines`, not the env-derived
+  `cfg.invoiceLocales` (which can drift from what the trigger checks) — closing that drift **for the line
+  descriptions only**. The sale HEADER's locale fields (`sales.locale`/`sales.invoice_locales`) are still
+  stamped by `recordSale` from boot-time `cfg`, so a config-vs-env drift can still file a `sales` header
+  inconsistent with its `sale_lines` keys. That residual write-side gap is **not** closed here (backlog
+  follow-up: source the whole filed record's locale from the DB location config).
+- The demo seed authors bare content (`SeedLocale = "en" | "es"`) and maps to full-tag config via
+  `SEED_INVOICE_LOCALE` — content authored bare, filed full.
+
+**Deferred follow-up:** authoring-time locale-completeness validation — today nothing requires a product
+to carry every venue invoice-locale's translation, so a missing one graceful-fills (the receipt shows the
+primary language in that column) rather than being caught at authoring. Graceful-fill keeps the sale
+unblocked (§5); a save-time check would make the receipt genuinely complete instead.

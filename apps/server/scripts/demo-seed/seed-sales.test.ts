@@ -28,7 +28,9 @@ import {
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
-const LOCALE = "es-ES";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+
+const LOCALE: SeedLocale = "es";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -77,7 +79,7 @@ async function provisionVenue(): Promise<VenueResult> {
       location: {
         name: "Sala principal",
         fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
+        invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
         operationDescription: "Venta en establecimiento",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,

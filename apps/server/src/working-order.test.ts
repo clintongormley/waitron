@@ -388,7 +388,7 @@ async function grossBasketTotal(
 ): Promise<string> {
   return withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const available = await listAvailableProducts(tx, cfg.locationId);
+    const { products: available } = await listAvailableProducts(tx, cfg.locationId);
     const byId = new Map(available.map((p) => [p.id, p]));
     const items = lines.map((l) => ({ product: byId.get(l.productId)!, quantity: l.quantity }));
     return priceBasket(items).total;

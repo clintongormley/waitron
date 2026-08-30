@@ -180,7 +180,7 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return listAvailableProducts(tx, cfg.locationId);
+    return (await listAvailableProducts(tx, cfg.locationId)).products;
   });
   const cafe = available.find((p) => p.descriptions[LOCALE] === "Café")!;
   const agua = available.find((p) => p.descriptions[LOCALE] === "Agua")!;

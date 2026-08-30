@@ -8,7 +8,7 @@ import type { TillProductGrid } from "../widgets/product-grid.js";
 const products: TillProduct[] = [
   {
     id: "cafe",
-    descriptions: { "es-ES": "Café" },
+    descriptions: { es: "Café" },
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",

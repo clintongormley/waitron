@@ -26,7 +26,7 @@ import {
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
-import type { SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 export interface SeedFloorInput {
   tenantId: string;
@@ -50,8 +50,11 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
-    locale,
-    invoiceLocales: [locale],
+    // `locale` is the BARE content key; the fiscal/display fields take the FULL tag it files under.
+    // Both are placeholders here (only tenantId/locationId are read — see this function's doc), kept
+    // full-tag so the throwaway cfg is a VALID `TillConfig` shape rather than a bare-locale one.
+    locale: SEED_INVOICE_LOCALE[locale],
+    invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
     cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",

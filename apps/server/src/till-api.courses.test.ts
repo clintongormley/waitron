@@ -61,7 +61,8 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    // invoice_locales `es-ES` matches the seeded products' `es-ES` description key — the park/place
+    // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
+    // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
     const loc = await db.execute<{ id: string }>(sql`
@@ -95,7 +96,7 @@ const suite = usePgliteDb({
         const p = await createProduct(tx, {
           catalogueId: catalogue.id,
           categoryId: category.id,
-          descriptions: { "es-ES": description },
+          descriptions: { es: description },
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
@@ -239,7 +240,7 @@ async function productIdsByDescription(): Promise<Map<string, string>> {
   const { products } = (await res.json()) as {
     products: { id: string; descriptions: Record<string, string> }[];
   };
-  return new Map(products.map((p) => [p.descriptions["es-ES"]!, p.id]));
+  return new Map(products.map((p) => [p.descriptions.es!, p.id]));
 }
 
 async function placeOrder(descriptions: string[]): Promise<string> {

@@ -166,7 +166,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return listAvailableProducts(tx, cfg.locationId);
+    return (await listAvailableProducts(tx, cfg.locationId)).products;
   });
   return { cfg, each: available.find((p) => p.pricingUnit === "each")! };
 }

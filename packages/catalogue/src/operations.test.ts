@@ -319,7 +319,7 @@ describe("catalogue operations", () => {
         allergens: { milk: { presence: "contains" } },
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const [available] = await listAvailableProducts(tx, locationId);
+      const [available] = (await listAvailableProducts(tx, locationId)).products;
       expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
     });
   });
@@ -483,7 +483,7 @@ describe("catalogue operations", () => {
       });
       await deactivateProduct(tx, p2.id);
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const available = await listAvailableProducts(tx, locationId);
+      const { products: available } = await listAvailableProducts(tx, locationId);
       expect(available.map((p) => p.id)).toEqual([p1.id]);
       expect(available[0]!.category).toBe("Food");
       expect(available[0]!.unitPrice).toBe("24.90");
@@ -500,7 +500,7 @@ describe("catalogue operations", () => {
       const pMain = await createProduct(tx, {
         catalogueId: main.id,
         categoryId: null,
-        descriptions: { "en-GB": "Steak" },
+        descriptions: { en: "Steak" },
         pricingUnit: "each",
         unitPrice: "20.00",
         vatClass: "general",
@@ -508,7 +508,7 @@ describe("catalogue operations", () => {
       const pLunch = await createProduct(tx, {
         catalogueId: lunch.id,
         categoryId: null,
-        descriptions: { "en-GB": "Set menu" },
+        descriptions: { en: "Set menu" },
         pricingUnit: "each",
         unitPrice: "12.00",
         vatClass: "general",
@@ -516,14 +516,14 @@ describe("catalogue operations", () => {
       await createProduct(tx, {
         catalogueId: other.id,
         categoryId: null,
-        descriptions: { "en-GB": "Hidden" },
+        descriptions: { en: "Hidden" },
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, main.id); // default
       await addCatalogueToLocation(tx, locationId, lunch.id); // other accessible
-      const rows = await listAvailableProducts(tx, locationId);
+      const { products: rows } = await listAvailableProducts(tx, locationId);
       expect(rows.map((r) => r.id).sort()).toEqual([pMain.id, pLunch.id].sort());
       expect(rows.find((r) => r.id === pLunch.id)).toMatchObject({
         catalogueId: lunch.id,
@@ -596,7 +596,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const [available] = await listAvailableProducts(tx, locationId);
+      const [available] = (await listAvailableProducts(tx, locationId)).products;
       expect(available!.category).toBeNull();
       // KDS-2: a product with no default course reports `courseId: null` (the till's course picker reads
       // this as "no pre-selected default"). The non-null path is proven end-to-end by the server's
@@ -607,23 +607,23 @@ describe("catalogue operations", () => {
 
   it("returns [] for a location with no catalogue assigned", async () => {
     await asTenant(async (tx) => {
-      expect(await listAvailableProducts(tx, locationId)).toEqual([]);
+      expect((await listAvailableProducts(tx, locationId)).products).toEqual([]);
     });
   });
 
   it("hides every product of a deactivated catalogue", async () => {
     await asTenant(async (tx) => {
       const fixture = await seedCatalogueFixture(tx, { locationId });
-      expect((await listAvailableProducts(tx, locationId)).length).toBe(2);
+      expect((await listAvailableProducts(tx, locationId)).products.length).toBe(2);
       await deactivateCatalogue(tx, fixture.catalogueId);
-      expect(await listAvailableProducts(tx, locationId)).toEqual([]);
+      expect((await listAvailableProducts(tx, locationId)).products).toEqual([]);
     });
   });
 
   it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
     await asTenant(async (tx) => {
       await seedCatalogueFixture(tx, { locationId });
-      const available = await listAvailableProducts(tx, locationId);
+      const { products: available } = await listAvailableProducts(tx, locationId);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
       // Compile-time proof that AvailableProduct is structurally assignable to PriceableProduct:
       // this only typechecks if every field priceBasket reads is present and correctly typed. Task 6

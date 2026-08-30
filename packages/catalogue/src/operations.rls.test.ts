@@ -109,7 +109,7 @@ describe("catalogue operations under real row-level security", () => {
       const available = await withTenant(probe, tenantA.tenantId, async (tx) => {
         await asAppUser(tx);
         await assignCatalogueToLocation(tx, tenantA.locationId, catalogueId);
-        return listAvailableProducts(tx, tenantA.locationId);
+        return (await listAvailableProducts(tx, tenantA.locationId)).products;
       });
       expect(available.map((p) => p.allergens)).toEqual([
         { gluten: { presence: "contains", source: "wheat" } },
