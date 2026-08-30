@@ -287,16 +287,17 @@ function deviceCookieFrom(res: Response): string {
   return setCookie!.split(";")[0]!;
 }
 
-/** Mint a pairing code for a station via the management route, then enrol a device with it (unauth).
- *  Returns the device id + the cookie jar. */
-async function enrolAt(
+/** Mint a pairing code from `codeBody` via the management route, then enrol a device with it (unauth).
+ *  The ONE enrol path both `enrolAt` (kds_station) and `enrolHandheld` funnel through, so the two kinds
+ *  cannot drift. Returns the device id + the cookie jar. */
+async function enrolWithCode(
   app: Hono,
   managerCookie: string,
-  stationId: string,
+  codeBody: { kind: string; stationId?: string; label: string },
 ): Promise<{ deviceId: string; jar: string }> {
   const codeRes = await send(app, "POST", "/management-api/device-codes", {
     cookie: managerCookie,
-    body: { kind: "kds_station", stationId, label: "Pantalla Cocina" },
+    body: codeBody,
   });
   expect(codeRes.status).toBe(201);
   const { code } = (await codeRes.json()) as { code: string };
@@ -307,23 +308,27 @@ async function enrolAt(
   return { deviceId, jar: deviceCookieFrom(enrol) };
 }
 
+/** Mint a pairing code for a station via the management route, then enrol a device with it (unauth).
+ *  Returns the device id + the cookie jar. */
+function enrolAt(
+  app: Hono,
+  managerCookie: string,
+  stationId: string,
+): Promise<{ deviceId: string; jar: string }> {
+  return enrolWithCode(app, managerCookie, {
+    kind: "kds_station",
+    stationId,
+    label: "Pantalla Cocina",
+  });
+}
+
 /** Mint a HANDHELD pairing code (no station — Task 2: `kindRequiresStation("handheld")` is false), then
  *  enrol a device with it (unauth). Returns the device id + the cookie jar. */
-async function enrolHandheld(
+function enrolHandheld(
   app: Hono,
   managerCookie: string,
 ): Promise<{ deviceId: string; jar: string }> {
-  const codeRes = await send(app, "POST", "/management-api/device-codes", {
-    cookie: managerCookie,
-    body: { kind: "handheld", label: "Waiter phone" },
-  });
-  expect(codeRes.status).toBe(201);
-  const { code } = (await codeRes.json()) as { code: string };
-
-  const enrol = await send(app, "POST", "/api/device/enrol", { body: { code } });
-  expect(enrol.status).toBe(200);
-  const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
-  return { deviceId, jar: deviceCookieFrom(enrol) };
+  return enrolWithCode(app, managerCookie, { kind: "handheld", label: "Waiter phone" });
 }
 
 describe("Device API over real Postgres", () => {
