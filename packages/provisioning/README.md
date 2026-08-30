@@ -216,15 +216,17 @@ does), so only the hash ever reaches the plan or the database, and the display n
 the only non-secret, so it stays a flag. This is the ONLY place either secret is set for the FIRST
 admin: `setPassword` and passkey enrollment are gated on an already-authenticated management session.
 
-**The seeded admin cannot yet sign in to the dashboard, by design.** Dashboard (management) login is
-**email + password** — `loginManager` resolves the person by email — but `venue` seeds the admin with a
-password and **no email** (the `seed-admin` insert names only tenant_id/display_name/pin_hash/password_hash/role),
-and `setEmail` is itself gated on an already-authenticated management session. So a venue-provisioned
-admin has no email sign-in path until an email is set out-of-band; today only the demo bootstrap
-(`apps/server/scripts/dev-setup.ts`) does that. The provisioned password is not idle — the C2b
-mirror-bundle adoption route authenticates this emailless admin **by id** via `loginManagerById`. The
-open decision (add a `venue --admin-email` for production bootstrap, or treat the admin as mirror-only)
-is tracked in `docs/backlog.md`.
+**Whether the seeded admin can sign in to the dashboard depends on how it was seeded.** Dashboard
+(management) login is **email + password** — `loginManager` resolves the person by email. The
+`seed-admin` insert now names an `email` column (written when the request supplies one; `email ?? null`
+otherwise), and **onboarding via the setup UI** (`apps/setup` → `setup-api.ts`) captures the admin email
+as a **required** field, so an **onboarding-provisioned admin signs in to the dashboard immediately**.
+The bare `venue` CLI has no `--admin-email` flag, so it seeds the admin **emailless** (email is OPTIONAL
+in provisioning), and such an admin has no email sign-in path until an email is set out-of-band
+(`setEmail` is gated on an already-authenticated management session); today only the demo bootstrap
+(`apps/server/scripts/dev-setup.ts`) does that. Independent of the email, the provisioned password is
+not idle — the C2b mirror-bundle adoption route authenticates the admin **by id** via `loginManagerById`
+(a server-to-server flow carrying the id, not the email form), regardless of whether it has an email.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
 confirmation (`--yes` skips it), applies, then prints the new `tenant`, `node` and `SIF` ids (with the

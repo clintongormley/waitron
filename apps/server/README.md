@@ -297,17 +297,20 @@ so it stays a flag), while the admin's two login secrets are read only from the 
 echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and `WAITRON_ADMIN_PASSWORD` (the
 dashboard password, ≥8 characters), both required.
 
-**This admin cannot yet sign in to the dashboard, by design.** Dashboard (management) login is
-**email + password** — the login screen POSTs an `{ email }`, and `loginManager` resolves the person by
-email. But `venue` seeds the admin with a `password_hash` and **no email** (its `seed-admin` insert
-names only `tenant_id`/`display_name`/`pin_hash`/`password_hash`/`role`), and `setEmail` requires an
-already-authenticated management session — so a venue-provisioned admin has no dashboard sign-in path
-until an email is set for it out-of-band. Today only the demo bootstrap (`apps/server/scripts/dev-setup.ts`,
-via `seedStaff`) does that, giving its admin `owner@demo.waitron.local`. Production bootstrap has no such
-step yet; the open decision — add a `venue --admin-email`, or treat the provisioned admin as
-mirror-only (it authenticates by id via `loginManagerById`, the mirror-bundle path) — is tracked in
-`docs/backlog.md`. The provisioned password is still exercised: it is what the mirror-bundle adoption
-route and `venue-apply.e2e.test.ts` authenticate by id.
+**Whether this admin can sign in to the dashboard depends on how it was seeded.** Dashboard
+(management) login is **email + password** — the login screen POSTs an `{ email }`, and `loginManager`
+resolves the person by email. Onboarding via the **setup UI** (`apps/setup` → `setup-api.ts`) captures
+the admin email as a **required** field and threads it into `seed-admin`, whose insert now names
+`email` (`packages/provisioning/src/venue-apply.ts`), so an **onboarding-provisioned admin signs in to
+the dashboard immediately**. The bare `venue` CLI shown above has no `--admin-email` flag, so it seeds
+the admin **emailless** — `email` is OPTIONAL in provisioning (`email ?? null`) — and such an admin has
+no email sign-in path until an email is set for it out-of-band (`setEmail` requires an
+already-authenticated management session). Today only the demo bootstrap
+(`apps/server/scripts/dev-setup.ts`, via `seedStaff`) does that, giving its admin
+`owner@demo.waitron.local`. Independent of the email, the provisioned **password** is still exercised:
+it is what the C2b mirror-bundle adoption route authenticates **by id** (via `loginManagerById`, a
+server-to-server flow carrying the admin's id, not the email form) and what `venue-apply.e2e.test.ts`
+authenticates by id.
 
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
 `--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only
