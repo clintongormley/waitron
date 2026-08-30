@@ -4,10 +4,20 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { generateSecret, generateSync } from "otplib";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedManager, seedPerson } from "../test/fixtures.js";
 import { authorizeManager, loginManager } from "./manager-login.js";
+import { verifyPassword } from "./verify-password.js";
+
+// Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
+// observable: the person-not-found branch must run one verifyPassword (against the dummy hash) before
+// throwing, or it becomes a fast/slow user-enumeration oracle. The real implementation is preserved
+// (`vi.fn(actual.verifyPassword)`), so every other case's password check behaves exactly as before.
+vi.mock("./verify-password.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./verify-password.js")>();
+  return { ...actual, verifyPassword: vi.fn(actual.verifyPassword) };
+});
 
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
 // branches and the role gate. A PGlite connection is superuser, so RLS is a false pass here
@@ -45,6 +55,22 @@ describe("loginManager", () => {
       codeOf(() => loginManager(tx, { tenantId, email: "ghost@x.com", password: "correct horse" })),
     );
     expect(code).toBe("password.invalid");
+  });
+  it("runs the password KDF on an unknown email (timing equalization, no oracle)", async () => {
+    // Proof-by-deletion for the enumeration-timing mitigation: an unknown email must still pay for one
+    // verifyPassword, exactly as a wrong-password attempt does, so the two are indistinguishable by
+    // latency. Delete the dummy-verify call in loginManager's not-found branch and this goes red.
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
+    await seedManager(suite.db, tenantId, { email: "owner-timing@x.com" });
+    const code = await run((tx) =>
+      codeOf(() =>
+        loginManager(tx, { tenantId, email: "nobody-timing@x.com", password: "some password" }),
+      ),
+    );
+    expect(code).toBe("password.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith("some password", expect.any(String));
   });
   it("does not authenticate a person from another tenant (tenant filter)", async () => {
     // A person with a valid email + password, but in a DIFFERENT tenant. Even on PGlite (superuser,
