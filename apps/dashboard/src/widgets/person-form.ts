@@ -143,14 +143,16 @@ export class PersonForm extends LitElement {
    */
   #confirm(event: Event): void {
     event.stopPropagation();
-    // A blank email is OMITTED, never sent as "": an empty address is not "no email" to the server —
-    // it fails `isValidEmail` as `person.email_invalid`. So the key is present only when typed.
+    // A blank OR whitespace-only email is OMITTED, never sent: an empty address is not "no email" to
+    // the server — it fails `isValidEmail` as `person.email_invalid`. Trim first so "   " counts as
+    // blank, and emit the trimmed value; the key is present only when a real address was typed.
     const detail: { displayName: string; role: PersonRole; pin: string; email?: string } = {
       displayName: this.displayName,
       role: this.selectedRole,
       pin: this.pin,
     };
-    if (this.email !== "") detail.email = this.email;
+    const email = this.email.trim();
+    if (email !== "") detail.email = email;
     this.dispatchEvent(new CustomEvent("create-person", { detail, bubbles: true, composed: true }));
   }
 

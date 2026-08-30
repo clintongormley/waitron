@@ -119,6 +119,37 @@ describe("person-form", () => {
     expect("email" in (await created).detail).toBe(false);
   });
 
+  // A whitespace-only email counts as blank and is OMITTED too — "   " must not be sent and then
+  // rejected as person.email_invalid from a seemingly empty field. Prove by deletion: drop the
+  // `.trim()` in `#confirm` and this fails with `email: "   "` present. (Copilot, PR #172.)
+  it("omits a whitespace-only email from create-person", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "   " } }),
+    );
+    await el.updateComplete;
+    const created = new Promise<CustomEvent<Record<string, unknown>>>((resolve) =>
+      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    expect("email" in (await created).detail).toBe(false);
+  });
+
+  // A padded real address is emitted TRIMMED, so surrounding spaces never reach the server's own
+  // trim+validate as a distinct (still valid, but noisy) value. (Copilot, PR #172.)
+  it("emits a padded email trimmed on create-person", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "  owner@x.com  " } }),
+    );
+    await el.updateComplete;
+    const created = new Promise<CustomEvent<{ email?: string }>>((resolve) =>
+      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    expect((await created).detail.email).toBe("owner@x.com");
+  });
+
   // The email field is a `type=email` input so mobile keyboards and browser validation treat it as an
   // address. `wt-input` forwards `type` to its inner <input> (packages/ui wt-input.ts).
   it("renders the email field as a type=email input", async () => {

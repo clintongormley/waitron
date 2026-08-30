@@ -293,7 +293,8 @@ export class PersonEdit extends LitElement {
                   <wt-button
                     variant="secondary"
                     data-test="save-email"
-                    @click=${(e: Event) => this.#emit("set-email", { email: this.email }, e)}
+                    ?disabled=${this.email.trim() === ""}
+                    @click=${(e: Event) => this.#emit("set-email", { email: this.email.trim() }, e)}
                     >${t("person.save_email")}</wt-button
                   >
                 </div>

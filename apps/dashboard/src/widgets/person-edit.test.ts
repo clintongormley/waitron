@@ -186,6 +186,45 @@ describe("person-edit", () => {
     expect((await seen).detail).toEqual({ email: "owner@x.com" });
   });
 
+  // Save-email is DISABLED while the field is blank/whitespace, so a no-op click can't fire a
+  // deterministic person.email_invalid (a person with email: null starts blank; there is deliberately
+  // no "clear the email" path this slice — see the backlog). (Copilot, PR #172.)
+  it("disables the save-email button when the field is blank or whitespace", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: { ...active, email: null },
+      open: true,
+    });
+    const save = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-email]")!;
+    expect(save().hasAttribute("disabled")).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "   " } }),
+    );
+    await el.updateComplete;
+    expect(save().hasAttribute("disabled")).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "a@b.com" } }),
+    );
+    await el.updateComplete;
+    expect(save().hasAttribute("disabled")).toBe(false);
+  });
+
+  // A padded address is emitted TRIMMED. (Copilot, PR #172.)
+  it("emits set-email with the trimmed value", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "  owner@x.com  " } }),
+    );
+    await el.updateComplete;
+    const seen = new Promise<CustomEvent<{ email: string }>>((resolve) =>
+      el.addEventListener("set-email", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-email]")!.click();
+    expect((await seen).detail).toEqual({ email: "owner@x.com" });
+  });
+
   it("emits set-password with the entered password on save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person: active,
