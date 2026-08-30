@@ -732,10 +732,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld takes and fires orders but NEVER settles — the bill is
-      // paid at the fixed till. A handheld cookie throws `device.forbidden_action` (403) here, before the
-      // provider guard and any fiscal write, so order-only holds even if the client were bypassed. An
-      // ordinary till carries no device cookie and passes.
+      // Handheld firewall (spec §5): integrated card pay settles at the fixed till — a handheld never
+      // settles THROUGH pay (it may settle a cash sale on `/api/sales`, node-keyed, but not the card
+      // leg here). A handheld cookie throws `device.forbidden_action` (403) here, before the provider
+      // guard and any fiscal write, so the fence holds even if the client were bypassed. An ordinary
+      // till carries no device cookie and passes.
       await assertNotHandheld(deps, c, "pay");
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
@@ -873,11 +874,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
+      // Handheld firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
       // (`placeOrder` → `recordSale`) — the unrecoverable fiscal record (CLAUDE.md §5) — so a handheld,
-      // which may take and fire orders but NEVER settle, is refused `device.forbidden_action` (403) HERE,
-      // before the id parse and any fiscal write, exactly as the sale/pay routes are. An ordinary till
-      // carries no device cookie and passes.
+      // which never settles THROUGH place (that deferred invoice settles at the fixed till; a handheld's
+      // one settlement is a cash sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
+      // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
+      // device cookie and passes.
       await assertNotHandheld(deps, c, "place");
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const result = await placeOrder(
@@ -1213,9 +1215,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
+      // Handheld firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
       // Mode I settles the deferred invoice (`collectOrder`) — a chained fiscal write, the unrecoverable
-      // record (CLAUDE.md §5). A handheld may take and fire orders but NEVER settle, so it is refused
+      // record (CLAUDE.md §5). A handheld never settles THROUGH collect (that stays fenced even for cash;
+      // a handheld's one settlement path is a cash sale on `/api/sales`), so it is refused
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
       await assertNotHandheld(deps, c, "collect");

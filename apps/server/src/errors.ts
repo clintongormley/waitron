@@ -819,7 +819,8 @@ declare module "@waitron/shared" {
      * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 403 by `till-api.ts`'s local STATUS map,
      * not here — the route layer owns the status, the split every other code in this file follows.
      * Distinct from `device.forbidden_station` (a device touching another station's item, KDS least
-     * privilege): this is the ORDER-ONLY fiscal boundary. Never renamed once shipped.
+     * privilege): this is the TENDER-SPLIT fiscal boundary — a handheld is fenced on
+     * card/pay/reprint/drawer/place/collect/cancel but may settle a cash sale. Never renamed once shipped.
      */
     "device.forbidden_action": { action: string };
     /**

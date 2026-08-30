@@ -71,9 +71,11 @@ export interface DeviceBinding {
 
 /**
  * Reads and authenticates the request's device cookie against the database, returning the binding on
- * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
- * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
- * know WHETHER a device is present (the order-only firewall) branches on the `null`.
+ * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice`,
+ * `assertNotHandheld` and `assertHandheldTenderAllowed` share. A caller that needs the cookie present
+ * throws; a caller that only needs to know WHETHER (and what KIND of) device is present — the handheld
+ * firewall guards, both the fully-fenced `assertNotHandheld` and the tender-split
+ * `assertHandheldTenderAllowed` — branches on the `null`.
  *
  * The cookie is `${deviceId}.${token}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the token VALIDATES it. Every miss — a missing or malformed cookie, an
