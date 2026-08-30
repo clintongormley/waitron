@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { asAppUser, saleLines, sales, withTenant, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -169,6 +170,67 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
+interface ThreeChecks {
+  /** The emptied ORIGIN tab (line 1 wholly moved by check C, line 2 by check A). */
+  tabId: string;
+  /** Check A = 1 agua + the whole jamón (MIXED VAT); B = 1 agua; C = 1 agua. */
+  a: string;
+  b: string;
+  c: string;
+  /** The paid results, in pay order — Task 2 asserts on these; Task 3 ignores them. */
+  rA: TillSaleResult;
+  rB: TillSaleResult;
+  rC: TillSaleResult;
+}
+
+/**
+ * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into the three checks
+ * design §3 describes (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties line 1 with a
+ * whole move), and pay all three via the EXISTING `payWorkingOrder`. Shared by BOTH tests so the split
+ * shape is defined once (DRY): Task 2 proves the filings, Task 3 proves the partition/conservation.
+ */
+async function splitIntoThreeChecks(
+  seeded: Seeded,
+  deps: Parameters<typeof payWorkingOrder>[0],
+): Promise<ThreeChecks> {
+  const { cfg, aguaId, jamonId, tableId } = seeded;
+  const { tabId } = await asApp(cfg, (tx) =>
+    openTab(tx, cfg, {
+      tableId,
+      lines: [
+        { productId: aguaId, quantity: "3" },
+        { productId: jamonId, quantity: "0.300" },
+      ],
+    }),
+  );
+  const { checkId: a } = await asApp(cfg, (tx) =>
+    splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
+  );
+  const { checkId: b } = await asApp(cfg, (tx) =>
+    splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+  );
+  const { checkId: c } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
+
+  // Pay all three via the EXISTING payWorkingOrder (no new verb). A check is a retrieved order, so
+  // req.lines is ignored — it files from its stored locked lines.
+  const rA = await payWorkingOrder(deps, cfg, {
+    id: a,
+    tender: { method: "cash", amount: "10.00" },
+    lines: [],
+  });
+  const rB = await payWorkingOrder(deps, cfg, {
+    id: b,
+    tender: { method: "cash", amount: "2.00" },
+    lines: [],
+  });
+  const rC = await payWorkingOrder(deps, cfg, {
+    id: c,
+    tender: { method: "cash", amount: "2.00" },
+    lines: [],
+  });
+  return { tabId, a, b, c, rA, rB, rC };
+}
+
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
@@ -192,48 +254,14 @@ function seqOf(result: TillSaleResult): number {
 
 describe("split-bill: pay each check files its own registro", () => {
   it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 registros with contiguous numbers", async () => {
-    const { cfg, aguaId, jamonId, tableId } = await setupVenue();
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
     const deps = { db: suite.admin, backend, clock };
 
-    // Origin tab: 3× agua (21%), 0.300 kg jamón (10%) — a mixed-VAT bill on one table.
-    const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
-        tableId,
-        lines: [
-          { productId: aguaId, quantity: "3" },
-          { productId: jamonId, quantity: "0.300" },
-        ],
-      }),
-    );
-
-    // Carve into 3 checks (design §3 "the 4 working orders = 3 checks + emptied origin"):
-    //   A = 1 agua (partial split of line 1) + the whole jamón (line 2) — MIXED VAT
-    //   B = 1 agua ; C = 1 agua (line 1 emptied on the last, whole move)
-    const { checkId: a } = await asApp(cfg, (tx) =>
-      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
-    );
-    const { checkId: b } = await asApp(cfg, (tx) =>
-      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
-    );
-    const { checkId: c } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
-
-    // Pay all three via the EXISTING payWorkingOrder (no new verb). A check is a retrieved order, so
-    // req.lines is ignored — it files from its stored locked lines.
-    const rA = await payWorkingOrder(deps, cfg, {
-      id: a,
-      tender: { method: "cash", amount: "10.00" },
-      lines: [],
-    });
-    const rB = await payWorkingOrder(deps, cfg, {
-      id: b,
-      tender: { method: "cash", amount: "2.00" },
-      lines: [],
-    });
-    const rC = await payWorkingOrder(deps, cfg, {
-      id: c,
-      tender: { method: "cash", amount: "2.00" },
-      lines: [],
-    });
+    // Origin tab (3× agua @21%, 0.300 kg jamón @10%) carved into 3 checks (design §3 "the 4 working
+    // orders = 3 checks + emptied origin") — A = 1 agua + whole jamón (MIXED VAT); B, C = 1 agua each,
+    // C emptying line 1 with a whole move — and all three paid. Shared with the partition test below.
+    const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps);
 
     // Negative control (run, then removed): a 4th `payWorkingOrder` for the emptied origin `tabId`
     // THREW `sale.empty_basket` — `priceStoredOrder` refuses an order with no stored lines — so the
@@ -284,5 +312,63 @@ describe("split-bill: pay each check files its own registro", () => {
       tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
+  });
+
+  it("partitions the items — every unit filed on exactly ONE check, quantity conserved, origin emptied", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const deps = { db: suite.admin, backend, clock };
+
+    // Same 3-check split as above (DRY): A = 1 agua + whole jamón; B = 1 agua; C = 1 agua.
+    const { tabId, a } = await splitIntoThreeChecks(seeded, deps);
+
+    const { originLines, filed, filedForOrigin } = await asApp(cfg, async (tx) => {
+      // The emptied origin: 0 working_order_lines, and it files NOTHING (never paid → no sales row).
+      const originLines = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+      // Every filed sale_line across the 3 checks, joined to its sale via sales.id = sale_lines.sale_id,
+      // tagged with the check it belongs to (sales.working_order_id). sale_lines SNAPSHOTS values and
+      // carries NO product_id (packages/db/src/schema/sales.ts) — so partition by vat_rate (the single
+      // 10% jamón line vs the three 21% agua lines), never by product. These are the REAL filed rows,
+      // not a recompute of the inputs.
+      const filed = await tx
+        .select({
+          workingOrderId: sales.workingOrderId,
+          vatRate: saleLines.vatRate,
+          quantity: saleLines.quantity,
+        })
+        .from(saleLines)
+        .innerJoin(sales, eq(sales.id, saleLines.saleId));
+      const filedForOrigin = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, tabId));
+      return { originLines, filed, filedForOrigin };
+    });
+
+    // The origin is emptied and files nothing (design §4 "no double-file; the remainder shares no item").
+    expect(originLines).toEqual([]);
+    expect(filedForOrigin).toEqual([]);
+
+    // CONSERVATION: summing the filed quantities per RATE across the 3 checks == the original basket.
+    const filed21 = filed.filter((f) => f.vatRate === "21.00");
+    const filed10 = filed.filter((f) => f.vatRate === "10.00");
+    const totalAgua = filed21.reduce((n, f) => n + Number(f.quantity), 0);
+    const totalJamon = filed10.reduce((n, f) => n + Number(f.quantity), 0);
+    expect(totalAgua).toBe(3); // 1 + 1 + 1, no unit created or destroyed
+    expect(totalJamon.toFixed(3)).toBe("0.300"); // moved whole to check A
+
+    // PARTITION: the 10%-rate (jamón) quantity appears on EXACTLY ONE check (no double-file).
+    const checksWith10 = new Set(filed10.map((f) => f.workingOrderId));
+    expect(checksWith10).toEqual(new Set([a]));
+
+    // Negative control (run once, then restored — brief Step 3): to over-allocate the aguas without
+    // the split aborting on an emptied line, the origin was temporarily opened with 4 aguas and check
+    // B took `quantity: "2"` (with a covering 10.00 tender), so the three checks filed 1 + 2 + 1 = 4.
+    // `totalAgua` came back 4 and this test FAILED at `expect(totalAgua).toBe(3)` with
+    // `expected 4 to be 3` (line ~360), proving the conservation sum catches a double-file / re-price.
+    // All three edits were reverted; the test is green as written.
   });
 });
