@@ -740,7 +740,11 @@ here is the cross-cutting or genuinely-decision-bearing work.
   layer (what products/`sale_lines` actually store), and **(2)** route `product-list.ts`/`recipe-screen.ts`
   through the shared `localizedName` (generalizing its fallback arg) so one resolver serves all. Latent
   bug for genuinely bilingual venues (`invoiceLocales` of two langs is a first-class config); harmless
-  while venues are single-locale.
+  while venues are single-locale. **Design sketch:**
+  `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md` — one region-tolerant
+  language-negotiation primitive (RFC 4647 lookup shape) for both software strings (terminal English)
+  and venue content (terminal venue-default → any), a two-phase chooser/lookup split, and the invariant
+  that the content default is the presentational venue default, never fiscal `invoiceLocales`.
 
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
