@@ -96,7 +96,10 @@ raises a `23503` foreign-key violation (not an `AppError` → the adopt boundary
 ([venue-adopt.ts](../../../packages/provisioning/src/venue-adopt.ts) `OUT_OF_SCOPE_FK_COLUMNS`):
 
 - `locations.catalogue_id` → `catalogues` (FK `locations_catalogue_id_catalogues_id_fk`, migration
-  0028). `catalogues` IS synced, but sync starts only **after** the mirror reboots into mirror mode; at
+  0028). _(Update 2026-08-30: that single-column FK was replaced by the tenant-consistent composite
+  `locations_catalogue_fk` in migration 0078; the nulling behaviour here is unchanged — `catalogues` is
+  still empty at adopt, so a verbatim pointer still `23503`s.)_ `catalogues` IS synced, but sync starts
+  only **after** the mirror reboots into mirror mode; at
   adopt (setup mode) it is empty. And `locations` is **not** synced, so once the catalogue rows do
   arrive the pointer is never restored.
 - `tills.receipt_printer_id` → `printers` (composite FK `tills_receipt_printer_fk`, migration 0068).

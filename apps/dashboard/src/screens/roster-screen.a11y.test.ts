@@ -33,7 +33,12 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-const locations = [{ id: "loc-1", name: "Main" }];
+// Two locations so the shared `<dashboard-location-picker>` renders its select (it renders nothing
+// for a single location) and axe scans it in the screen context, as the inlined picker used to be.
+const locations = [
+  { id: "loc-1", name: "Main" },
+  { id: "loc-2", name: "Annex" },
+];
 // Today's date in UTC (`toISOString()` is UTC, matching the screen's `today()` seed) — always in the
 // current week the screen defaults to, so the shift renders in a cell.
 const day = new Date().toISOString().slice(0, 10);

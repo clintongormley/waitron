@@ -133,8 +133,9 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
  * The trust-boundary check for an untrusted `catalogueId` a location-menu WRITE will reference: refuse
  * it as `catalogue.not_found` (404) unless it names a catalogue VISIBLE to the current tenant. Runs
  * inside `gated`'s tenant-scoped tx, so `catalogueExists`'s read is RLS-filtered and another tenant's
- * id reads as absent. This is what stops a cross-tenant id becoming a location's default (the
- * `locations.catalogue_id` FK is single-column/global — see the route comment).
+ * id reads as absent. This is the CLEAN-error front of a two-layer defense: both write targets carry a
+ * tenant-consistent composite FK (`locations.catalogue_id` → 0078, `location_catalogues.catalogue_id`
+ * → 0074) that 23503-rejects a cross-tenant id at the data layer anyway — see the route comment.
  */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId))) {
@@ -211,11 +212,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // remove a member; PUT sets the default (keep-sellable — the old default is demoted, never dropped).
   // The two routes that WRITE a `catalogueId` reference (POST add, PUT default) guard it with
   // `catalogueExists` FIRST — an absent or cross-tenant id is refused `catalogue.not_found` (404).
-  // That guard is load-bearing on the PUT path: `locations.catalogue_id`'s FK is single-column/global
-  // (0028), NOT tenant-scoped, and a FK check bypasses RLS, so WITHOUT it a foreign id would be accepted
-  // as the location's default (proven cross-tenant in catalogue-api.rls.test.ts). `location_catalogues`'
-  // FK is composite (0074), so POST would `23503` on a foreign id anyway — the guard just turns that
-  // opaque 500 into the same clean 404. DELETE needs no guard: removing a non-member row is a no-op.
+  // This is defense-in-depth, not the sole protection: BOTH write targets carry a tenant-consistent
+  // composite FK — `locations.catalogue_id` → catalogues(tenant_id,id) (0078), `location_catalogues`
+  // → (0074) — that 23503-rejects a cross-tenant id at the DATA layer independently of RLS. The guard's
+  // job is the CLEAN, uniform error: without it both routes still refuse a cross-tenant id, but via the
+  // FK's opaque 500 (proven cross-tenant in catalogue-api.rls.test.ts: guard deleted → the PUT returns
+  // 500, the default is never set). DELETE needs no guard: removing a non-member row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

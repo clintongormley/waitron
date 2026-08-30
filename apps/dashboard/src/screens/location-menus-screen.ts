@@ -1,6 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+// The named import evaluates the module, which registers `<dashboard-location-picker>` via its
+// `@customElement` side effect — so no separate side-effect import is needed alongside the helper.
+import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, LocationCatalogueSummary, LocationSummary } from "../api/client.js";
@@ -37,7 +40,6 @@ import type { DashboardApi, LocationCatalogueSummary, LocationSummary } from "..
 export class LocationMenusScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -46,13 +48,6 @@ export class LocationMenusScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
-      }
-      .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
-        margin-bottom: var(--wt-space-4);
       }
       table {
         width: 100%;
@@ -117,9 +112,7 @@ export class LocationMenusScreen extends LitElement {
         this.catalogues = [];
         return;
       }
-      if (!locations.some((l) => l.id === this.locationId)) {
-        this.locationId = locations[0]!.id;
-      }
+      this.locationId = resolveLocationSelection(locations, this.locationId);
       await this.#loadCatalogues();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -131,11 +124,11 @@ export class LocationMenusScreen extends LitElement {
     this.catalogues = await this.api.listLocationCatalogues(this.locationId);
   }
 
-  /** The location picker changed. Native `change` is `composed:false`; `stopPropagation` is defensive
-   * consistency with the composed handlers (the roster-screen pattern). Reload the catalogues. */
-  async #onSelectLocation(event: Event): Promise<void> {
+  /** The location picker emitted `location-changed`. `stopPropagation` keeps the composed event inside
+   * this screen (the roster-screen pattern). Reload the catalogues. */
+  async #onSelectLocation(event: CustomEvent<{ locationId: string }>): Promise<void> {
     event.stopPropagation();
-    this.locationId = (event.target as HTMLSelectElement).value;
+    this.locationId = event.detail.locationId;
     this.errorKey = null;
     try {
       await this.#loadCatalogues();
@@ -201,24 +194,13 @@ export class LocationMenusScreen extends LitElement {
 
   #renderBody(): TemplateResult {
     return html`
-      ${
-        this.locations.length > 1
-          ? html`<label class="picker"
-              >${t("location_menus.location")}
-              <select
-                data-test="location-select"
-                @change=${(e: Event) => void this.#onSelectLocation(e)}
-              >
-                ${this.locations.map(
-                  (l) =>
-                    html`<option value=${l.id} .selected=${l.id === this.locationId}>
-                      ${l.name}
-                    </option>`,
-                )}
-              </select>
-            </label>`
-          : nothing
-      }
+      <dashboard-location-picker
+        .locations=${this.locations}
+        .selected=${this.locationId}
+        .label=${t("location_menus.location")}
+        @location-changed=${(e: CustomEvent<{ locationId: string }>) =>
+          void this.#onSelectLocation(e)}
+      ></dashboard-location-picker>
       ${
         this.catalogues.length === 0
           ? html`<p class="prompt" data-test="no-catalogues">

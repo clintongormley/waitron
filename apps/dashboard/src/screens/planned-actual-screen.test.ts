@@ -39,6 +39,12 @@ async function flush(el: PlannedActualScreen): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
+// The location select now lives in the shared `<dashboard-location-picker>` widget's shadow root, so
+// reach through that boundary rather than the screen's own shadow root.
+const locationSelect = (el: PlannedActualScreen) =>
+  el
+    .shadowRoot!.querySelector("dashboard-location-picker")!
+    .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
 afterEach(cleanupWidgets);
 
 describe("planned-actual-screen", () => {
@@ -82,7 +88,7 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el);
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
@@ -178,7 +184,7 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el);
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
@@ -228,7 +234,7 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el);
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
@@ -242,9 +248,7 @@ describe("planned-actual-screen", () => {
       expect.any(String),
       expect.any(String),
     );
-    const reselect = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=location-select]",
-    )!;
+    const reselect = locationSelect(el);
     expect(reselect.value).toBe("loc-2");
   });
 });

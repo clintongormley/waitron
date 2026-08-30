@@ -15,7 +15,12 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-const locations = [{ id: "loc-1", name: "Main" }];
+// Two locations so the shared `<dashboard-location-picker>` renders its select (it renders nothing
+// for a single location) and axe scans it in the screen context, as the inlined picker used to be.
+const locations = [
+  { id: "loc-1", name: "Main" },
+  { id: "loc-2", name: "Annex" },
+];
 const rows: PlannedVsActualRow[] = [
   {
     personId: "p1",

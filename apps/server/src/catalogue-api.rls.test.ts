@@ -379,16 +379,21 @@ describe("Catalogue API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("refuses a cross-tenant catalogueId on the location-menu writes — 404, no cross-tenant default set", async () => {
-    // The guard that closes the single-column `locations.catalogue_id` FK hole (0028). That FK is NOT
-    // tenant-scoped and a FK check BYPASSES RLS, so WITHOUT `assertCatalogueVisible` a PUT default with
-    // another tenant's catalogueId would SUCCEED and set a cross-tenant catalogue as tenant A's default
-    // (`location_catalogues`' composite FK would 23503 the POST anyway; the guard makes both a clean 404).
+    // Cross-tenant `catalogueId` is refused on BOTH location-menu writes. `assertCatalogueVisible` is now
+    // the FRONT layer of a two-layer defense: behind it, BOTH writes carry a tenant-consistent composite
+    // FK — `locations_catalogue_fk` (0078) for the PUT default, `location_catalogues_catalogue_fk` (0074)
+    // for the POST — so the cross-tenant id is rejected at the DATA layer too, independently of RLS. The
+    // guard's job is the CLEAN error: a bare 23503 surfaces as an opaque 500, and the guard turns it into
+    // `catalogue.not_found` (404). (Before 0078, `locations.catalogue_id` carried a single-column FK to
+    // catalogues(id) that let a cross-tenant default LAND — which is why the guard was added; 0078 is the
+    // data-layer backstop, pinned in `locations-default-catalogue.rls.test.ts`.)
     //
     // GUARD-BY-DELETION (assertCatalogueVisible), run on postgres:18 via Testcontainers
     // (TESTCONTAINERS_RYUK_DISABLED=true): removed BOTH `await assertCatalogueVisible(tx, catalogueId);`
-    // calls from `catalogue-api.ts`. This test then FAILED — the PUT returned 204 and tenant A's location
-    // default became tenant B's catalogue id (the final `some(isDefault)` flipped true). Restored the two
-    // lines and it passed again; `git diff catalogue-api.ts` clean afterwards.
+    // calls from `catalogue-api.ts`. This test then FAILED — the PUT returned **500** (the composite FK's
+    // 23503, not a 204: the default is NEVER set now, the FK blocks it), so the `toBe(404)` flipped red.
+    // Restored the two lines and it passed again; `git diff catalogue-api.ts` clean afterwards. (The 404
+    // is thus the guard's doing; the isolation itself is the composite FK's — the two are proven apart.)
     const a = await setupVenue();
     const b = await setupVenue();
     const appA = mountApp(a.tenantId);

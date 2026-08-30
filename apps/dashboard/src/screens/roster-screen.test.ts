@@ -48,6 +48,12 @@ function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const dialog = (el: RosterScreen) => el.shadowRoot!.querySelector("dashboard-shift-dialog")!;
+// The location select now lives in the shared `<dashboard-location-picker>` widget's shadow root, so
+// reach through that boundary rather than the screen's own shadow root.
+const locationSelect = (el: RosterScreen) =>
+  el
+    .shadowRoot!.querySelector("dashboard-location-picker")!
+    .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
 const draftSnapshot = (): RosterSnapshot => ({
   version: {
     id: "v1",
@@ -153,7 +159,7 @@ describe("roster-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el);
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
@@ -353,7 +359,7 @@ describe("roster-screen", () => {
     });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    const select = locationSelect(el);
     select.value = "loc-2";
     select.dispatchEvent(new Event("change"));
     await flush(el);
