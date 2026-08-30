@@ -173,6 +173,42 @@ const navDevices = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-devices]");
 const navPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printers]");
+/** The sidebar's navigation landmark (present only for a non-staff logged-in session). */
+const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-label]");
+/** A nav item by its stable `data-test="nav-<screen>"` id (the ids every downstream consumer pins). */
+const navItem = (el: DashboardApp, screen: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
+
+/** The sixteen manager faces the grouped sidebar switches between, every one keeping its `data-test`
+ * id. Order is the sidebar's render order (pinned overview+sales, then Menu / Service / Team /
+ * Purchasing / Configuration). */
+const NAV_SCREENS = [
+  "overview",
+  "sales",
+  "catalogue",
+  "recipe",
+  "floor",
+  "statuses",
+  "kitchen",
+  "staff",
+  "roster",
+  "approvals",
+  "planned-actual",
+  "purchases",
+  "layout",
+  "receipt",
+  "devices",
+  "printers",
+] as const;
+
+/** The five group-header i18n keys the sidebar renders (the pinned overview+sales group has none). */
+const NAV_GROUP_KEYS = [
+  "nav.group.menu",
+  "nav.group.service",
+  "nav.group.team",
+  "nav.group.purchasing",
+  "nav.group.configuration",
+] as const;
 /** The chooser in the logged-in header chrome (present only when logged in). */
 const headerChooser = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
@@ -587,6 +623,46 @@ describe("dashboard-app", () => {
     expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
     expect(staff(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
+  });
+
+  // The grouped static sidebar (Task 11): every group header renders, every one of the sixteen manager
+  // faces keeps its `data-test="nav-<screen>"` id, and the active face is marked `aria-current="page"`.
+  it("renders each nav group header and all 16 nav items", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // Every group header (an <h2 class="nav-group">) renders its localised label…
+    const headers = [...el.shadowRoot!.querySelectorAll("h2.nav-group")].map((h) =>
+      h.textContent?.trim(),
+    );
+    for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
+    // …and every one of the sixteen manager faces is present by its stable data-test id.
+    for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
+    expect(NAV_SCREENS).toHaveLength(16);
+  });
+
+  it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // Opens on overview (Task 9's landing) → overview is the current item.
+    expect(navItem(el, "overview")!.getAttribute("aria-current")).toBe("page");
+
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    // The clicked item becomes current, and the previously-current one drops the marker.
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("a staff session still gets no nav (no navigation landmark)", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(sidebarNav(el)).toBeNull();
   });
 
   it("does not show the nav on the login screen", async () => {
