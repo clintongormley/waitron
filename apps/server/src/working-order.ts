@@ -1811,6 +1811,75 @@ export async function splitOffCheck(
   return { checkId };
 }
 
+/**
+ * Detach a table from a joined tab (TS-5, deferred from TS-3). WITH items: the table keeps running its
+ * OWN bill — create a new `open` tab ANCHORED to it (its `tab_id` repointed) and move the items over
+ * (TS-4's {@link transferLines}). WITHOUT items: just free it (`tab_id → NULL`) and clear its TS-2
+ * manual `status_id` (a turnover — the same "clear on turnover" TS-3's `moveTab` applies at the move
+ * boundary). Unlike a split-off CHECK, an un-joined table's new tab IS table-anchored: it is still a
+ * seat, not a payment unit (design §2). Returns the new `tabId` (with items) or `{}` (freed). Runs on
+ * the caller's tx scope.
+ *
+ * The with-items branch repoints the detached table BEFORE the move, so both `tabId` (still covered by
+ * its origin table(s)) and `newTabId` (now covered by the detached table) are TABS when {@link
+ * transferLines} runs — which is exactly why the reuse is `transferLines` here, not `splitOffCheck`'s
+ * bare `carveOffLines`: `splitOffCheck`'s destination is table-LESS and would be rejected by
+ * `transferLines`' `lockOpenTab` back-pointer check, whereas an un-joined table's new tab passes it. So
+ * `transferLines` gives the correct is-a-tab validation AND the ascending-id lock ordering for free,
+ * over a `newTabId` that is a freshly-minted, uncontended row (no deadlock hazard against the origin
+ * lock this verb already holds).
+ */
+export async function unjoinTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  tableId: string,
+  transfers?: { lineNo: number; quantity?: string }[],
+): Promise<{ tabId?: string }> {
+  // Lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an absent/
+  // foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and fail
+  // closed, design §3).
+  const [table] = await tx
+    .select({ tabId: diningTables.tabId })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId))
+    .for("update");
+  if (table?.tabId !== tabId) {
+    throw new AppError("table.not_joined", { tableId, tabId });
+  }
+
+  // The shared tab must be open (you cannot re-carve a settled/abandoned bill).
+  const [shared] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (shared?.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+
+  if (transfers === undefined || transfers.length === 0) {
+    // Free it: null the back-pointer AND the TS-2 status in ONE statement (turnover — the tab left this
+    // table, the same idiom `moveTab`/`openTab` use). Files nothing (pre-fiscal). Other tables joined to
+    // the tab keep pointing at it.
+    await tx
+      .update(diningTables)
+      .set({ tabId: null, statusId: null })
+      .where(eq(diningTables.id, tableId));
+    return {};
+  }
+
+  // With items: create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
+  // with `transferLines` — repointing FIRST makes `newTabId` a real tab (back-pointer set) so
+  // `transferLines`' is-a-tab lock passes. `transferLines` re-locks `tabId` (a no-op — already held
+  // above) and `newTabId` (fresh), in ascending-id order.
+  const newTabId = randomUUID();
+  await createOpenOrder(tx, cfg, newTabId, [], null);
+  await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
+  await transferLines(tx, cfg, tabId, newTabId, transfers);
+  return { tabId: newTabId };
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;

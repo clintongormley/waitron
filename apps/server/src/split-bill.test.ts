@@ -26,7 +26,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab, splitOffCheck } from "./working-order.js";
+import { joinTable, openTab, splitOffCheck, unjoinTable } from "./working-order.js";
 import "./errors.js";
 
 // PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
@@ -230,5 +230,91 @@ describe("splitOffCheck", () => {
     await expect(
       asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 99 }])),
     ).rejects.toMatchObject({ code: "tab.line_not_found" });
+  });
+});
+
+describe("unjoinTable", () => {
+  it("with items: anchors a NEW open tab to the detached table and moves the items onto it", async () => {
+    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+    );
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2)); // both tables now point at tabId
+
+    const { tabId: newTabId } = await asApp(cfg, (tx) =>
+      unjoinTable(tx, cfg, tabId, tableId2, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    const state = await asApp(cfg, async (tx) => {
+      const [detached] = await tx
+        .select({ tabId: diningTables.tabId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId2));
+      const [stillJoined] = await tx
+        .select({ tabId: diningTables.tabId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId));
+      const [newTab] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, newTabId!));
+      const newTabLines = await tx
+        .select({ productId: workingOrderLines.productId, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, newTabId!));
+      return { detached, stillJoined, newTab, newTabLines };
+    });
+
+    expect(newTabId).toBeDefined();
+    expect(state.detached?.tabId).toBe(newTabId); // the table now runs its OWN bill (re-anchored)
+    expect(state.stillJoined?.tabId).toBe(tabId); // the origin table is unaffected
+    expect(state.newTab?.status).toBe("open");
+    expect(state.newTabLines).toEqual([{ productId: aguaId, quantity: "1.000" }]);
+  });
+
+  it("without items: frees the table (tab_id → NULL) and clears its TS-2 status", async () => {
+    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+    );
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
+
+    const result = await asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2));
+
+    const [row] = await asApp(cfg, (tx) =>
+      tx
+        .select({ tabId: diningTables.tabId, statusId: diningTables.statusId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId2)),
+    );
+    expect(result).toEqual({});
+    expect(row?.tabId).toBeNull();
+    expect(row?.statusId).toBeNull(); // turnover: the manual TS-2 status clears (design §3, TS-3 pattern)
+  });
+
+  it("refuses to un-join a table that isn't part of the tab (table.not_joined)", async () => {
+    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+    );
+    // tableId2 is FREE (never joined) → not part of tabId.
+    await expect(asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2))).rejects.toMatchObject({
+      code: "table.not_joined",
+    });
+  });
+
+  it("refuses to un-join from a tab whose shared order is no longer open (tab.not_open)", async () => {
+    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+    );
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
+    // Abandon the shared order WITHOUT clearing the tables' tab_id — a STALE pointer, exactly the state
+    // openTab documents (a settled/abandoned tab leaves its tables pointing at it). tableId2.tab_id still
+    // equals tabId, so it passes the table.not_joined guard and reaches the shared-tab open check.
+    await db.execute(sql`update working_orders set status = 'abandoned' where id = ${tabId}`);
+    await expect(asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2))).rejects.toMatchObject({
+      code: "tab.not_open",
+    });
   });
 });
