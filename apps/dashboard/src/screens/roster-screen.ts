@@ -6,9 +6,8 @@ import "@waitron/ui/src/components/wt-button.js";
 // so `<dashboard-shift-dialog>` is registered before this screen renders it (the widget-registration
 // pattern the catalogue screen follows).
 import "../widgets/shift-dialog.js";
-// Same side-effect import for the shared location picker (`<dashboard-location-picker>`), plus its
-// pure selection helper.
-import "../widgets/location-picker.js";
+// The named import evaluates the module, which registers `<dashboard-location-picker>` via its
+// `@customElement` side effect — so no separate side-effect import is needed alongside the helper.
 import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

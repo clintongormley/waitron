@@ -1,9 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-// Value import (not `import type`): registers `<dashboard-location-picker>` before this screen renders
-// it; `resolveLocationSelection` is its shared selection helper.
-import "../widgets/location-picker.js";
+// The named import evaluates the module, which registers `<dashboard-location-picker>` via its
+// `@customElement` side effect — so no separate side-effect import is needed alongside the helper.
 import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
