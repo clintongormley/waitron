@@ -214,10 +214,17 @@ admin connection string — read from an environment variable or an echo-off pro
 boundary (`assertPinLength` / `assertPasswordLength` enforce the same floors the identity package
 does), so only the hash ever reaches the plan or the database, and the display name (`--admin-name`) is
 the only non-secret, so it stays a flag. This is the ONLY place either secret is set for the FIRST
-admin: `setPassword` and passkey enrollment are gated on an already-authenticated management session,
-so without this seed a first dashboard login would be impossible. After `venue`, sign in to the
-management dashboard with the admin's display name and this password — that is the first dashboard
-login.
+admin: `setPassword` and passkey enrollment are gated on an already-authenticated management session.
+
+**The seeded admin cannot yet sign in to the dashboard, by design.** Dashboard (management) login is
+**email + password** — `loginManager` resolves the person by email — but `venue` seeds the admin with a
+password and **no email** (the `seed-admin` insert names only tenant_id/display_name/pin_hash/password_hash/role),
+and `setEmail` is itself gated on an already-authenticated management session. So a venue-provisioned
+admin has no email sign-in path until an email is set out-of-band; today only the demo bootstrap
+(`apps/server/scripts/dev-setup.ts`) does that. The provisioned password is not idle — the C2b
+mirror-bundle adoption route authenticates this emailless admin **by id** via `loginManagerById`. The
+open decision (add a `venue --admin-email` for production bootstrap, or treat the admin as mirror-only)
+is tracked in `docs/backlog.md`.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
 confirmation (`--yes` skips it), applies, then prints the new `tenant`, `node` and `SIF` ids (with the

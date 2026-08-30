@@ -19,7 +19,7 @@
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
-/** One `GET /management-api/staff-roster` entry — the pre-login picker list, no role or status. */
+/** One `GET /management-api/staff-roster` entry — the colleague-picker list, no role or status. */
 export interface RosterEntry {
   personId: string;
   displayName: string;
@@ -883,14 +883,16 @@ export class DashboardApi {
     this.#fetchImpl = fetchImpl;
   }
 
-  /** `GET /management-api/staff-roster` — the pre-login person picker (id + display name only). */
+  /** `GET /management-api/staff-roster` — the staff self-service colleague picker in
+   * `my-schedule-screen.ts` (id + display name only). UNAUTHENTICATED but no longer part of login:
+   * the login screen POSTs `{ email }` and no longer reads this. */
   getStaffRoster(): Promise<RosterEntry[]> {
     return this.#request<RosterEntry[]>("/management-api/staff-roster", "GET");
   }
 
   /**
    * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
-   * Task 4). PUBLIC (pre-login, like {@link getStaffRoster}): each `{ code, label }` is a
+   * Task 4). PUBLIC and read pre-login by the login screen's language chooser: each `{ code, label }` is a
    * `SUPPORTED_LOCALES` entry, and `venueDefault` the tenant's fallback locale. The language chooser
    * reads the list; the app decides what to do with a pick, so the client only surfaces the shape.
    */

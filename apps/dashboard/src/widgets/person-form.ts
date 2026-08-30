@@ -16,7 +16,7 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
 /**
  * The management dashboard's CREATE-PERSON form: a `wt-dialog` (heading "Nuevo usuario") holding a
  * display-name field (`wt-input`), a role picker (native `<select>` — there is no `wt-select`
- * primitive, exactly as the login screen's roster picker), a PIN field (the till credential) and a
+ * primitive), a PIN field (the till credential) and a
  * dashboard sign-in email field (`wt-input[type=email]`), plus a primary confirm control in the footer.
  *
  * The staff screen drives it by setting `.open` — the same open-by-property contract `wt-dialog`

@@ -77,7 +77,13 @@ export async function createPerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (err) {
-    // A `persons_tenant_email_uq` collision → person.email_taken; email is non-null on this path.
+    // The insert can raise only two unique violations on `persons`: `persons_tenant_email_uq`, the
+    // partial index that fires solely when `email` IS NOT NULL, and the `id` primary key. `asEmailTaken`
+    // maps 23505 to `person.email_taken` (and re-throws anything else). On the reachable path — the email
+    // collision — `email` is non-null, so `email!` carries the value that collided. The `email!` also
+    // covers the only case where `email` is null AND a 23505 fires: a `defaultRandom()` uuid PK collision,
+    // which is cryptographically unreachable; if it ever happened we would mislabel it `person.email_taken`
+    // with an `email: null`, an accepted theoretical wart, not a live bug.
     asEmailTaken(err, email!);
   }
 }
