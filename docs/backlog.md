@@ -747,7 +747,7 @@ here is the cross-cutting or genuinely-decision-bearing work.
 **Cross-cutting engineering:**
 
 - **Handheld live updates (SSE/WebSocket).** Deferred from the order-only handheld slice
-  (`feat/handheld-tableside-ordering`, owner decision 2026-08-30). The app is pull-only today —
+  (#173, owner decision 2026-08-30). The app is pull-only today —
   it refetches the affected read-model after each round/serve/fire, plus a manual refresh. Two
   waiters on the same table therefore see stale data until a refetch (the server still guards
   append-only rounds + price-locks, so concurrent rounds append safely). A live push channel —
