@@ -512,6 +512,37 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay-card")).toBeNull(); // Card is hidden
   });
 
+  it("cashOnly suppresses the integrated-card extras too, even with a provider set (Copilot #176)", async () => {
+    // `cashOnly` must mean NO card affordance at all: not just the Card button but the integrated-card
+    // tip/offline-consent inputs (`.card-extras`). Today `cashOnly` is only set where `cardProvider` is
+    // "none" (so the extras are already gone), but a future caller pairing them must not leave card-only
+    // inputs on screen with no card tender. Prove-by-deletion: drop `|| this.cashOnly` from
+    // `#renderCardExtras` and this fails while the counter test below still passes.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cashOnly: true,
+      cardProvider: "stripe_terminal",
+      tipsEnabled: true,
+    });
+    expect(query(el, ".pay-card")).toBeNull(); // Card button hidden
+    expect(query(el, ".card-extras")).toBeNull(); // AND the integrated-card extras block
+    expect(query(el, ".tip-input")).toBeNull(); // AND the tip input inside it
+  });
+
+  it("keeps the integrated-card extras when NOT cashOnly (counter control for the gate above)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "stripe_terminal",
+      tipsEnabled: true,
+    });
+    expect(query(el, ".card-extras")).not.toBeNull();
+    expect(query(el, ".tip-input")).not.toBeNull();
+  });
+
   it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

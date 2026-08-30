@@ -661,7 +661,12 @@ export class TillTenderPay extends LitElement {
    * into the emitted event until then.
    */
   #renderCardExtras() {
-    if (this.cardProvider === "none") return nothing;
+    // {@link cashOnly} means NO card affordance at all (a handheld settles cash only), so suppress the
+    // integrated-card tip/offline-consent inputs too — not just the Card button ({@link renderCardButton}).
+    // Today `cashOnly` is only set where `cardProvider` is `"none"` (the handheld table-order screen never
+    // threads a provider), so this is defensive: it keeps the invariant true for any future caller that
+    // pairs `cashOnly` with an integrated provider, rather than leaving card-only inputs with no tender.
+    if (this.cardProvider === "none" || this.cashOnly) return nothing;
     return html`
       <div class="card-extras">
         ${
