@@ -59,7 +59,7 @@ describe.each(["light", "dark"] as const)("till-allergen-screen a11y (%s theme)"
     );
     const rows = [...el.shadowRoot!.querySelectorAll<HTMLTableRowElement>("tbody tr")];
     const sandwich = rows.find((r) =>
-      r.querySelector(".row-open")?.textContent?.includes("Bocadillo"),
+      r.querySelector(".row-open")?.textContent?.includes("Sandwich"),
     );
     sandwich!.querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
