@@ -71,10 +71,15 @@ demo or behind-the-scenes".
 
 **Tier A — an owner notices these missing in the first five minutes:**
 
-1. **Sales/takings screen + a real dashboard home.** `packages/reporting` (daily close, frozen Z, VAT)
-   is fully built but has **no dashboard surface**, and login lands on the staff-admin table. Wire it
-   to new dashboard routes + a reporting screen, and replace the landing with a business overview
-   (takings, covers, open tables, top sellers). *Backend built → biggest value-for-cost.* NEW frontend.
+1. **Sales/takings screen + a real dashboard home — LANDED (#167).** Non-staff now land on a
+   **business-overview home** (takings today + tips + gross, sales/corrections/voids counts, open vs
+   total tables, top sellers), and a **Sales screen** gives the single-day daily close (per-till tender
+   breakdown, VAT by rate, cash-up, counts) and a period roll-up. Backed by a new `report.view`
+   permission (supervisor+manager), three node-scoped `/management-api/reports/` routes
+   (overview/daily-close/period), and a new `computeTopSellers` reporting query. **Covers was dropped**
+   — no guest count is captured anywhere and fabricating one is forbidden (house rule); the home shows
+   only real figures. *The menu-import seed (#165) fills every screen.* Grouped **sidebar** + **email
+   login** are still to-do (was bundled here; now item 2).
 2. **Admin-site professionalization.** (a) The dashboard's **flat row of 14 tabs**
    (`dashboard-app.ts:374`) becomes a grouped **sidebar** — also the enabler for every new admin screen
    below without the top bar overflowing; (b) **email + password login**, dropping the prepopulated
@@ -185,7 +190,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys | mid-shift-suspension enforce, discount gate, till-refund enforce; **encrypt `totp_secret` at rest** |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI | **backend built but UNWIRED to the dashboard → demo Tier A #1**; fiscal filing remainder parked |
+| 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI; **+ `computeTopSellers`, `currentBusinessDay`, 3 dashboard `/reports/` routes (#167)** | **wired to the dashboard — sales screen + business-overview home LANDED (#167)**; fiscal filing remainder parked |
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer | **TS-5 split-bill + wire TS-3/4 move into the till → demo Tier A #3** |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
