@@ -139,15 +139,17 @@ export class BookingsScreen extends LitElement {
     void this.#init();
   }
 
-  /** Load the tables once (for the form picker + seat prompt), then the day's bookings. */
+  /** Load the day's bookings, then the tables (for the form picker + seat prompt). Bookings FIRST because
+   * `#load()` clears `errorKey` at its start: were the tables loaded first, a `listTables` failure would be
+   * wiped by the following bookings load and the screen would show no error while the picker/seat prompt
+   * are broken. Loading them after `#load()` lets a table-load failure survive to the banner. */
   async #init(): Promise<void> {
-    this.errorKey = null;
+    await this.#load();
     try {
       this.tables = await this.api.listTables();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
-    await this.#load();
   }
 
   /** (Re)load the selected day's bookings. A rejection becomes the `errorKey` banner. */

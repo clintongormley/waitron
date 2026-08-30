@@ -133,6 +133,18 @@ describe("bookings-screen", () => {
     expect(alert.textContent).toContain(codeMessage("server.internal", "es-ES"));
   });
 
+  it("surfaces a table-load failure even when the bookings load succeeds", async () => {
+    // #init loads the tables (form picker + seat prompt) AND the day's bookings. A `listTables` failure
+    // must not be hidden by a successful `listBookings` — the picker and the seat prompt are broken, so
+    // the banner must show rather than the screen reporting no error.
+    const api = stubApi({ listTables: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("server.internal", "es-ES"));
+  });
+
   it("opens the create form and, on create-booking, creates then closes and reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });

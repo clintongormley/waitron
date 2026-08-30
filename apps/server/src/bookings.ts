@@ -1,7 +1,8 @@
 // The booking CRUD + lifecycle service (design §3a) — a dedicated module, imported by Task 5's
 // `booking-api.ts` routes, the same split `purchasing-api.ts` uses over the `@waitron/purchasing`
-// operations (routes on one side, DB ops on the other). NO HTTP, NO seat (Task 4's `seatBooking`), NO
-// floor read (Task 6) here — just the tab-less reservation CRUD and its status machine.
+// operations (routes on one side, DB ops on the other). NO HTTP and NO floor read (Task 6) here — the
+// reservation CRUD and its status machine, PLUS `seatBooking` (the TS-1 tab integration, which imports
+// `openTab` from `working-order.ts`) that a `booked` row transitions through into `seated`.
 //
 // Every verb runs on the CALLER's transaction, already tenant-scoped as `app_user` (Task 5's `gated`
 // wrapper = withTenant + asAppUser + authorizeManager). RLS confines every read/write to the tenant, so

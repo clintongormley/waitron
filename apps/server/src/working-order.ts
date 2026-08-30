@@ -3234,6 +3234,22 @@ export interface TableState {
  *  (Bookings-1 §2b/§4). Computed in JS via `Intl` — never in SQL — so no offset is stored: a booking is
  *  a wall-clock intention, and "today"/"now" for the imminence check are the venue's local values at
  *  read time. Returns the local calendar date (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
+/** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
+ *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
+ *  so a typo or a legacy value can be anything. `Intl.DateTimeFormat({ timeZone })` throws `RangeError`
+ *  on an unknown zone, which would turn the floor read (GET /api/tables/state) into a 500 — corrupt
+ *  venue config must not take out the operational floor (house §5 spirit). A zone `Intl` rejects falls
+ *  back to the column's own default rather than throwing. */
+function safeTimeZone(timeZone: string): string {
+  try {
+    // Constructing the formatter is what validates the zone; it throws RangeError for an unknown one.
+    new Intl.DateTimeFormat(undefined, { timeZone });
+    return timeZone;
+  } catch {
+    return "Europe/Madrid";
+  }
+}
+
 function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -3266,7 +3282,9 @@ export async function listTablesWithState(
   const tzRow = await tx.execute<{ time_zone: string }>(
     sql`select time_zone from locations where id = ${loc}`,
   );
-  const timeZone = tzRow.rows[0]?.time_zone ?? "Europe/Madrid";
+  // `?? default` covers a missing/RLS-hidden row; `safeTimeZone` covers a STORED value `Intl` rejects
+  // (the column is unvalidated free text) — either way the read never throws on bad tz config.
+  const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? "Europe/Madrid");
   const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
   const result = await tx.execute<{
     id: string;

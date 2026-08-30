@@ -769,6 +769,27 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     expect(row.nextReservation).toMatchObject({ time: "13:30", contactName: "Earlier" });
   });
 
+  it("does not crash when locations.time_zone is an invalid IANA zone (falls back to the default)", async () => {
+    // `locations.time_zone` is free-text with NO CHECK constraint (schema: `.notNull()
+    // .default("Europe/Madrid")`), so a typo or a legacy value can be stored. `Intl.DateTimeFormat`
+    // throws `RangeError` on an unknown zone, which would turn the floor read (GET /api/tables/state)
+    // into a 500 — bad config must not take out the operational floor. The read falls back to the
+    // column's own default (Europe/Madrid), so with `MADRID_NOON` the 14:00 booking still surfaces.
+    const cfg = await setupVenue({ timeZone: "Not/AZone" });
+    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "13" }));
+    await insertBooking(cfg, {
+      tableId,
+      date: "2026-09-15",
+      time: "14:00",
+      partySize: 3,
+      name: "Fallback",
+    });
+
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
+    const row = rows.find((t) => t.id === tableId)!;
+    expect(row.nextReservation).toMatchObject({ time: "14:00", contactName: "Fallback" });
+  });
+
   it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
     // now = 2026-09-01T23:00:00Z. In Pacific/Kiritimati (UTC+14) that is 2026-09-02 13:00 — a DIFFERENT
     // calendar day than the UTC 2026-09-01. A booking dated 2026-09-02 at 15:00 must surface (it is the
