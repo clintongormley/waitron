@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { asAppUser, saleLines, sales, withTenant, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -370,5 +370,115 @@ describe("split-bill: pay each check files its own registro", () => {
     // `totalAgua` came back 4 and this test FAILED at `expect(totalAgua).toBe(3)` with
     // `expected 4 to be 3` (line ~360), proving the conservation sum catches a double-file / re-price.
     // All three edits were reverted; the test is green as written.
+  });
+
+  it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const deps = { db: suite.admin, backend, clock };
+    // Open a 2× agua tab and carve ONE agua onto a detached check — the working order under proof.
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+    );
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    // Pay the SAME check twice (a lost-response retry). A check is a working order, so the #61
+    // `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes the second pay a REPLAY of
+    // the first filing, not a second one — exactly the idempotency `till-sale.ts` gives every retrieved
+    // order. The whole point of the split-bill split is that this key applies to a check as to any tab.
+    const first = await payWorkingOrder(deps, cfg, {
+      id: checkId,
+      tender: { method: "cash", amount: "2.00" },
+      lines: [],
+    });
+    const second = await payWorkingOrder(deps, cfg, {
+      id: checkId,
+      tender: { method: "cash", amount: "2.00" },
+      lines: [],
+    });
+
+    // The retry returns the SAME invoice number + total — the original ticket re-derived, not a new file.
+    expect(second.invoiceNumber).toBe(first.invoiceNumber);
+    expect(second.total).toBe(first.total);
+
+    // The unrepairable double-file this key exists to prevent: EXACTLY ONE registro is tied to the check
+    // via sales.working_order_id, after two pays. Read as the app role under RLS.
+    // PROVEN LOAD-BEARING (this run): the count is 1, not 2 — the second pay filed nothing. The witness
+    // that the replay is real is `second.invoiceNumber === first.invoiceNumber`: a genuine second filing
+    // would draw the NEXT series number (A/2), so an off idempotency key would show BOTH as a differing
+    // invoice number AND as `forCheck.length === 2` here (the sibling `working-order.rls.test.ts` idempotent
+    // -replay test proves the same key by deletion — reverting it double-files).
+    const forCheck = await asApp(cfg, (tx) =>
+      tx
+        .select({ id: registrosFacturacion.id })
+        .from(registrosFacturacion)
+        .innerJoin(sales, eq(sales.id, registrosFacturacion.saleId))
+        .where(eq(sales.workingOrderId, checkId)),
+    );
+    expect(forCheck.length).toBe(1);
+  });
+});
+
+// A split cannot cross a tenant boundary. `splitOffCheck`'s origin read is `working_orders WHERE id =
+// fromTabId` (the base .from() table, NO explicit tenant predicate), so isolation here is STRUCTURAL:
+// FORCE ROW LEVEL SECURITY hides the foreign tab and the read finds nothing → `tab.not_open`,
+// fail-closed. PGlite (superuser, RLS-bypassing) could not show this. Mirrors the landed sibling
+// `transfer-lines.rls.test.ts`'s "cross-tenant isolation" describe verbatim in shape — including its
+// exact `alter policy … using (true) with check (true)` deletion-proof dance.
+describe("split-bill cross-tenant isolation (FORCE RLS hides the foreign tab; the policy is the guard)", () => {
+  it("a cross-tenant split is impossible — RLS hides the other tenant's tab (fail-closed)", async () => {
+    const owner = await setupVenue(); // tenant X, with an open tab
+    const other = await setupVenue(); // tenant Y (its own venue/cfg)
+    const { tabId } = await asApp(owner.cfg, (tx) =>
+      openTab(tx, owner.cfg, {
+        tableId: owner.tableId,
+        lines: [{ productId: owner.aguaId, quantity: "2" }],
+      }),
+    );
+
+    // As tenant Y, X's tabId is RLS-hidden → `splitOffCheck`'s origin read finds no `working_orders`
+    // row → `tab.not_open` (naming the foreign id), before any check is minted or line moved.
+    await expect(
+      asApp(other.cfg, (tx) => splitOffCheck(tx, other.cfg, tabId, [{ lineNo: 1, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
+
+    // Positive control: the OWNER can split the same tab (same op, same tab, only the tenant differs —
+    // both empty would prove nothing, CLAUDE.md §1).
+    const { checkId } = await asApp(owner.cfg, (tx) =>
+      splitOffCheck(tx, owner.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    expect(checkId).toBeDefined();
+
+    // Prove the RLS POLICY predicate is the guard (deletion-proof, BOTH directions on one backend): under
+    // tenant Y the owner's row is HIDDEN (count 0); neutralising `working_orders`' isolation policy to
+    // `true` inside a ROLLED-BACK transaction makes it APPEAR (count 1) — so the predicate, not mere table
+    // access, hid it. The `alter policy` runs as the owner (superuser), before dropping to `app_user`.
+    // Rolled back, so the policy is restored and no rows move. Copied verbatim in shape from
+    // transfer-lines.rls.test.ts:344-367 (itself the append-order-amendment.rls.test.ts idiom).
+    const conn = await suite.pg.connect();
+    try {
+      await conn.execute(sql`begin`);
+      // Hidden under the real predicate, as tenant Y's app_user.
+      await conn.execute(sql`set local role app_user`);
+      await conn.execute(sql`select set_config('app.tenant_id', ${other.cfg.tenantId}, true)`);
+      const hidden = await conn.execute<{ n: number }>(
+        sql`select count(*)::int as n from working_orders where id = ${tabId}`,
+      );
+      expect(hidden.rows[0]!.n).toBe(0);
+      // Neutralise the predicate as the owner, then read again as tenant Y's app_user: it appears.
+      await conn.execute(sql`reset role`);
+      await conn.execute(
+        sql`alter policy working_orders_tenant_isolation on working_orders using (true) with check (true)`,
+      );
+      await conn.execute(sql`set local role app_user`);
+      const visible = await conn.execute<{ n: number }>(
+        sql`select count(*)::int as n from working_orders where id = ${tabId}`,
+      );
+      expect(visible.rows[0]!.n).toBe(1); // the predicate was the guard: drop it and the foreign row appears
+    } finally {
+      await conn.execute(sql`rollback`);
+      await conn.close();
+    }
   });
 });
