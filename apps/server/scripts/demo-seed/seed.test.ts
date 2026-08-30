@@ -132,7 +132,7 @@ describe("seedDemoRestaurant", () => {
     // Catalogues: both demo menus were seeded (seedCatalogues).
     expect(read.menus.map((m) => m.name).sort()).toEqual(["Casa Delgado", "Menú del Día"]);
 
-    // Floor: the ~16-table demo plan (seedFloor seeds 22).
+    // Floor: the ~16-table demo plan (seedFloor seeds 16).
     expect(read.tables).toBeGreaterThanOrEqual(16);
 
     // Staff: the demo team (seedStaff seeds 6).

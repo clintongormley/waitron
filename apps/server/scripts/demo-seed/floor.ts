@@ -24,7 +24,7 @@ import type { FloorTableShape } from "../../src/tables.js";
  *  internal handle joining a {@link SeedTable} to the zone it sits in — it has no DB counterpart
  *  (the real `floor_zones.id` is minted at seed time). */
 export interface SeedZone {
-  key: "comedor" | "terraza" | "barra";
+  key: "dining" | "terrace" | "bar";
   name: Record<SeedLocale, string>;
   displayOrder: number;
 }
@@ -50,16 +50,16 @@ export interface SeedStatus {
 }
 
 export const DEMO_ZONES: SeedZone[] = [
-  { key: "comedor", name: { "en-GB": "Comedor", "es-ES": "Comedor" }, displayOrder: 0 },
-  { key: "terraza", name: { "en-GB": "Terraza", "es-ES": "Terraza" }, displayOrder: 1 },
-  { key: "barra", name: { "en-GB": "Barra", "es-ES": "Barra" }, displayOrder: 2 },
+  { key: "dining", name: { "en-GB": "Comedor", "es-ES": "Comedor" }, displayOrder: 0 },
+  { key: "terrace", name: { "en-GB": "Terraza", "es-ES": "Terraza" }, displayOrder: 1 },
+  { key: "bar", name: { "en-GB": "Barra", "es-ES": "Barra" }, displayOrder: 2 },
 ];
 
 export const DEMO_TABLES: SeedTable[] = [
   // ── Comedor (indoor dining room) — 8 tables, top-left of the canvas ─────────────────────────────
   {
     label: "1",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 2,
     posX: 120,
     posY: 100,
@@ -68,7 +68,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "2",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 2,
     posX: 280,
     posY: 100,
@@ -77,7 +77,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "3",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 4,
     posX: 120,
     posY: 220,
@@ -86,7 +86,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "4",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 4,
     posX: 280,
     posY: 220,
@@ -95,7 +95,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "5",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 4,
     posX: 120,
     posY: 340,
@@ -104,7 +104,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "6",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 4,
     posX: 280,
     posY: 340,
@@ -113,7 +113,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "7",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 6,
     posX: 120,
     posY: 460,
@@ -122,7 +122,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "8",
-    zoneKey: "comedor",
+    zoneKey: "dining",
     capacity: 8,
     posX: 280,
     posY: 460,
@@ -132,7 +132,7 @@ export const DEMO_TABLES: SeedTable[] = [
   // ── Terraza (outdoor terrace) — 5 tables, top-right of the canvas ───────────────────────────────
   {
     label: "T1",
-    zoneKey: "terraza",
+    zoneKey: "terrace",
     capacity: 2,
     posX: 650,
     posY: 120,
@@ -141,7 +141,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "T2",
-    zoneKey: "terraza",
+    zoneKey: "terrace",
     capacity: 2,
     posX: 800,
     posY: 120,
@@ -150,7 +150,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "T3",
-    zoneKey: "terraza",
+    zoneKey: "terrace",
     capacity: 4,
     posX: 650,
     posY: 280,
@@ -159,7 +159,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "T4",
-    zoneKey: "terraza",
+    zoneKey: "terrace",
     capacity: 4,
     posX: 800,
     posY: 280,
@@ -168,7 +168,7 @@ export const DEMO_TABLES: SeedTable[] = [
   },
   {
     label: "T5",
-    zoneKey: "terraza",
+    zoneKey: "terrace",
     capacity: 6,
     posX: 725,
     posY: 440,
@@ -176,9 +176,9 @@ export const DEMO_TABLES: SeedTable[] = [
     rotation: 90,
   },
   // ── Barra (bar) — 3 high tables, a strip along the bottom of the canvas ─────────────────────────
-  { label: "B1", zoneKey: "barra", capacity: 2, posX: 150, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B2", zoneKey: "barra", capacity: 2, posX: 450, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B3", zoneKey: "barra", capacity: 2, posX: 750, posY: 750, shape: "rect", rotation: 0 },
+  { label: "B1", zoneKey: "bar", capacity: 2, posX: 150, posY: 750, shape: "rect", rotation: 0 },
+  { label: "B2", zoneKey: "bar", capacity: 2, posX: 450, posY: 750, shape: "rect", rotation: 0 },
+  { label: "B3", zoneKey: "bar", capacity: 2, posX: 750, posY: 750, shape: "rect", rotation: 0 },
 ];
 
 export const DEMO_STATUSES: SeedStatus[] = [

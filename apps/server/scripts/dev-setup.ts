@@ -55,10 +55,13 @@ export function resolveSeedLocale(): SeedLocale {
  * days of back-dated preproduction sales, defaulting to 28 (0 skips sales entirely). Read at call time
  * (not module load) so the default lives in one place and a one-shot `WAITRON_SEED_SALES_DAYS=… pnpm
  * dev:reset` takes effect — mirrors {@link resolveSeedLocale}. Both `devSetup` (the seed horizon) and
- * `main` (the human summary line) read it, so the `"28"` default is not duplicated.
+ * `main` (the human summary line) read it, so the `"28"` default is not duplicated. A non-numeric
+ * value (e.g. a typo) falls back to the same default rather than propagating `NaN` into the seed
+ * horizon and the printed summary.
  */
 export function resolveSalesDays(): number {
-  return Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  const n = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  return Number.isFinite(n) && n >= 0 ? n : 28;
 }
 
 /** The exact env contract `apps/server` boots against (config.ts + till-config.ts), in write order. */

@@ -105,6 +105,11 @@ export async function seedCatalogues(
           vatClass: product.vatClass,
           image: product.image,
         });
+        if (productsByImage.has(product.image)) {
+          throw new Error(
+            `demo-seed: duplicate image basename '${product.image}' — image basenames must be unique across the menu`,
+          );
+        }
         productsByImage.set(product.image, created.id);
       }
     }
