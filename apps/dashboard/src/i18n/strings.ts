@@ -28,6 +28,8 @@ export const en = {
   "action.deactivate": "Deactivate",
   // Shell nav
   "nav.sections": "Sections",
+  "nav.overview": "Overview",
+  "nav.sales": "Sales & takings",
   "nav.staff": "Users",
   "nav.catalogue": "Menu",
   "nav.layout": "Layout",
@@ -414,6 +416,8 @@ export const es: Record<StringKey, string> = {
   "action.move_down": "Bajar",
   "action.deactivate": "Desactivar",
   "nav.sections": "Secciones",
+  "nav.overview": "Resumen",
+  "nav.sales": "Ventas y recaudación",
   "nav.staff": "Usuarios",
   "nav.catalogue": "Carta",
   "nav.layout": "Disposición",

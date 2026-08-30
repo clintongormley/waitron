@@ -11,6 +11,8 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import "./widgets/language-chooser.js";
 import "./screens/login-screen.js";
 import "./screens/my-schedule-screen.js";
+import "./screens/dashboard-overview-screen.js";
+import "./screens/dashboard-sales-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/layout-screen.js";
@@ -32,16 +34,20 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * author the catalogue, arrange the till layout, edit the receipt trim, configure the table service
  * statuses, arrange the floor plan (zones + tables), configure the kitchen (stations + bump mode),
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
- * purchase invoices, author ingredients and product recipes, manage enrolled devices, or manage
- * printing (agents + printers + status). Exactly one shows at a time. `staff`, `catalogue`, `layout`,
- * `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`,
- * `recipe`, `devices` and `printers` are the fourteen MANAGER faces the nav switches between;
- * `my-schedule` is the sole face of a `staff`-role session and carries no nav. All logged-in faces share
- * the same chrome (logout, plus the nav for a non-staff session).
+ * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
+ * (agents + printers + status), see today's business overview, or review sales & takings over a date
+ * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `layout`, `receipt`,
+ * `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`,
+ * `devices` and `printers` are the sixteen MANAGER faces the nav switches between — `overview` is also
+ * the post-login/post-probe LANDING for every non-staff role (Task 9); `my-schedule` is the sole face
+ * of a `staff`-role session and carries no nav. All logged-in faces share the same chrome (logout, plus
+ * the nav for a non-staff session).
  */
 type Screen =
   | "login"
   | "my-schedule"
+  | "overview"
+  | "sales"
   | "staff"
   | "catalogue"
   | "layout"
@@ -61,24 +67,26 @@ type Screen =
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `my-schedule` | `staff` | `catalogue` | `layout` | `receipt` | `statuses` |
- * `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` | `purchases` | `recipe` | `devices`
- * | `printers`) and does the event wiring the screens deliberately do not:
+ * machine (`login` | `my-schedule` | `overview` | `sales` | `staff` | `catalogue` | `layout` |
+ * `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
+ * `purchases` | `recipe` | `devices` | `printers`) and does the event wiring the screens deliberately
+ * do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.getMe()` (WHOAMI); a
  *    success means a live management session, so it applies the resolved role — a `staff` person
- *    lands on the self-service `my-schedule` screen, a manager/supervisor/admin on the existing
- *    manager `staff` screen — while ANY rejection (the common `management_session.required`/401, or a
- *    stray/network error) means no usable session, so it opens on `login`. The probe is fully wrapped
+ *    lands on the self-service `my-schedule` screen, a manager/supervisor/admin on the business
+ *    `overview` screen (registered Task 9 — the "today at a glance" home) — while ANY rejection (the
+ *    common `management_session.required`/401, or a stray/network error) means no usable session, so
+ *    it opens on `login`. The probe is fully wrapped
  *    — an unhandled rejection here would be the exact `apps/till` `#boot` defect (`docs/backlog.md`),
  *    so this shell mirrors the login/staff screens' own `try/catch`ed loaders instead;
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
- *    the freshly-authenticated person's role, then land on `my-schedule` or `staff` the same way;
+ *    the freshly-authenticated person's role, then land on `my-schedule` or `overview` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the fourteen manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `floor`,
- *    `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`, `devices` and `printers`
- *    — a plain local state change, no server call. A `staff` session has no nav (the self-service view is
- *    its only face);
+ *    the sixteen manager faces `overview`, `sales`, `staff`, `catalogue`, `layout`, `receipt`,
+ *    `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`, `purchases`, `recipe`,
+ *    `devices` and `printers` — a plain local state change, no server call. A `staff` session has no
+ *    nav (the self-service view is its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -86,7 +94,8 @@ type Screen =
  * flashes a screen it is not entitled to.
  *
  * HEADING OUTLINE. Each screen owns its OWN top heading — `dashboard-my-schedule-screen` renders the
- * sole `<h1>Mi horario</h1>`, `dashboard-staff-screen` the sole
+ * sole `<h1>Mi horario</h1>`, `dashboard-overview-screen` the sole `<h1>Hoy de un vistazo</h1>`,
+ * `dashboard-sales-screen` the sole `<h1>Ventas y recaudación</h1>`, `dashboard-staff-screen` the sole
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
  * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
@@ -245,9 +254,10 @@ export class DashboardApp extends LitElement {
   }
 
   /** Land a resolved whoami on the right face: a `staff` person on the self-service `my-schedule`
-   * screen, every other role on the existing manager `staff` screen. Records the id + role the shell
-   * and screen both read. The ONE place the role→screen branch lives, shared by the boot probe and the
-   * post-login re-probe.
+   * screen, every other role (supervisor/manager/admin) on the business `overview` screen — the
+   * post-login landing since Task 9 (previously the manager `staff` screen; `staff` is still one nav
+   * click away). Records the id + role the shell and screen both read. The ONE place the role→screen
+   * branch lives, shared by the boot probe and the post-login re-probe.
    *
    * Per-user-language-preference: also apply the signed-in person's UI language —
    * `resolveActiveLocale(me.locale, me.venueLocale)`, their supported stored choice else the venue
@@ -263,7 +273,7 @@ export class DashboardApp extends LitElement {
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
-    this.screen = me.role === "staff" ? "my-schedule" : "staff";
+    this.screen = me.role === "staff" ? "my-schedule" : "overview";
     this.#venueLocale = me.venueLocale;
     if (!this.isConnected) return;
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
@@ -368,12 +378,25 @@ export class DashboardApp extends LitElement {
     `;
   }
 
-  /** The manager nav — the thirteen-face switcher, shown only for a NON-staff session (a `staff` person
-   * has just the self-service view, so no nav). Extracted so the `render` chrome reads as
-   * "nav-or-nothing, then logout". */
+  /** The manager nav — the sixteen-face switcher, shown only for a NON-staff session (a `staff` person
+   * has just the self-service view, so no nav). `overview` leads (it's the post-login landing/home),
+   * `sales` follows it (the two reporting faces sit together). Extracted so the `render` chrome reads
+   * as "nav-or-nothing, then logout". */
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
+        <wt-button
+          variant=${this.screen === "overview" ? "primary" : "secondary"}
+          data-test="nav-overview"
+          @click=${() => (this.screen = "overview")}
+          >${t("nav.overview")}</wt-button
+        >
+        <wt-button
+          variant=${this.screen === "sales" ? "primary" : "secondary"}
+          data-test="nav-sales"
+          @click=${() => (this.screen = "sales")}
+          >${t("nav.sales")}</wt-button
+        >
         <wt-button
           variant=${this.screen === "staff" ? "primary" : "secondary"}
           data-test="nav-staff"
@@ -464,9 +487,9 @@ export class DashboardApp extends LitElement {
 
   /**
    * The mounted logged-in face for the current `screen`. Reached only from the chrome branch of
-   * {@link DashboardApp.render}, where `screen` is never `login`, so `staff` is the default: it is the
-   * probe's landing and the post-login/post-logout return, and folding it into the default keeps that
-   * branch covered rather than leaving an unreachable exhaustive `default`.
+   * {@link DashboardApp.render}, where `screen` is never `login`, so `overview` is the default: it is
+   * every non-staff role's probe/post-login landing (Task 9), and folding it into the default keeps
+   * that branch covered rather than leaving an unreachable exhaustive `default`.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
@@ -475,6 +498,10 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .myPersonId=${this.myPersonId}
         ></dashboard-my-schedule-screen>`;
+      case "sales":
+        return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
+      case "staff":
+        return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "layout":
@@ -506,7 +533,7 @@ export class DashboardApp extends LitElement {
       case "printers":
         return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
       default:
-        return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
+        return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }
   }
 }
