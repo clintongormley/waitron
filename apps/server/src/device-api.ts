@@ -185,6 +185,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
+  // ── Who am I? (DEVICE-GUARDED) ───────────────────────────────────────────────────────────────────────
+  // The client boot probe (Task 7): `requireDevice` resolves the cookie to its binding, and the route
+  // echoes it back so the till client can decide which shell to render for this device KIND. A missing
+  // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
+  app.get("/api/device/me", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      return c.json({ deviceId: device.deviceId, kind: device.kind, stationId: device.stationId });
+    }),
+  );
+
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {

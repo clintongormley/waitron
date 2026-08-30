@@ -307,6 +307,25 @@ async function enrolAt(
   return { deviceId, jar: deviceCookieFrom(enrol) };
 }
 
+/** Mint a HANDHELD pairing code (no station — Task 2: `kindRequiresStation("handheld")` is false), then
+ *  enrol a device with it (unauth). Returns the device id + the cookie jar. */
+async function enrolHandheld(
+  app: Hono,
+  managerCookie: string,
+): Promise<{ deviceId: string; jar: string }> {
+  const codeRes = await send(app, "POST", "/management-api/device-codes", {
+    cookie: managerCookie,
+    body: { kind: "handheld", label: "Waiter phone" },
+  });
+  expect(codeRes.status).toBe(201);
+  const { code } = (await codeRes.json()) as { code: string };
+
+  const enrol = await send(app, "POST", "/api/device/enrol", { body: { code } });
+  expect(enrol.status).toBe(200);
+  const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
+  return { deviceId, jar: deviceCookieFrom(enrol) };
+}
+
 describe("Device API over real Postgres", () => {
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
     const venue = await setupVenue();
@@ -774,5 +793,29 @@ describe("Device API over real Postgres", () => {
     const jar = deviceCookieFrom(ok);
     const stationRes = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(stationRes.status).toBe(200);
+  });
+
+  it("GET /api/device/me reports an enrolled handheld's kind", async () => {
+    // The client boot probe (Task 7): `requireDevice` resolves the device cookie to its binding, and the
+    // route echoes it back so the till client can pick which shell to render. A handheld binds to no
+    // station, so `stationId` is null.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const { deviceId, jar } = await enrolHandheld(app, venue.managerCookie);
+    const res = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
+  });
+
+  it("GET /api/device/me 401s a request with no device cookie", async () => {
+    // No cookie folds straight through `requireDevice` to `device.unauthorized` (401) — the route adds no
+    // handling of its own.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const res = await send(app, "GET", "/api/device/me", { cookie: null });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.unauthorized" },
+    });
   });
 });
