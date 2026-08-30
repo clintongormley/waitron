@@ -536,23 +536,41 @@ export async function openTab(
 }
 
 /**
+ * Lock a working order's row `FOR UPDATE` and confirm it is `open`, else `tab.not_open` (naming `tabId`) —
+ * the shared locked-open-status primitive. An absent id (or another tenant's, RLS-hidden) matches no row
+ * and fails closed the same way. This checks ONLY the `working_orders` row; it does NOT require a
+ * `dining_tables` back-pointer, so it accepts a table-LESS open order (a split-off check) as well as a
+ * tab — {@link lockOpenTab} layers the is-a-tab back-pointer assertion on top.
+ *
+ * Lock ORDER: this takes the `working_orders` row lock and nothing else. Callers that ALSO lock
+ * `dining_tables` must take THIS lock FIRST, then `dining_tables` — the class order the sale/settle path
+ * uses (`payWorkingOrder` locks `working_orders`, then its settle UPDATE fires the 0050
+ * `working_orders_clear_table_status` trigger touching `dining_tables`), so a concurrent op and pay
+ * cannot cross-lock into a 40P01 (see {@link mergeTabs}/{@link unjoinTable}).
+ */
+async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
+  const [row] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (row?.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
  * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
  * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
  * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
  * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
  * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
  * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
- * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side.
+ * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side. This is
+ * {@link lockOpenTabRow} (the locked-open-status check) PLUS the is-a-tab back-pointer assertion.
  */
 async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
-  const [tab] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (tab === undefined || tab.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
-  }
+  await lockOpenTabRow(tx, tabId);
   const [pointer] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -1787,14 +1805,7 @@ export async function splitOffCheck(
   // Lock + validate the origin is an OPEN tab before minting anything (a fresh order number for a
   // check that would roll back is wasteful; and this is the `tab.not_open` guard design §3 names). The
   // FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
-  const [origin] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, fromTabId))
-    .for("update");
-  if (origin?.status !== "open") {
-    throw new AppError("tab.not_open", { tabId: fromTabId });
-  }
+  await lockOpenTabRow(tx, fromTabId);
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
