@@ -962,6 +962,21 @@ here is the cross-cutting or genuinely-decision-bearing work.
   rewritten. The other three: may we *supply* the idempotency key; are reader webhooks signed like
   online ones; does `void` map onto the refund endpoint.
 
+**Bizum (parked research, 2026-08-30 — no decision, revisit when payment providers are built):**
+
+- **Bizum is account-to-account, not a card.** Merchant Bizum runs through **Redsys** (the interbank
+  gateway) or a PSP. The **Redsys TPV Virtual API is one standard integration for every Spanish bank**
+  (cards + Bizum via `Ds_Merchant_Paymethods="z"`; the bank only issues FUC + terminal + SHA-256
+  credentials) — no per-bank build. Redsys-direct Bizum ≈ 0.4–0.6%; **Stripe Bizum is 4.99% + €0.40**
+  (rule out except as a stopgap); **SumUp does not support Bizum at all** (not in its APM list).
+- **In-person:** dynamic QR works today (customer scans + approves in their bank app); **Bizum Pay NFC
+  tap** launched 18 May 2026 (phased, ~full rollout late 2026) — customer taps their phone on a
+  merchant NFC acceptance terminal, same gesture as contactless.
+- **Open question that picks the architecture** (unverified): can a SumUp/Stripe **Tap-to-Pay-on-phone**
+  reader (waiter's phone = the reader) accept a **Bizum Pay NFC** tap? If no, the convenient Bizum tap
+  needs a bank datáfono on Redsys rails, not the waiter's phone — i.e. "SumUp phone + QR Bizum" vs "one
+  bank smart-TPV does both". Resolve this before designing any in-person Bizum UX.
+
 **CI / test infra:**
 
 - **Job-sharding next lever.** Critical-path jobs are now `test-heavy` (`packages/db`, ~275s) and
