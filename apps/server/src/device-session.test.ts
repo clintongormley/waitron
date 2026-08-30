@@ -18,7 +18,6 @@ import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import {
   DEVICE_COOKIE,
-  assertHandheldTenderAllowed,
   assertNotHandheld,
   clearDeviceCookie,
   readDeviceCookie,
@@ -182,30 +181,19 @@ async function probeTry(
   return (await res.json()) as DeviceBinding | null;
 }
 
-/** Run one firewall guard behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
- * the thrown code when it refuses. `probeAssert`/`probeTender` are the per-guard wrappers. */
-async function probeGuard(
+/** Run `assertNotHandheld` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
+ * the thrown code when it refuses. The one firewall guard left after the tender-split was removed, so the
+ * scaffold is inlined here rather than factored across probes. */
+async function probeAssert(
   cfg: TillConfig,
   cookieValue: string | null,
-  runGuard: (deps: { db: Database; cfg: { tenantId: string } }, c: Context) => Promise<void>,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
   const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
-    await runGuard(deps, c);
+    await assertNotHandheld(deps, c, "record_sale");
     return c.body(null, 204);
   });
   if (res.status === 204) return { ok: true };
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
-}
-
-/** Run `assertNotHandheld` behind the shared scaffold. */
-function probeAssert(cfg: TillConfig, cookieValue: string | null) {
-  return probeGuard(cfg, cookieValue, (deps, c) => assertNotHandheld(deps, c, "record_sale"));
-}
-
-/** Run the tender-aware `assertHandheldTenderAllowed`, threading the tender method the sale route now
- * knows before the guard. Mirrors `probeAssert`. */
-function probeTender(cfg: TillConfig, cookieValue: string | null, method: "cash" | "card") {
-  return probeGuard(cfg, cookieValue, (deps, c) => assertHandheldTenderAllowed(deps, c, method));
 }
 
 const COOKIE_VALUE = "11111111-1111-4111-8111-111111111111.token_ABC-123";
@@ -360,26 +348,5 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
     // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
     // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
     expect(await probeAssert(cfg, "not-a-uuid.sometoken")).toEqual({ ok: true });
-  });
-
-  it("assertHandheldTenderAllowed allows a handheld CASH tender and refuses a handheld CARD tender", async () => {
-    const { cfg, deviceId, token } = await enrolHandheldFixture();
-    // Cash is the carved-out tender a handheld may settle: the chain is keyed by the submitting node
-    // (`nodeId`), not the till (record-sale.ts:79-82), so a handheld files cash under its node's SIF.
-    expect(await probeTender(cfg, `${deviceId}.${token}`, "cash")).toEqual({ ok: true });
-    // A manual card tender stays fenced — the datáfono leg settles at the fixed till.
-    expect(await probeTender(cfg, `${deviceId}.${token}`, "card")).toEqual({
-      ok: false,
-      code: "device.forbidden_action",
-    });
-  });
-
-  it("assertHandheldTenderAllowed passes a non-handheld device, an absent cookie, and a failed cookie — even for a card tender", async () => {
-    const { cfg, deviceId, token } = await enrolDeviceFixture();
-    // Like `assertNotHandheld`, the tender-aware guard blocks ONLY a verified handheld, so even a card
-    // tender passes for a non-handheld device and for every non-device caller.
-    expect(await probeTender(cfg, `${deviceId}.${token}`, "card")).toEqual({ ok: true }); // kds_station
-    expect(await probeTender(cfg, null, "card")).toEqual({ ok: true }); // ordinary till (no cookie)
-    expect(await probeTender(cfg, "not-a-uuid.sometoken", "card")).toEqual({ ok: true }); // failed cookie
   });
 });

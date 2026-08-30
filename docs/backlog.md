@@ -126,16 +126,19 @@ demo or behind-the-scenes".
    `packages/core/src/record-sale.ts:79-82` — "Which node processes and chains the sale — the
    SIF/chain/series key"), **not** the till; `tillId` is separate metadata. So a handheld files a sale
    under **its node's SIF exactly like a till** — no per-device SIF, no separate chain. This slice lets
-   a waiter settle a **CASH** sale on the handheld: **reverse PR #173's firewall for the cash tender
-   only** (allow `handheld` on `POST /api/sales` with a cash tender), **un-hide the cash tender** on the
-   handheld pay UI (flip `canSettle` for cash), and prove **fiscal parity** (a handheld cash sale files
-   a correct chained registro under the box's node/SIF — same assertions as a counter cash sale).
-   **Tender-aware:** a handheld's **card** tender (manual on `/api/sales` and integrated `/api/pay`)
-   stays fenced, `/api/drawer/open` stays fenced (a table waiter has a pocket float, not a register),
-   and `place`/`collect` stay fenced. **Deferred siblings:** *handheld card via mobile reader* (Stripe
-   Terminal / Tap to Pay — its own slice) and *device auth: enrol-all + fail-closed allowlist* (infra,
-   post-demo — spec `docs/superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md`,
-   whose §3 allowlist already encodes "sell-cash = till + handheld").
+   a waiter **settle a sale on the handheld at `POST /api/sales` for CASH or a MANUAL card tender**: the
+   manual card is the datáfono leg (the operator charges a **separate bank terminal the POS never talks
+   to** — `recordManualCardPayment` makes no network call), so it is fiscally identical to cash and needs
+   no reader. `POST /api/sales` is therefore **no longer fenced against a handheld at all** (the earlier
+   cash-only tender-split guard is removed), the handheld pay UI **shows both cash and manual card**, and
+   **fiscal parity** is proven (a handheld sale files a correct chained registro under the box's node/SIF
+   — same assertions as a counter sale, plus one captured `payments` row for the manual card). **Still
+   fenced:** the **integrated** card reader (`/api/pay`), `/api/drawer/open` (a table waiter has a pocket
+   float, not a register), and `place`/`collect`. **Deferred siblings:** *handheld card via a mobile
+   reader* (Stripe Terminal / Tap to Pay — the integrated `/api/pay` path, its own slice) and *device
+   auth: enrol-all + fail-closed allowlist* (infra, post-demo — spec
+   `docs/superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md`, whose §3 allowlist
+   already encodes "sell-cash = till + handheld").
 
 **Tier B — an owner will ask; product-defining:**
 

@@ -475,72 +475,24 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
-  it("cashOnly hides the Card button in the pay view, keeping cash and Hold", async () => {
-    // A handheld settles CASH only — a card tender is fenced client- AND server-side (Task 1's
-    // /api/sales firewall). `cashOnly` is the honest affordance: no Card button anywhere.
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, cashOnly: true });
-    expect(query(el, ".pay")).not.toBeNull(); // cash stays
-    expect(query(el, ".hold")).not.toBeNull(); // Hold stays
-    expect(query(el, ".pay-card")).toBeNull(); // Card is hidden
-    expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
-    expect(el.shadowRoot!.textContent).not.toContain(t("tender.card"));
-  });
+  it("both idle views (pay + collect) render the Card button by default — the #renderCardButton dedup", async () => {
+    // The Card (manual datáfono) button is shared verbatim by both idle views via `#renderCardButton`.
+    // Every settling face renders it — the counter/fixed till AND the handheld: a handheld settles a
+    // MANUAL card tender on `POST /api/sales` (the server fences only the INTEGRATED reader, `/api/pay`),
+    // and the handheld table-order screen threads no `cardProvider`, so Card stays the #62 manual path.
+    const payStore = new WorkingOrderStore();
+    payStore.addProduct(cafe, "2");
+    const pay = await mountWidget<TillTenderPay>("till-tender-pay", { store: payStore });
+    expect(query(pay.el, ".pay-card")).not.toBeNull(); // Mode P (prepay) pay view
 
-  it("default (cashOnly false) keeps the Card button in the pay view (counter behaviour)", async () => {
-    // Prove-by-deletion control for the gate above: with the gate removed, this would still pass but
-    // the cashOnly test would fail — so this pins the counter/fixed-till Card button.
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    expect(query(el, ".pay-card")).not.toBeNull();
-  });
-
-  it("cashOnly hides the Card button in the collect view too (Modes I/T)", async () => {
-    // Gate BOTH idle views so `cashOnly` means "no card, anywhere" — a future Mode-I handheld cannot
-    // leak a Card button through the collect view.
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
+    const collectStore = new WorkingOrderStore();
+    collectStore.addProduct(cafe, "2");
+    const collect = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store: collectStore,
       mode: "invoice_first",
       stage: "collect",
-      cashOnly: true,
     });
-    expect(query(el, ".pay")).not.toBeNull(); // Collect (cash) stays
-    expect(query(el, ".pay-card")).toBeNull(); // Card is hidden
-  });
-
-  it("cashOnly suppresses the integrated-card extras too, even with a provider set (Copilot #176)", async () => {
-    // `cashOnly` must mean NO card affordance at all: not just the Card button but the integrated-card
-    // tip/offline-consent inputs (`.card-extras`). Today `cashOnly` is only set where `cardProvider` is
-    // "none" (so the extras are already gone), but a future caller pairing them must not leave card-only
-    // inputs on screen with no card tender. Prove-by-deletion: drop `|| this.cashOnly` from
-    // `#renderCardExtras` and this fails while the counter test below still passes.
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
-      cashOnly: true,
-      cardProvider: "stripe_terminal",
-      tipsEnabled: true,
-    });
-    expect(query(el, ".pay-card")).toBeNull(); // Card button hidden
-    expect(query(el, ".card-extras")).toBeNull(); // AND the integrated-card extras block
-    expect(query(el, ".tip-input")).toBeNull(); // AND the tip input inside it
-  });
-
-  it("keeps the integrated-card extras when NOT cashOnly (counter control for the gate above)", async () => {
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
-      cardProvider: "stripe_terminal",
-      tipsEnabled: true,
-    });
-    expect(query(el, ".card-extras")).not.toBeNull();
-    expect(query(el, ".tip-input")).not.toBeNull();
+    expect(query(collect.el, ".pay-card")).not.toBeNull(); // Modes I/T collect view
   });
 
   it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {

@@ -2001,24 +2001,23 @@ describe("till-app", () => {
         expect(screen.products).toEqual([cafe]);
       });
 
-      it("lets a normal (counter/fixed) till settle the tab — canSettle true (default), cashOnly false", async () => {
+      it("a counter till can settle the tab — canSettle true (default)", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue([tabLine]),
         });
         const screen = await toTableOrder(el, openTable);
-        // A fixed till is not in handheld mode ⇒ the pay widget is available, with BOTH tenders
-        // (Card too — cashOnly is false at the counter).
+        // The pay section is available. The screen threads no `cardProvider`, so the embedded pay widget
+        // offers BOTH tenders — cash and the manual (datáfono) card.
         expect(screen.canSettle).toBe(true);
-        expect(screen.cashOnly).toBe(false);
       });
 
-      it("a handheld settles cash — canSettle true, cashOnly true", async () => {
+      it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
         // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
-        // table reaches the table-order screen. Since Task 1 it may settle a CASH tender (the server
-        // /api/sales firewall permits handheld cash, fences handheld card), so the pay section SHOWS,
-        // cash only — the Card button is hidden (cashOnly true).
+        // table reaches the table-order screen. It may settle at `POST /api/sales` for cash OR a manual
+        // card tender (the server firewall permits both, fencing only the INTEGRATED reader, `/api/pay`),
+        // so the pay section SHOWS with both tenders.
         const { el } = await mountApp({
           getDeviceIdentity: vi
             .fn()
@@ -2040,7 +2039,6 @@ describe("till-app", () => {
         const screen = tableOrder(el)!;
         expect(screen).not.toBeNull();
         expect(screen.canSettle).toBe(true);
-        expect(screen.cashOnly).toBe(true);
       });
 
       it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {

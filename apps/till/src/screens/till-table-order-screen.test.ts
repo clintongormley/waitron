@@ -212,15 +212,15 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
   });
 
-  it("threads cashOnly to the embedded pay widget (a handheld settles cash only)", async () => {
-    // A handheld shows the pay section (canSettle true) but cash only — the Card button is hidden.
-    // `cashOnly` threads screen → till-tender-pay, which drops `.pay-card`.
-    const { el } = await mount({ lines: [pendingLine], canSettle: true, cashOnly: true });
+  it("renders the embedded pay widget with the Card button (a handheld settles cash or manual card)", async () => {
+    // The table-order screen threads no `cashOnly`/`cardProvider`, so the embedded pay widget offers
+    // BOTH tenders — cash and the manual (datáfono) card. A handheld settles either on `POST /api/sales`;
+    // only the INTEGRATED reader (`/api/pay`) is fenced server-side.
+    const { el } = await mount({ lines: [pendingLine], canSettle: true });
     await openDrawer(el);
     const widget = tender(el);
-    expect(widget.cashOnly).toBe(true);
     await widget.updateComplete;
-    expect(widget.shadowRoot!.querySelector(".pay-card")).toBeNull();
+    expect(widget.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
   });
 
   it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {

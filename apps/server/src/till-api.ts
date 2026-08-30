@@ -80,7 +80,7 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertHandheldTenderAllowed, assertNotHandheld } from "./device-session.js";
+import { assertNotHandheld } from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -148,10 +148,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.not_found": 401,
   "person.suspended": 403,
   // The handheld firewall (spec §5; owner reversal 2026-08-30): a handheld device tried a fiscal/cash
-  // action it may not perform — a manual CARD tender on `POST /api/sales` (cash is allowed; the chain is
-  // node-keyed, record-sale.ts:79-82), integrated pay, reprint, drawer, place, collect or cancel.
-  // `assertHandheldTenderAllowed`/`assertNotHandheld` refuse it server-side even if the client is
-  // bypassed. 403: authenticated but forbidden.
+  // action it may not perform — the INTEGRATED card reader (`POST /api/pay`), reprint, drawer, place,
+  // collect or cancel. (`POST /api/sales` is NOT here: a handheld settles cash or a manual card there,
+  // both node-keyed, record-sale.ts:79-82.) `assertNotHandheld` refuses it server-side even if the client
+  // is bypassed. 403: authenticated but forbidden.
   "device.forbidden_action": 403,
   "session.not_open": 401,
   "session.required": 401,
@@ -418,30 +418,31 @@ function mountCourseVerb(
  * maps errors identically.
  *
  * HANDHELD FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1; owner reversal
- * 2026-08-30). A `handheld` device may TAKE and FIRE orders, and since the reversal may SETTLE a CASH
- * sale on `POST /api/sales` — cash files under the submitting NODE's SIF (`nodeId`), not the till
- * (record-sale.ts:79-82), so a handheld cash registro is indistinguishable from a counter one. Everything
- * else a handheld must NEVER do stays fenced: a manual CARD tender on `POST /api/sales`, and every other
- * fiscal record, chain link, invoice number, cash-drawer row or amendment-log entry — those settle at the
- * fixed till. The fully-fenced routes run `assertNotHandheld` right after `requireSession`; the tender-
- * split sale route runs `assertHandheldTenderAllowed` (after reading the body, so the tender is known);
- * the rest run neither. When you add a route, decide which side it is on and, if it touches ANY fiscal/
- * cash write, FENCE it (fail-safe for fiscal — when in doubt, fence). The full split:
+ * 2026-08-30, widened same day). A `handheld` device may TAKE and FIRE orders, and may SETTLE a sale on
+ * `POST /api/sales` for CASH or a MANUAL card tender — both file under the submitting NODE's SIF
+ * (`nodeId`), not the till (record-sale.ts:79-82), so a handheld registro is indistinguishable from a
+ * counter one; the manual card is the datáfono leg (a SEPARATE bank terminal the POS never talks to,
+ * `recordManualCardPayment` makes no network call), so it needs no reader. What stays fenced is the
+ * INTEGRATED card reader (`POST /api/pay`) and the deferred-settlement / amendment-log / drawer writers —
+ * every other fiscal record, chain link, invoice number, cash-drawer row or amendment-log entry settles at
+ * the fixed till. The fenced routes run `assertNotHandheld` right after `requireSession`; the sale route
+ * and the rest run neither. When you add a route, decide which side it is on and, if it touches ANY
+ * fiscal/cash write NOT reachable through the node-keyed sale path, FENCE it (fail-safe for fiscal — when
+ * in doubt, fence). The full split:
  *
- *   TENDER-SPLIT (`assertHandheldTenderAllowed` — handheld cash allowed, handheld card fenced):
- *     POST /api/sales   cash → passes with NO guard action (a handheld files a chained registro like a till)
- *                       card → refused 403, action `record_sale_card` (a handheld's manual card tender)
- *
- *   FENCED (fiscal / cash / amendment-log writers — `assertNotHandheld`):
- *     POST /api/pay                        pay          — integrated-card settlement
+ *   FENCED (integrated card + deferred-settlement / cash / amendment-log writers — `assertNotHandheld`):
+ *     POST /api/pay                        pay          — integrated-card reader settlement
  *     POST /api/sales/:id/reprint          reprint      — reprints a FILED fiscal ticket
  *     POST /api/drawer/open                drawer_open  — cash-drawer open + audit row
  *     POST /api/working-orders/:id/place   place        — Mode I files a deferred chained invoice
  *     POST /api/working-orders/:id/collect collect      — Mode T immediate sale / Mode I settlement
  *     POST /api/working-orders/:id/cancel  cancel       — appends `order_cancelled` to the amendment log
  *
- *   ALLOWED (order-taking, floor-ops, reads, config — NO fiscal/cash/amendment write): the session/
- *     locale/roster/boot routes; GET /api/products; the park/list/retrieve/edit/abandon working-order
+ *   ALLOWED (order-taking, the node-keyed sale, floor-ops, reads, config — NO fenced fiscal/cash/amendment
+ *     write): the session/locale/roster/boot routes; GET /api/products;
+ *     POST /api/sales itself (a handheld settles cash or a manual card there — both file a chained registro
+ *     under the node's SIF, no reader, exactly like a counter walk-up sale); the
+ *     park/list/retrieve/edit/abandon working-order
  *     routes; send-to-prep and every kitchen/expo verb (fire/ready/away, per-line + whole-ticket bump,
  *     `GET /api/stations`+queues, `GET /api/expo/queue`); the NON-fiscal kitchen handover
  *     `POST /api/orders/:id/collect` (stamps only `collected_at`) and reprint `POST /api/orders/:id/reprint`
@@ -692,17 +693,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Read the body BEFORE the device guard so the tender is known (ordering change: a malformed-JSON
-      // body now surfaces before the 403 rather than after — negligible, arguably more correct).
+      // NOT fenced against a handheld (owner reversal, widened 2026-08-30): `POST /api/sales` settles a
+      // cash OR a manual-card tender, and both file under the submitting node's SIF (`nodeId`), not the
+      // till (record-sale.ts:79-82). The manual `card` tender is the datáfono leg — the operator charges a
+      // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes no network call), so
+      // it is fiscally identical to cash and needs no reader. Only the INTEGRATED reader (`POST /api/pay`,
+      // below) stays fenced (`assertNotHandheld`). An ordinary till carries no device cookie either way.
       const body = await c.req.json<TillSaleRequest>();
-      // Tender-aware firewall (owner reversal, 2026-08-30): a handheld may SETTLE a CASH sale — the fiscal
-      // chain is keyed by the submitting node (`nodeId`), not the till (record-sale.ts:79-82), so a
-      // handheld files a cash sale under its node's SIF exactly like the fixed till — but a manual CARD
-      // tender stays fenced (the datáfono leg the till owns). Enforced HERE, on the server, so it holds
-      // even if the client were bypassed; a handheld cookie + card tender throws `device.forbidden_action`
-      // (403) before any fiscal record — the unrecoverable one (CLAUDE.md §5) — could be written. An
-      // ordinary till carries no device cookie and passes for either tender.
-      await assertHandheldTenderAllowed(deps, c, body.tender.method);
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
       // becomes `payWorkingOrder`'s `req.id` and `22P02`s at its `eq(workingOrders.id, req.id)` lock read

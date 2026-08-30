@@ -229,14 +229,6 @@ export class TillTenderPay extends LitElement {
    * `willUpdate`.
    */
   @property() cardOutcome?: CardOutcome;
-  /**
-   * Cash only — hide the Card button in every idle view. Set for a handheld, which may settle a CASH
-   * tender but not a card one: the server `/api/sales` firewall fences a handheld card 403
-   * `device.forbidden_action` (Task 1's tender-aware route), so offering Card here would be a dead
-   * affordance. The counter/fixed till leaves this `false` and keeps both tenders. UI honesty only —
-   * the server guard is the real boundary; this widget hides what the server would reject.
-   */
-  @property({ type: Boolean }) cashOnly = false;
 
   @state() private view: View = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
@@ -575,13 +567,13 @@ export class TillTenderPay extends LitElement {
 
   /**
    * The Card (manual datáfono) tender button, shared verbatim by both idle views (pay + collect).
-   * Returns `nothing` when {@link cashOnly} — a handheld settles CASH only (card fenced client- AND
-   * server-side, `assertHandheldTenderAllowed`), so it must offer no card affordance at all. Extracted so
-   * a change to the button lives in one place and the two views cannot drift, matching this file's own
-   * `#renderCardExtras` idiom.
+   * Extracted so a change to the button lives in one place and the two views cannot drift, matching this
+   * file's own `#renderCardExtras` idiom. A handheld renders it too: it settles a manual card tender on
+   * `POST /api/sales` (the datáfono leg, no reader), which the server firewall permits — only the
+   * INTEGRATED reader (`/api/pay`) is fenced, and the handheld table-order screen threads no provider so
+   * the Card button stays on the manual `#62` path.
    */
   #renderCardButton(disabled: boolean) {
-    if (this.cashOnly) return nothing;
     return html`
       <wt-button
         class="pay-card"
@@ -661,12 +653,7 @@ export class TillTenderPay extends LitElement {
    * into the emitted event until then.
    */
   #renderCardExtras() {
-    // {@link cashOnly} means NO card affordance at all (a handheld settles cash only), so suppress the
-    // integrated-card tip/offline-consent inputs too — not just the Card button ({@link renderCardButton}).
-    // Today `cashOnly` is only set where `cardProvider` is `"none"` (the handheld table-order screen never
-    // threads a provider), so this is defensive: it keeps the invariant true for any future caller that
-    // pairs `cashOnly` with an integrated provider, rather than leaving card-only inputs with no tender.
-    if (this.cardProvider === "none" || this.cashOnly) return nothing;
+    if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
         ${

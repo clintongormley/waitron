@@ -156,12 +156,16 @@ selects the shell and (via §5) fences the fiscal routes. No order-path code cha
 ## 5. The pre-fiscal firewall (fiscal safety, H2) — load-bearing
 
 > **Update (2026-08-30, branch `feat/handheld-cash-at-table`):** the order-only firewall below was
-> **partially reversed for the CASH tender only** (following the fiscal-model correction in §0.1,
-> lines 26–33). A handheld may now **settle a CASH sale on `POST /api/sales`**, filing under its
-> node's SIF exactly like a till; **card and every other fiscal/cash route stay fenced**. The tender
-> split is enforced by `assertHandheldTenderAllowed` (allows handheld cash, refuses handheld card) in
-> `apps/server/src/device-session.ts`, with `assertNotHandheld` still fencing the remaining routes.
-> See `docs/backlog.md`'s "→ NEXT BUILD: handheld cash-at-table" row and the fail-closed allowlist in
+> **reversed for settlement at `POST /api/sales`** (following the fiscal-model correction in §0.1,
+> lines 26–33). A handheld may now **settle a sale on `POST /api/sales` for CASH or a MANUAL card
+> tender**, filing under its node's SIF exactly like a till. The manual card is the datáfono leg — the
+> operator charges a **separate bank terminal the POS never talks to** (`recordManualCardPayment` makes
+> no network call), so it is fiscally identical to cash and needs no reader; `POST /api/sales` therefore
+> runs **no handheld guard at all**. What stays fenced (`assertNotHandheld` in
+> `apps/server/src/device-session.ts`): the **INTEGRATED** card path (`POST /api/pay`, Stripe Terminal /
+> Tap to Pay — the deferred "mobile reader" slice) and the amendment/drawer/place/collect routes. The
+> earlier `assertHandheldTenderAllowed` tender-split was removed with this widening. See
+> `docs/backlog.md`'s "→ NEXT BUILD: handheld cash-at-table" row and the fail-closed allowlist in
 > `2026-08-30-device-auth-enrolment-fail-closed-design.md` §3. The section below is preserved as the
 > original order-only design.
 
