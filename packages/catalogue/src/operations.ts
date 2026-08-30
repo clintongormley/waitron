@@ -186,6 +186,22 @@ export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
 }
 
+/**
+ * Whether `catalogueId` names a catalogue VISIBLE to the current tenant — the trust-boundary check the
+ * location-menu write routes run on an untrusted `catalogueId` before {@link addCatalogueToLocation} /
+ * {@link setLocationDefaultCatalogue}. The read is RLS-filtered, so another tenant's catalogue reads as
+ * absent (`false`) — which is what closes the cross-tenant-default hole: `locations.catalogue_id`'s FK
+ * is single-column/global (not tenant-scoped), so without this a foreign id would be accepted as a
+ * location's default.
+ */
+export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: catalogues.id })
+    .from(catalogues)
+    .where(eq(catalogues.id, catalogueId));
+  return row !== undefined;
+}
+
 export async function renameCatalogue(tx: Transaction, id: string, name: string): Promise<void> {
   await tx
     .update(catalogues)
@@ -331,6 +347,34 @@ export async function assignCatalogueToLocation(
 }
 
 /**
+ * Make `catalogueId` the location's default menu (`locations.catalogue_id`) while KEEPING the old
+ * default sellable — the owner-chosen "keep-sellable" behaviour: an owner picking a new default does
+ * not expect the previous menu to stop being sold, so the old default is demoted to a
+ * `location_catalogues` member rather than dropped. "Which menus does this location sell?" and "which
+ * one opens first?" stay independent. A location with no prior default (or one already set to
+ * `catalogueId`) skips the demote. The redundant member row `catalogueId` may already hold is left
+ * untouched — {@link resolveAccessibleCatalogueIds} de-duplicates, so it is invisible.
+ */
+export async function setLocationDefaultCatalogue(
+  tx: Transaction,
+  locationId: string,
+  catalogueId: string,
+): Promise<void> {
+  // Only the current default matters here, so read `locations.catalogue_id` DIRECTLY rather than via
+  // `resolveAccessibleCatalogueIds` — that helper also SELECTs the `location_catalogues` members and
+  // builds a Set the demote logic never consults, a wasted round-trip on every default change.
+  const [row] = await tx
+    .select({ id: locations.catalogueId })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  const defaultId = row?.id ?? null;
+  if (defaultId !== null && defaultId !== catalogueId) {
+    await addCatalogueToLocation(tx, locationId, defaultId);
+  }
+  await assignCatalogueToLocation(tx, locationId, catalogueId);
+}
+
+/**
  * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row): the
  * location may then sell from it alongside its default `catalogue_id`. Idempotent — the composite PK
  * (tenant_id, location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
@@ -345,6 +389,28 @@ export async function addCatalogueToLocation(
     .insert(locationCatalogues)
     .values({ tenantId: CURRENT_TENANT, locationId, catalogueId })
     .onConflictDoNothing();
+}
+
+/**
+ * Detach a catalogue from a location's accessible set (delete its `location_catalogues` row): the
+ * location stops selling from it. Idempotent — deleting a row that is not there is a no-op. This
+ * NEVER touches the default (`locations.catalogue_id`), which is not stored as a member row, so it
+ * cannot strip a location's default menu; call {@link assignCatalogueToLocation} to change the
+ * default. `app_user` holds DELETE on `location_catalogues` (0074).
+ */
+export async function removeCatalogueFromLocation(
+  tx: Transaction,
+  locationId: string,
+  catalogueId: string,
+): Promise<void> {
+  await tx
+    .delete(locationCatalogues)
+    .where(
+      and(
+        eq(locationCatalogues.locationId, locationId),
+        eq(locationCatalogues.catalogueId, catalogueId),
+      ),
+    );
 }
 
 /**
@@ -381,6 +447,32 @@ export interface AccessibleCatalogue {
   name: string;
   /** True for `locations.catalogue_id` — the till's menu switcher pre-selects this one. */
   isDefault: boolean;
+}
+
+export interface LocationCatalogue extends Catalogue {
+  /** In this location's accessible set — its default (`locations.catalogue_id`) OR a
+   * `location_catalogues` member. The set the till sells from. */
+  sellable: boolean;
+  /** This location's default menu (`locations.catalogue_id`); always also `sellable`. */
+  isDefault: boolean;
+}
+
+/**
+ * EVERY catalogue the tenant owns, each flagged with whether `locationId` may sell from it
+ * (`sellable`) and whether it is that location's default (`isDefault`) — the dashboard's
+ * location↔menu membership screen. Unlike {@link listAccessibleCatalogues} (which returns ONLY the
+ * accessible set, for the till), this returns the full list so the screen can offer the not-yet-sold
+ * catalogues to add. Order follows {@link listCatalogues} (creation order); the screen sorts for
+ * display.
+ */
+export async function listCataloguesForLocation(
+  tx: Transaction,
+  locationId: string,
+): Promise<LocationCatalogue[]> {
+  const all = await listCatalogues(tx);
+  const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx, locationId);
+  const sellable = new Set(ids);
+  return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));
 }
 
 /**

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -9,6 +10,7 @@ import {
   addCatalogueToLocation,
   applyRecipeDerivation,
   assignCatalogueToLocation,
+  catalogueExists,
   createCatalogue,
   createCategory,
   createProduct,
@@ -17,8 +19,11 @@ import {
   listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
+  listCataloguesForLocation,
   listCategories,
   listProducts,
+  removeCatalogueFromLocation,
+  setLocationDefaultCatalogue,
   renameCatalogue,
   renameCategory,
   updateProduct,
@@ -581,6 +586,129 @@ describe("catalogue operations", () => {
   it("returns [] from listAccessibleCatalogues for a location with no accessible catalogue", async () => {
     await asTenant(async (tx) => {
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([]);
+    });
+  });
+
+  it("removes a member catalogue from a location's accessible set", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await removeCatalogueFromLocation(tx, locationId, lunch.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  it("removeCatalogueFromLocation is a no-op for a catalogue that is not a member", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const ghost = await createCatalogue(tx, { name: "Ghost" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await removeCatalogueFromLocation(tx, locationId, ghost.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  // The default lives in `locations.catalogue_id`, never as a `location_catalogues` row, so the
+  // member-remove op can never strip a location's default menu — calling it with the default id is a
+  // no-op on the member table. This is the guard that keeps a location from dropping to zero sellable
+  // menus via the remove route.
+  it("removeCatalogueFromLocation never removes the default (it is not a member row)", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await removeCatalogueFromLocation(tx, locationId, main.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: main.id, name: "Main", isDefault: true },
+      ]);
+    });
+  });
+
+  // The management screen's read: EVERY tenant catalogue (sellable here or not), each flagged
+  // `sellable` (in this location's accessible set — default OR member) and `isDefault`. `shelf` is a
+  // catalogue the tenant owns but this location does not sell, so it must appear with `sellable:false`.
+  it("lists every tenant catalogue with sellable + default flags for a location", async () => {
+    await asTenant(async (tx) => {
+      const main = await createCatalogue(tx, { name: "Main" });
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const shelf = await createCatalogue(tx, { name: "Shelf" });
+      await assignCatalogueToLocation(tx, locationId, main.id);
+      await addCatalogueToLocation(tx, locationId, lunch.id);
+      const rows = await listCataloguesForLocation(tx, locationId);
+      expect(rows).toHaveLength(3);
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      expect(byId.get(main.id)).toMatchObject({ name: "Main", sellable: true, isDefault: true });
+      expect(byId.get(lunch.id)).toMatchObject({ name: "Lunch", sellable: true, isDefault: false });
+      expect(byId.get(shelf.id)).toMatchObject({
+        name: "Shelf",
+        sellable: false,
+        isDefault: false,
+      });
+    });
+  });
+
+  // Keep-sellable (owner decision): changing the default demotes the OLD default to a member so the
+  // location keeps selling it — "which menus does this location sell?" and "which one opens first?" are
+  // independent choices. Casa was the default, Día a member; after making Día the default, both are
+  // still sellable, Día now flagged default.
+  it("setLocationDefaultCatalogue changes the default and keeps the old default sellable", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      const dia = await createCatalogue(tx, { name: "Día" });
+      await assignCatalogueToLocation(tx, locationId, casa.id);
+      await addCatalogueToLocation(tx, locationId, dia.id);
+      await setLocationDefaultCatalogue(tx, locationId, dia.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: dia.id, name: "Día", isDefault: true },
+        { id: casa.id, name: "Casa", isDefault: false },
+      ]);
+    });
+  });
+
+  // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
+  it("setLocationDefaultCatalogue sets the default when the location had none", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: casa.id, name: "Casa", isDefault: true },
+      ]);
+    });
+  });
+
+  // Re-setting the same catalogue as default must NOT insert a redundant `location_catalogues` member
+  // row for it (leaving it as both default and member) — the `defaultId !== catalogueId` branch skips
+  // the keep-sellable add. `listAccessibleCatalogues` de-duplicates, so it CANNOT see a redundant row;
+  // this asserts the member count DIRECTLY, so deleting that branch (which would then add the row) turns
+  // this test red. (Proven by deletion: `defaultId !== catalogueId` removed → member count becomes 1.)
+  it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
+    await asTenant(async (tx) => {
+      const casa = await createCatalogue(tx, { name: "Casa" });
+      await assignCatalogueToLocation(tx, locationId, casa.id);
+      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+        { id: casa.id, name: "Casa", isDefault: true },
+      ]);
+      const members = await tx.execute<{ count: number }>(
+        sql`select count(*)::int as count from location_catalogues where location_id = ${locationId}`,
+      );
+      expect(members.rows[0]!.count).toBe(0);
+    });
+  });
+
+  // The trust-boundary guard the location-menu write routes use: is this catalogue VISIBLE to the
+  // current tenant? A same-tenant id is true; an absent id is false. (The cross-tenant/RLS-hidden case
+  // is a superuser-blind PGlite can't show — proven in catalogue-api.rls.test.ts on real Postgres.)
+  it("catalogueExists is true for a tenant catalogue and false for an absent id", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Casa" });
+      expect(await catalogueExists(tx, cat.id)).toBe(true);
+      expect(await catalogueExists(tx, "00000000-0000-0000-0000-000000000000")).toBe(false);
     });
   });
 

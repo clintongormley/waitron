@@ -222,13 +222,14 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The sixteen manager faces the grouped sidebar switches between, every one keeping its `data-test`
+/** The seventeen manager faces the grouped sidebar switches between, every one keeping its `data-test`
  * id. Order is the sidebar's render order (pinned overview+sales, then Menu / Service / Team /
  * Purchasing / Configuration). */
 const NAV_SCREENS = [
   "overview",
   "sales",
   "catalogue",
+  "location-menus",
   "recipe",
   "floor",
   "statuses",
@@ -668,9 +669,9 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the sixteen manager
+  // The grouped static sidebar (Task 11): every group header renders, every one of the seventeen manager
   // faces keeps its `data-test="nav-<screen>"` id, and the active face is marked `aria-current="page"`.
-  it("renders each nav group header and all 16 nav items", async () => {
+  it("renders each nav group header and all 17 nav items", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -680,9 +681,9 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the sixteen manager faces is present by its stable data-test id.
+    // …and every one of the seventeen manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(16);
+    expect(NAV_SCREENS).toHaveLength(17);
   });
 
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
@@ -744,7 +745,7 @@ describe("dashboard-app", () => {
   });
 
   // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
-  // its sixteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
+  // its seventeen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
   // every visible control. It stays interactive at desktop width and whenever the drawer is open.
   // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
   // sidebar never-inert, so the narrow+closed assertion below goes red.
@@ -762,7 +763,7 @@ describe("dashboard-app", () => {
       // Desktop (matchMedia does not match): in-flow and fully interactive.
       expect(sidebar().hasAttribute("inert")).toBe(false);
 
-      // Narrow + closed → inert (the sixteen nav buttons leave the tab order + a11y tree).
+      // Narrow + closed → inert (the seventeen nav buttons leave the tab order + a11y tree).
       mq.set(true);
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(true);

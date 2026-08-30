@@ -31,7 +31,7 @@ export const en = {
   // The hamburger that opens/closes the off-canvas nav drawer on narrow screens (icon-only, so this is
   // its accessible name).
   "nav.toggle": "Toggle navigation",
-  // Sidebar group headers (grouping the sixteen manager faces; the pinned overview+sales group has none)
+  // Sidebar group headers (grouping the seventeen manager faces; the pinned overview+sales group has none)
   "nav.group.menu": "Menu",
   "nav.group.service": "Service",
   "nav.group.team": "Team",
@@ -48,6 +48,7 @@ export const en = {
   "nav.planned_actual": "Planned vs actual",
   "nav.purchases": "Purchases",
   "nav.recipe": "Recipes",
+  "nav.location_menus": "Location menus",
   "nav.statuses": "Statuses",
   "nav.floor": "Floor plan",
   "nav.kitchen": "Kitchen",
@@ -71,6 +72,14 @@ export const en = {
   "catalogue.empty_prompt": "Create a catalogue to start adding products.",
   "catalogue.new": "New catalogue",
   "catalogue.create": "Create catalogue",
+  // Location menus screen (which catalogues a location sells + its default)
+  "location_menus.title": "Location menus",
+  "location_menus.location": "Location",
+  "location_menus.menu": "Menu",
+  "location_menus.sells_here": "Sells here",
+  "location_menus.default": "Default",
+  "location_menus.no_locations": "No locations yet.",
+  "location_menus.no_catalogues": "No menus yet. Create one on the Menu screen.",
   // Layout screen
   "layout.title": "Layout",
   "layout.no_config": "No settings",
@@ -449,6 +458,7 @@ export const es: Record<StringKey, string> = {
   "nav.planned_actual": "Previsto vs real",
   "nav.purchases": "Compras",
   "nav.recipe": "Recetas",
+  "nav.location_menus": "Menús por local",
   "nav.statuses": "Estados",
   "nav.floor": "Sala",
   "nav.kitchen": "Cocina",
@@ -469,6 +479,13 @@ export const es: Record<StringKey, string> = {
   "catalogue.empty_prompt": "Crea un catálogo para empezar a añadir productos.",
   "catalogue.new": "Nuevo catálogo",
   "catalogue.create": "Crear catálogo",
+  "location_menus.title": "Menús por local",
+  "location_menus.location": "Local",
+  "location_menus.menu": "Carta",
+  "location_menus.sells_here": "Se vende aquí",
+  "location_menus.default": "Predeterminada",
+  "location_menus.no_locations": "Aún no hay locales.",
+  "location_menus.no_catalogues": "Aún no hay cartas. Crea una en la pantalla Carta.",
   "layout.title": "Disposición",
   "layout.no_config": "Sin ajustes",
   "layout.columns": "Columnas (1–12)",

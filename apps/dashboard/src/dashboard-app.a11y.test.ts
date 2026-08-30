@@ -58,6 +58,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
+    // The location-menus screen (reachable via the nav) loads these on connect.
+    getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
+    listLocationCatalogues: vi.fn().mockResolvedValue([]),
     // The layout + receipt screens (reachable via the nav) load `getLayout` on connect.
     getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
     putLayout: vi.fn().mockResolvedValue(undefined),
@@ -238,6 +241,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(catalogue!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the location-menus screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the location-menus screen (its own <h1> "Menús por local" is then the sole heading;
+    // the shell's nav chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-location-menus]")!.click();
+    await flush(el);
+    const locationMenus = el.shadowRoot!.querySelector("dashboard-location-menus-screen");
+    expect(locationMenus).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(locationMenus!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

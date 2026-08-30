@@ -16,12 +16,17 @@ import { bodyLimit } from "hono/body-limit";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
+  addCatalogueToLocation,
+  catalogueExists,
   createCatalogue,
   createCategory,
   createProduct,
   listCatalogues,
+  listCataloguesForLocation,
   listCategories,
   listProducts,
+  removeCatalogueFromLocation,
+  setLocationDefaultCatalogue,
   updateProduct,
   validateImageBytes,
   type ProductAllergens,
@@ -67,12 +72,13 @@ const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to — the catalogue parallel of
- * `management-api.ts`'s `STATUS`. CLIENT faults only: a genuine SERVER fault (a driver error, a
- * malformed-uuid `catalogueId` reaching a `uuid` column, a well-formed-but-foreign `catalogueId`
- * hitting the FK → PG `23503`) reaches `run` as a NON-AppError and becomes an opaque 500 — the
- * deliberately opaque posture design §4 records for a foreign id (the `catalogue.not_found` /
- * `category.not_found` pre-check is a noted later-slice follow-up, not an oversight). A registered code
- * absent from this table defaults to 400 via `run`'s `?? 400`.
+ * `management-api.ts`'s `STATUS`. Mostly CLIENT faults. `catalogue.not_found` (404) is thrown by the
+ * LOCATION-MENU writes' `assertCatalogueVisible` pre-check on an untrusted `catalogueId`; the PRODUCT
+ * routes keep the older opaque posture — a well-formed-but-foreign `catalogueId` there hits the FK
+ * (PG `23503`) and reaches `run` as a NON-AppError → opaque 500 (the `category.not_found` pre-check for
+ * that path is still a noted later-slice follow-up, not an oversight). Any other genuine SERVER fault (a
+ * driver error, a malformed-uuid id reaching a `uuid` column) is likewise an opaque 500. A registered
+ * code absent from this table defaults to 400 via `run`'s `?? 400`.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -81,6 +87,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
+  "catalogue.not_found": 404,
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
@@ -104,6 +111,35 @@ const run = createErrorBoundary(STATUS, "catalogue.failed");
 function requireUuidParam(id: string, kind: string): string {
   if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
   return id;
+}
+
+/**
+ * Screen the `{ catalogueId }` body the location-menu POST/PUT routes carry: REQUIRED (a
+ * missing/wrong-typed one is `management.request_invalid` naming the field, the body-screen convention)
+ * and uuid-SHAPED (a malformed string is `shared.invalid_id` before it reaches a `uuid` column, exactly
+ * as `requireUuidParam` screens a path id). This is a SHAPE screen only; whether the id names a
+ * catalogue the tenant may use is {@link assertCatalogueVisible}'s job, run inside the tx.
+ * `readJsonBody` coerces a null/malformed body to `{}`, so those land on the typeof screen as a clean 400.
+ */
+async function requireCatalogueIdBody(c: Context): Promise<string> {
+  const body = await readJsonBody<{ catalogueId?: unknown }>(c);
+  if (typeof body.catalogueId !== "string") {
+    throw new AppError("management.request_invalid", { field: "catalogueId" });
+  }
+  return requireUuidParam(body.catalogueId, "CatalogueId");
+}
+
+/**
+ * The trust-boundary check for an untrusted `catalogueId` a location-menu WRITE will reference: refuse
+ * it as `catalogue.not_found` (404) unless it names a catalogue VISIBLE to the current tenant. Runs
+ * inside `gated`'s tenant-scoped tx, so `catalogueExists`'s read is RLS-filtered and another tenant's
+ * id reads as absent. This is what stops a cross-tenant id becoming a location's default (the
+ * `locations.catalogue_id` FK is single-column/global — see the route comment).
+ */
+async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
+  if (!(await catalogueExists(tx, catalogueId))) {
+    throw new AppError("catalogue.not_found", { catalogueId });
+  }
 }
 
 /**
@@ -165,6 +201,63 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const { name } = body;
       const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
       return c.json(created, 201);
+    }),
+  );
+
+  // ── Location menus ───────────────────────────────────────────────────────────────────────────────
+  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its default
+  // `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY tenant catalogue
+  // flagged sellable/isDefault so the screen can also offer the not-yet-sold ones; POST/DELETE add and
+  // remove a member; PUT sets the default (keep-sellable — the old default is demoted, never dropped).
+  // The two routes that WRITE a `catalogueId` reference (POST add, PUT default) guard it with
+  // `catalogueExists` FIRST — an absent or cross-tenant id is refused `catalogue.not_found` (404).
+  // That guard is load-bearing on the PUT path: `locations.catalogue_id`'s FK is single-column/global
+  // (0028), NOT tenant-scoped, and a FK check bypasses RLS, so WITHOUT it a foreign id would be accepted
+  // as the location's default (proven cross-tenant in catalogue-api.rls.test.ts). `location_catalogues`'
+  // FK is composite (0074), so POST would `23503` on a foreign id anyway — the guard just turns that
+  // opaque 500 into the same clean 404. DELETE needs no guard: removing a non-member row is a no-op.
+  app.get("/management-api/locations/:locationId/catalogues", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const rows = await gated(sessionId, (tx) => listCataloguesForLocation(tx, locationId));
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/locations/:locationId/catalogues", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = await requireCatalogueIdBody(c);
+      await gated(sessionId, async (tx) => {
+        await assertCatalogueVisible(tx, catalogueId);
+        await addCatalogueToLocation(tx, locationId, catalogueId);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.delete("/management-api/locations/:locationId/catalogues/:catalogueId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
+      await gated(sessionId, (tx) => removeCatalogueFromLocation(tx, locationId, catalogueId));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/locations/:locationId/default-catalogue", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
+      const catalogueId = await requireCatalogueIdBody(c);
+      await gated(sessionId, async (tx) => {
+        await assertCatalogueVisible(tx, catalogueId);
+        await setLocationDefaultCatalogue(tx, locationId, catalogueId);
+      });
+      return c.body(null, 204);
     }),
   );
 
