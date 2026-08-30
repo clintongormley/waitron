@@ -433,6 +433,20 @@ declare module "@waitron/shared" {
      */
     "table.not_joined": { tableId: string; tabId: string };
     /**
+     * A caller tried to un-join a table's items onto a new tab, but this table is the SOLE table anchoring
+     * the named tab — it does not SHARE its tab with any other table, so there is no join to carve it out
+     * of. An ordinary single-table tab is settled or moved, not un-joined; only a genuine ≥2-table join
+     * splits. Rejecting here is honest: the WITH-items un-join would otherwise repoint this table away and
+     * leave the tab anchorless, and the downstream back-pointer check would throw a MISLEADING
+     * `tab.not_open` on a tab that is in fact open. `tableId`/`tabId` are caller-supplied uuids the till
+     * already holds, not secrets. `table.*`, not `server.*`: it is a fact about a table's join state, not
+     * the process (the rule `tenant.not_found`'s note gives); destined for `@waitron/core` once a package
+     * other than this host throws it, the note the `table.not_joined` family carries. Mapped to 409 in the
+     * route layer (the ids may be valid, but the table's un-shared state forbids the un-join), the sibling
+     * of `table.not_joined`.
+     */
+    "table.not_shared": { tableId: string; tabId: string };
+    /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
      * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
      * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency

@@ -336,6 +336,35 @@ describe("unjoinTable", () => {
     expect(state.newTabLines).toEqual([{ productId: aguaId, quantity: "1.000" }]);
   });
 
+  it("with items: refuses to un-join a table that SOLELY anchors its tab (table.not_shared), minting nothing", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    // An ordinary single-table tab: tableId is the ONLY table pointing at tabId (no join). A WITH-items
+    // un-join has no join to split off, so it must reject honestly rather than repoint the table away and
+    // let transferLines' back-pointer check throw a misleading tab.not_open on the now-anchorless tab.
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+    );
+
+    await expect(
+      asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId, [{ lineNo: 1, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "table.not_shared" });
+
+    // Nothing minted, nothing moved: tableId still anchors tabId, and no second open working order exists.
+    const state = await asApp(cfg, async (tx) => {
+      const [anchor] = await tx
+        .select({ tabId: diningTables.tabId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId));
+      const [{ count }] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(workingOrders)
+        .where(eq(workingOrders.status, "open"));
+      return { anchor, count };
+    });
+    expect(state.anchor?.tabId).toBe(tabId); // unchanged — the guard threw before the repoint
+    expect(state.count).toBe(1); // only the original tab's order exists; no new tab was created
+  });
+
   it("without items: frees the table (tab_id → NULL) and clears its TS-2 status", async () => {
     const { cfg, aguaId, tableId, tableId2, activeStatusId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

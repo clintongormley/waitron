@@ -107,6 +107,13 @@ async function priceOrderLines(
   // value today (a future course picker); park/update pass none, so their lines take the product default.
   lines: { productId: string; quantity: string; courseId?: string | null }[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
+  if (lines.length === 0) {
+    // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
+    // to price. priceBasket([]) yields the correct empty PricedBasket shape (a pure call, no DB), so every
+    // splitOffCheck / lineless openTab / unjoin skips the full listAvailableProducts scan they used to pay
+    // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
+    return { lineRows: [], priced: priceBasket([]) };
+  }
   const { products: available, invoiceLocales } = await listAvailableProducts(tx, cfg.locationId);
   const byId = new Map(available.map((p) => [p.id, p]));
   const items = lines.map((line) => {
@@ -1912,7 +1919,21 @@ export async function unjoinTable(
     return {};
   }
 
-  // With items: create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
+  // With items: split them off onto a NEW tab. This only makes sense when `tableId` is one of ≥2 tables
+  // sharing `tabId` — you un-join a table FROM a join. If `tableId` is the SOLE table anchoring `tabId`,
+  // the repoint below would leave `tabId` anchorless and `transferLines`' `lockOpenTab` back-pointer
+  // check would throw a MISLEADING `tab.not_open` on a tab that IS open. Reject honestly, before minting
+  // anything, when no OTHER table anchors this tab.
+  const [otherAnchor] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(eq(diningTables.tabId, tabId), ne(diningTables.id, tableId)))
+    .limit(1);
+  if (otherAnchor === undefined) {
+    throw new AppError("table.not_shared", { tableId, tabId });
+  }
+
+  // Create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
   // with `transferLines` — repointing FIRST makes `newTabId` a real tab (back-pointer set) so
   // `transferLines`' is-a-tab lock passes. `transferLines` re-locks `tabId` (a no-op — already held
   // above) and `newTabId` (fresh), in ascending-id order.
