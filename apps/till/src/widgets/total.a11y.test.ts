@@ -7,7 +7,7 @@ import type { TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { "es-ES": "Café" },
+  descriptions: { es: "Café" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",

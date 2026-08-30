@@ -8,7 +8,7 @@ import type { TillProduct } from "../api/client.js";
 // A product whose allergens have NOT been reviewed — `null`. Renders "pending", never all-clear.
 const coffee: TillProduct = {
   id: "coffee",
-  descriptions: { "es-ES": "Café", en: "Coffee" },
+  descriptions: { es: "Café", en: "Coffee" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -20,7 +20,7 @@ const coffee: TillProduct = {
 // (no source) — so a test can tell the two cells and the two detail rows apart.
 const sandwich: TillProduct = {
   id: "sandwich",
-  descriptions: { "es-ES": "Bocadillo", en: "Sandwich" },
+  descriptions: { es: "Bocadillo", en: "Sandwich" },
   pricingUnit: "each",
   unitPrice: "4.00",
   vatClass: "reduced",
@@ -34,7 +34,7 @@ const sandwich: TillProduct = {
 // A reviewed product with NO declared allergens — `{}`. Distinct from `null`: reviewed/all-clear.
 const water: TillProduct = {
   id: "water",
-  descriptions: { "es-ES": "Agua", en: "Water" },
+  descriptions: { es: "Agua", en: "Water" },
   pricingUnit: "each",
   unitPrice: "1.00",
   vatClass: "general",
@@ -127,7 +127,7 @@ describe("till-allergen-screen", () => {
     // dialog contradicts the matrix and the ALLERGEN_DISPLAY_ORDER doc's own guarantee.
     const wrap: TillProduct = {
       id: "wrap",
-      descriptions: { "es-ES": "Wrap", en: "Wrap" },
+      descriptions: { es: "Wrap", en: "Wrap" },
       pricingUnit: "each",
       unitPrice: "3.50",
       vatClass: "reduced",

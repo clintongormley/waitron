@@ -262,7 +262,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId,
-        descriptions: { "es-ES": "Café solo" },
+        descriptions: { es: "Café solo" },
         pricingUnit: "each",
         unitPrice: "1.20",
         vatClass: "general",
@@ -286,7 +286,7 @@ describe("mountCatalogueApi — products", () => {
     expect(product).toMatchObject({
       catalogueId,
       categoryId,
-      descriptions: { "es-ES": "Café solo" },
+      descriptions: { es: "Café solo" },
       unitPrice: "1.20",
       vatClass: "general",
       pricingUnit: "each",
@@ -308,7 +308,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "No sellable yet" },
+        descriptions: { es: "No sellable yet" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -326,7 +326,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "Explícitamente activo" },
+        descriptions: { es: "Explícitamente activo" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -340,7 +340,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "Activo por defecto" },
+        descriptions: { es: "Activo por defecto" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -357,7 +357,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "Sin precio" },
+        descriptions: { es: "Sin precio" },
         pricingUnit: "each",
         // unitPrice omitted
         vatClass: "general",
@@ -384,7 +384,7 @@ describe("mountCatalogueApi — products", () => {
         body: {
           catalogueId,
           categoryId: null,
-          descriptions: { "es-ES": "Mal alérgeno" },
+          descriptions: { es: "Mal alérgeno" },
           pricingUnit: "each",
           unitPrice: "1.00",
           vatClass: "general",
@@ -405,7 +405,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "Editar" },
+        descriptions: { es: "Editar" },
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -451,7 +451,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "Editar alérgeno" },
+        descriptions: { es: "Editar alérgeno" },
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -477,7 +477,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
   const productBase = {
     catalogueId: DUMMY_UUID,
     categoryId: null,
-    descriptions: { "es-ES": "x" },
+    descriptions: { es: "x" },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
@@ -536,7 +536,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "antes" },
+        descriptions: { es: "antes" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -546,7 +546,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 
     const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
       body: {
-        descriptions: { "es-ES": "después" },
+        descriptions: { es: "después" },
         vatClass: "reduced",
         pricingUnit: "weight",
         categoryId,
@@ -567,7 +567,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       }[]
     ).find((r) => r.id === productId)!;
     expect(row).toMatchObject({
-      descriptions: { "es-ES": "después" },
+      descriptions: { es: "después" },
       vatClass: "reduced",
       pricingUnit: "weight",
       categoryId,
@@ -582,7 +582,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { "es-ES": "sin cambios" },
+        descriptions: { es: "sin cambios" },
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

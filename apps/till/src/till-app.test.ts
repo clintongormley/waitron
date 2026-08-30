@@ -31,7 +31,7 @@ const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { "es-ES": "Café" },
+  descriptions: { es: "Café" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -43,7 +43,7 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { "es-ES": "Jamón" },
+  descriptions: { es: "Jamón" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",
@@ -3210,7 +3210,7 @@ describe("till-app", () => {
     const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
     const bocadillo: TillProduct = {
       id: "bocadillo",
-      descriptions: { "es-ES": "Bocadillo" },
+      descriptions: { es: "Bocadillo" },
       pricingUnit: "each",
       unitPrice: "3.00",
       vatClass: "general",
@@ -3221,7 +3221,7 @@ describe("till-app", () => {
     };
     const cerveza: TillProduct = {
       id: "cerveza",
-      descriptions: { "es-ES": "Cerveza" },
+      descriptions: { es: "Cerveza" },
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "general",

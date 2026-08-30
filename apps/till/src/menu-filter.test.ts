@@ -6,7 +6,7 @@ import type { TillProduct } from "./api/client.js";
 function product(id: string, catalogueId?: string): TillProduct {
   return {
     id,
-    descriptions: { "en-GB": id },
+    descriptions: { en: id },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",

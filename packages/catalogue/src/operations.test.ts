@@ -500,7 +500,7 @@ describe("catalogue operations", () => {
       const pMain = await createProduct(tx, {
         catalogueId: main.id,
         categoryId: null,
-        descriptions: { "en-GB": "Steak" },
+        descriptions: { en: "Steak" },
         pricingUnit: "each",
         unitPrice: "20.00",
         vatClass: "general",
@@ -508,7 +508,7 @@ describe("catalogue operations", () => {
       const pLunch = await createProduct(tx, {
         catalogueId: lunch.id,
         categoryId: null,
-        descriptions: { "en-GB": "Set menu" },
+        descriptions: { en: "Set menu" },
         pricingUnit: "each",
         unitPrice: "12.00",
         vatClass: "general",
@@ -516,7 +516,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, {
         catalogueId: other.id,
         categoryId: null,
-        descriptions: { "en-GB": "Hidden" },
+        descriptions: { en: "Hidden" },
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",

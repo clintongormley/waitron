@@ -9,7 +9,7 @@ import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { "es-ES": "Café" },
+  descriptions: { es: "Café" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -376,7 +376,7 @@ describe("till-table-order-screen", () => {
     const bocadillo: TillProduct = {
       ...cafe,
       id: "bocadillo",
-      descriptions: { "es-ES": "Bocadillo" },
+      descriptions: { es: "Bocadillo" },
       courseId: null,
       catalogueId: "cat-food",
       catalogueName: "Comida",
@@ -384,7 +384,7 @@ describe("till-table-order-screen", () => {
     const cerveza: TillProduct = {
       ...cafe,
       id: "cerveza",
-      descriptions: { "es-ES": "Cerveza" },
+      descriptions: { es: "Cerveza" },
       courseId: null,
       catalogueId: "cat-drinks",
       catalogueName: "Bebidas",

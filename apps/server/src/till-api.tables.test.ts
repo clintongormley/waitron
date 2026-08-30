@@ -50,7 +50,8 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    // invoice_locales is `es-ES` (matching the seeded product's `es-ES` description key): the tab
+    // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
+    // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly — the same constraint the park route's harness documents.
     const loc = await db.execute<{ id: string }>(sql`
@@ -81,7 +82,7 @@ const suite = usePgliteDb({
       const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { "es-ES": "Agua mineral" },
+        descriptions: { es: "Agua mineral" },
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",

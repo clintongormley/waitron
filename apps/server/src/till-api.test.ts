@@ -73,8 +73,9 @@ const suite = usePgliteDb({
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with a
     // FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite superuser (RLS
     // bypassed) — pure setup, as `@waitron/db`'s own seed helpers document.
-    // invoice_locales is `es-ES` (matching the seeded product's `es-ES` description key), because the
-    // working-order-line insert `POST /api/working-orders` performs fires `check_locales`, which
+    // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
+    // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the
+    // working-order-line insert `POST /api/working-orders` fires `check_locales`, which
     // demands a line's `descriptions` keys equal the location's locales EXACTLY.
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -115,7 +116,7 @@ const suite = usePgliteDb({
       const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { "es-ES": "Agua mineral" },
+        descriptions: { es: "Agua mineral" },
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -129,7 +130,7 @@ const suite = usePgliteDb({
       const p2 = await createProduct(tx, {
         catalogueId: cat2.id,
         categoryId: bebidas.id,
-        descriptions: { "es-ES": "Cerveza" },
+        descriptions: { es: "Cerveza" },
         pricingUnit: "each",
         unitPrice: "2.50",
         vatClass: "general",
@@ -907,7 +908,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       products: [
         {
           id: aguaProduct.id,
-          descriptions: { "es-ES": "Agua mineral" },
+          descriptions: { es: "Agua mineral" },
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
@@ -919,7 +920,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         },
         {
           id: cervezaProduct.id,
-          descriptions: { "es-ES": "Cerveza" },
+          descriptions: { es: "Cerveza" },
           pricingUnit: "each",
           unitPrice: "2.50",
           vatClass: "general",
