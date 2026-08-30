@@ -104,6 +104,17 @@ export const bookings = pgTable(
     unique("bookings_tenant_id_key").on(t.tenantId, t.id),
     // The day-list scan: the location's bookings for a given date.
     index("bookings_tenant_location_date_idx").on(t.tenantId, t.locationId, t.bookingDate),
+    // The reserved-on-floor lateral join (working-order.ts nextReservation) filters on
+    // (tenant_id, table_id, status, booking_date) then orders/ranges on booking_time — matched left to
+    // right by this index. Without it that per-table subquery re-scans the whole day's bookings
+    // (bookings_tenant_location_date_idx has no table_id prefix), O(tables × bookings-that-day).
+    index("bookings_tenant_table_status_date_time_idx").on(
+      t.tenantId,
+      t.tableId,
+      t.status,
+      t.bookingDate,
+      t.bookingTime,
+    ),
     // A party of zero or fewer is malformed.
     check("bookings_party_size_ck", sql`${t.partySize} > 0`),
   ],

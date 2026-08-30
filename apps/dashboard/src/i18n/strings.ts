@@ -398,8 +398,6 @@ export const en = {
   "booking.confirm_seat": "Confirm seat",
   "booking.no_show": "No-show",
   "booking.cancel": "Cancel",
-  "booking.fields_required": "Fill in the date, time, party size and name",
-  "booking.party_invalid": "Party size must be a whole number of 1 or more",
   // Business-overview home screen (the "today at a glance" post-login landing for non-staff roles)
   "overview.title": "Today at a glance",
   "overview.takings_title": "Takings today",
@@ -790,8 +788,6 @@ export const es: Record<StringKey, string> = {
   "booking.confirm_seat": "Confirmar mesa",
   "booking.no_show": "No presentada",
   "booking.cancel": "Cancelar",
-  "booking.fields_required": "Rellena la fecha, la hora, los comensales y el nombre",
-  "booking.party_invalid": "Los comensales deben ser un número entero de 1 o más",
   "overview.title": "Hoy de un vistazo",
   "overview.takings_title": "Recaudación de hoy",
   "overview.tender_total": "Total cobrado",

@@ -2,8 +2,9 @@
 // below throw directly — `management.request_invalid` (the empty-patch / malformed-field guard) — under
 // the "every file that throws one of these imports ./errors.js" convention. `shared.invalid_id` (thrown
 // by `requireUuidParam`) is declared in `@waitron/shared` and loads via the `AppError` value import;
-// the `booking.*` / `table.*` / `tab.*` codes these routes answer are thrown by the `@waitron/bookings`
-// verbs (`./bookings.js`), whose `import "./errors.js"` registers them, and load transitively through
+// the `booking.*` / `table.*` / `tab.*` codes these routes answer are thrown by the `bookings.ts`
+// verbs (`./bookings.js`) — a local module, destined for `@waitron/bookings` if that package is ever
+// extracted — whose `import "./errors.js"` registers them, and load transitively through
 // the value imports of those verbs below — the same transitive-reachability shape `purchasing-api.ts`
 // relies on. So this one line is all this file needs.
 import "./errors.js";
@@ -186,6 +187,24 @@ export function mountBookingsApi(app: Hono, deps: BookingsApiDeps, log: Logger):
       return fn(tx, auth);
     });
 
+  // The three no-body lifecycle moves (cancel / no-show / complete) are byte-for-byte identical apart
+  // from the URL suffix and the verb — `mountCourseVerb`'s booking parallel (till-api.ts). Session gate
+  // first (→ 401), `:id` screened to a uuid (→ `shared.invalid_id` 400 before any DB work), then the verb
+  // under `gated` (BOOKING_WRITE + tenant/`app_user` scope), 204 on success. `gated`/`cfg` are captured.
+  const mountBookingLifecycleVerb = (
+    suffix: string,
+    verb: (tx: Transaction, cfg: TillConfig, id: string) => Promise<void>,
+  ): void => {
+    app.post(`/management-api/bookings/:id/${suffix}`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "BookingId");
+        await gated(sessionId, (tx) => verb(tx, cfg, id));
+        return c.body(null, 204);
+      }),
+    );
+  };
+
   // ── List by day ──────────────────────────────────────────────────────────────────────────────────
   app.get("/management-api/bookings", (c) =>
     run(c, log, async () => {
@@ -247,30 +266,7 @@ export function mountBookingsApi(app: Hono, deps: BookingsApiDeps, log: Logger):
   );
 
   // ── Lifecycle moves (no body) ────────────────────────────────────────────────────────────────────
-  app.post("/management-api/bookings/:id/cancel", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "BookingId");
-      await gated(sessionId, (tx) => cancelBooking(tx, cfg, id));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.post("/management-api/bookings/:id/no-show", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "BookingId");
-      await gated(sessionId, (tx) => markNoShow(tx, cfg, id));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.post("/management-api/bookings/:id/complete", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "BookingId");
-      await gated(sessionId, (tx) => completeBooking(tx, cfg, id));
-      return c.body(null, 204);
-    }),
-  );
+  mountBookingLifecycleVerb("cancel", cancelBooking);
+  mountBookingLifecycleVerb("no-show", markNoShow);
+  mountBookingLifecycleVerb("complete", completeBooking);
 }
