@@ -176,16 +176,18 @@ demo or behind-the-scenes".
    face, Menu nav group) lets an owner pick which catalogues a location sells and which is the default
    (`GET/POST/DELETE/PUT /management-api/locations/:id/catalogues` + `/default-catalogue`, `person.manage`
    gated, keep-sellable on default change), so membership is no longer fixed at seed/provisioning. A
-   cross-tenant `catalogueId` is refused `catalogue.not_found` (404) — the app-layer guard for the
-   single-column `locations.catalogue_id` FK (composite-FK hardening still the deferred item below).
+   cross-tenant `catalogueId` is refused `catalogue.not_found` (404) — backed by BOTH the app-layer guard
+   AND, as of #179, a tenant-consistent **composite FK** on `locations.catalogue_id` (0077/0078; the guard
+   is now the clean-404 front layer, the FK the data-layer backstop).
    **Per-till persisted menu selection was DROPPED** (owner call): a switch stays temporary, so the
    remaining owner-facing gaps are a **draft/published** state (only an `active` bool today) and
-   **time-of-day / seasonal scheduling**. PARTIAL → complete. **Follow-ups:** (a) till-side — reset the
-   temporary menu switch to the location default on the next order (the reshaped, non-persisted form of
-   the dropped per-till idea); (b) extract a shared `<location-picker>` widget (the load/select pattern
-   is now triplicated across roster / planned-actual / location-menus); (c) composite `(tenant_id, id)`
-   FK on `locations.catalogue_id` (the deep form of the cross-tenant guard; already noted in
-   `tenants.ts`).
+   **time-of-day / seasonal scheduling**. PARTIAL → complete. **The three Slice A follow-ups all LANDED
+   (#179):** (a) the till menu switch now reverts to the location default on the next order (`#onNewSale`
+   / `#onParkOrder`); (b) a shared `<dashboard-location-picker>` widget + `resolveLocationSelection`
+   helper were extracted from roster / planned-actual / location-menus (a single-location tenant no longer
+   sees a one-option select); (c) the composite `(tenant_id, catalogue_id)` FK replaced the single-column
+   one. **Remaining Tier B #8: draft/publish + time-of-day/seasonal scheduling** (both greenfield, no owner
+   decision pending).
 9. **Order timings — overdue / forgotten-order alerting** (owner-elevated 2026-08-29). The KDS
    station queue **already ages every order** (colour buckets fresh <5 / warm <10 / hot ≥10 min +
    minute label, `station-queue.ts:405-434`), so the base already demos. This adds the *feature*:
