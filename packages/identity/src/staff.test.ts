@@ -261,6 +261,30 @@ describe("asEmailTaken", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ email: "owner@x.com" });
   });
 
+  it("translates a 23505 whose constraint is persons_tenant_email_uq", () => {
+    let thrown: unknown;
+    try {
+      asEmailTaken({ cause: { code: "23505", constraint: "persons_tenant_email_uq" } }, "o@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
+  });
+
+  // A 23505 on a DIFFERENT persons constraint (the id PK, or any added later) must NOT be mislabelled
+  // person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate in
+  // asEmailTaken and this fails (the error becomes person.email_taken). (Copilot, PR #172.)
+  it("re-throws a 23505 whose constraint is not the email index", () => {
+    const original = { cause: { code: "23505", constraint: "persons_pkey" } };
+    let thrown: unknown;
+    try {
+      asEmailTaken(original, "owner@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
+  });
+
   it("re-throws a non-unique error unchanged", () => {
     const original = { code: "42501" };
     let thrown: unknown;

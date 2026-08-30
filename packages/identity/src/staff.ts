@@ -1,6 +1,6 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { isUniqueViolation } from "@waitron/db";
+import { isUniqueViolation, uniqueViolationConstraint } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
@@ -15,11 +15,24 @@ import { roleHasPermission, type Permission, type PersonRoleValue } from "./perm
  * collision — into the domain `person.email_taken`, and re-throw anything else untouched. The
  * duplicate surfaces as SQLSTATE 23505 wrapped in Drizzle's `DrizzleQueryError`, so detection goes
  * through `@waitron/db`'s `isUniqueViolation` (a cause-chain walk), not a top-level `.code` read.
+ *
+ * It matches on the CONSTRAINT NAME, not merely on 23505: a different unique violation on `persons`
+ * — the `id` PK, or any unique constraint added later — is re-thrown untouched, never mislabelled
+ * `person.email_taken` (which would also break the `{ email }` param contract when `email` is null).
+ * When the driver reports no constraint name (PGlite omits it), it falls back to translating: that
+ * partial index is the only NON-PK unique constraint these write paths can hit, and a null-email PK
+ * clash is a cryptographically-unreachable `defaultRandom()` collision.
+ *
  * `email` is normalized before it reaches here, so the error carries the value that actually
  * collided. Exported for the crafted-error unit test in staff.test.ts, NOT from the package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
-  if (isUniqueViolation(err)) throw new AppError("person.email_taken", { email });
+  if (isUniqueViolation(err)) {
+    const constraint = uniqueViolationConstraint(err);
+    if (constraint === undefined || constraint === "persons_tenant_email_uq") {
+      throw new AppError("person.email_taken", { email });
+    }
+  }
   throw err;
 }
 
@@ -85,11 +98,10 @@ export async function createPerson(
   } catch (err) {
     // The insert can raise only two unique violations on `persons`: `persons_tenant_email_uq`, the
     // partial index that fires solely when `email` IS NOT NULL, and the `id` primary key. `asEmailTaken`
-    // maps 23505 to `person.email_taken` (and re-throws anything else). On the reachable path — the email
-    // collision — `email` is non-null, so `email!` carries the value that collided. The `email!` also
-    // covers the only case where `email` is null AND a 23505 fires: a `defaultRandom()` uuid PK collision,
-    // which is cryptographically unreachable; if it ever happened we would mislabel it `person.email_taken`
-    // with an `email: null`, an accepted theoretical wart, not a live bug.
+    // translates ONLY the email-index constraint (re-throwing a PK/other violation), and that index
+    // can only fire with a non-null email — so whenever it translates, `email!` is genuinely non-null.
+    // (A null-email PK clash is a cryptographically-unreachable `defaultRandom()` collision, re-thrown
+    // untouched on a driver that reports the constraint name.)
     asEmailTaken(err, email!);
   }
 }
