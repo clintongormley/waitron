@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { commands } from "@vitest/browser/context";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
+
+declare module "@vitest/browser/context" {
+  interface BrowserCommands {
+    // Resizes the Playwright viewport to cross Task 12's 48rem drawer breakpoint (fires matchMedia
+    // change → flips the shell's `narrow` state). Restore a desktop width in a finally.
+    setViewportSize: (width: number, height: number) => Promise<void>;
+  }
+}
 import type { DashboardApp } from "./dashboard-app.js";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
@@ -166,6 +175,34 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(true);
     await expectNoA11yViolations(host);
+  });
+
+  it("the off-canvas drawer is accessible at narrow width, closed and open (Task 12)", async () => {
+    // The DESKTOP a11y test above validates DOM/ARIA structure but never the off-canvas rendering,
+    // where the real risk lives (a closed off-screen sidebar keeping its 16 nav buttons in the tab
+    // order). Shrink below the 48rem breakpoint and scan axe both closed (the sidebar is inert, so its
+    // buttons leave the a11y tree) and open (the drawer slid in over a scrim).
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    try {
+      await commands.setViewportSize(400, 800);
+      // Wait for matchMedia change to reach the element (async after a resize).
+      for (let i = 0; i < 100 && !sidebar().hasAttribute("inert"); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      // Closed + narrow: the sidebar is inert and axe is clean.
+      expect(sidebar().hasAttribute("inert")).toBe(true);
+      await expectNoA11yViolations(host);
+      // Open the drawer at narrow width and scan again.
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+      await expectNoA11yViolations(host);
+    } finally {
+      await commands.setViewportSize(1280, 800);
+    }
   });
 
   it("the staff screen renders accessibly with a single, well-ordered heading", async () => {

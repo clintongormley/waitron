@@ -1,6 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+
+/**
+ * Installs a CONTROLLABLE stub for `window.matchMedia`, targeting only the drawer breakpoint
+ * (`(max-width: 48rem)`); every other query (e.g. prefers-color-scheme) delegates to the real one, so
+ * theming is untouched. Returns `set(narrow)` — which flips `matches` and fires the shell's registered
+ * change listener — and `restore()`. Used instead of a real viewport resize because a genuine
+ * desktop↔narrow resize does NOT reliably re-fire matchMedia in this headless browser within a test
+ * budget (proven: the narrow→desktop transition timed out). This drives the shell's `narrow` state
+ * deterministically. Install it BEFORE mountWidget so the element's connectedCallback reads the stub.
+ */
+function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () => void } {
+  const DRAWER_QUERY = "(max-width: 48rem)";
+  const listeners = new Set<(e: MediaQueryListEvent) => void>();
+  let matches = false;
+  const mql = {
+    get matches() {
+      return matches;
+    },
+    media: DRAWER_QUERY,
+    onchange: null,
+    addEventListener: (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+      listeners.add(cb);
+    },
+    removeEventListener: (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+      listeners.delete(cb);
+    },
+    addListener: (cb: (e: MediaQueryListEvent) => void) => listeners.add(cb),
+    removeListener: (cb: (e: MediaQueryListEvent) => void) => listeners.delete(cb),
+    dispatchEvent: () => true,
+  } as unknown as MediaQueryList;
+  const original = window.matchMedia.bind(window);
+  window.matchMedia = ((query: string) =>
+    query === DRAWER_QUERY ? mql : original(query)) as typeof window.matchMedia;
+  return {
+    set(narrow: boolean) {
+      matches = narrow;
+      for (const cb of listeners) cb({ matches: narrow } as MediaQueryListEvent);
+    },
+    restore() {
+      window.matchMedia = original;
+    },
+  };
+}
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
@@ -698,6 +741,67 @@ describe("dashboard-app", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+  });
+
+  // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
+  // its sixteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
+  // every visible control. It stays interactive at desktop width and whenever the drawer is open.
+  // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
+  // sidebar never-inert, so the narrow+closed assertion below goes red.
+  it("makes the off-canvas sidebar inert only when narrow and closed", async () => {
+    // Drive the breakpoint via a controllable matchMedia stub (installed BEFORE mount so the shell's
+    // connectedCallback reads it) — deterministic, unlike a real viewport resize here.
+    const mq = stubDrawerMatchMedia();
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+
+      // Desktop (matchMedia does not match): in-flow and fully interactive.
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+
+      // Narrow + closed → inert (the sixteen nav buttons leave the tab order + a11y tree).
+      mq.set(true);
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(true);
+
+      // Opening the drawer makes it interactive again (narrow but open)…
+      const toggle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
+      toggle.click();
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+      // …and closing it again re-inerts it (still narrow).
+      toggle.click();
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(true);
+
+      // Back to desktop width while still CLOSED → interactive again (desktop overrides closed).
+      mq.set(false);
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+    } finally {
+      mq.restore();
+    }
+  });
+
+  it("Escape closes an open drawer", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(true);
+
+    // A keydown anywhere inside the layout bubbles to the wrapper's handler.
+    layout().dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(false);
   });
 
   it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {

@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
@@ -63,6 +64,12 @@ type Screen =
   | "recipe"
   | "devices"
   | "printers";
+
+/** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
+ * single source so the JS `matchMedia` query and the CSS `@media` block below cannot drift — a media
+ * query cannot read a `--custom-property`, so the breakpoint is a literal in both places, and `48rem`
+ * matches the existing repo precedent in `apps/till/src/screens/till-counter-screen.ts:111`. */
+const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
 /** One nav entry: the face it switches to and the i18n key for its label. */
 type NavItem = { screen: Screen; labelKey: StringKey };
@@ -267,9 +274,10 @@ export class DashboardApp extends LitElement {
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER. It leaves
          the flow (position: fixed, translated off the leading edge) and slides in when the layout gains
-         the drawer-open class; the hamburger appears to toggle it. The 48rem breakpoint (a common tablet
-         width, matching apps/till's counter screen) is a plain commented media query — CSS custom
-         properties cannot drive a media condition, so it is spelled here rather than tokenised. */
+         the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
+         --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
+         constant that drives the narrow state); 48rem matches the existing repo precedent in
+         apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
         .nav-toggle {
           display: inline-block;
@@ -307,6 +315,22 @@ export class DashboardApp extends LitElement {
    * ANY nav item — or clicking the scrim — sets it back to `false`. */
   @state() private drawerOpen = false;
 
+  /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
+   * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
+   * render) or its sixteen nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through sixteen invisible controls before reaching a visible one. At
+   * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
+  @state() private narrow = false;
+
+  /** The live breakpoint query the shell listens to. Held so {@link disconnectedCallback} can detach the
+   * listener; created in {@link connectedCallback}. */
+  #breakpoint?: MediaQueryList;
+
+  /** The breakpoint listener — a stable bound reference so add/removeEventListener pair up. */
+  readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
+    this.narrow = e.matches;
+  };
+
   /** The logged-in person's role, learned from `getMe()`. `undefined` until a probe/login resolves.
    * `staff` suppresses the manager nav; the four other values keep it. NOT named `role` — that
    * collides with `HTMLElement.role` (the reflected ARIA property), which a `@state` cannot override. */
@@ -331,6 +355,22 @@ export class DashboardApp extends LitElement {
     // controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys and the
     // screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
     new LocaleChangeController(this);
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Track the drawer breakpoint so a CLOSED off-canvas sidebar can be made inert (see render). Read
+    // the current match once up front (matchMedia only fires `change` on a TRANSITION, never for the
+    // initial state), then follow changes.
+    this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
+    this.narrow = this.#breakpoint.matches;
+    this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
+  }
+
+  override disconnectedCallback(): void {
+    this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
+    this.#breakpoint = undefined;
+    super.disconnectedCallback();
   }
 
   override firstUpdated(): void {
@@ -500,12 +540,22 @@ export class DashboardApp extends LitElement {
     const hasNav = this.sessionRole !== "staff";
     return html`
       <div
-        class="layout ${hasNav && this.drawerOpen ? "drawer-open" : ""}"
+        class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}
+        @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
-             breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. -->
-        ${hasNav ? html`<aside class="sidebar">${this.#nav()}</aside>` : nothing}
+             breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
+             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its sixteen nav buttons
+             leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
+             control; it is interactive at desktop width and whenever the drawer is open. -->
+        ${
+          hasNav
+            ? html`<aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>
+                ${this.#nav()}
+              </aside>`
+            : nothing
+        }
         <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
              (and only a non-staff session can open one); the CSS hides it at desktop width regardless.
              aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
@@ -561,6 +611,14 @@ export class DashboardApp extends LitElement {
   #selectScreen(screen: Screen): void {
     this.screen = screen;
     this.drawerOpen = false;
+  }
+
+  /** Escape closes the open drawer (Task 12) — completing keyboard operability: open via the hamburger,
+   * close via Escape, the scrim, or selecting a nav item. Bound on the `.layout` wrapper, which contains
+   * every logged-in control, so a keydown anywhere inside (the hamburger, a nav button) bubbles to it.
+   * A no-op when the drawer is already closed, so it never swallows Escape from anything else. */
+  #onLayoutKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
   #nav(): TemplateResult {
