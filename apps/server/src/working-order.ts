@@ -3210,8 +3210,10 @@ export interface TableState {
    *  reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
    *  renders "Reserved HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
    *  `locations.time_zone` at read time (§2b), computed in JS from the injected clock — never in SQL.
-   *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present. */
-  nextReservation: { time: string; partySize: number; contactName: string } | null;
+   *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present.
+   *  Data-minimisation: only `time` is projected — the floor badge renders "Reserved HH:MM" and nothing
+   *  else, so the customer's `party_size`/`contact_name` are deliberately kept off every till device. */
+  nextReservation: { time: string } | null;
 }
 
 /**
@@ -3307,15 +3309,11 @@ export async function listTablesWithState(
     shape: FloorTableShape | null;
     rotation: number | null;
     next_reservation_time: string | null;
-    next_reservation_party_size: number | null;
-    next_reservation_contact_name: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
       res.booking_time as next_reservation_time,
-      res.party_size as next_reservation_party_size,
-      res.contact_name as next_reservation_contact_name,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
@@ -3369,7 +3367,7 @@ export async function listTablesWithState(
     -- CLAUDE.md scalar-subquery trap is about BARE interpolated columns binding inward; these are
     -- explicit dt.-qualified references, so they resolve to the outer table.
     left join lateral (
-      select b.booking_time, b.party_size, b.contact_name
+      select b.booking_time
       from bookings b
       where b.tenant_id = dt.tenant_id and b.table_id = dt.id
         and b.status = 'booked'
@@ -3414,13 +3412,7 @@ export async function listTablesWithState(
       // normalise to `HH:MM` at the presentation edge (controller ruling) so the floor reads "Reserved
       // HH:MM" straight off it.
       nextReservation:
-        r.next_reservation_time !== null
-          ? {
-              time: r.next_reservation_time.slice(0, 5),
-              partySize: Number(r.next_reservation_party_size),
-              contactName: r.next_reservation_contact_name!,
-            }
-          : null,
+        r.next_reservation_time !== null ? { time: r.next_reservation_time.slice(0, 5) } : null,
       ...(hasOpenTab
         ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
         : {}),

@@ -615,9 +615,11 @@ export interface TableState {
    * renders "Reserved HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
    * `TableState.nextReservation` (`apps/server/src/working-order.ts`'s `listTablesWithState`), NOT
    * imported — the same bundle-decoupling rationale as the siblings here. Non-optional `| null`,
-   * unconditionally present, matching `status`/`posX`.
+   * unconditionally present, matching `status`/`posX`. Data-minimisation: only `time` is projected —
+   * the floor badge renders "Reserved HH:MM" and nothing else, so the customer's party size / contact
+   * name are deliberately kept off every till device (server: `listTablesWithState`).
    */
-  nextReservation: { time: string; partySize: number; contactName: string } | null;
+  nextReservation: { time: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
    * rendered `shape`, and `rotation` in degrees, or `null` for an unplaced table. A LOCAL mirror of the

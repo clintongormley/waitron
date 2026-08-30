@@ -711,7 +711,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
   // 2026-09-15T10:00:00Z → Madrid (CEST, UTC+2 in September) 12:00 on 2026-09-15.
   const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
 
-  it("surfaces the table's next booked reservation later today as HH:MM + party + name", async () => {
+  it("surfaces the table's next booked reservation later today as HH:MM", async () => {
     const cfg = await setupVenue();
     const { id: tableId } = await asApp(cfg, (tx) =>
       createTable(tx, cfg, { label: "7", capacity: 4 }),
@@ -727,7 +727,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     const row = (
       await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
     ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toEqual({ time: "14:00", partySize: 5, contactName: "Marta" });
+    expect(row.nextReservation).toEqual({ time: "14:00" });
   });
 
   it("returns null when the table has no upcoming booked reservation", async () => {
@@ -767,7 +767,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     const row = (
       await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
     ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toMatchObject({ time: "13:30", contactName: "Earlier" });
+    expect(row.nextReservation).toEqual({ time: "13:30" });
   });
 
   it("does not crash when locations.time_zone is an invalid IANA zone (falls back to the default)", async () => {
@@ -788,7 +788,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
 
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
     const row = rows.find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toMatchObject({ time: "14:00", contactName: "Fallback" });
+    expect(row.nextReservation).toEqual({ time: "14:00" });
   });
 
   it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
@@ -806,7 +806,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, clock))).find(
       (t) => t.id === tableId,
     )!;
-    expect(row.nextReservation).toMatchObject({ time: "15:00", contactName: "Venue" });
+    expect(row.nextReservation).toEqual({ time: "15:00" });
   });
 
   it("derives venue-local 'now' from locations.time_zone (hour boundary)", async () => {
@@ -821,6 +821,6 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, clock))).find(
       (t) => t.id === tableId,
     )!;
-    expect(row.nextReservation).toMatchObject({ time: "14:00", contactName: "Future" });
+    expect(row.nextReservation).toEqual({ time: "14:00" });
   });
 });

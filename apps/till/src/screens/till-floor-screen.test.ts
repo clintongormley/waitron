@@ -331,7 +331,7 @@ describe("till-floor-screen", () => {
       tables: [
         table({
           id: "t1",
-          nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
+          nextReservation: { time: "20:30" },
         }),
       ],
     });
@@ -351,9 +351,7 @@ describe("till-floor-screen", () => {
 
   it("renders the reserved chip on the map token for a placed reserved table", async () => {
     const el = await mountFloor({
-      tables: [
-        placed("t1", { nextReservation: { time: "21:00", partySize: 2, contactName: "Bea" } }),
-      ],
+      tables: [placed("t1", { nextReservation: { time: "21:00" } })],
     });
     const token = el
       .shadowRoot!.querySelector("wt-floor-canvas")!
