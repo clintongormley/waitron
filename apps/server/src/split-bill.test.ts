@@ -242,6 +242,39 @@ describe("splitOffCheck", () => {
       asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 99 }])),
     ).rejects.toMatchObject({ code: "tab.line_not_found" });
   });
+
+  it("refuses an EMPTY transfers array (sale.empty_basket), minting nothing", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+    );
+    // An empty `transfers` array makes carveOffLines' `inArray(col, [])` render `false` — a no-op WHERE
+    // clause — so without an up-front guard the call would SUCCEED after createOpenOrder had already
+    // minted a check: a table-less `open` working order, zero lines, a consumed order_number. An orphan.
+    // Refused before anything is minted, same "nothing to work with" shape as the walk-up/park/round
+    // paths' `sale.empty_basket` (see working-order.ts:221-227).
+    await expect(asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, []))).rejects.toMatchObject({
+      code: "sale.empty_basket",
+    });
+
+    const state = await asApp(cfg, async (tx) => {
+      const originLines = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      return { originLines, orderCount: orders.length };
+    });
+    // Origin untouched — still the whole agua×3.
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: "3.000" }]);
+    // No orphan check minted — only the origin tab exists.
+    expect(state.orderCount).toBe(1);
+  });
 });
 
 describe("unjoinTable", () => {

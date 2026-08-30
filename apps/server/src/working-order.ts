@@ -1789,6 +1789,11 @@ async function carveOffLines(
  * `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes it file AT MOST ONE sale.
  * Called once per check; the origin holds the remainder (emptied ⇒ abandon it with the existing
  * `abandonHeldOrder`, or pay it as the last check — design §3). Runs on the CALLER's tx/tenant scope.
+ *
+ * Refuses an EMPTY `transfers` array with `sale.empty_basket`, BEFORE minting the check: `carveOffLines`
+ * renders `inArray(col, [])` as `false`, a no-op WHERE clause, so without this guard the call would
+ * otherwise succeed and leave an orphan — a table-less `open` working order with zero lines and a
+ * consumed order_number.
  */
 export async function splitOffCheck(
   tx: Transaction,
@@ -1796,6 +1801,15 @@ export async function splitOffCheck(
   fromTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ checkId: string }> {
+  // Refuse an EMPTY transfers array BEFORE minting anything. carveOffLines' `inArray(col, [])` renders
+  // `false` — a no-op WHERE clause — so without this guard the call below would SUCCEED after
+  // createOpenOrder had already minted a check: a table-less `open` working order, zero lines, a
+  // consumed order_number. An orphan. Same "nothing to work with" shape as the walk-up/park/round paths'
+  // `sale.empty_basket` (see this file's own doc comment at line ~221).
+  if (transfers.length === 0) {
+    throw new AppError("sale.empty_basket", {});
+  }
+
   // Refuse a batch naming a source line_no twice BEFORE locking, minting the check, or moving anything —
   // the same up-front guard `transferLines` makes (a duplicate does not conserve quantity: two "1"s off a
   // 3× line would leave 2 on the origin AND 2 on the check, 4 from an original 3). Reused so split-bill
