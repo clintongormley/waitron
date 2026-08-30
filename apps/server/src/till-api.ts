@@ -1102,7 +1102,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
+      // Handheld firewall (spec §5): a handheld may not reprint a fiscal ticket — refused
       // `device.forbidden_action` (403) before the id parse. An ordinary till carries no device cookie.
       await assertNotHandheld(deps, c, "reprint");
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
@@ -1157,7 +1157,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld has no cash drawer to open — refused
+      // Handheld firewall (spec §5): a handheld has no cash drawer to open — refused
       // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries no
       // device cookie and passes.
       await assertNotHandheld(deps, c, "drawer_open");
@@ -1243,7 +1243,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): cancelling a placed order APPENDS an `order_cancelled` entry to the
+      // Handheld firewall (spec §5): cancelling a placed order APPENDS an `order_cancelled` entry to the
       // tamper-evident hash-chained amendment log (`cancelPlacedOrder`) — a fiscal-adjacent mutation a
       // handheld must not perform. Refused `device.forbidden_action` (403) HERE, before the reason/id
       // parse and any amendment write. An ordinary till carries no device cookie and passes.
