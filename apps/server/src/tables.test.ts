@@ -823,4 +823,25 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     )!;
     expect(row.nextReservation).toEqual({ time: "14:00" });
   });
+
+  it("keeps a just-passed reservation on the floor within the grace window, drops it beyond", async () => {
+    // now = Madrid 12:00. RESERVATION_GRACE_MINUTES is 30, so the floor floor is 11:30. A booking at
+    // 11:45 (15 min past, within grace) STILL surfaces — the reserved cue is most useful when a guest is
+    // due or running late — while one at 11:15 (45 min past, beyond grace) is gone. Both are today +
+    // booked; only their time relative to the grace floor differs.
+    const cfg = await setupVenue();
+    const { id: withinId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "14" }));
+    const { id: beyondId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "15" }));
+    await insertBooking(cfg, { tableId: withinId, date: "2026-09-15", time: "11:45", name: "Due" });
+    await insertBooking(cfg, {
+      tableId: beyondId,
+      date: "2026-09-15",
+      time: "11:15",
+      name: "Gone",
+    });
+
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
+    expect(rows.find((t) => t.id === withinId)!.nextReservation).toEqual({ time: "11:45" });
+    expect(rows.find((t) => t.id === beyondId)!.nextReservation).toBeNull();
+  });
 });

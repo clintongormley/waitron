@@ -611,7 +611,8 @@ export interface TableState {
   status: { id: string; label: string; color: string } | null;
   /**
    * The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — its earliest
-   * reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
+   * reservation for the venue's TODAY at or after the grace floor (the venue's wall-clock rolled back a
+   * short window so a due/late guest's badge lingers), or `null`. The floor
    * renders "Reserved HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
    * `TableState.nextReservation` (`apps/server/src/working-order.ts`'s `listTablesWithState`), NOT
    * imported — the same bundle-decoupling rationale as the siblings here. Non-optional `| null`,

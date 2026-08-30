@@ -3207,7 +3207,8 @@ export interface TableState {
   shape: FloorTableShape | null;
   rotation: number | null;
   /** The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — the earliest
-   *  reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
+   *  reservation for the venue's TODAY at or after the grace floor (the venue's current wall-clock rolled
+   *  back by `RESERVATION_GRACE_MINUTES`, so a due/late guest's badge lingers), or `null`. The floor
    *  renders "Reserved HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
    *  `locations.time_zone` at read time (§2b), computed in JS from the injected clock — never in SQL.
    *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present.
@@ -3271,6 +3272,26 @@ function venueWallClock(now: Date, timeZone: string): { date: string; time: stri
   };
 }
 
+/** How long a `booked` reservation keeps surfacing on the floor AFTER its time (Bookings-1 §4,
+ *  reserved-on-floor grace window). The floor cue is most useful exactly when a guest is due or running
+ *  late, so the reserved badge lingers for this window past the booking time rather than vanishing on
+ *  the minute. A sensible fixed default; a per-venue configurable value is a later slice — not built
+ *  here. Only ever SUBTRACTED from the venue's local "now", clamped to the start of today (below), so it
+ *  never widens the scan to yesterday. */
+const RESERVATION_GRACE_MINUTES = 30;
+
+/** The earliest booking time still surfaced on the floor: the venue-local "now" (`HH:MM`) rolled back by
+ *  `RESERVATION_GRACE_MINUTES`, clamped to `"00:00"` so it never crosses to the previous day (the read
+ *  only scans today, §4). Pure HH:MM minute-of-day arithmetic — no timezone math, that already happened
+ *  in `venueWallClock`. */
+function reservationGraceFloor(venueNow: string): string {
+  const [h, m] = venueNow.split(":").map(Number);
+  const floorMinutes = Math.max(0, h * 60 + m - RESERVATION_GRACE_MINUTES);
+  const hh = String(Math.floor(floorMinutes / 60)).padStart(2, "0");
+  const mm = String(floorMinutes % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 export async function listTablesWithState(
   tx: Transaction,
   cfg: TillConfig,
@@ -3289,6 +3310,10 @@ export async function listTablesWithState(
   // (the column is unvalidated free text) — either way the read never throws on bad tz config.
   const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? DEFAULT_TIME_ZONE);
   const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
+  // Reserved-on-floor grace window (§4): surface reservations from `RESERVATION_GRACE_MINUTES` BEFORE
+  // the venue's now, so a due/late guest's badge lingers rather than vanishing on the minute. Clamped to
+  // "00:00" so the scan never reaches into yesterday (we bound to today's date below).
+  const graceFloor = reservationGraceFloor(venueNow);
   const result = await tx.execute<{
     id: string;
     label: string;
@@ -3361,8 +3386,9 @@ export async function listTablesWithState(
     left join table_service_statuses tss
       on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
     -- Reserved-on-floor (Bookings-1 section 4): the table's NEXT still-booked reservation for the
-    -- venue's TODAY at/after the venue's current wall-clock. venueToday/venueNow are computed in JS
-    -- from locations.time_zone (bound params below), so this sub-select does no timezone arithmetic.
+    -- venue's TODAY at/after the grace floor -- the venue's wall-clock rolled back by
+    -- RESERVATION_GRACE_MINUTES so a due/late guest's badge lingers. venueToday/graceFloor are computed
+    -- in JS from locations.time_zone (bound params below), so this sub-select does no timezone arithmetic.
     -- Correlated to the BASE dining_tables dt on qualified outer columns (dt.tenant_id / dt.id) -- the
     -- CLAUDE.md scalar-subquery trap is about BARE interpolated columns binding inward; these are
     -- explicit dt.-qualified references, so they resolve to the outer table.
@@ -3372,7 +3398,7 @@ export async function listTablesWithState(
       where b.tenant_id = dt.tenant_id and b.table_id = dt.id
         and b.status = 'booked'
         and b.booking_date = ${venueToday}
-        and b.booking_time >= ${venueNow}
+        and b.booking_time >= ${graceFloor}
       order by b.booking_time asc
       limit 1
     ) res on true
