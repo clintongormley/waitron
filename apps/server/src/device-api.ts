@@ -19,7 +19,7 @@ import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireEnum } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
@@ -250,7 +250,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `requireLiveStation` → an opaque 500). Both refuse a bad value as `management.request_invalid`
       // naming the field — the SHARED request-screens the other gated surfaces validate through.
       const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
-      const stationId = requireBodyUuid(body.stationId, "stationId");
+      // The station is conditional on the kind (Task 2's `kindRequiresStation`): a `kds_station` code
+      // binds to a station so `stationId` is still required (a missing one 400s here); a `handheld` code
+      // binds to none, so we pass `null` and never screen `stationId` at all.
+      const stationId = kindRequiresStation(kind)
+        ? requireBodyUuid(body.stationId, "stationId")
+        : null;
       const label = requireString(body.label, "label");
       const result = await gated(sessionId, (tx) =>
         generatePairingCode(tx, deps.cfg, { kind, stationId, label }),

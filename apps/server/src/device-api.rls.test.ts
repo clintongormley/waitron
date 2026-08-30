@@ -686,6 +686,22 @@ describe("Device API over real Postgres", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
   });
 
+  it("mints a handheld code with no station", async () => {
+    // A `handheld` code binds to no station (Task 2: `kindRequiresStation("handheld")` is false), so a
+    // body carrying just `{ kind, label }` and NO `stationId` mints a code — the route makes the station
+    // conditional on the kind. THE PROOF: reverting the route to the unconditional
+    // `requireBodyUuid(body.stationId, …)` rejects this missing station as `management.request_invalid`
+    // (400), flipping the assertion red; restoring the conditional turns it green again.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const res = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: { kind: "handheld", label: "Waiter phone" },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).code).toEqual(expect.any(String));
+  });
+
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
