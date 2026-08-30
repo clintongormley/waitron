@@ -99,9 +99,17 @@ demo or behind-the-scenes".
    reconciles the floor. Pre-fiscal (H2 untouched). **Deferred niceties:** partial-quantity transfer
    split (v1 moves whole lines; the `#confirmTransfer` partial branch is ready for a stepper); merge
    hardcodes `freeSourceTable:true` (no 4+4-join-keeping-the-table UI); optional reload-of-floor on a
-   failed action (a stale-floor race). **Remaining: TS-5 split-bill** — the one **fiscal, owner-gated,
-   supervised** slice (each check files its own sale + registro); specced + planned
-   (`2026-08-17-table-service-ts5-*`).
+   failed action (a stale-floor race). **TS-5 split-bill LANDED (#178)** — the one **fiscal, owner-gated,
+   supervised** slice: `splitOffCheck` (spin items into a new separately-filing check) + `unjoinTable` +
+   `table.not_joined` + two HTTP routes, each check paid by the **unchanged** `payWorkingOrder →
+   recordSale` (immutable core untouched — H2 grep receipt). Proven on real Postgres (3 checks → exactly
+   3 `registros`, per-check desglose, contiguity, partition/conservation, idempotency, cross-tenant RLS)
+   + a dedicated fiscal-correctness review. Review also caught + fixed a real `unjoinTable`
+   lock-order **deadlock** (locked `dining_tables` before `working_orders`, reverse of the settle path;
+   invisible to PGlite) with a real-PG race test. **Deferred followups (small):** (a) sole-anchor
+   `unjoinTable` with items throws a fail-closed but misleading `tab.not_open` (unreachable via the
+   intended flow); (b) `createOpenOrder(…, [], …)` still does a full-catalogue read for empty lines
+   (a hot-path micro-opt TS-5 makes the norm — shared with the walk-up/park paths).
 4. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
    centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
    **Order-only handheld slice — LANDED (#173)** (spec
@@ -259,7 +267,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer **printing**, cash-drawer **authorization** — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z* (VAT-exact + hash chain + *descuadre*), VAT summary, modelo 303 output+input VAT, DR303 file + download route, purchase-invoice UI; **+ `computeTopSellers`, `currentBusinessDay`, 3 dashboard `/reports/` routes (#167)** | **wired to the dashboard — sales screen + business-overview home LANDED (#167)**; fiscal filing remainder parked |
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
-| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, **till action-flow wiring (#174)** | **TS-5 split-bill → demo Tier A #3** (move/transfer into the till LANDED #174) |
+| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, **till action-flow wiring (#174)**, **TS-5 split-bill (#178)** | table-service core COMPLETE (TS-1..TS-5); two small TS-5 followups deferred (sole-anchor unjoin error; `createOpenOrder` empty-lines catalogue read) |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
 | 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
@@ -657,8 +665,10 @@ The table-service core (TS-1..TS-4), the floor plan (FP-1/FP-2), and the KDS dis
 built. Remaining, greenfield + product-heavy → **specced with the owner, run supervised, never landed
 unattended**:
 
-- **TS-5 split-bill** — item-split; the **one fiscal TS slice** (each check files its own sale +
-  `registro`); dedicated fiscal review. Spec/plan `2026-08-17-table-service-ts5-*`.
+- **TS-5 split-bill — LANDED (#178)** — item-split; the **one fiscal TS slice** (each check files its own
+  sale + `registro`); dedicated fiscal review done; a real-PG `unjoinTable` lock-order deadlock caught in
+  review and fixed. Two small followups deferred (sole-anchor unjoin misleading error; `createOpenOrder`
+  empty-lines catalogue read — a shared hot-path micro-opt). Spec/plan `2026-08-17-table-service-ts5-*`.
 - **Bookings-1** — staff-entered reservations (local date+time wall-clock, `booking.manage`-gated,
   dashboard day-list). Core is independent; the seat-opens-a-tab + reserved-on-floor integrations
   build on TS-1 + FP-1. Spec/plan `2026-08-17-bookings-1*`.
