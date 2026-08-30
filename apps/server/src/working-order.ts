@@ -1482,6 +1482,30 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
 }
 
 /**
+ * Refuse a carve-off batch that names the same source `line_no` more than once, BEFORE any lock, mint or
+ * write (`tab.transfer_duplicate_line`, naming the FIRST line_no that repeats). A repeated line_no does
+ * NOT conserve quantity: every entry is validated against the STATIC pre-batch snapshot of the line's
+ * quantity (never updated between entries) and the split write sets the source to `original − q` (a plain
+ * set, not a cumulative decrement), so two partial "1"s off a café×3 line both pass and the destination
+ * gains 1.000+1.000 while the source only drops to 2.000 — 4 from an original 3. A whole-line + partial
+ * pair on one line is worse and contradictory: the whole-line path DELETEs the line while the split's
+ * `UPDATE … WHERE line_no=…` then matches zero rows and its INSERT still fabricates a destination line.
+ * Neither shape folds into a cumulative decrement, so a duplicate is simply refused (a 400 request-shape
+ * fault). Shared by {@link transferLines} (both ends tabs) and {@link splitOffCheck} (detached check); a
+ * duplicate WHOLE-line pair — already harmless via `moveTabLines`' `inArray` set semantics — is refused
+ * too, which is fine/stricter.
+ */
+function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
+  const seenLineNos = new Set<number>();
+  for (const { lineNo } of transfers) {
+    if (seenLineNos.has(lineNo)) {
+      throw new AppError("tab.transfer_duplicate_line", { tabId, lineNo });
+    }
+    seenLineNos.add(lineNo);
+  }
+}
+
+/**
  * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
  * `transfers` names a source `line_no` and optionally a `quantity`:
  *
@@ -1573,24 +1597,10 @@ export async function transferLines(
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
 
-  // A batch may name each source line_no AT MOST once — refused before any lock or write. A repeated
-  // line_no does NOT conserve quantity: every entry is validated against the STATIC `byLineNo` snapshot
-  // of `line.quantity` below (never updated between entries) and the split write sets the source to
-  // `original − q` (a plain set, not a cumulative decrement), so two partial "1"s off a café×3 line
-  // both pass and the destination gains 1.000+1.000 while the source only drops to 2.000 — 4 from an
-  // original 3. A whole-line + partial pair on one line is worse and contradictory: `moveTabLines`
-  // DELETEs the line (moving it whole) and the split's `UPDATE ... WHERE line_no=…` then matches zero
-  // rows while its INSERT still fabricates a destination line. Neither shape folds into a cumulative
-  // decrement, so a duplicate is simply refused (a 400 request-shape fault), naming the FIRST line_no
-  // that repeats. This up-front guard also covers a duplicate WHOLE-line pair — already harmless via
-  // `moveTabLines`' `inArray` set semantics — which is fine/stricter.
-  const seenLineNos = new Set<number>();
-  for (const { lineNo } of transfers) {
-    if (seenLineNos.has(lineNo)) {
-      throw new AppError("tab.transfer_duplicate_line", { tabId: fromTabId, lineNo });
-    }
-    seenLineNos.add(lineNo);
-  }
+  // A batch may name each source line_no AT MOST once — refused before any lock or write (the same
+  // pre-lock rejection this verb has always made; see {@link assertDistinctTransferLines} for why a
+  // repeated line_no cannot conserve quantity).
+  assertDistinctTransferLines(fromTabId, transfers);
 
   // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the
   // canonical lowercase uuids `randomUUID()`/`gen_random_uuid()` emit matches PostgreSQL's own byte
@@ -1768,6 +1778,12 @@ export async function splitOffCheck(
   fromTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ checkId: string }> {
+  // Refuse a batch naming a source line_no twice BEFORE locking, minting the check, or moving anything —
+  // the same up-front guard `transferLines` makes (a duplicate does not conserve quantity: two "1"s off a
+  // 3× line would leave 2 on the origin AND 2 on the check, 4 from an original 3). Reused so split-bill
+  // inherits it, naming the origin tab.
+  assertDistinctTransferLines(fromTabId, transfers);
+
   // Lock + validate the origin is an OPEN tab before minting anything (a fresh order number for a
   // check that would roll back is wasteful; and this is the `tab.not_open` guard design §3 names). The
   // FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).

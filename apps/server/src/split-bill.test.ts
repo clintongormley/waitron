@@ -183,6 +183,42 @@ describe("splitOffCheck", () => {
     ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 
+  it("rejects a batch repeating a lineNo (tab.transfer_duplicate_line), minting nothing and conserving quantity", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+    );
+    // Two partial "1"s off the SAME line 1: without the guard each validates against the static 3 and the
+    // source is set to 3−1 twice (non-cumulative), so the check would gain 1.000+1.000 and the origin drop
+    // to 2.000 — 4 aguas from an original 3. Refused UP FRONT, before the check is minted.
+    await expect(
+      asApp(cfg, (tx) =>
+        splitOffCheck(tx, cfg, tabId, [
+          { lineNo: 1, quantity: "1" },
+          { lineNo: 1, quantity: "1" },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "tab.transfer_duplicate_line" });
+
+    const state = await asApp(cfg, async (tx) => {
+      const originLines = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      return { originLines, orderCount: orders.length };
+    });
+    // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: "3.000" }]);
+    // No stray check minted — only the origin tab exists.
+    expect(state.orderCount).toBe(1);
+  });
+
   it("inherits TS-4's move guards (tab.transfer_quantity_invalid, tab.line_not_found)", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
