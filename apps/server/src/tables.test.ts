@@ -832,6 +832,9 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     const cfg = await setupVenue();
     const { id: withinId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "14" }));
     const { id: beyondId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "15" }));
+    // The grace floor itself (11:30 = now − 30) must STILL surface: the filter is `>= graceFloor`
+    // (inclusive), so a `>=`→`>` regression would drop this exact-boundary booking and this pins it.
+    const { id: boundaryId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "16" }));
     await insertBooking(cfg, { tableId: withinId, date: "2026-09-15", time: "11:45", name: "Due" });
     await insertBooking(cfg, {
       tableId: beyondId,
@@ -839,9 +842,16 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
       time: "11:15",
       name: "Gone",
     });
+    await insertBooking(cfg, {
+      tableId: boundaryId,
+      date: "2026-09-15",
+      time: "11:30",
+      name: "Edge",
+    });
 
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
     expect(rows.find((t) => t.id === withinId)!.nextReservation).toEqual({ time: "11:45" });
     expect(rows.find((t) => t.id === beyondId)!.nextReservation).toBeNull();
+    expect(rows.find((t) => t.id === boundaryId)!.nextReservation).toEqual({ time: "11:30" });
   });
 });
