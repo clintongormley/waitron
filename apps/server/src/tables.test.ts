@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  DEFAULT_TIME_ZONE,
   asAppUser,
   ticketItems,
   withTenant,
@@ -58,7 +59,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
   const tenantId = await seedTenant(db);
   // Default the location's time_zone from the schema default (Europe/Madrid) unless a test pins one —
   // the reserved-on-floor read derives venue-local "today"/"now" from this column (design §2b/§4).
-  const timeZone = opts.timeZone ?? "Europe/Madrid";
+  const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento', ${timeZone}) returning id`);
