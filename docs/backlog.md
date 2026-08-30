@@ -528,7 +528,20 @@ Provisioning/build*).
     installation number), so the design's "disjoint series on re-mint" is unmet — a same-day post-backup
     invoice-number **collision** risk (non-catastrophic, backstopped by AEAT error `3000`; NOT the chain
     fork). **Follow-up: a disjoint-series option for the cold-restore re-registration path.**
-- **4c — break-glass.** Loopback-only admin reset; factory-reset design-only. **← next.**
+- **4c — break-glass — implemented on `feat/onboarding-4c-break-glass`** (a post-merge docs commit
+  flips this to LANDED). An on-box **`waitron-break-glass`** CLI (the "local console" of spec §12/§17,
+  resolved 2026-08-30 to a loopback CLI; held-button/recovery-boot are firmware, parked) resets a
+  locked-out admin's dashboard **password (+ PIN) and reactivates** a suspended admin, for the box's
+  single `WAITRON_TILL_TENANT_ID`, targeting `role='admin'` (0 → error, N → refuse + `--person`).
+  Gate: physical shell + the box's `DATABASE_URL`; the new credential rides **env, never argv**; the
+  ungated reset is **confined to the CLI command** (no reusable identity export), runs `withTenant`
+  under the app role's RLS, and prints a `break-glass: reset admin <id> …` line to stdout (never the
+  secret) — **no chain impact.** Passkey-revocation out of scope; a durable admin-action audit record
+  (the CLI only writes stdout today) is a noted follow-up. **Factory reset stays design-only**
+  (chain-destructive; `docs/superpowers/plans/2026-08-30-onboarding-slice4c-factory-reset-design.md`).
+  **→ Slice 4 (onboarding backup / status / break-glass) is now COMPLETE: 4a #159, 4b-i #161, 4b-ii
+  #163, 4b-iii runbook, 4c. Remaining onboarding slices 5–7 (AP-mode firmware / OS image / paid
+  real-cert) stay parked (firmware/OS/paid).**
 
 **Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid
 real-cert):**
