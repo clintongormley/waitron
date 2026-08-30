@@ -103,12 +103,13 @@ export async function loginManagerById(
   input: { tenantId: string; personId: string; password: string; totp?: string },
 ): Promise<ManagementSession> {
   // The C2b mirror-bundle route (`apps/server/src/mirror-bundle-api.ts`) authenticates the primary's
-  // ADMIN by id, NOT by email: the provisioned admin is seeded WITHOUT an email
-  // (`packages/provisioning/src/venue-apply.ts`'s `seed-admin` insert names no email column), so it
-  // has none for the email path `loginManager` uses. There is no enumeration surface to hide on this
-  // path — the caller is a trusted mirror over the primary's first-contact TLS, sending an id the
-  // operator typed — so an unknown id is a straight `person.not_found` (no dummy-KDF equalisation).
-  // Everything after the lookup is identical to `loginManager`, via `completeManagerLogin`.
+  // ADMIN by id, NOT by email — the mirror is a trusted server-to-server flow over the primary's
+  // first-contact TLS, carrying an id the operator typed, not an email login form. (The provisioned
+  // admin MAY now carry an email — onboarding via the setup UI sets one, though the `venue` CLI /
+  // dev-setup can still seed it emailless — but this path never uses it.) There is no enumeration
+  // surface to hide here — a caller either holds a valid primary admin id or does not — so an unknown
+  // id is a straight `person.not_found` (no dummy-KDF equalisation). Everything after the lookup is
+  // identical to `loginManager`, via `completeManagerLogin`.
   const [person] = await selectPersonLogin(tx).where(
     and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)),
   );
