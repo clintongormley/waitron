@@ -194,6 +194,26 @@ describe("splitOffCheck", () => {
     ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 
+  it("refuses a DETACHED CHECK as the split origin (tab.not_open) — origin must be an open TAB", async () => {
+    // The origin of a split must be an open TAB (table-anchored, spec §3 + the `/api/tabs/:id/split`
+    // route). A detached check — a table-LESS open order minted BY a prior split — is a payment unit,
+    // not a seat, and must not itself be a split origin. `lockOpenTab` adds the is-a-tab back-pointer
+    // assertion that `lockOpenTabRow` (status-only) lacks; a check has no `dining_tables.tab_id`
+    // pointing at it, so it fails closed to `tab.not_open`.
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+    );
+    // Mint a real detached check off the tab, then try to split off IT — its checkId is a table-less
+    // open order.
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    await expect(
+      asApp(cfg, (tx) => splitOffCheck(tx, cfg, checkId, [{ lineNo: 1 }])),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
+  });
+
   it("rejects a batch repeating a lineNo (tab.transfer_duplicate_line), minting nothing and conserving quantity", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

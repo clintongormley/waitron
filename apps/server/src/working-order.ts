@@ -1816,15 +1816,19 @@ export async function splitOffCheck(
   // inherits it, naming the origin tab.
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Lock + validate the origin is an OPEN tab before minting the check — fail fast with the
-  // `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
-  // catalogue read + `allocateOrderNumber`). Ordering is about doing LESS WORK, not saving an order
-  // number: everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the
-  // counter increment together (`allocateOrderNumber` is a transactional UPSERT into
-  // `working_order_counters`, `packages/db/src/allocate-order-number.ts` — a rolled-back allocation
-  // leaves no gap). The FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4
-  // lock discipline).
-  await lockOpenTabRow(tx, fromTabId);
+  // Lock + validate the origin is an OPEN TAB (table-anchored) before minting the check — fail fast
+  // with the `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
+  // catalogue read + `allocateOrderNumber`). The origin MUST be a tab, not merely any open order: the
+  // spec §3 and the `/api/tabs/:id/split` route require a table-anchored tab, so a detached CHECK (a
+  // table-less open order minted by a prior split) must NOT be a split origin. `lockOpenTab` adds the
+  // is-a-tab `dining_tables` back-pointer assertion `lockOpenTabRow` (status-only) lacks; it holds NO
+  // `dining_tables` lock (the pointer read is a plain SELECT, {@link lockOpenTab}), so this reintroduces
+  // no lock-order/deadlock concern. Ordering is about doing LESS WORK, not saving an order number:
+  // everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the counter
+  // increment together (`allocateOrderNumber` is a transactional UPSERT into `working_order_counters`,
+  // `packages/db/src/allocate-order-number.ts` — a rolled-back allocation leaves no gap). The FOR UPDATE
+  // also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
+  await lockOpenTab(tx, fromTabId);
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
