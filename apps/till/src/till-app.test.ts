@@ -614,6 +614,49 @@ describe("till-app", () => {
     expect(s!.deviceMode).toBe(true);
   });
 
+  // §C2 containment/identity. An enrolled handheld returns to the lock screen on every logout/cold boot
+  // (it STAYS on lock, unlike a KDS). If the lock screen still offered "Set up as kitchen display", a
+  // waiter could re-enrol the phone as a KDS station (silently swapping its device cookie) and escape
+  // the phone shell to `station`. The app hands the lock screen `deviceEnrolled = handheldMode ||
+  // deviceMode`, which hides both device-setup affordances on an already-enrolled device.
+  it("hides the lock screen's device-setup affordances on an enrolled handheld (deviceEnrolled)", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    // A handheld waits on the lock screen, in handheld mode.
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    expect(lock(el)!.deviceEnrolled).toBe(true);
+    // Neither affordance is rendered, so the re-enrol / escape route is gone.
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-device]")).toBeNull();
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-handheld]")).toBeNull();
+  });
+
+  // §C2 defense-in-depth. Even if a `setup-device` event still reached the app while a handheld is
+  // active (a leaked/bubbled affordance), `#onSetupDevice` must NOT flip the phone's identity to a KDS
+  // station nor navigate it to `station` — it is routed through the face-set gate and guarded on
+  // handheld mode. Prove-by-deletion: drop that guard and this test goes red (deviceMode flips, screen
+  // becomes `station`).
+  it("ignores a setup-device event while a handheld is active (no identity flip, no escape to station)", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Fire the escape event directly (bypassing the now-hidden affordance) — the gate must swallow it.
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    // Still the phone shell: on the lock screen, never the station, and identity is unchanged.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+  });
+
   // Handheld enrol (handheld-tableside Task 8): the lock screen's "set up as waiter handheld" affordance
   // opens the enrol view, and a redeemed code re-boots the app into the phone shell.
   it("the set-up-handheld affordance opens the handheld enrol view (lock screen gone)", async () => {

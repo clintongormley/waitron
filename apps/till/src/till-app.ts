@@ -951,12 +951,20 @@ export class TillApp extends LitElement {
    * Route a FRESH (unenrolled) display into device mode from the lock screen's "set up as kitchen display"
    * affordance (device-identity-1 §5a). The station screen mounts in device mode, probes its own device
    * station (401, since there is no cookie yet), and shows the enrol view so the operator can pair the
-   * display with a code. State-only switch, like {@link #onShowStation}.
+   * display with a code.
+   *
+   * Defense-in-depth (§C2): a handheld returns to the lock screen on every logout and cold boot, so a
+   * leaked/bubbled `setup-device` must not let it become a KDS. The `handheldMode` guard withholds BOTH
+   * the identity flip (`deviceMode`) and the navigation — and the navigation itself goes through
+   * {@link #goToScreen}, whose face-set gate ({@link HANDHELD_FACES} excludes `station`) is the single
+   * place that refusal lives. The lock screen already hides this affordance from an enrolled device
+   * (`deviceEnrolled`); this is the second line if the event reaches the app anyway.
    */
   #onSetupDevice(): void {
+    if (this.handheldMode) return;
     this.errorKey = undefined;
     this.deviceMode = true;
-    this.screen = "station";
+    this.#goToScreen("station");
   }
 
   /**
@@ -1419,14 +1427,27 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The ONE place a face-outside-the-current-shell transition is decided (handheld-tableside §6a). A
-   * normal operator till may reach every {@link Screen}; a handheld may reach ONLY {@link HANDHELD_FACES}
-   * (`lock`/`floor`/`table-order`), so a `target` outside that set is REFUSED — the handheld stays put.
-   * This makes {@link HANDHELD_FACES} the genuine gate (not a scattered `handheldMode` read): any handler
-   * that could move the app to a counter-side face while a handheld is active routes through here, so even
-   * a stray/bubbled `back-to-counter` cannot escape the phone shell into the counter POS (and the
-   * `station`/`expo`/`schedule` it leads to). Proven by deletion: drop the guard and a handheld's
-   * `back-to-counter` lands it on the counter (the §6a containment test goes red).
+   * The face-set gate for the transitions that can fire WHILE A HANDHELD IS ACTIVE (handheld-tableside
+   * §6a). A normal operator till may reach every {@link Screen}; a handheld may reach ONLY
+   * {@link HANDHELD_FACES} (`lock`/`floor`/`table-order`), so a `target` outside that set is REFUSED —
+   * the handheld stays put. This makes {@link HANDHELD_FACES} the genuine gate rather than a scattered
+   * `handheldMode` read.
+   *
+   * The handlers routed through here are exactly the two whose events can reach the app from inside the
+   * phone shell:
+   *  - {@link #onBackToCounter} — a `back-to-counter` from the floor's Back or bubbled from the
+   *    table-order subtree; the gate keeps it off the counter POS (and the `station`/`expo`/`schedule`
+   *    it leads to).
+   *  - {@link #onSetupDevice} — a leaked/bubbled `setup-device` from the lock screen, itself a handheld
+   *    face; the gate refuses `station` (that handler ALSO guards its `deviceMode` identity flip on
+   *    `handheldMode`, which this gate cannot).
+   *
+   * The remaining counter-side setters — {@link #onShowStation}, {@link #onShowExpo},
+   * {@link #onShowSchedule} and the payment→`ticket` transitions — assign `this.screen` directly and are
+   * NOT gated, because their affordances are emitted only by the counter screen
+   * (`till-counter-screen`), which a handheld never reaches: unreachable-by-affordance, not gated.
+   * Proven by deletion: drop the guard and a handheld's `back-to-counter` lands it on the counter (the
+   * §6a containment test goes red).
    */
   #goToScreen(target: Screen): void {
     if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
@@ -1585,7 +1606,13 @@ export class TillApp extends LitElement {
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "lock":
-        return html`<till-lock-screen .api=${this.api}></till-lock-screen>`;
+        // `deviceEnrolled` gates the lock screen's device-setup affordances (§C2): an already-enrolled
+        // device — a handheld (which STAYS on lock) or a KDS — must not offer "set up as kitchen
+        // display", or a waiter could re-enrol an in-service phone as a KDS and escape the shell.
+        return html`<till-lock-screen
+          .api=${this.api}
+          .deviceEnrolled=${this.handheldMode || this.deviceMode}
+        ></till-lock-screen>`;
       case "counter":
         return html`<till-counter-screen
           .api=${this.api}
