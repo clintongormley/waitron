@@ -801,13 +801,18 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A handheld device tried to reach a fiscal/cash route — here, to RECORD A SALE (`POST /api/sales`).
-     * A handheld is ORDER-ONLY by design (spec §5, decision 0.1): it takes and fires orders but NEVER
-     * settles — the bill is paid at the fixed till. `assertNotHandheld` (`device-session.ts`) enforces
-     * this ON THE SERVER, so order-only holds even if the client were bypassed; this guards an
-     * UNRECOVERABLE fiscal record (CLAUDE.md §5 — `registros_facturacion` is append-only and
-     * hash-chained). `action` names the refused operation (e.g. `record_sale`) — a within-app symbol the
-     * caller passes, not a secret, echoed so the refusal is actionable, the same non-secret-param shape
+     * A handheld device tried a fiscal/cash action it may not perform. A handheld takes and fires orders,
+     * and — since the owner reversal (2026-08-30) — may SETTLE a CASH sale on `POST /api/sales`, because
+     * the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till (record-sale.ts:79-82), so
+     * a handheld cash sale files under its node's SIF exactly like the fixed till's. What a handheld may
+     * NOT do still throws THIS: a manual CARD tender on `POST /api/sales` (`record_sale_card`), and every
+     * other fiscal/cash route the bill is settled through at the fixed till — integrated pay, reprint,
+     * drawer open, place, collect, cancel. `assertHandheldTenderAllowed` (the cash/card split on the sale
+     * route) and `assertNotHandheld` (`device-session.ts`, the fully-fenced routes) enforce this ON THE
+     * SERVER, so the boundary holds even if the client were bypassed; it guards an UNRECOVERABLE fiscal
+     * record (CLAUDE.md §5 — `registros_facturacion` is append-only and hash-chained). `action` names the
+     * refused operation (e.g. `record_sale_card`, `pay`) — a within-app symbol the caller passes, not a
+     * secret, echoed so the refusal is actionable, the same non-secret-param shape
      * `device.forbidden_station` uses for its `stationId`.
      *
      * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package

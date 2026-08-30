@@ -80,7 +80,7 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertNotHandheld } from "./device-session.js";
+import { assertHandheldTenderAllowed, assertNotHandheld } from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -147,9 +147,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
   "person.not_found": 401,
   "person.suspended": 403,
-  // The order-only firewall (spec §5): a handheld device presented its cookie on `POST /api/sales`. A
-  // handheld takes and fires orders but never SETTLES — `assertNotHandheld` refuses it here so the
-  // order-only rule holds server-side even if the client is bypassed. 403: authenticated but forbidden.
+  // The handheld firewall (spec §5; owner reversal 2026-08-30): a handheld device tried a fiscal/cash
+  // action it may not perform — a manual CARD tender on `POST /api/sales` (cash is allowed; the chain is
+  // node-keyed, record-sale.ts:79-82), integrated pay, reprint, drawer, place, collect or cancel.
+  // `assertHandheldTenderAllowed`/`assertNotHandheld` refuse it server-side even if the client is
+  // bypassed. 403: authenticated but forbidden.
   "device.forbidden_action": 403,
   "session.not_open": 401,
   "session.required": 401,
@@ -415,16 +417,22 @@ function mountCourseVerb(
  * `POST /api/sales` to THIS same function, each handler wrapped in `run` (above) so the whole surface
  * maps errors identically.
  *
- * ORDER-ONLY FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1;
- * `assertNotHandheld`, device-session.ts). A `handheld` device may TAKE and FIRE orders but must NEVER
- * write a fiscal record, a chain link, an invoice number, a cash-drawer row, or an amendment-log entry —
- * those settle at the fixed till. Every route that can do any of those runs `assertNotHandheld` right
- * after `requireSession`; the rest do not. When you add a route, decide which side it is on and, if it
- * touches ANY of the above, FENCE it (fail-safe for fiscal — when in doubt, fence). The full split
- * (whole-branch review, 2026-08-30):
+ * HANDHELD FIREWALL — the classification a NEW route inherits (spec §5, decision 0.1; owner reversal
+ * 2026-08-30). A `handheld` device may TAKE and FIRE orders, and since the reversal may SETTLE a CASH
+ * sale on `POST /api/sales` — cash files under the submitting NODE's SIF (`nodeId`), not the till
+ * (record-sale.ts:79-82), so a handheld cash registro is indistinguishable from a counter one. Everything
+ * else a handheld must NEVER do stays fenced: a manual CARD tender on `POST /api/sales`, and every other
+ * fiscal record, chain link, invoice number, cash-drawer row or amendment-log entry — those settle at the
+ * fixed till. The fully-fenced routes run `assertNotHandheld` right after `requireSession`; the tender-
+ * split sale route runs `assertHandheldTenderAllowed` (after reading the body, so the tender is known);
+ * the rest run neither. When you add a route, decide which side it is on and, if it touches ANY fiscal/
+ * cash write, FENCE it (fail-safe for fiscal — when in doubt, fence). The full split:
+ *
+ *   TENDER-SPLIT (`assertHandheldTenderAllowed` — handheld cash allowed, handheld card fenced):
+ *     POST /api/sales                      record_sale       — cash files a chained registro (handheld OK)
+ *                                          record_sale_card  — manual card tender (handheld refused 403)
  *
  *   FENCED (fiscal / cash / amendment-log writers — `assertNotHandheld`):
- *     POST /api/sales                      record_sale  — files a chained registro
  *     POST /api/pay                        pay          — integrated-card settlement
  *     POST /api/sales/:id/reprint          reprint      — reprints a FILED fiscal ticket
  *     POST /api/drawer/open                drawer_open  — cash-drawer open + audit row
@@ -684,13 +692,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Order-only firewall (spec §5): a handheld device may take and fire orders but must NEVER settle
-      // a sale — the bill is paid at the fixed till. Enforced HERE, on the server, so it holds even if
-      // the client were bypassed; a handheld cookie makes this throw `device.forbidden_action` (403)
-      // before any fiscal record — the unrecoverable one (CLAUDE.md §5) — could be written. An ordinary
-      // till carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "record_sale");
+      // Read the body BEFORE the device guard so the tender is known (ordering change: a malformed-JSON
+      // body now surfaces before the 403 rather than after — negligible, arguably more correct).
       const body = await c.req.json<TillSaleRequest>();
+      // Tender-aware firewall (owner reversal, 2026-08-30): a handheld may SETTLE a CASH sale — the fiscal
+      // chain is keyed by the submitting node (`nodeId`), not the till (record-sale.ts:79-82), so a
+      // handheld files a cash sale under its node's SIF exactly like the fixed till — but a manual CARD
+      // tender stays fenced (the datáfono leg the till owns). Enforced HERE, on the server, so it holds
+      // even if the client were bypassed; a handheld cookie + card tender throws `device.forbidden_action`
+      // (403) before any fiscal record — the unrecoverable one (CLAUDE.md §5) — could be written. An
+      // ordinary till carries no device cookie and passes for either tender.
+      await assertHandheldTenderAllowed(deps, c, body.tender.method);
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
       // becomes `payWorkingOrder`'s `req.id` and `22P02`s at its `eq(workingOrders.id, req.id)` lock read

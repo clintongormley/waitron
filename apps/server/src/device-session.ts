@@ -165,10 +165,13 @@ export async function requireDevice(
 }
 
 /**
- * The ORDER-ONLY firewall (spec §5, decision 0.1): a handheld device may not reach a fiscal/cash route.
- * A handheld takes and fires orders but NEVER settles — the bill is paid at the fixed till. Enforced ON
- * THE SERVER so order-only holds even if the client were bypassed, guarding an UNRECOVERABLE fiscal
- * record (CLAUDE.md §5). Called AFTER the route's session guard, on the SAME request.
+ * The FULLY-FENCED firewall (spec §5, decision 0.1): a handheld device may not reach THIS fiscal/cash
+ * route at all. A handheld takes and fires orders, and — since the owner reversal (2026-08-30) — may
+ * settle a CASH sale on `POST /api/sales` via the sibling {@link assertHandheldTenderAllowed}; but every
+ * route that runs THIS guard (integrated pay, reprint, drawer, place, collect, cancel) settles at the
+ * fixed till and is refused outright. Enforced ON THE SERVER so the fence holds even if the client were
+ * bypassed, guarding an UNRECOVERABLE fiscal record (CLAUDE.md §5). Called AFTER the route's session
+ * guard, on the SAME request.
  *
  * Absence of a device cookie — an ordinary till, which authenticates by operator SESSION and carries no
  * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which
@@ -182,4 +185,34 @@ export async function assertNotHandheld(
 ): Promise<void> {
   const device = await tryReadDevice(deps, c);
   if (device?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+}
+
+/**
+ * The TENDER-AWARE firewall for `POST /api/sales` (owner reversal, 2026-08-30) — the one place the
+ * order-only rule (above) is relaxed. A handheld device may SETTLE a CASH sale but is still refused a
+ * manual CARD one. Cash is allowed because the fiscal chain is keyed by the SUBMITTING NODE (`nodeId`),
+ * NOT the till — `record-sale.ts:79-82` ("Which node processes and chains the sale — the
+ * SIF/chain/series key") — so a handheld files a cash sale under its node's SIF exactly like a till: no
+ * per-device SIF, no separate chain, a registro indistinguishable from a counter cash one (`tillId` is
+ * separate metadata, not the chain key). A manual card tender stays fenced — that is the "datáfono"
+ * hand-key leg the fixed till owns. Called AFTER the route's session guard and AFTER the request body is
+ * read, so `tenderMethod` is known; enforced ON THE SERVER so the split holds even if the client were
+ * bypassed, guarding an UNRECOVERABLE fiscal record (CLAUDE.md §5).
+ *
+ * Passes: an absent device cookie (an ordinary till, which authenticates by operator SESSION —
+ * `tryReadDevice` → `null`); a non-handheld device; a handheld with a `"cash"` tender. Refused: a
+ * handheld with a non-cash tender, `device.forbidden_action` naming the attempted `action`
+ * (`record_sale_card`). This relaxes ONLY `POST /api/sales` for cash — every other fiscal/cash route
+ * (`/api/pay`, reprint, drawer, place, collect, cancel) still runs {@link assertNotHandheld} and refuses
+ * a handheld outright.
+ */
+export async function assertHandheldTenderAllowed(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+  tenderMethod: "cash" | "card",
+): Promise<void> {
+  const device = await tryReadDevice(deps, c);
+  if (device?.kind === "handheld" && tenderMethod !== "cash") {
+    throw new AppError("device.forbidden_action", { action: "record_sale_card" });
+  }
 }
