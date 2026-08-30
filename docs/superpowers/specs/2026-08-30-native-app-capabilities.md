@@ -108,8 +108,22 @@ checking browser support for the wrong question:
 - **Payment NFC** (tap a card) is the Tap to Pay secure-element path through the SumUp/Stripe **SDK**
   — that is N1/N2, and Web NFC (the browser API) plays no part in it. You cannot and would not read
   a payment card through Web NFC.
-- **Non-payment NFC** (staff badge, loyalty tag) has **no designed feature.** If one ever appears,
-  add a row then — and on a handheld it would use native NFC, not Web NFC.
+- **Non-payment NFC** — two uses have been **considered, not yet designed**, so they are recorded
+  here rather than as a row. Each has a path that needs **neither an app nor Web NFC**, so neither
+  forces an app today:
+  - **Tap-to-login / clock-in with a user tag** — a staff member taps a tag to log in (fast user
+    switching; pairs naturally with the registro de jornada clock-in). *No-app path:* a
+    keyboard-wedge RFID/NFC reader on the counter **types** the tag's UID — the same HID pattern as
+    the barcode scanner (hardware spec §6), needing neither an app nor Web NFC. The app-forcing path
+    is the **device** reading the tag with its own antenna, on iOS.
+  - **Tap-to-pair a handheld with a networked POS device (e.g. the Solo)** — tap to associate them.
+    But the Solo is driven over the Cloud API by our **server**, not by the handheld, so the
+    association is really *which reader do this handheld's checkouts route to* — a software choice
+    (pick from a list) or a QR sticker + camera scan, neither needing NFC. NFC would only be a
+    faster pairing UX.
+  - **Net:** promote either to a row only if it is adopted **with the device-NFC path on iOS** —
+    Web NFC is Chrome-Android-only and unsupported on iOS Safari, so that specific combination is
+    the wall. Anything else (HID reader, camera/QR, Android Web NFC) needs no app.
 - **Bluetooth** has no use case: printers are ESC/POS over TCP, the Solo is Cloud-API networked, a
   BLE card reader (e.g. SumUp Air) is paired *inside* the payment SDK (N1/N2, not our code via Web
   Bluetooth), scales are deferred (D4), and the scanner is HID.
