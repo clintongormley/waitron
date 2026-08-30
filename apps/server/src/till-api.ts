@@ -65,7 +65,9 @@ import {
   placeOrder,
   readTabLines,
   sendToPrep,
+  splitOffCheck,
   transferLines,
+  unjoinTable,
   unmarkLineServed,
   updateHeldOrder,
   voidTabLine,
@@ -245,6 +247,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
+  // Split-bill un-join (TS-5). Un-joining a table that is not currently joined to the named tab — an
+  // absent/foreign table, a free table, or one joined to a DIFFERENT tab (all read as tab_id ≠ tabId) —
+  // is `table.not_joined` (409): the ids may be valid, but the table's STATE (not joined here) forbids
+  // the detach, the same 409 shape `table.occupied`/`tab.not_open` use. Thrown by `unjoinTable`. (Split's
+  // `splitOffCheck` throws only already-mapped codes — `tab.not_open`, the reused transfer codes.)
+  "table.not_joined": 409,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
@@ -1669,6 +1677,55 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
       });
       return c.body(null, 200);
+    }),
+  );
+
+  // Split-bill (TS-5, design §3): spin SELECTED items off this open tab (`:id` = fromTabId) into a NEW
+  // separately-filing check — a detached, table-LESS open working order the till then pays via the
+  // existing pay path. SESSION-GUARDED. The tab `:id` is `requireTabParam`-screened (a malformed id →
+  // `tab.not_open` 409, the SAME fail-closed code the sibling tab routes use — a malformed id passed into
+  // `eq(workingOrders.id, …)` would 22P02 → an opaque 500). `splitOffCheck` is tx-level, so this route
+  // opens the `withTenant`/`asAppUser` transaction around it. Returns 200 `{ checkId }`; no fiscal write
+  // happens here (the check files only when it is later paid), so this stays on the ALLOWED side of the
+  // order-only firewall like the other tab verbs.
+  app.post("/api/tabs/:id/split", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const fromTabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{
+        transfers: { lineNo: number; quantity?: string }[];
+      }>();
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
+      });
+      return c.json(result);
+    }),
+  );
+
+  // Un-join (TS-5, deferred from TS-3): detach a joined table (`:id` = the shared tabId) from its tab —
+  // WITH items into its own new table-anchored bill, or WITHOUT into a free table (turnover). SESSION-
+  // GUARDED; both the path `:id` (the shared tab) and the body `tableId` are `isUuid`-screened before any
+  // query. A malformed tab id → `tab.not_open` (409, via `requireTabParam`); a malformed `tableId` →
+  // `table.not_joined` (409) — the SAME code `unjoinTable` throws for a table not currently joined to this
+  // tab, so a malformed target fails closed to the honest "that table is not joined here" rather than an
+  // opaque 500. The verb is tx-level, so this route opens the `withTenant`/`asAppUser` transaction around
+  // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
+  app.post("/api/tabs/:id/unjoin", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const tabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{
+        tableId: string;
+        transfers?: { lineNo: number; quantity?: string }[];
+      }>();
+      if (!isUuid(body.tableId))
+        throw new AppError("table.not_joined", { tableId: body.tableId, tabId });
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
+      });
+      return c.json(result);
     }),
   );
 }
