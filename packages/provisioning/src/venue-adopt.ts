@@ -85,8 +85,9 @@ function reviveRow(table: Table, row: VenueRow): VenueRow {
  * (which is why the fixtures/e2e passed before a real trading venue was modelled), but a real one sets
  * them, so this is load-bearing for the actual deli target.
  *
- *   - `locations.catalogueId` → `catalogues` (FK `locations_catalogue_id_catalogues_id_fk`, migration
- *     0028). `catalogues` IS one of the synced tables, but sync only starts AFTER the mirror reboots
+ *   - `locations.catalogueId` → `catalogues` (tenant-consistent composite FK `locations_catalogue_fk`
+ *     `(tenant_id, catalogue_id)`, migration 0078 — 0028's single-column FK was replaced). `catalogues`
+ *     IS one of the synced tables, but sync only starts AFTER the mirror reboots
  *     into mirror mode; at adopt (setup mode) `catalogues` is EMPTY. And `locations` is NOT synced, so
  *     once the catalogue rows do arrive by sync the pointer is never restored — the mirror's location
  *     permanently loses its menu pointer. That is a v1 disaster-recovery FIDELITY limitation, not a

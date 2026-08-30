@@ -540,6 +540,20 @@
       "when": 1788092852889,
       "tag": "0076_shocking_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1788122826064,
+      "tag": "0077_famous_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1788122838003,
+      "tag": "0078_abnormal_speedball",
+      "breakpoints": true
     }
   ]
 }

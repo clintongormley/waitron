@@ -27,9 +27,9 @@ declare module "@waitron/shared" {
     /**
      * A catalogue id supplied to a location-menu write (add-member / set-default) names no catalogue
      * VISIBLE to the current tenant — it is absent, or another tenant's (RLS hides it). Thrown at the
-     * trust boundary because `locations.catalogue_id`'s FK is single-column/global (not tenant-scoped),
-     * so a foreign id would otherwise be accepted as a location's default; the `location_catalogues`
-     * FK is composite, so it would `23503` instead — this guard makes both routes reject it cleanly.
+     * trust boundary as the CLEAN error in front of the data layer: both `locations.catalogue_id` and
+     * `location_catalogues.catalogue_id` carry tenant-consistent composite FKs (0078 / 0074), so a
+     * foreign id is `23503`-rejected there too — this guard turns that opaque 500 into a uniform 404.
      */
     "catalogue.not_found": { catalogueId: string };
   }

@@ -11,7 +11,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { catalogues } from "./catalogue.js";
 
 /**
  * The per-venue pay-timing / service mode — see the `orderFlow` column on `locations` below for the
@@ -161,17 +160,17 @@ export const locations = pgTable(
     // This location's DEFAULT catalogue (menu) — nullable (a venue may exist before a menu is
     // assigned). Not the only menu a location sells from: `location_catalogues` may add further
     // catalogues to the accessible set, resolved by `resolveAccessibleCatalogueIds`
-    // (`packages/catalogue/src/operations.ts`). This FK and `catalogue.ts`'s own `tenants` FK make
-    // the two schema modules import each other; the cycle is harmless because every cross-module
-    // reference is a lazy `.references(() => …)` thunk, evaluated only after both modules have
-    // finished loading, never at import time. The receipt is CI, not an assertion:
-    // `pnpm --filter @waitron/db db:generate` emits this FK (see
-    // drizzle/0028_dapper_tiger_shark.sql) and `pnpm --filter @waitron/db
-    // typecheck` compiles the mutually-importing pair — both run green in CI, so a dependency bump
-    // that broke thunk resolution would fail those same commands rather than slip through here.
-    // (Cross-tenant integrity — that the catalogue belongs to THIS tenant — remains RLS's job, not
-    // this FK's; a composite `(tenant_id, id)` FK is the deferred hardening, see backlog.)
-    catalogueId: uuid("catalogue_id").references(() => catalogues.id),
+    // (`packages/catalogue/src/operations.ts`). The FK is a TENANT-CONSISTENT composite
+    // `(tenant_id, catalogue_id) → catalogues(tenant_id, id)`, hand-written in a custom migration
+    // (0078; 0077 first drops the original single-column FK) exactly like `location_catalogues`'s FKs —
+    // deliberately NOT a single-column `.references()`
+    // here — so a location cannot take another tenant's catalogue as its default (0028's single-column
+    // FK to catalogues(id) let it; proven in locations-default-catalogue.rls.test.ts). `catalogue_id` is
+    // nullable, so a MATCH SIMPLE composite FK skips the check when it is NULL (no default). Declaring
+    // the FK in the migration rather than the schema drops the tenants→catalogue import edge the
+    // single-column thunk needed; `catalogue.ts` still imports `tenants` for its own tenant FK, so the
+    // dependency is now one-directional.
+    catalogueId: uuid("catalogue_id"),
   },
   (t) => [
     // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK

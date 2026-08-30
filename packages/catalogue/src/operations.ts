@@ -190,9 +190,10 @@ export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
  * Whether `catalogueId` names a catalogue VISIBLE to the current tenant — the trust-boundary check the
  * location-menu write routes run on an untrusted `catalogueId` before {@link addCatalogueToLocation} /
  * {@link setLocationDefaultCatalogue}. The read is RLS-filtered, so another tenant's catalogue reads as
- * absent (`false`) — which is what closes the cross-tenant-default hole: `locations.catalogue_id`'s FK
- * is single-column/global (not tenant-scoped), so without this a foreign id would be accepted as a
- * location's default.
+ * absent (`false`). This is the FRONT of a two-layer defense: both `locations.catalogue_id` and
+ * `location_catalogues.catalogue_id` now carry tenant-consistent COMPOSITE FKs (migrations 0078 / 0074),
+ * so a cross-tenant id is rejected at the DATA layer too (23503) — this check's job is the CLEAN error,
+ * turning that opaque 500 into `catalogue.not_found` (404) uniformly across both routes.
  */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
