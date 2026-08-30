@@ -105,22 +105,28 @@ function requireDeclarationType(raw: string | undefined): string {
 /** Reads THIS server's venue clock — the `time_zone`/`day_cutover` of the node's location — the inputs
  * `currentBusinessDay`/`computeDailyClose` consume (spec D9). `day_cutover` is a `time` ("HH:MM:SS"),
  * sliced to the "HH:MM" the reporting validators expect. A missing node is not user input: `cfg.nodeId`
- * is this server's OWN node (from `till.nodeId`), whose location row always exists (composite FK), so
- * the guard is an unreachable invariant break → an opaque 500 via `run`, never a registered code (the
- * `tenants`-row guard in the modelo 303 route below does the same). */
+ * is this server's OWN node (from `till.nodeId`), and `nodes.location_id` is `NOT NULL` with an FK to
+ * `locations.id` (`nodes_location_id_locations_id_fk`, migration 0015_nodes), so the expected invariant
+ * is that its location row is present; a missing one is an invariant break → an opaque 500 via `run`,
+ * never a registered code (the `tenants`-row guard in the modelo 303 route below does the same). The
+ * `l.tenant_id = n.tenant_id` join predicate is satisfied under RLS, which scopes both tables to this
+ * server's one tenant. The explicit `n.tenant_id` predicate is belt-and-suspenders over RLS, matching
+ * `countOpenTables` below. */
 async function resolveVenueClock(
   tx: Transaction,
+  tenantId: TenantId,
   nodeId: string,
 ): Promise<{ timeZone: string; dayCutover: string }> {
   const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
     select l.time_zone, l.day_cutover
     from nodes n join locations l on l.tenant_id = n.tenant_id and l.id = n.location_id
-    where n.id = ${nodeId}
+    where n.id = ${nodeId} and n.tenant_id = ${tenantId}
   `);
   const row = rows[0];
   /* v8 ignore start */
   if (row === undefined) {
-    // Unreachable: this server's own node + its location always exist (mirrors the modelo 303 route's
+    // Expected-unreachable: this server's own node exists and `nodes.location_id` (NOT NULL, FK to
+    // locations.id — 0015_nodes) guarantees its location row (mirrors the modelo 303 route's
     // whoami-style tenant guard). A misconfigured node becomes an opaque 500 via `run`.
     throw new Error(`report-api: no node/location row for ${nodeId}`);
   }
@@ -149,15 +155,28 @@ async function countOpenTables(
 }
 
 /**
- * Mounts the gated modelo 303 export route on an existing Hono app — `mountPurchasingApi`'s sibling,
- * attached to the SAME app. `GET /management-api/reports/modelo-303?year&period&declarationType`
- * returns the AEAT DR303 fixed-layout file (ISO-8859-1) for the period. Every DB touch funnels
- * through `gated` (withTenant + asAppUser + authorizeManager(report.export)), so RLS scopes the read
- * to this server's one tenant and the gate runs in one place.
+ * Mounts the gated reporting routes on an existing Hono app — `mountPurchasingApi`'s sibling, attached
+ * to the SAME app. Four `GET /management-api/reports/*` routes, each funnelling every DB touch through
+ * `gated` (withTenant + asAppUser + authorizeManager) so RLS scopes the read to this server's one
+ * tenant and the gate runs in one place:
  *
- * PRE-FILING CAVEATS (unchanged from dr303.ts §29-38): the produced file is a CANDIDATE, not a proven
- * submission-ready one — página 2 is omitted (validate once against the real sede uploader), and under
- * prorrata the base is emitted unscaled pending an asesor confirmation.
+ * - `/reports/modelo-303?year&period&declarationType` — gated on `report.export` (manager + admin).
+ *   The AEAT DR303 fixed-layout file (ISO-8859-1) for the period; aggregates ALL of the obligado's
+ *   nodes (ignores `cfg.nodeId`).
+ * - `/reports/overview` — gated on `report.view` (supervisor, manager + admin). THIS node's
+ *   sales/takings for TODAY (venue-clock business day): takings, record counts, open-tables tile,
+ *   top sellers.
+ * - `/reports/daily-close?businessDay` — gated on `report.view`. The full daily close (VAT summary,
+ *   cash-up, counts) plus top sellers for ONE explicit business day, THIS node.
+ * - `/reports/period?from&to` — gated on `report.view`. A VAT summary + top sellers over a closed
+ *   business-day RANGE (inclusive), THIS node.
+ *
+ * The `report.export` seam is DISTINCT from `report.view`: viewing the takings dashboard is not
+ * exporting the fiscal file (a supervisor holds view but not export).
+ *
+ * PRE-FILING CAVEATS for the modelo 303 route (unchanged from dr303.ts §29-38): the produced file is a
+ * CANDIDATE, not a proven submission-ready one — página 2 is omitted (validate once against the real
+ * sede uploader), and under prorrata the base is emitted unscaled pending an asesor confirmation.
  */
 export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): void {
   const gated = <T>(
@@ -185,7 +204,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   }> => {
     const tenantId = brandTenantId(deps.cfg.tenantId);
     const nodeId = brandNodeId(deps.cfg.nodeId);
-    const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+    const clock = await resolveVenueClock(tx, tenantId, deps.cfg.nodeId);
     return { tenantId, nodeId, clock };
   };
 

@@ -33,7 +33,9 @@ const close: DailyCloseDto = {
     tipTotal: "8.00",
   },
   counts: { sales: 10, corrections: 1, voids: 2 },
-  // Short language-subtag keys — the real `descriptions` shape (schema `invoiceLocales: ["es","ca"]`).
+  // Short language-subtag keys — the catalogue/product `descriptions` shape (`invoiceLocales:
+  // ["es","ca"]`); localizedName resolves it via the short-subtag arm (the overview-screen test
+  // covers the full-tag arm). Both keyings are live in the tree.
   topSellers: [{ descriptions: { es: "Café", en: "Coffee" }, quantity: "5", total: "10.00" }],
 };
 

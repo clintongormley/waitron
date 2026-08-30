@@ -68,9 +68,15 @@ async function seedTodaySale(db: Database): Promise<void> {
             ${SEED.lineQuantity}, '3.50', '21.00', ${SEED.lineTotal})`);
 }
 
-/** Seed two dining tables at the node's location: one OPEN (tab_id → a working order) and one FREE
- * (tab_id null) → the route's openTables must be {open:1, total:2}. The open table needs a real
- * working_orders row because dining_tables.tab_id carries a composite FK (0046_tab_link_fks). */
+/** Seed dining tables at the node's location: one ACTIVE + OPEN (tab_id → a working order), one ACTIVE
+ * + FREE (tab_id null), and one INACTIVE (active = false) that ALSO carries an open tab → the route's
+ * openTables must be {open:1, total:2} because `countOpenTables`'s `and dt.active = true` predicate
+ * excludes the inactive table from BOTH the total and the open count. The open tables need real
+ * working_orders rows because dining_tables.tab_id carries a composite FK (0046_tab_link_fks).
+ *
+ * Proven by deletion: removing `and dt.active = true` from `countOpenTables` makes the inactive table
+ * count, so openTables becomes {open:2, total:3} and the route test's {open:1, total:2} assertion
+ * fails on both fields; restore it and the test passes. */
 async function seedDiningTables(db: Database): Promise<void> {
   const wo = await db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id, node_id, order_number, status)
@@ -82,6 +88,13 @@ async function seedDiningTables(db: Database): Promise<void> {
   await db.execute(sql`
     insert into dining_tables (tenant_id, location_id, label, tab_id)
     values (${tenantId}, ${locationId}, 'Mesa 2', null)`);
+  // An INACTIVE table with an open tab — must be excluded from openTables.total AND .open.
+  const inactiveWo = await db.execute<{ id: string }>(sql`
+    insert into working_orders (tenant_id, till_id, node_id, order_number, status)
+    values (${tenantId}, ${tillId}, ${nodeId}, 2, 'open') returning id`);
+  await db.execute(sql`
+    insert into dining_tables (tenant_id, location_id, label, tab_id, active)
+    values (${tenantId}, ${locationId}, 'Mesa 3 (baja)', ${inactiveWo.rows[0]!.id}, false)`);
 }
 
 const suite = usePgliteDb({
@@ -177,7 +190,9 @@ describe("mountReportApi — /reports/overview", () => {
     // One non-correcting, non-voided sale on today.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
 
-    // Two tables at the node's location, one with an open tab.
+    // Two ACTIVE tables at the node's location, one with an open tab. The third seeded table is
+    // inactive (active = false) with an open tab and is excluded from BOTH counts — dropping
+    // `countOpenTables`'s `and dt.active = true` predicate would make this {open:2, total:3}.
     expect(body.openTables).toEqual({ open: 1, total: 2 });
 
     // The single seeded line, keyed on its frozen descriptions snapshot.

@@ -10,9 +10,14 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    // Short language-subtag keys — the real `descriptions` shape (schema `invoiceLocales: ["es","ca"]`).
-    { descriptions: { es: "Café con leche", en: "Latte" }, quantity: "18", total: "36.00" },
-    // Second row has no "es" key: exercises localizedName's fallback-to-first-value arm.
+    // FULL invoice-locale-tag keys — the shape the `/reports/overview` sale-line snapshot produces
+    // (its seed writes `{ "es-ES": … }`); localizedName resolves it via the full-tag arm.
+    {
+      descriptions: { "es-ES": "Café con leche", "en-GB": "Latte" },
+      quantity: "18",
+      total: "36.00",
+    },
+    // Second row carries neither "es-ES" nor "es": exercises localizedName's fallback-to-first-value arm.
     { descriptions: { en: "Croissant" }, quantity: "12", total: "24.00" },
   ],
 };
