@@ -3682,6 +3682,61 @@ describe("till-app", () => {
       expect(c.store.lines[0]!.product.id).toBe("bocadillo");
     });
 
+    /** The app-owned active menu id (the private `@state` the switcher and grid filter read). */
+    const selected = (el: TillApp) =>
+      (el as unknown as { selectedCatalogueId: string }).selectedCatalogueId;
+
+    it("keeps a mid-order menu switch, then reverts to the location default on the NEXT order (pay → new-sale)", async () => {
+      // Owner decision: switching menus is TEMPORARY — it sticks for the current order but reverts to the
+      // location's default menu when the next order begins.
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+
+      // Login lands on the location default (Comida).
+      expect(selected(el)).toBe("cat-food");
+
+      // Switch to the non-default menu and ring a line — a mid-order switch STICKS (the control: it must
+      // NOT be reset while the order is in progress, or it would fight the waiter).
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+      c.store.addProduct(cerveza, "1");
+      await el.updateComplete;
+      expect(selected(el)).toBe("cat-drinks");
+
+      // Complete the sale: the switch STILL sticks across the ticket — the order it belongs to is settled
+      // but the NEXT one has not begun yet.
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+      expect(selected(el)).toBe("cat-drinks");
+
+      // Start the next order — the temporary switch reverts to the location default.
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+      expect(selected(el)).toBe("cat-food");
+      // ...and the switcher + grid reflect the default once more.
+      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+    });
+
+    it("reverts a temporary menu switch to the location default when the basket is PARKED (a fresh order begins)", async () => {
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+
+      // Switch to the non-default menu and ring a line — the switch sticks mid-order (the control).
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+      c.store.addProduct(cerveza, "1");
+      await el.updateComplete;
+      expect(selected(el)).toBe("cat-drinks");
+
+      // Park it: the basket clears and a fresh working order begins, so the menu reverts to the default.
+      emit(c, "park-order", { label: "Mesa 4" });
+      await flush(el);
+      expect(c.store.lines).toHaveLength(0);
+      expect(selected(el)).toBe("cat-food");
+    });
+
     it("with a SINGLE menu the switcher renders nothing and the grid shows every product (unchanged)", async () => {
       // The default stubApi ships one menu (`defaultMenu`) with `cafe` on it — the pre-multi-menu shape.
       const { el } = await mountApp();

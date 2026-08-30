@@ -587,9 +587,9 @@ export class TillApp extends LitElement {
     const { menus, products } = await this.api.listProducts();
     this.products = products;
     this.menus = menus;
-    // Show the location's default menu first (the server orders it first and flags `isDefault`), falling
-    // back to the first accessible menu, then "" (no menus — the grid shows nothing until one exists).
-    this.selectedCatalogueId = menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
+    // Show the location's default menu first. `#defaultCatalogueId` picks it the same way the
+    // per-order reset does, so login and reset can never drift (see its own doc).
+    this.selectedCatalogueId = this.#defaultCatalogueId();
     this.operatorName = displayName;
     this.operatorPersonId = personId;
     // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
@@ -667,10 +667,25 @@ export class TillApp extends LitElement {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
+  /**
+   * The location's DEFAULT menu id: the {@link TillMenu} the server flagged `isDefault` (it also orders
+   * that one first), else the first accessible menu, else `""` (no menus — the grid shows nothing until
+   * one exists). The single source of the default so login ({@link TillApp.#onLoggedIn}) and the
+   * per-order reset ({@link TillApp.#onNewSale}/{@link TillApp.#onParkOrder}) cannot drift apart.
+   */
+  #defaultCatalogueId(): string {
+    return this.menus.find((menu) => menu.isDefault)?.id ?? this.menus[0]?.id ?? "";
+  }
+
   /** The switcher picked a menu (`menu-selected`): show that menu's products. State-only — it changes
    * `selectedCatalogueId`, which the screens thread into their grid filter, and NEVER touches the working
    * order, so an in-flight cart line survives the switch. The screens keep the FULL {@link products} for
-   * name resolution (a tab spans menus) and allergen lookup; only their grid narrows. */
+   * name resolution (a tab spans menus) and allergen lookup; only their grid narrows.
+   *
+   * The switch is TEMPORARY (owner decision): it sticks for the current order but reverts to the
+   * location default when the next order begins — see {@link TillApp.#defaultCatalogueId}'s reset call
+   * sites. Nothing here resets it mid-order, so a switch made while ringing a basket survives until that
+   * basket is settled or parked. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
     this.selectedCatalogueId = event.detail.id;
   }
@@ -1057,6 +1072,11 @@ export class TillApp extends LitElement {
       }
       this.#store.clear();
       this.cardOutcome = undefined;
+      // A parked basket is set aside and a FRESH working order begins on the counter, so the active menu
+      // reverts to the location default — the temporary-switch boundary (see {@link #onMenuSelected}),
+      // exactly as {@link #onNewSale}. Only on the success path (inside the try): a rejected park keeps
+      // the basket, so the order is still in progress and the switch must still stick. No-op single-menu.
+      this.selectedCatalogueId = this.#defaultCatalogueId();
       await this.#refreshHeldOrders();
     } catch {
       // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
@@ -1237,12 +1257,16 @@ export class TillApp extends LitElement {
 
   /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
    * stage back to `"order"`, back to the counter. `cardOutcome` is cleared too — a new, unrelated
-   * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. */
+   * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. The
+   * active menu reverts to the location default: a menu switch is TEMPORARY (see {@link #onMenuSelected})
+   * and a new order is exactly the boundary it must not cross, so a waiter who switched for the last sale
+   * starts the next one on the default. A single-menu venue makes this a no-op. */
   #onNewSale(): void {
     this.#store.clear();
     this.stage = "order";
     this.errorKey = undefined;
     this.cardOutcome = undefined;
+    this.selectedCatalogueId = this.#defaultCatalogueId();
     this.screen = "counter";
   }
 
