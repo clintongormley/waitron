@@ -417,8 +417,10 @@ export async function listAccessibleCatalogues(
  *
  * Returns the location's `invoiceLocales` ALONGSIDE the products — both derived from the single
  * `resolveAccessibleCatalogueIds` read of `locations` — so the sale path (`priceOrderLines`) re-keys
- * catalogue content to the fiscal line's full tags without a SECOND `locations` query. `[]` when the
- * location does not exist (which is also when `products` is empty).
+ * catalogue content to the fiscal line's full tags without a SECOND `locations` query. `invoiceLocales`
+ * is `[]` ONLY when the `locations` row is missing; `products` empties more broadly (any location with
+ * no accessible catalogue), so the two emptiness conditions are NOT equivalent — a real location with
+ * an empty catalogue returns `[]` products but its actual `invoiceLocales`.
  */
 export async function listAvailableProducts(
   tx: Transaction,

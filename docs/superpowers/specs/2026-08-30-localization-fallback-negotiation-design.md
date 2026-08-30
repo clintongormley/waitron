@@ -118,11 +118,22 @@ non-Spanish venue, and for adding a new primary UI language cleanly.
 The read-side above is about *displaying* content. There is a separate write-side concern: a filed
 line's `descriptions` must satisfy the `working_order_lines_check_locales` trigger
 (`packages/db/drizzle/0004_working_orders.sql`), which requires the map keys to equal the location's
-full-tag `invoice_locales` **exactly**. This is **our** receipt-completeness guard, NOT fiscal law —
-verified 2026-08-30 against the AEAT developer FAQ (no language mandate) and `packages/verifactu`:
-AEAT's record carries a single `DescripcionOperacion` STRING (built from `sale.descriptionOfOperation`,
-e.g. "Venta en establecimiento"); the per-line `descriptions` MAP never reaches AEAT — it drives the
-customer receipt only.
+full-tag `invoice_locales` **exactly**. This is **our** receipt-completeness guard, NOT fiscal law.
+Receipts (verified 2026-08-30):
+
+- **AEAT's record carries a single `DescripcionOperacion` STRING, not a locale map.**
+  `packages/verifactu/src/types.ts:149` types it `DescripcionOperacion: string`;
+  `packages/verifactu/src/validate.ts:289` caps it at 500 chars;
+  `packages/fiscal-verifactu/src/backend.ts:285` builds it from the sale's single
+  `sale.descriptionOfOperation` (the seed value is the generic `"Venta en establecimiento"`,
+  `packages/fiscal-verifactu/src/testing/seed.ts:307`). The per-line `descriptions` MAP is never
+  serialized into the AEAT XML (`packages/verifactu/src/xml/serialize.ts:213` emits only the string) —
+  it drives the customer RECEIPT only.
+- **No AEAT language mandate for descriptions.** The AEAT developer FAQ
+  (`1784456130925_FAQs-Desarrolladores.pdf`, 52 pp) contains no `idioma`/`lengua`/multi-language
+  requirement for the operation description — grepped 2026-08-30 (the only two `descripci*` hits are a
+  test-data note and an unrelated code-table row). Sourced from the FAQ; if a stronger receipt is
+  wanted it is the Orden HAC/1177/2024 layout, not checked here.
 
 So venues author catalogue content **bare** (`{ es: … }`), and it is **re-keyed to the location's
 full-tag `invoice_locales` at the single point content enters a fiscal line**:

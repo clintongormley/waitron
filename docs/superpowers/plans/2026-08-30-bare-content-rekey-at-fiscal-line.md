@@ -41,7 +41,7 @@ export function toInvoiceLineDescriptions(
 ```
 - For `fullTag` in `invoiceLocales`: `lang = fullTag.replace(/-.*$/, "")`; value =
   `catalogue[fullTag] ?? catalogue[lang] ?? catalogue[<first key whose region-strip === lang>] ?? Object.values(catalogue)[0] ?? ""`.
-- Result has exactly `invoiceLocales.length` keys, one per tag (deduate if `invoiceLocales` has dups — it won't).
+- Result has exactly `invoiceLocales.length` keys, one per tag (dedupe if `invoiceLocales` has dups — it won't).
 
 **Tests (TDD, prove each):**
 - `{ es: "Café" }` + `["es-ES"]` → `{ "es-ES": "Café" }` (region-strip match).
