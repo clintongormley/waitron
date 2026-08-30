@@ -45,7 +45,7 @@ export const en = {
   "nav.devices": "Devices",
   "nav.printers": "Printers",
   // Login screen
-  "login.roster": "User",
+  "login.email": "Email",
   "login.password": "Password",
   "login.totp": "Code (if applicable)",
   "login.with_passkey": "Log in with passkey",
@@ -432,7 +432,7 @@ export const es: Record<StringKey, string> = {
   "nav.kitchen": "Cocina",
   "nav.devices": "Dispositivos",
   "nav.printers": "Impresoras",
-  "login.roster": "Usuario",
+  "login.email": "Correo electrónico",
   "login.password": "Contraseña",
   "login.totp": "Código (si procede)",
   "login.with_passkey": "Entrar con passkey",

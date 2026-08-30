@@ -660,9 +660,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(login(el)).toBeTruthy();
     expect(currentLocale()).toBe("en-GB");
-    const rosterField = login(el)!.shadowRoot!.querySelector(".field")!;
-    expect(rosterField.textContent).toContain(t("login.roster", "en-GB")); // "User"
-    expect(rosterField.textContent).not.toContain(t("login.roster", "es-ES")); // not "Usuario"
+    // The email/password field labels live inside the wt-input primitive's own shadow root, so a
+    // localised string that renders in the login screen's OWN shadow is the observable proxy: the
+    // submit button's slotted text. It differs across locales, so it proves the keyed re-render
+    // reached this deep child in the seeded venue default (en-GB), not the module default (es-ES).
+    const submit = login(el)!.shadowRoot!.querySelector("[data-test=submit]")!;
+    expect(submit.textContent).toContain(t("action.login", "en-GB")); // "Log in"
+    expect(submit.textContent).not.toContain(t("action.login", "es-ES")); // not "Entrar"
   });
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {
