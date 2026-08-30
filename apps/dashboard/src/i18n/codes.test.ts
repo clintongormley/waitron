@@ -135,3 +135,16 @@ it("has a sentence for each printing code (Impresoras screen)", () => {
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
+
+it("has a sentence for the location-menus screen code", () => {
+  // The location↔menu writes (apps/server/src/catalogue-api.ts) reject with `catalogue.not_found` when
+  // a catalogueId names no catalogue the tenant can see. The Location menus screen renders
+  // codeMessage(errorKey), so it must map to real copy, never the raw wire code and never the GENERIC
+  // fallback. `management.request_invalid` / `shared.invalid_id` and the gate codes are covered above.
+  // Proven by deletion: drop `catalogue.not_found` from CODE_MESSAGES and codeMessage returns
+  // GENERIC_ES → the assertions below go red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  expect(codeMessage("catalogue.not_found", "es")).not.toBe("catalogue.not_found");
+  expect(codeMessage("catalogue.not_found", "es")).not.toBe(GENERIC_ES);
+  expect(codeMessage("catalogue.not_found", "en")).not.toBe(GENERIC_ES);
+});
