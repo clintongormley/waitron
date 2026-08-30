@@ -204,6 +204,20 @@ describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
+  it("too-short PIN → returns 2, row untouched (same floor as the gated resetPin)", async () => {
+    const { tenantId, adminId } = await setupTenant();
+    const before = await readPerson(tenantId, adminId);
+
+    // "12" is length 2, below MIN_PIN_LENGTH (4). A valid password rides along so only the PIN gate
+    // can be what rejects it — a break-glass PIN below the floor would re-lock the operator.
+    const { code } = await run({ ...baseEnv(tenantId), WAITRON_BREAKGLASS_PIN: "12" });
+    expect(code).toBe(2);
+
+    // Rejected before any write — the password (and thus the whole row) is untouched.
+    const after = await readPerson(tenantId, adminId);
+    expect(after!.passwordHash).toBe(before!.passwordHash);
+  });
+
   it("missing DATABASE_URL / tenant id → returns 2", async () => {
     const noUrl = await run({
       WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",

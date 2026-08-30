@@ -1,7 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { type Database, withTenant } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
-import { assertPasswordLength, hashPassword, hashPin, persons } from "@waitron/identity";
+import {
+  assertPasswordLength,
+  assertPinLength,
+  hashPassword,
+  hashPin,
+  persons,
+} from "@waitron/identity";
 
 type Env = Record<string, string | undefined>;
 
@@ -68,14 +74,25 @@ export async function runBreakGlassReset(deps: {
     }
     throw err;
   }
-  // Optional PIN reset. Length is NOT enforced here: the dashboard password is the break-glass
-  // credential, and a wrong-length PIN would fail `persons_pin_hash_ck` only if empty — `hashPin`
-  // always produces a non-empty hash, so any provided value is storable. (A caller who wants the
-  // policy floor uses the gated `resetPin`.)
+  // Optional PIN reset.
   const newPin = deps.env.WAITRON_BREAKGLASS_PIN;
   // One named condition, used by both the UPDATE (whether to set `pin_hash`) and the log line, so the
   // two can never drift on what "a PIN was given" means.
   const resetPin = newPin !== undefined && newPin !== "";
+  if (resetPin) {
+    // Enforce the SAME PIN floor the gated `resetPin` applies (identity's `MIN_PIN_LENGTH`). A
+    // break-glass PIN that stores fine but falls below the floor the till keypad/login enforces would
+    // re-lock the operator — the opposite of what this command is for. Too-short → usage error (2).
+    try {
+      assertPinLength(newPin!);
+    } catch (err) {
+      if (isAppError(err) && hasCode(err, "pin.too_short")) {
+        deps.out(`new PIN too short: minimum ${String(err.params.min)} digits`);
+        return 2;
+      }
+      throw err;
+    }
+  }
 
   const parsedPerson = parsePersonArg(deps.argv);
   if (!parsedPerson.ok) {
