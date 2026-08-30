@@ -53,6 +53,12 @@ export const persons = pgTable(
      * write boundary (setPersonLocale), not by a DB enum, so a new locale is a
      * catalogue + constant change with no migration. */
     locale: text("locale"),
+    /** The person's login email — the identifier for dashboard (management) sign-in. Nullable:
+     * till-only staff who authenticate with a PIN need none. Unique per tenant, case-insensitively,
+     * enforced by the functional partial index persons_tenant_email_uq (custom migration), not a
+     * column constraint. Validated/normalized at the write boundary (setEmail/createPerson), so no
+     * DB format check here. */
+    email: text("email"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
