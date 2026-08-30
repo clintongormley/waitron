@@ -31,6 +31,13 @@ declare module "@waitron/shared" {
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
     "person.suspended": { personId: string };
+    /** The supplied email address failed the screening check (see isValidEmail) at a write boundary
+     * — malformed, no domain dot, or contained whitespace. The address itself is not a credential and
+     * carries no param. */
+    "person.email_invalid": Record<string, never>;
+    /** Another person in this tenant already holds this normalised email — the create/setEmail insert
+     * hit the unique index. The domain concept is "already taken", not the column that collided (§3). */
+    "person.email_taken": { email: string };
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
     /** No passkey is registered for this person (or no credential matched the returned id) — they
