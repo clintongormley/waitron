@@ -26,8 +26,12 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  *   "Suspender" for an active person, "Reactivar" for a suspended one → emits `set-status { status }`
  *   with the OPPOSITE status. No local state — the button always reflects the person the screen handed
  *   down, so after a suspend + reload it flips to "Reactivar".
- * - **PIN** — a field (`wt-input`) + "Restablecer PIN" → emits `reset-pin { pin }`.
- * - **Contraseña** — a field (`wt-input`) + "Establecer contraseña" → emits `set-password { password }`.
+ * - **PIN** (the till credential) — a field (`wt-input`) + "Restablecer PIN" → emits `reset-pin { pin }`.
+ * - **Correo** + **Contraseña** (the dashboard sign-in credentials, grouped) — an email field
+ *   (`wt-input[type=email]`) + "Guardar correo" → emits `set-email { email }` (the screen turns it into
+ *   `updatePerson({ email })`), and a password field + "Establecer contraseña" → emits
+ *   `set-password { password }`. Unlike the write-only PIN/password, the email is EXISTING data, so it
+ *   is preset to the person's current address (parallel to the role picker), not left blank.
  *
  * Like the pure-display staff list and the create form (and UNLIKE the login screen), it does NOT call
  * the API: the staff screen owns the injected `DashboardApi` and turns each domain event into the
@@ -114,6 +118,11 @@ export class PersonEdit extends LitElement {
   @state() private selectedRole: PersonRole = "staff";
   @state() private pin = "";
   @state() private password = "";
+  // The dashboard sign-in email. UNLIKE the write-only PIN/password, this is existing data, so it is
+  // PRESET to the person's current email (parallel to the role picker) rather than starting blank —
+  // the operator edits what is already there. Reset alongside the role on the same person-identity
+  // change, so an unsaved edit is discarded on close but a same-id reload does not clobber it.
+  @state() private email = "";
 
   // The identity of the person the role picker was last initialised for. Reset `selectedRole` only when
   // the person IDENTITY changes, not on every `person` re-assignment: after an action the screen reloads
@@ -128,6 +137,9 @@ export class PersonEdit extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("person") && this.person && this.person.personId !== this.#rolePersonId) {
       this.selectedRole = this.person.role;
+      // Preset the email field to the person's current address (null → blank). Guarded by the SAME
+      // identity check as the role, so a post-action same-id reload does not discard an unsaved edit.
+      this.email = this.person.email ?? "";
       this.#rolePersonId = this.person.personId;
     }
   }
@@ -160,6 +172,11 @@ export class PersonEdit extends LitElement {
     this.password = event.detail.value;
   }
 
+  #onEmailChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.email = event.detail.value;
+  }
+
   /** Dispatch a bubbling, composed action event so it reaches the staff screen across the shadow
    * boundary. `stopPropagation` on the button's own composed `click` keeps the screen from also
    * hearing a raw click — the house pattern person-form's confirm handler follows. */
@@ -186,6 +203,9 @@ export class PersonEdit extends LitElement {
     this.pin = "";
     this.password = "";
     this.selectedRole = this.person?.role ?? "staff";
+    // The email is not a secret, but it resets to the person's current address on close (like the
+    // role) so an unsaved edit is discarded rather than lingering into the next open of this person.
+    this.email = this.person?.email ?? "";
   }
 
   override render() {
@@ -256,6 +276,25 @@ export class PersonEdit extends LitElement {
                     data-test="save-pin"
                     @click=${(e: Event) => this.#emit("reset-pin", { pin: this.pin }, e)}
                     >${t("person.reset_pin")}</wt-button
+                  >
+                </div>
+
+                <!-- Dashboard sign-in credentials (the PIN above is the till credential): the login
+                     email and the password, grouped together. -->
+                <div class="action">
+                  <wt-input
+                    class="field grow"
+                    data-test="edit-email"
+                    type="email"
+                    label=${t("person.email")}
+                    .value=${this.email}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
+                  ></wt-input>
+                  <wt-button
+                    variant="secondary"
+                    data-test="save-email"
+                    @click=${(e: Event) => this.#emit("set-email", { email: this.email }, e)}
+                    >${t("person.save_email")}</wt-button
                   >
                 </div>
 

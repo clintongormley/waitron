@@ -28,6 +28,7 @@ const people: PersonSummary[] = [
     status: "active",
     hasPassword: true,
     hasTotp: false,
+    email: "ada@x.com",
   },
   {
     personId: "p2",
@@ -36,6 +37,7 @@ const people: PersonSummary[] = [
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
 ];
 
@@ -165,6 +167,50 @@ describe("staff-screen", () => {
     expect(api.createPerson).toHaveBeenCalledWith(detail);
     expect(api.listStaff).toHaveBeenCalledTimes(2);
     expect(form(el).open).toBe(false);
+  });
+
+  // The create form carries the dashboard sign-in email on its create-person detail; the screen
+  // forwards the whole detail (including email) to createPerson unchanged.
+  it("forwards the email into createPerson", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await el.updateComplete;
+
+    const detail = { displayName: "Cy", role: "staff" as const, pin: "1234", email: "cy@x.com" };
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.createPerson).toHaveBeenCalledWith(detail);
+  });
+
+  // A create rejected with `person.email_taken` (a duplicate address) surfaces the localised copy in
+  // the create dialog's own banner (its top layer), never the raw wire code — the same routing the
+  // `pin.too_short` case uses. The page-level banner stays suppressed while the dialog is open.
+  it("renders person.email_taken from a rejected create in the dialog banner", async () => {
+    const api = stubApi({
+      createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await el.updateComplete;
+
+    const detail = { displayName: "A", role: "staff" as const, pin: "1234", email: "dupe@x.com" };
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(form(el).error).toBe("person.email_taken");
+    const banner = form(el).shadowRoot!.querySelector("[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("person.email_taken", "es-ES"));
+    expect(banner).not.toContain("person.email_taken");
   });
 
   // #load's guard: a rejected initial listStaff must become the error banner, never an unhandled
@@ -417,6 +463,25 @@ describe("staff-screen — row edit", () => {
     await flush(el);
 
     expect(api.resetPin).toHaveBeenCalledWith("p1", "4321");
+    expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  it("set-email calls updatePerson with the email and reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("set-email", {
+        detail: { email: "owner@x.com" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+
+    expect(api.updatePerson).toHaveBeenCalledWith("p1", { email: "owner@x.com" });
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 

@@ -22,6 +22,7 @@ const people: PersonSummary[] = [
     status: "active",
     hasPassword: true,
     hasTotp: true,
+    email: null,
   },
   {
     personId: "p2",
@@ -30,6 +31,7 @@ const people: PersonSummary[] = [
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
 ];
 

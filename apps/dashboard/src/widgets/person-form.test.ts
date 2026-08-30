@@ -80,6 +80,55 @@ describe("person-form", () => {
     expect(event.detail).toEqual({ displayName: "Ada", role: "manager", pin: "1234" });
   });
 
+  // The dashboard sign-in email is carried on create-person alongside the other fields. Typed into
+  // the `wt-input[type=email]` (its composed `wt-change`), it must reach the emitted detail so the
+  // staff screen can forward it to `createPerson`.
+  it("carries the typed email on create-person", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=display-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Owner" } }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "1234" } }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "owner@x.com" } }),
+    );
+    await el.updateComplete;
+
+    const created = new Promise<CustomEvent<{ email?: string }>>((resolve) =>
+      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    expect((await created).detail).toMatchObject({
+      displayName: "Owner",
+      pin: "1234",
+      email: "owner@x.com",
+    });
+  });
+
+  // A blank email is OMITTED from the detail entirely — a create with no email must not send an empty
+  // string the server would reject as `person.email_invalid`. Prove by deletion: drop the non-empty
+  // guard in `#confirm` and this fails with `email: ""` present.
+  it("omits email from create-person when the field is left blank", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const created = new Promise<CustomEvent<Record<string, unknown>>>((resolve) =>
+      el.addEventListener("create-person", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    expect("email" in (await created).detail).toBe(false);
+  });
+
+  // The email field is a `type=email` input so mobile keyboards and browser validation treat it as an
+  // address. `wt-input` forwards `type` to its inner <input> (packages/ui wt-input.ts).
+  it("renders the email field as a type=email input", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const inner = el
+      .shadowRoot!.querySelector("[data-test=email]")!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(inner.type).toBe("email");
+  });
+
   // create-person must escape this widget's shadow boundary to reach the app shell (a later task),
   // so it is dispatched bubbles+composed — asserted so a future edit does not quietly drop either.
   it("emits create-person as a bubbling, composed event", async () => {
@@ -134,16 +183,21 @@ describe("person-form", () => {
       "[data-test=display-name]",
     )!;
     const pin = el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=pin]")!;
+    const email = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=email]",
+    )!;
     const select = el.shadowRoot!.querySelector("select")!;
 
     displayName.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Ada" } }));
     pin.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1234" } }));
+    email.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "ada@x.com" } }));
     select.value = "manager";
     select.dispatchEvent(new Event("change"));
     await el.updateComplete;
     // Sanity: the fields hold the entered values before the close.
     expect(displayName.value).toBe("Ada");
     expect(pin.value).toBe("1234");
+    expect(email.value).toBe("ada@x.com");
     expect(select.value).toBe("manager");
 
     const closed = new Promise<void>((resolve) =>
@@ -155,6 +209,9 @@ describe("person-form", () => {
 
     expect(displayName.value).toBe("");
     expect(pin.value).toBe("");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=email]")!.value,
+    ).toBe("");
     expect(el.shadowRoot!.querySelector("select")!.value).toBe("staff");
   });
 

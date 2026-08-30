@@ -60,6 +60,17 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The PIN is too short",
     es: "El PIN es demasiado corto",
   },
+  // Login-email management (apps/server/src/management-api staff routes → identity's setEmail). The
+  // Users form's create/edit rejects with these when the address is malformed or already belongs to
+  // another person in the tenant (a case-insensitive unique index on the email).
+  "person.email_invalid": {
+    en: "That email address isn't valid",
+    es: "Esa dirección de correo no es válida",
+  },
+  "person.email_taken": {
+    en: "That email is already in use",
+    es: "Ese correo ya está en uso",
+  },
   "password.too_short": {
     en: "The password is too short",
     es: "La contraseña es demasiado corta",

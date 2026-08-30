@@ -218,6 +218,9 @@ export const en = {
   "person.name": "Name",
   "person.role": "Role",
   "person.pin": "PIN",
+  // The dashboard sign-in email — grouped with the password as the dashboard credential (the PIN is
+  // the till credential); shown on both the create and edit forms and in the staff list.
+  "person.email": "Email",
   // Person edit
   "person.edit": "Edit user",
   "person.save_role": "Save role",
@@ -227,6 +230,7 @@ export const en = {
   "person.reset_pin": "Reset PIN",
   "person.password": "Password",
   "person.set_password": "Set password",
+  "person.save_email": "Save email",
   // Allergen picker
   "allergen.reviewed": "Reviewed",
   "allergen.origin": "Origin",
@@ -589,6 +593,7 @@ export const es: Record<StringKey, string> = {
   "person.name": "Nombre",
   "person.role": "Rol",
   "person.pin": "PIN",
+  "person.email": "Correo electrónico",
   "person.edit": "Editar usuario",
   "person.save_role": "Guardar rol",
   "person.status_label": "Estado",
@@ -597,6 +602,7 @@ export const es: Record<StringKey, string> = {
   "person.reset_pin": "Restablecer PIN",
   "person.password": "Contraseña",
   "person.set_password": "Establecer contraseña",
+  "person.save_email": "Guardar correo",
   "allergen.reviewed": "Revisado",
   "allergen.origin": "Origen",
   "allergen.contains": "Contiene",

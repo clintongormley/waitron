@@ -17,6 +17,7 @@ const active: PersonSummary = {
   status: "active",
   hasPassword: true,
   hasTotp: false,
+  email: "ada@x.com",
 };
 
 const suspended: PersonSummary = {
@@ -141,6 +142,48 @@ describe("person-edit", () => {
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-pin]")!.click();
     expect((await seen).detail).toEqual({ pin: "4321" });
+  });
+
+  // Unlike the write-only PIN/password, the email is EXISTING data, so the field is preset to the
+  // person's current email (parallel to the role picker's preset) — the operator edits what is there.
+  it("presets the email field to the person's current email", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+    });
+    const email = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=edit-email]",
+    )!;
+    expect(email.value).toBe("ada@x.com");
+  });
+
+  // A person with no email yet presets the field to an empty string, not "null" — `email` is nullable.
+  it("presets the email field to empty when the person has none", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: { ...active, email: null },
+      open: true,
+    });
+    const email = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=edit-email]",
+    )!;
+    expect(email.value).toBe("");
+  });
+
+  it("emits set-email with the entered email on save", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "owner@x.com" } }),
+    );
+    await el.updateComplete;
+
+    const seen = new Promise<CustomEvent<{ email: string }>>((resolve) =>
+      el.addEventListener("set-email", (e) => resolve(e as CustomEvent)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-email]")!.click();
+    expect((await seen).detail).toEqual({ email: "owner@x.com" });
   });
 
   it("emits set-password with the entered password on save", async () => {

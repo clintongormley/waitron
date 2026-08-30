@@ -16,13 +16,14 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
 /**
  * The management dashboard's CREATE-PERSON form: a `wt-dialog` (heading "Nuevo usuario") holding a
  * display-name field (`wt-input`), a role picker (native `<select>` — there is no `wt-select`
- * primitive, exactly as the login screen's roster picker) and a PIN field (`wt-input`), plus a
- * primary confirm control in the footer.
+ * primitive, exactly as the login screen's roster picker), a PIN field (the till credential) and a
+ * dashboard sign-in email field (`wt-input[type=email]`), plus a primary confirm control in the footer.
  *
  * The staff screen drives it by setting `.open` — the same open-by-property contract `wt-dialog`
  * itself uses — and hears one event: on confirm the form dispatches `create-person` carrying
- * `{ displayName, role, pin }`, `bubbles`/`composed` so it crosses the shadow boundary to the staff
- * screen, which turns it into `DashboardApi.createPerson`. The form does NOT call the API itself
+ * `{ displayName, role, pin }` plus `email` WHEN one was typed (a blank email is omitted, never sent
+ * as ""), `bubbles`/`composed` so it crosses the shadow boundary to the staff screen, which turns it
+ * into `DashboardApi.createPerson`. The form does NOT call the API itself
  * (like the pure-display staff list, unlike the login screen) and does NOT close itself on confirm —
  * the staff screen closes it once the create succeeds, so a rejected create leaves the entered
  * values in place.
@@ -75,6 +76,10 @@ export class PersonForm extends LitElement {
   // `ha-*`/`wt-*` components hit with `ariaLabel`. The emitted event's detail key is still `role`.
   @state() private selectedRole: PersonRole = "staff";
   @state() private pin = "";
+  // The dashboard sign-in email (grouped with a password on the edit form; the PIN is the till
+  // credential). Optional on create — a blank field is OMITTED from the emitted detail, so a create
+  // with no email never sends an empty string the server would reject as `person.email_invalid`.
+  @state() private email = "";
 
   // A handle to the native role <select>, reconciled to `selectedRole` in `updated()` (see that
   // method for why a template binding cannot do this on a native select).
@@ -125,6 +130,12 @@ export class PersonForm extends LitElement {
     this.pin = event.detail.value;
   }
 
+  /** Capture the email field's new value; stops the composed `wt-change` from leaking out. */
+  #onEmailChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.email = event.detail.value;
+  }
+
   /**
    * Ask the app to create the person. `stopPropagation` keeps the confirm button's own composed
    * `click` inside this shadow boundary, so the shell hears the semantic `create-person` and not a
@@ -132,13 +143,15 @@ export class PersonForm extends LitElement {
    */
   #confirm(event: Event): void {
     event.stopPropagation();
-    this.dispatchEvent(
-      new CustomEvent<{ displayName: string; role: PersonRole; pin: string }>("create-person", {
-        detail: { displayName: this.displayName, role: this.selectedRole, pin: this.pin },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    // A blank email is OMITTED, never sent as "": an empty address is not "no email" to the server —
+    // it fails `isValidEmail` as `person.email_invalid`. So the key is present only when typed.
+    const detail: { displayName: string; role: PersonRole; pin: string; email?: string } = {
+      displayName: this.displayName,
+      role: this.selectedRole,
+      pin: this.pin,
+    };
+    if (this.email !== "") detail.email = this.email;
+    this.dispatchEvent(new CustomEvent("create-person", { detail, bubbles: true, composed: true }));
   }
 
   /**
@@ -159,6 +172,7 @@ export class PersonForm extends LitElement {
     this.displayName = "";
     this.selectedRole = "staff";
     this.pin = "";
+    this.email = "";
   }
 
   override render() {
@@ -188,6 +202,16 @@ export class PersonForm extends LitElement {
           label=${t("person.pin")}
           .value=${this.pin}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
+        ></wt-input>
+        <!-- Dashboard sign-in credential (the PIN above is the till credential): the login email.
+             Optional on create — a blank field is omitted from the emitted detail (see #confirm). -->
+        <wt-input
+          class="field"
+          data-test="email"
+          type="email"
+          label=${t("person.email")}
+          .value=${this.email}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
         ></wt-input>
         <wt-button
           slot="footer"
