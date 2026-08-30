@@ -166,6 +166,12 @@ Out of the first slice, each recorded deferred:
 - **Re-open picker to edit** a placed dish's options.
 - **Per-modifier station routing** / fan-out (a modifier rides its dish's station).
 - **Nested option groups.**
+- **Modifier↔allergen association** — a follow-on slice (owner, 2026-08-30). A modifier changes a dish's
+  as-served allergen profile in both directions (adds "extra cheese"→milk; removes "gluten-free
+  bun"→gluten): an allergen overlay on `option_group_items` (adds/removes, EU-14) + per-line derivation
+  (dish − removed + added) on the existing product allergen subsystem. Non-fiscal (never in the huella),
+  so separately reviewable and not supervised — but legally load-bearing (EU 1169/2011), so it must ship
+  add+remove together. Own spec, after this lands. Backlog Tier B #7.
 - Hoisting the shared receipt/basket formatters to `packages/shared` (existing debt, unchanged here).
 
 ## 10. Files touched (map)

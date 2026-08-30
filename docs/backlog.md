@@ -150,6 +150,15 @@ demo or behind-the-scenes".
    slice):** *per-option quantity* ("extra shot ×2") — the first slice expresses "up to N of a group"
    via the group's `max_select`, but not a count on a single option; and a per-option **VAT-class
    override** ships but is expected to be rarely used (options inherit the dish's rate by default).
+   **Follow-on slice — modifier↔allergen association (own spec, after modifiers lands; owner, 2026-08-30):**
+   a modifier changes a dish's **as-served allergen profile in BOTH directions** — *adds* ("extra cheese"
+   → milk) and, safety-critically, *removes* ("gluten-free bun" → removes gluten; "oat milk" → removes
+   milk). Add an allergen overlay to `option_group_items` (adds/removes, EU-14) and derive per line
+   (dish allergens − removed + added), building on the existing product allergen subsystem
+   (`allergens`/`manual_allergens`/`recipe_derivation`). **Non-fiscal** (never in the huella), so it is a
+   separately-reviewable, non-supervised slice — but **legally load-bearing** (EU 1169/2011 Annex II,
+   food-safety-advisor territory) and must ship add+remove together (an add-only half-version would show
+   a "gluten-free" modifier as still containing gluten — worse than nothing).
 8. **Menu-management depth.** The **live multi-menu till foundation landed**: a location has a
    **default catalogue plus other accessible catalogues** (`location_catalogues`), and the till lists
    the **union** of their products and **switches menus live, client-side**. Missing the pieces that
