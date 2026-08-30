@@ -1846,6 +1846,43 @@ describe("till-app", () => {
         expect(screen.products).toEqual([cafe]);
       });
 
+      it("lets a normal (counter/fixed) till settle the tab — canSettle threads through as true", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        // A fixed till is not in handheld mode ⇒ the pay widget is available.
+        expect(screen.canSettle).toBe(true);
+      });
+
+      it("an order-only handheld cannot settle — canSettle threads through as false", async () => {
+        // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
+        // table reaches the table-order screen. It is ORDER-ONLY, so the pay section must be hidden.
+        const { el } = await mountApp({
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        await flush(el);
+        // A handheld waits on the lock screen, then lands on the floor after PIN login.
+        emit(lock(el)!, "logged-in", {
+          personId: "p1",
+          displayName: "Ana",
+          canConfigureTill: false,
+        });
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+        await flush(el);
+        const screen = tableOrder(el)!;
+        expect(screen).not.toBeNull();
+        expect(screen.canSettle).toBe(false);
+      });
+
       it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {
         const catalogue = [
           { id: "s1", label: "Reservada", color: "#cc0000" },

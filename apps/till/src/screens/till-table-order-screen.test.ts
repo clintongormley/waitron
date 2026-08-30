@@ -196,6 +196,22 @@ describe("till-table-order-screen", () => {
     expect(leaked).toBe(false);
   });
 
+  it("hides the pay section when settlement is disabled (an order-only handheld)", async () => {
+    // A handheld takes and fires orders but never settles payment (the server firewall is the real
+    // guarantee; this is the honest UI). With `canSettle=false` the pay section is gone.
+    const { el } = await mount({ lines: [pendingLine], canSettle: false });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector("section.pay")).toBeNull();
+    // The total row stays visible — the waiter can see the tab total, just can't take payment.
+    expect(el.shadowRoot!.querySelector("[data-tab-total]")).not.toBeNull();
+  });
+
+  it("shows the pay section by default (canSettle unset ⇒ the counter/fixed till still pays)", async () => {
+    const { el } = await mount({ lines: [pendingLine] });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
+  });
+
   it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);
