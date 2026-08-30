@@ -5,7 +5,12 @@ import type { RecordSaleInput } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS, hashPassword, loginManagerById } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  hashPassword,
+  loginManager,
+  loginManagerById,
+} from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -53,7 +58,7 @@ const steadyClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-function request(taxId = "B12345678"): VenueRequest {
+function request(taxId = "B12345678", adminEmail?: string): VenueRequest {
   return {
     country: "ES",
     taxId,
@@ -78,6 +83,7 @@ function request(taxId = "B12345678"): VenueRequest {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
       passwordHash: hashPassword("dashPass123"),
+      ...(adminEmail !== undefined ? { email: adminEmail } : {}),
     },
   };
 }
@@ -216,6 +222,50 @@ describe("the provisioned admin authenticates by id with its password", () => {
         return loginManagerById(tx, {
           tenantId: venue.tenantId,
           personId: personId!,
+          password: "wrongpass1",
+        });
+      }),
+    ).rejects.toMatchObject({ code: "password.invalid" });
+  });
+});
+
+describe("the onboarding-provisioned admin authenticates by email", () => {
+  it("loginManager (the email path) succeeds with the provisioned email + password and rejects a wrong one", async () => {
+    // The whole-chain proof for admin-email onboarding: an admin provisioned WITH an email
+    // (captured by the onboarding UI, validated + normalized at the setup-api boundary, written by
+    // `applyVenue`'s seed-admin insert) can sign in to the dashboard by EMAIL via `loginManager` —
+    // not only by id via `loginManagerById`. A valid, already-normalized lowercase address, as the
+    // setup-api boundary produces. A distinct obligado (B44444444) so this admin is its own in the
+    // shared PGlite database.
+    const adminEmail = "owner@venue.example";
+    const venue = await applyVenue(planVenue(request("B44444444", adminEmail)), { db: suite.db });
+
+    // The admin's id is generated at seed time; fetch it so we can prove the email login resolves the
+    // SAME provisioned admin, not just some person.
+    const admin = await suite.db.execute<{ id: string }>(sql`
+      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+    const personId = admin.rows[0]?.id;
+    expect(personId).toBeDefined();
+
+    // The email path mints a management session for the provisioned admin — run as the app role under
+    // the tenant (asAppUser), the same role constraints production's login runs under.
+    const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginManager(tx, {
+        tenantId: venue.tenantId,
+        email: adminEmail,
+        password: "dashPass123",
+      });
+    });
+    expect(session.personId).toBe(personId);
+
+    // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
+    await expect(
+      withTenant(suite.db, venue.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return loginManager(tx, {
+          tenantId: venue.tenantId,
+          email: adminEmail,
           password: "wrongpass1",
         });
       }),
