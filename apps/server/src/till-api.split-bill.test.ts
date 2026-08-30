@@ -306,6 +306,25 @@ describe("POST /api/tabs/:id/split", () => {
       error: { code: "management.request_invalid", params: { field: "transfers" } },
     });
   });
+
+  it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
+    const { app, tabA, cookie } = await setupTabApp();
+    // A literal JSON `null` body parses successfully (unlike malformed JSON, which throws a
+    // SyntaxError c.req.json<T>() never catches for these routes): `c.req.json()` returns `null`
+    // itself, so `body.transfers` would throw `Cannot read properties of null` before the
+    // array-shape screen above ever ran, escaping to an opaque 500 (the class every `:id`/field
+    // screen in this file exists to prevent). Screened by the same object/null/array guard the
+    // `/api/tables/:id/placement` sibling uses (till-api.ts ~1547), naming "body".
+    const res = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+  });
 });
 
 describe("POST /api/tabs/:id/unjoin", () => {
@@ -418,6 +437,24 @@ describe("POST /api/tabs/:id/unjoin", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "transfers" } },
+    });
+  });
+
+  it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
+    const { app, tabA, cookie } = await setupJoinedApp();
+    // Same degenerate input as the /split case above: a literal JSON `null` body parses to `null`
+    // itself (not a SyntaxError), so `body.tableId` would throw before `isUuid` ever ran, escaping to
+    // an opaque 500. Screened by the object/null/array guard naming "body" — the SAME code the
+    // `/api/tables/:id/placement` sibling answers for a non-object body, before the domain-specific
+    // `table.not_joined` a well-formed-but-wrong `tableId` gets.
+    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
     });
   });
 });
