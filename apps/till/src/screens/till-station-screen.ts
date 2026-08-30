@@ -46,8 +46,9 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
  *
  * It holds no queue data of its own beyond which station/view is showing; the widget renders from the
  * fetched {@link groups}. Lit + `@waitron/ui` `baseStyles` + theme tokens only (no hardcoded chrome), so it
- * follows the operator's theme like every sibling. Copy is the till's i18n (`station.*`); the shipped
- * default locale is es-ES, so it renders in Spanish. Identifiers stay English; station names are DATA.
+ * follows the operator's theme like every sibling. Copy is the till's i18n (`station.*`), rendered in
+ * the active locale (English by default, es-ES for a Spanish venue). Identifiers stay English; station
+ * names are DATA.
  */
 @customElement("till-station-screen")
 export class TillStationScreen extends LitElement {

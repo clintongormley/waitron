@@ -14,9 +14,9 @@ const authorizers: StaffMember[] = [
   { personId: "adm-1", displayName: "Administradora" },
 ];
 
-/** Mount the dialog with a set of authorizers, in es-ES (the shipped default). */
+/** Mount the dialog with a set of authorizers, in the shipped default locale (en-GB). */
 async function mount(props: Partial<TillSupervisorOverrideDialog> = {}) {
-  setLocale("es-ES");
+  setLocale("en-GB");
   return mountWidget<TillSupervisorOverrideDialog>("till-supervisor-override-dialog", {
     authorizers,
     ...props,

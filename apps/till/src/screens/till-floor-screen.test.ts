@@ -274,14 +274,14 @@ describe("till-floor-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("renders a free table as available (Libre), with no tab total and no to-serve badge", async () => {
+  it("renders a free table as available, with no tab total and no to-serve badge", async () => {
     const { el } = await mount({
       tables: [
         table({ id: "t1", label: "5", state: "free", hasOpenTab: false, pendingToServe: 0 }),
       ],
     });
     const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-    expect(card.textContent).toContain("Libre");
+    expect(card.textContent).toContain(t("floor.free"));
     // A free table carries no open-tab total and no "to serve" badge.
     expect(el.shadowRoot!.querySelector("[data-to-serve]")).toBeNull();
   });
@@ -348,7 +348,7 @@ describe("till-floor-screen", () => {
     expect(tabs).toEqual(["z1", "z2"]);
   });
 
-  it("groups zoneless tables under a 'Sin zona' tab and shows them when it is selected", async () => {
+  it("groups zoneless tables under a no-zone tab and shows them when it is selected", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
       tables: [table({ id: "t1", zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: null })],
@@ -356,15 +356,15 @@ describe("till-floor-screen", () => {
     // The default tab is the first zone: the zoneless table is not shown yet.
     expect(el.shadowRoot!.querySelector('[data-table="t9"]')).toBeNull();
     const sinZona = el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!;
-    expect(sinZona.textContent).toContain("Sin zona");
+    expect(sinZona.textContent).toContain(t("floor.no_zone"));
     sinZona.click();
     await el.updateComplete;
-    // Selecting "Sin zona" reveals the null-zone table (and hides the zoned one).
+    // Selecting the no-zone tab reveals the null-zone table (and hides the zoned one).
     expect(el.shadowRoot!.querySelector('[data-table="t9"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
   });
 
-  it("keeps a table whose zone was deactivated (unknown zoneId) under 'Sin zona', never lost", async () => {
+  it("keeps a table whose zone was deactivated (unknown zoneId) under the no-zone tab, never lost", async () => {
     // `deactivateZone` is a soft `active=false` and never nulls a table's zoneId, so a table can carry
     // a zoneId that is not among the ACTIVE zones. It must not vanish — least of all one owing money.
     const { el } = await mount({
@@ -385,7 +385,7 @@ describe("till-floor-screen", () => {
     });
     // Not on the default (Comedor) tab — its zone is not active…
     expect(el.shadowRoot!.querySelector('[data-table="tg"]')).toBeNull();
-    // …but a "Sin zona" tab exists to catch it, and selecting it reveals the orphaned table.
+    // …but a no-zone tab exists to catch it, and selecting it reveals the orphaned table.
     const sinZona = el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!;
     expect(sinZona).not.toBeNull();
     sinZona.click();
@@ -393,7 +393,7 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-table="tg"]')).not.toBeNull();
   });
 
-  it("shows no 'Sin zona' tab when every table belongs to a zone", async () => {
+  it("shows no zoneless tab when every table belongs to a zone", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
       tables: [table({ id: "t1", zoneId: "z1" })],

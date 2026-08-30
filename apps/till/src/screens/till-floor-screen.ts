@@ -60,9 +60,10 @@ import type { FloorZone, TableState, TillApi } from "../api/client.js";
  *
  * COPY. Every user-facing label comes from the till's i18n catalogue (`i18n/strings.ts`) via `t()`, like
  * the sibling screens — the `floor.*` keys. `t()` takes no params, so a count-bearing label is
- * `${n} ${t(key)}` (value + suffix word). The shipped default locale is es-ES, so these render in Spanish
- * ("Sala", "Libre", "por servir", "Sin zona"); the English base is the source of truth. Identifiers stay
- * English. Zone names and totals are DATA and pass through verbatim.
+ * `${n} ${t(key)}` (value + suffix word). Labels render in the active locale — English by default
+ * ("Floor", "Free", "to serve", "No zone"), Spanish for a Spanish venue ("Sala", "Libre", "por servir",
+ * "Sin zona"); the English base is the source of truth. Identifiers stay English. Zone names and totals
+ * are DATA and pass through verbatim.
  *
  * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome colour/spacing, so the
  * screen follows the operator's theme exactly like every sibling till screen (the occupancy accent and

@@ -341,8 +341,8 @@ describe("till-expo-screen", () => {
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
-    // The default locale is es-ES: the banner shows the translated sentence, not the wire code.
-    expect(alert!.textContent).toContain(codeMessage("session.required", "es-ES"));
+    // The banner shows the localised sentence (in the active default locale), never the wire code.
+    expect(alert!.textContent).toContain(codeMessage("session.required"));
     expect(alert!.textContent).not.toContain("session.required");
   });
 
@@ -357,7 +357,7 @@ describe("till-expo-screen", () => {
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("server.internal", "es-ES"));
+    expect(alert!.textContent).toContain(codeMessage("server.internal"));
   });
 
   // --- Age colouring --------------------------------------------------------------------------

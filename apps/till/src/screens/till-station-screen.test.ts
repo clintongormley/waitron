@@ -332,7 +332,7 @@ describe("till-station-screen", () => {
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("session.required", "es-ES"));
+    expect(alert!.textContent).toContain(codeMessage("session.required"));
     expect(alert!.textContent).not.toContain("session.required");
   });
 
@@ -349,7 +349,7 @@ describe("till-station-screen", () => {
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("server.internal", "es-ES"));
+    expect(alert!.textContent).toContain(codeMessage("server.internal"));
   });
 
   it("shows the no-stations message when the venue has none configured", async () => {
@@ -533,7 +533,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("device.pairing_expired", "es-ES"));
+    expect(alert!.textContent).toContain(codeMessage("device.pairing_expired"));
     expect(alert!.textContent).not.toContain("device.pairing_expired");
     // Still on the enrol view so the operator can retry a fresh code.
     expect(enrolInput(el)).not.toBeNull();

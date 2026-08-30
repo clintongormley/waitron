@@ -79,8 +79,9 @@ class TabPayStore extends WorkingOrderStore {
  * verb and never a re-price. The Hold/`park-order` a `tender-pay` also offers is meaningless for an
  * already-persisted tab, so the screen SWALLOWS it rather than misrouting it to the counter's basket.
  *
- * COPY. Every user-facing label goes through `t()` (`table.*`, plus `label.total`); the shipped default
- * locale is es-ES, so these render in Spanish ("Enviar ronda", "Pendiente de servir", "Servido",
+ * COPY. Every user-facing label goes through `t()` (`table.*`, plus `label.total`), rendered in the
+ * active locale — English by default ("Send round", "To serve", "Served", "Charge", "Status",
+ * "Move · Split"), Spanish for a Spanish venue ("Enviar ronda", "Pendiente de servir", "Servido",
  * "Cobrar", "Estado", "Mover · Dividir"). Lit + `@waitron/ui` `baseStyles` + theme tokens only — no
  * hardcoded chrome (the status swatch is DATA colour, like the floor screen's badge).
  *
