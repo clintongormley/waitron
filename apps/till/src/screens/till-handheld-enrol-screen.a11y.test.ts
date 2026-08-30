@@ -8,7 +8,7 @@ function stubApi(overrides: Partial<Record<"enrolDevice", unknown>> = {}): TillA
   return {
     enrolDevice: vi
       .fn()
-      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: "", label: "Phone" }),
+      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null, label: "Phone" }),
     ...overrides,
   } as unknown as TillApi;
 }

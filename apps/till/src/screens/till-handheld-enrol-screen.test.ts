@@ -14,7 +14,7 @@ function stubApi(overrides: Partial<Record<"enrolDevice", unknown>> = {}): TillA
   return {
     enrolDevice: vi
       .fn()
-      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: "", label: "Phone" }),
+      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null, label: "Phone" }),
     ...overrides,
   } as unknown as TillApi;
 }
@@ -41,7 +41,7 @@ describe("till-handheld-enrol-screen", () => {
   it("enrols on a submitted code and signals success", async () => {
     const enrolDevice = vi
       .fn()
-      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: "", label: "Phone" });
+      .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null, label: "Phone" });
     const { el } = await mountWidget<TillHandheldEnrolScreen>("till-handheld-enrol-screen", {
       api: stubApi({ enrolDevice }),
     });
@@ -90,7 +90,7 @@ describe("till-handheld-enrol-screen", () => {
     el.addEventListener("handheld-enrolled", spy);
     submitCode(el, "ABCD1234");
     el.remove(); // disconnect while enrolDevice is still pending
-    resolveEnrol({ deviceId: "d1", kind: "handheld", stationId: "", label: "Phone" });
+    resolveEnrol({ deviceId: "d1", kind: "handheld", stationId: null, label: "Phone" });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(spy).not.toHaveBeenCalled();
   });
