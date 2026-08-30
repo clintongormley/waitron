@@ -56,6 +56,12 @@ already enforced per-tenant by `persons_tenant_email_uq`.
 
 ## Task 2: setup-api validates + threads the admin email
 
+> **Correction (2026-08-30, finish-branch simplify).** The steps below export `normalizeEmail`/`isValidEmail`
+> and re-compose them in setup-api — as implemented. The finish-branch simplify pass then CONSOLIDATED
+> this: setup-api calls identity's existing composed helper **`normalizeAndValidateEmail`** (now exported
+> from the barrel) directly, and the `normalizeEmail`/`isValidEmail` barrel exports were removed. Read
+> `normalizeAndValidateEmail` wherever the steps below say `normalizeEmail`/`isValidEmail`.
+
 **Files:**
 - Modify: `packages/identity/src/index.ts` (export `normalizeEmail`/`isValidEmail`), `apps/server/src/setup-api.ts` (admin request → provisioning)
 - Test: `apps/server/src/setup-api.*test.ts` (extend the admin-request path)

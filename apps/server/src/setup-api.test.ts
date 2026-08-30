@@ -268,8 +268,8 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   // The admin's dashboard-login email is captured at onboarding, NORMALIZED (trim + lowercase) at this
   // boundary, and threaded into the provisioning `admin` shape. It is NOT a secret, so it is not hashed
   // — it reaches `provision` verbatim (normalized) so the seeded `persons` row carries it and the
-  // email-based dashboard login can resolve it. Deletion-proof: drop the `normalizeEmail` call in
-  // setup-api.ts and this goes RED (the stored value keeps the request's mixed case).
+  // email-based dashboard login can resolve it. Deletion-proof: drop the `normalizeAndValidateEmail`
+  // call in setup-api.ts and this goes RED (the stored value keeps the request's mixed case).
   it("normalizes the admin email and threads it into the provision request", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
@@ -285,10 +285,10 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(provisionRequests[0].venue.admin.email).toBe("owner@x.com");
   });
 
-  // A present-but-malformed email fails the screening check (identity's `isValidEmail`) at the write
-  // boundary, refused with the domain-named `person.email_invalid` (400) — the same code the management
-  // API's create/edit-email paths raise — BEFORE anything is provisioned. Deletion-proof: remove the
-  // `isValidEmail` guard in setup-api.ts and this goes RED (the bad email reaches `provision`).
+  // A present-but-malformed email fails identity's `normalizeAndValidateEmail` at the write boundary,
+  // refused with the domain-named `person.email_invalid` (400) — the same code the management API's
+  // create/edit-email paths raise — BEFORE anything is provisioned. Deletion-proof: drop the
+  // `normalizeAndValidateEmail` call in setup-api.ts and this goes RED (the bad email reaches `provision`).
   it("refuses a malformed admin email with 400 person.email_invalid, without provisioning", async () => {
     const app = new Hono();
     const { deps, provision, requestRestart } = makeDeps();
