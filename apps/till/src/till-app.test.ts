@@ -77,6 +77,7 @@ const freeTable: TableState = {
   readyToServe: 0,
   enRoute: 0,
   status: null,
+  nextReservation: null,
   // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
   posX: null,
   posY: null,
@@ -99,6 +100,7 @@ const openTable: TableState = {
   readyToServe: 0,
   enRoute: 0,
   status: null,
+  nextReservation: null,
   posX: null,
   posY: null,
   shape: null,

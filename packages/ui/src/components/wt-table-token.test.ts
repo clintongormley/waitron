@@ -86,6 +86,16 @@ test("shows the manual status badge with its DATA colour, mirroring FP-1", async
   expect(dot.style.background).toBe("rgb(10, 20, 30)");
 });
 
+test("shows the reserved chip (label + time) only when a reservation time is set", async () => {
+  const reserved = await mountToken(table({ reservedTime: "20:30" }), { reserved: "Reservada" });
+  const chip = reserved.shadowRoot!.querySelector(".badge.reserved");
+  // The locale label precedes the wall-clock time ("Reservada 20:30").
+  expect(chip?.textContent?.replace(/\s+/g, " ").trim()).toBe("Reservada 20:30");
+
+  const none = await mountToken(table({ reservedTime: null }));
+  expect(none.shadowRoot!.querySelector(".badge.reserved")).toBeNull();
+});
+
 test("renders the covers count, with an optional localisable suffix", async () => {
   const bare = await mountToken(table({ capacity: 6 }));
   expect(bare.shadowRoot!.querySelector(".capacity")?.textContent?.trim()).toBe("6");

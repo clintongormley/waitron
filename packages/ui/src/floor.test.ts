@@ -212,7 +212,31 @@ test("toFloorTable maps a placed table's coordinates and occupancy", () => {
     tabTotal: "12.50",
     pendingToServe: 2,
     status: null,
+    reservedTime: null,
   });
+});
+
+test("toFloorTable carries the reserved time through the occupancy half", () => {
+  const table = toFloorTable(
+    {
+      id: "t1",
+      label: "1",
+      capacity: 4,
+      posX: 200,
+      posY: 300,
+      shape: "rect",
+      rotation: 90,
+      zoneId: "z1",
+    },
+    {
+      state: "open-tab",
+      tabTotal: "12.50",
+      pendingToServe: 0,
+      status: null,
+      reservedTime: "20:30",
+    },
+  );
+  expect(table.reservedTime).toBe("20:30");
 });
 
 test("toFloorTable defaults null coordinates to 0 and a missing tab total to null", () => {

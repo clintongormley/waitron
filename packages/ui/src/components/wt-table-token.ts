@@ -12,6 +12,9 @@ import type { FloorTable } from "../floor.js";
 export interface TableTokenLabels {
   covers?: string;
   toServe?: string;
+  /** The PREFIX word for the reserved chip ("Reservada"/"Reserved"), rendered before the "HH:MM" time
+   *  ("Reservada 20:30"), unlike the count-suffix labels above. Absent ⇒ just the time. */
+  reserved?: string;
 }
 
 /**
@@ -129,6 +132,17 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text);
       }
 
+      /* "Reservada HH:MM" (Bookings-1 §4) — the table's imminent booking. Distinguished from the service
+         hints by a PRIMARY border on a neutral chip (theme text on a neutral fill, so the token-fixed
+         contrast holds and no arbitrary colour is involved): distinct from the ready chip's success
+         border and the status chip's neutral border. It is an independent signal — it sits beside the
+         one service hint and the manual status, never in their place. */
+      .badge.reserved {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-primary);
+      }
+
       /* The manual-status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
          and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
@@ -178,6 +192,13 @@ export class WtTableToken extends LitElement {
             t.pendingToServe > 0
               ? html`<span class="badge to-serve" data-to-serve
                   >${t.pendingToServe}${this.labels.toServe ? ` ${this.labels.toServe}` : nothing}</span
+                >`
+              : nothing
+          }
+          ${
+            t.reservedTime != null
+              ? html`<span class="badge reserved" data-reserved
+                  >${this.labels.reserved ? html`${this.labels.reserved} ` : nothing}${t.reservedTime}</span
                 >`
               : nothing
           }

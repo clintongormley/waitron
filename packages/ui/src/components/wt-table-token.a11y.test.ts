@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 interface Token extends HTMLElement {
   table: FloorTable;
-  labels: { covers?: string; toServe?: string };
+  labels: { covers?: string; toServe?: string; reserved?: string };
   updateComplete: Promise<unknown>;
 }
 
@@ -35,7 +35,7 @@ function tableData(overrides: Partial<FloorTable> = {}): FloorTable {
 async function mountToken(t: FloorTable, theme: "light" | "dark"): Promise<Token> {
   const el = (await mountThemed("<wt-table-token></wt-table-token>", theme)) as Token;
   el.table = t;
-  el.labels = { covers: "plazas", toServe: "por servir" };
+  el.labels = { covers: "plazas", toServe: "por servir", reserved: "Reservada" };
   await el.updateComplete;
   return el;
 }
@@ -51,6 +51,7 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
         state: "open-tab",
         tabTotal: "47.50",
         pendingToServe: 3,
+        reservedTime: "20:30",
         status: { id: "s1", label: "Reservada", color: "rgb(120, 90, 200)" },
       }),
       theme,

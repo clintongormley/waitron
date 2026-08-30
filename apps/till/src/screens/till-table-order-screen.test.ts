@@ -416,6 +416,7 @@ describe("till-table-order-screen", () => {
       readyToServe: 0,
       enRoute: 0,
       status: null,
+      nextReservation: null,
       posX: null,
       posY: null,
       shape: null,

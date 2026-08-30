@@ -21,12 +21,14 @@ import "./wt-table-token.js";
  * The user-facing copy the canvas needs. Threaded as a prop (the `@waitron/ui` convention — copy is
  * never hardcoded locale text), with English defaults so the component is usable and testable
  * standalone. A consumer app (the till, the dashboard) passes its own i18n; only the keys it overrides
- * change. `covers`/`toServe` also flow down into each `<wt-table-token>`.
+ * change. `covers`/`toServe`/`reserved` also flow down into each `<wt-table-token>`.
  */
 export interface FloorCanvasCopy {
   floor: string;
   covers: string;
   toServe: string;
+  /** The reserved chip's prefix word ("Reservada"/"Reserved"), threaded into each token (Bookings-1 §4). */
+  reserved: string;
   zone: string;
   rotate: string;
   remove: string;
@@ -41,6 +43,7 @@ const DEFAULT_COPY: FloorCanvasCopy = {
   floor: "Floor plan",
   covers: "covers",
   toServe: "to serve",
+  reserved: "Reserved",
   zone: "Zone",
   rotate: "Rotate",
   remove: "Remove from plan",
@@ -323,7 +326,7 @@ export class WtFloorCanvas extends LitElement {
       >
         <wt-table-token
           .table=${t}
-          .labels=${{ covers: copy.covers, toServe: copy.toServe }}
+          .labels=${{ covers: copy.covers, toServe: copy.toServe, reserved: copy.reserved }}
         ></wt-table-token>
       </button>
     `;

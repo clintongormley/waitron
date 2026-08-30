@@ -1066,6 +1066,8 @@ describe("TillApi", () => {
         readyToServe: 3,
         enRoute: 1,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
+        // Bookings-1 §4: an imminent reservation rides the read-model and must round-trip decoded.
+        nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
         // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
         posX: 250,
         posY: 400,
@@ -1084,6 +1086,7 @@ describe("TillApi", () => {
         readyToServe: 0,
         enRoute: 0,
         status: null,
+        nextReservation: null,
         // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
         posX: null,
         posY: null,
