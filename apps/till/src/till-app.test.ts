@@ -18,6 +18,7 @@ import type {
   HeldOrderSummary,
   PayOutcome,
   TabLine,
+  TableServiceStatus,
   TableState,
   TillApi,
   TillProduct,
@@ -248,10 +249,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
-    // Device mode (device-identity-1 §5a): the boot device probe. Defaults to a 401 — a NORMAL operator
-    // till is not an enrolled device — so every existing test boots to the lock screen as before; the
-    // device-boot test overrides it to resolve. `enrolDevice`/`deviceAdvance` are the station screen's
-    // (device mode), present so its own probe/enrol paths never hit an undefined method.
+    // Device mode (device-identity-1 §5a): the boot device probe. `getDeviceIdentity` is the kind-aware
+    // probe the boot runs FIRST (handheld-tableside Task 7); it defaults to a 401 — a NORMAL operator till
+    // is not an enrolled device — so every existing test boots to the lock screen as before. The KDS-boot
+    // test overrides it to `kds_station` (then `getDeviceStation` prefetches the queue); the handheld-boot
+    // test overrides it to `handheld`. `getDeviceStation` keeps its own 401 default so the KDS end-state is
+    // unchanged. `enrolDevice`/`deviceAdvance` are the station screen's (device mode), present so its own
+    // probe/enrol paths never hit an undefined method.
+    getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     enrolDevice: vi.fn().mockResolvedValue({
       deviceId: "dev-1",
@@ -285,6 +290,9 @@ const schedule = (el: TillApp) =>
 const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
 const station = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen");
+/** The handheld enrol screen (handheld-tableside Task 8), present only while `handheldEnrolling` is set;
+ * queried by tag (its class is not imported here — the app only needs to know it is mounted). */
+const handheldEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-handheld-enrol-screen");
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
@@ -459,13 +467,20 @@ describe("till-app", () => {
   // Device mode (device-identity-1 §5a): an enrolled display boots straight into its bound station; a
   // normal operator till's 401 device probe leaves it on the lock screen with no boot error; and the
   // lock screen's set-up affordance routes a fresh display into device mode to reach the enrol view.
-  it("boots an ENROLLED device straight into the station screen in device mode", async () => {
+  it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
       // Drive the venue default to en-GB (≠ the es-ES starting point) so the device path's venue-default
       // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
       // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
       // guard must never withhold the venue default from the operator-less device path.
       getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
+      // The kind-aware probe (Task 7): a `kds_station` identity keeps the existing behaviour — the boot
+      // then PREFETCHES the bound station's queue (`getDeviceStation`), a DELIBERATE second authenticated
+      // read that preserves the `initialDeviceStation` optimisation. Only the mock plumbing changes here;
+      // the end-state assertions (lands on `station`, `deviceMode` true) are exactly as before.
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
@@ -479,14 +494,163 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  it("a normal operator till (401 device probe) stays on the lock screen with NO boot error", async () => {
-    // The default stub's getDeviceStation rejects `device.unauthorized` — the expected not-a-device case.
+  it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
+    // The kind-aware probe (Task 7): a `handheld` identity puts the till into handheld mode but STAYS on
+    // the lock screen — the waiter PIN-logs-in, then lands on the floor rather than the counter POS.
+    const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+      // The floor's data source (FP-1) — proving the handheld login LOADS the floor via `#onShowFloor`,
+      // not that it merely switches `screen` to an empty one (`<till-floor-screen>` renders purely from
+      // these props, which only `#onShowFloor` fetches).
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+      listStatuses: vi.fn().mockResolvedValue([status]),
+    });
+    await flush(el);
+    // A handheld waits on the lock screen (unlike a kds_station, which skips it) — but in handheld mode.
+    expect(lock(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // A handheld is NOT a KDS display — the kind branch never prefetches the station queue.
+    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    // After login the waiter lands on the FLOOR (the face-set's post-lock face), never the counter.
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    expect(counter(el)).toBeNull();
+    // The floor was LOADED, not just shown: `#onShowFloor`'s three fetches ran and the screen renders
+    // POPULATED from them — the fix for the empty-floor dead end.
+    expect(currentApi.getTablesState).toHaveBeenCalled();
+    expect(currentApi.listZones).toHaveBeenCalled();
+    expect(currentApi.listStatuses).toHaveBeenCalled();
+    const f = floor(el);
+    expect(f).not.toBeNull();
+    expect(f!.tables).toEqual([freeTable]);
+    expect(f!.zones).toEqual([floorZone]);
+    // Counter concerns a handheld's floor landing never shows are skipped on this path.
+    expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
+  });
+
+  // Handheld face-set containment (§6a): the phone shell may reach ONLY `HANDHELD_FACES`
+  // (`lock`/`floor`/`table-order`). A `back-to-counter` — whether from the floor's Back affordance or
+  // bubbled from any child — must NOT land the handheld on the counter POS (from which `station`/`expo`/
+  // `schedule` are reachable). The screen state machine consults the face-set instead of navigating
+  // blindly; the floor's Back affordance is suppressed in handheld mode (`canExitToCounter`).
+  describe("handheld face-set containment (§6a)", () => {
+    /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
+    async function toHandheldFloor(): Promise<TillApp> {
+      const { el } = await mountApp({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([openTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        getTabLines: vi.fn().mockResolvedValue([]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      return el;
+    }
+
+    it("suppresses the floor's back-to-counter affordance in handheld mode (canExitToCounter=false)", async () => {
+      const el = await toHandheldFloor();
+      expect(floor(el)).not.toBeNull();
+      // UI honesty: the handheld floor is the top of the phone shell, so its Back-to-counter control is
+      // gone (a handheld has no counter to return to).
+      expect(floor(el)!.canExitToCounter).toBe(false);
+      expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
+    });
+
+    it("does NOT leave the face-set when back-to-counter fires from the floor (stays on floor)", async () => {
+      const el = await toHandheldFloor();
+      // Fire the escape event the floor's Back used to emit — the app's face-set gate must swallow it.
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+      // Still on the floor; the counter POS (and the station/expo/schedule it leads to) is unreachable.
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
+
+    it("does NOT leave the face-set when back-to-counter bubbles from the table-order screen", async () => {
+      const el = await toHandheldFloor();
+      emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      // A stray back-to-counter bubbling up from the table-order subtree must be gated too — the handheld
+      // stays on `table-order` (a face-set member), never falls through to the counter.
+      emit(tableOrder(el)!, "back-to-counter");
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
+  });
+
+  it("a normal operator till (401 identity probe) stays on the lock screen with NO boot error", async () => {
+    // The default stub's getDeviceIdentity rejects `device.unauthorized` — the expected not-a-device case.
     const { el } = await mountApp();
     await flush(el);
     expect(lock(el)).not.toBeNull();
     expect(station(el)).toBeNull();
-    // A device-station 401 must NOT surface `boot.error` (that is only for a failed getTill).
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
+    // A rejected identity probe never falls through to the KDS station prefetch.
+    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    // A device 401 must NOT surface `boot.error` (that is only for a failed getTill).
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  // A RE-BOOT resets the device-mode state before re-probing (`#boot` runs more than once — notably
+  // `#onHandheldEnrolled` re-runs it after a fresh phone enrols). Device state left by a PRIOR boot (or a
+  // prior `#onSetupDevice`) must not survive into a later one: the probe RESETS `handheldMode`/`deviceMode`
+  // and the `screen` baseline before re-establishing the correct mode, so every boot starts clean.
+  it("a re-boot resolving handheld after a prior device-mode state ends on lock in handheld mode (not station)", async () => {
+    // First boot 401s → normal lock; `setup-device` then leaves deviceMode=true / screen=station; the
+    // re-boot's identity probe resolves `handheld`.
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    // Leave a stale device-mode state behind: setup-device flips deviceMode on and navigates to station.
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    expect(station(el)).not.toBeNull();
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
+    // Re-boot (the enrol path) with the identity now `handheld`. Emit from the station element — it
+    // bubbles to the app's `@handheld-enrolled` handler, which re-runs `#boot`.
+    emit(station(el)!, "handheld-enrolled");
+    await flush(el);
+    // The re-boot reset the stale device state before re-probing: a handheld waits on the lock screen,
+    // never the station the prior setup-device left it on, and deviceMode is cleared.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+  });
+
+  it("a re-boot resolving NO device after a prior handheld boot returns to the normal lock (both modes false)", async () => {
+    // First boot resolves `handheld` (handheldMode=true, on lock); the re-boot's probe 401s — no device.
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValueOnce({ deviceId: "d1", kind: "handheld", stationId: null })
+        .mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    await flush(el);
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Re-boot with no device — `#onHandheldEnrolled`'s path, but the cookie no longer resolves.
+    emit(lock(el)!, "handheld-enrolled");
+    await flush(el);
+    // The stale handheld mode did not survive: back to a normal operator lock, both device modes false.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
   });
 
   it("the lock screen's set-up affordance routes a fresh display into device mode", async () => {
@@ -499,6 +663,88 @@ describe("till-app", () => {
     const s = station(el);
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
+  });
+
+  // §C2 containment/identity. An enrolled handheld returns to the lock screen on every logout/cold boot
+  // (it STAYS on lock, unlike a KDS). If the lock screen still offered "Set up as kitchen display", a
+  // waiter could re-enrol the phone as a KDS station (silently swapping its device cookie) and escape
+  // the phone shell to `station`. The app hands the lock screen `deviceEnrolled = handheldMode ||
+  // deviceMode`, which hides both device-setup affordances on an already-enrolled device.
+  it("hides the lock screen's device-setup affordances on an enrolled handheld (deviceEnrolled)", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    // A handheld waits on the lock screen, in handheld mode.
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    expect(lock(el)!.deviceEnrolled).toBe(true);
+    // Neither affordance is rendered, so the re-enrol / escape route is gone.
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-device]")).toBeNull();
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-handheld]")).toBeNull();
+  });
+
+  // §C2 defense-in-depth. Even if a `setup-device` event still reached the app while a handheld is
+  // active (a leaked/bubbled affordance), `#onSetupDevice` must NOT flip the phone's identity to a KDS
+  // station nor navigate it to `station` — it is routed through the face-set gate and guarded on
+  // handheld mode. Prove-by-deletion: drop that guard and this test goes red (deviceMode flips, screen
+  // becomes `station`).
+  it("ignores a setup-device event while a handheld is active (no identity flip, no escape to station)", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Fire the escape event directly (bypassing the now-hidden affordance) — the gate must swallow it.
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    // Still the phone shell: on the lock screen, never the station, and identity is unchanged.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+  });
+
+  // Handheld enrol (handheld-tableside Task 8): the lock screen's "set up as waiter handheld" affordance
+  // opens the enrol view, and a redeemed code re-boots the app into the phone shell.
+  it("the set-up-handheld affordance opens the handheld enrol view (lock screen gone)", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    // The lock screen emits `setup-handheld`; the app overlays the handheld enrol screen so a fresh phone
+    // can pair itself, and the lock screen it replaces is no longer rendered.
+    emit(lock(el)!, "setup-handheld");
+    await flush(el);
+    expect(handheldEnrol(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+  });
+
+  it("a redeemed handheld enrol re-boots into the phone shell (handheld mode, back on the lock screen)", async () => {
+    const { el } = await mountApp({
+      // The FIRST boot (at mount) is a normal 401 — not-a-device. AFTER enrol the cookie is set, so the
+      // re-boot's SECOND identity probe resolves `handheld`. `mockRejectedValueOnce` then default-resolve
+      // gives the two-call sequence the one mock must serve across both boots.
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    emit(lock(el)!, "setup-handheld");
+    await flush(el);
+    expect(handheldEnrol(el)).not.toBeNull();
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `handheld-enrolled`.
+    emit(handheldEnrol(el)!, "handheld-enrolled");
+    await flush(el);
+    // The re-boot read the fresh cookie as `handheld`: the enrol view is gone, the app is back on the lock
+    // screen (the phone shell — a handheld waits for the PIN login), and handheld mode is on.
+    expect(handheldEnrol(el)).toBeNull();
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
+    expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
   });
 
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
@@ -1747,6 +1993,43 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledWith("wo-7");
         expect(screen.lines).toEqual([tabLine]);
         expect(screen.products).toEqual([cafe]);
+      });
+
+      it("lets a normal (counter/fixed) till settle the tab — canSettle threads through as true", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        // A fixed till is not in handheld mode ⇒ the pay widget is available.
+        expect(screen.canSettle).toBe(true);
+      });
+
+      it("an order-only handheld cannot settle — canSettle threads through as false", async () => {
+        // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
+        // table reaches the table-order screen. It is ORDER-ONLY, so the pay section must be hidden.
+        const { el } = await mountApp({
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        await flush(el);
+        // A handheld waits on the lock screen, then lands on the floor after PIN login.
+        emit(lock(el)!, "logged-in", {
+          personId: "p1",
+          displayName: "Ana",
+          canConfigureTill: false,
+        });
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+        await flush(el);
+        const screen = tableOrder(el)!;
+        expect(screen).not.toBeNull();
+        expect(screen.canSettle).toBe(false);
       });
 
       it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {

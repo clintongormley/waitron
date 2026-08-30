@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
@@ -18,11 +18,14 @@ import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import {
   DEVICE_COOKIE,
+  assertNotHandheld,
   clearDeviceCookie,
   readDeviceCookie,
   requireDevice,
   setDeviceCookie,
+  tryReadDevice,
 } from "./device-session.js";
+import type { DeviceBinding } from "./device-session.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — MANDATORY for `requireDevice` (CLAUDE.md §4). The guard is DB VALIDATION
@@ -107,13 +110,22 @@ type ProbeResult =
   | { ok: true; binding: { deviceId: string; kind: string; stationId: string | null } }
   | { ok: false; code: string };
 
-/** Run `requireDevice` behind a one-route Hono app carrying the given cookie value (or none), the
- * `management-session.test.ts` shape. Returns the binding on success or the thrown code on failure. */
-async function probe(cfg: TillConfig, cookieValue: string | null): Promise<ProbeResult> {
+/**
+ * The shared one-route scaffold every guard probe runs behind (the `management-session.test.ts`
+ * shape): a fresh Hono app whose sole `GET /probe` runs `handler` with the guard's `deps` + the request
+ * `Context`, carrying the given cookie value (or none), with an `onError` that captures any throw. The
+ * three probes below differ only in which guard they call and how they read the outcome — they supply
+ * `handler` and interpret `{ res, thrown }`; the setup lives here once.
+ */
+async function runProbe(
+  cfg: TillConfig,
+  cookieValue: string | null,
+  handler: (deps: { db: Database; cfg: { tenantId: string } }, c: Context) => Promise<Response>,
+): Promise<{ res: Response; thrown: unknown }> {
   const app = new Hono();
   const deps = { db: suite.admin, cfg: { tenantId: cfg.tenantId } };
   let thrown: unknown;
-  app.get("/probe", async (c) => c.json(await requireDevice(deps, c)));
+  app.get("/probe", (c) => handler(deps, c));
   app.onError((err, c) => {
     thrown = err;
     return c.body(null, 500);
@@ -122,12 +134,64 @@ async function probe(cfg: TillConfig, cookieValue: string | null): Promise<Probe
     "/probe",
     cookieValue === null ? undefined : { headers: { cookie: `${DEVICE_COOKIE}=${cookieValue}` } },
   );
+  return { res, thrown };
+}
+
+/** Run `requireDevice` behind the shared scaffold. Returns the binding on success or the thrown code on
+ * failure. */
+async function probe(cfg: TillConfig, cookieValue: string | null): Promise<ProbeResult> {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) =>
+    c.json(await requireDevice(deps, c)),
+  );
   if (res.status === 200) {
     return {
       ok: true,
       binding: (await res.json()) as { deviceId: string; kind: string; stationId: string | null },
     };
   }
+  return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
+}
+
+/** Enrol a REAL handheld device — no station (`kindRequiresStation("handheld")` is false, Task 2) — so
+ * `tryReadDevice` resolves its cookie to a `handheld` binding. Same enrol path as `enrolDeviceFixture`,
+ * with the order-only kind. */
+async function enrolHandheldFixture(): Promise<{
+  cfg: TillConfig;
+  deviceId: string;
+  token: string;
+}> {
+  const { cfg } = await setupStation();
+  const { code } = await asApp(suite.admin, cfg, (tx) =>
+    generatePairingCode(tx, cfg, { kind: "handheld", stationId: null, label: "Waiter phone" }),
+  );
+  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  return { cfg, deviceId: dev.deviceId, token: dev.token };
+}
+
+/** Run the NON-throwing `tryReadDevice` behind the shared scaffold, returning the binding or `null` it
+ * resolves the cookie to — the `probe` shape, but reading the JSON-encoded value instead of catching a
+ * throw (a `null` round-trips as `null`). */
+async function probeTry(
+  cfg: TillConfig,
+  cookieValue: string | null,
+): Promise<DeviceBinding | null> {
+  const { res } = await runProbe(cfg, cookieValue, async (deps, c) =>
+    c.json((await tryReadDevice(deps, c)) ?? null),
+  );
+  return (await res.json()) as DeviceBinding | null;
+}
+
+/** Run `assertNotHandheld` behind the shared scaffold: `{ ok: true }` when it passes (no throw), or the
+ * thrown code when it refuses. */
+async function probeAssert(
+  cfg: TillConfig,
+  cookieValue: string | null,
+): Promise<{ ok: true } | { ok: false; code: string }> {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
+    await assertNotHandheld(deps, c, "record_sale");
+    return c.body(null, 204);
+  });
+  if (res.status === 204) return { ok: true };
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
@@ -237,5 +301,51 @@ describe("requireDevice (real Postgres)", () => {
     await revoke(deviceId);
     const result = await probe(cfg, `${deviceId}.${token}`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
+  });
+});
+
+describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
+  it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
+    const { cfg, deviceId, token, stationId } = await enrolDeviceFixture();
+    // Success resolves to the same binding `requireDevice` returns.
+    expect(await probeTry(cfg, `${deviceId}.${token}`)).toEqual({
+      deviceId,
+      kind: "kds_station",
+      stationId,
+    });
+    // Every point where `requireDevice` throws `device.unauthorized`, the core returns `null`: no dot,
+    // empty, empty selector, empty token, non-uuid selector, unknown id, wrong token.
+    for (const bad of [
+      "no-dot-here",
+      "",
+      ".tokenonly",
+      `${deviceId}.`,
+      "not-a-uuid.sometoken",
+      `${randomUUID()}.${token}`,
+      `${deviceId}.not-the-real-token`,
+    ]) {
+      expect(await probeTry(cfg, bad)).toBeNull();
+    }
+    expect(await probeTry(cfg, null)).toBeNull(); // absent cookie
+  });
+
+  it("assertNotHandheld refuses an ACTIVE handheld with device.forbidden_action", async () => {
+    const { cfg, deviceId, token } = await enrolHandheldFixture();
+    expect(await probeAssert(cfg, `${deviceId}.${token}`)).toEqual({
+      ok: false,
+      code: "device.forbidden_action",
+    });
+  });
+
+  it("assertNotHandheld passes a non-handheld device, an absent cookie, and a failed device cookie", async () => {
+    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    // A kds_station device is not order-only — it never posts to a sale route, and the firewall does
+    // not block it here.
+    expect(await probeAssert(cfg, `${deviceId}.${token}`)).toEqual({ ok: true });
+    // An ordinary till carries NO device cookie: `tryReadDevice` → null → the firewall passes.
+    expect(await probeAssert(cfg, null)).toEqual({ ok: true });
+    // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
+    // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
+    expect(await probeAssert(cfg, "not-a-uuid.sometoken")).toEqual({ ok: true });
   });
 });

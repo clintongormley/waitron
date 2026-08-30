@@ -287,16 +287,17 @@ function deviceCookieFrom(res: Response): string {
   return setCookie!.split(";")[0]!;
 }
 
-/** Mint a pairing code for a station via the management route, then enrol a device with it (unauth).
- *  Returns the device id + the cookie jar. */
-async function enrolAt(
+/** Mint a pairing code from `codeBody` via the management route, then enrol a device with it (unauth).
+ *  The ONE enrol path both `enrolAt` (kds_station) and `enrolHandheld` funnel through, so the two kinds
+ *  cannot drift. Returns the device id + the cookie jar. */
+async function enrolWithCode(
   app: Hono,
   managerCookie: string,
-  stationId: string,
+  codeBody: { kind: string; stationId?: string; label: string },
 ): Promise<{ deviceId: string; jar: string }> {
   const codeRes = await send(app, "POST", "/management-api/device-codes", {
     cookie: managerCookie,
-    body: { kind: "kds_station", stationId, label: "Pantalla Cocina" },
+    body: codeBody,
   });
   expect(codeRes.status).toBe(201);
   const { code } = (await codeRes.json()) as { code: string };
@@ -305,6 +306,29 @@ async function enrolAt(
   expect(enrol.status).toBe(200);
   const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
   return { deviceId, jar: deviceCookieFrom(enrol) };
+}
+
+/** Mint a pairing code for a station via the management route, then enrol a device with it (unauth).
+ *  Returns the device id + the cookie jar. */
+function enrolAt(
+  app: Hono,
+  managerCookie: string,
+  stationId: string,
+): Promise<{ deviceId: string; jar: string }> {
+  return enrolWithCode(app, managerCookie, {
+    kind: "kds_station",
+    stationId,
+    label: "Pantalla Cocina",
+  });
+}
+
+/** Mint a HANDHELD pairing code (no station — Task 2: `kindRequiresStation("handheld")` is false), then
+ *  enrol a device with it (unauth). Returns the device id + the cookie jar. */
+function enrolHandheld(
+  app: Hono,
+  managerCookie: string,
+): Promise<{ deviceId: string; jar: string }> {
+  return enrolWithCode(app, managerCookie, { kind: "handheld", label: "Waiter phone" });
 }
 
 describe("Device API over real Postgres", () => {
@@ -686,6 +710,22 @@ describe("Device API over real Postgres", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
   });
 
+  it("mints a handheld code with no station", async () => {
+    // A `handheld` code binds to no station (Task 2: `kindRequiresStation("handheld")` is false), so a
+    // body carrying just `{ kind, label }` and NO `stationId` mints a code — the route makes the station
+    // conditional on the kind. THE PROOF: reverting the route to the unconditional
+    // `requireBodyUuid(body.stationId, …)` rejects this missing station as `management.request_invalid`
+    // (400), flipping the assertion red; restoring the conditional turns it green again.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const res = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: { kind: "handheld", label: "Waiter phone" },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).code).toEqual(expect.any(String));
+  });
+
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
@@ -758,5 +798,46 @@ describe("Device API over real Postgres", () => {
     const jar = deviceCookieFrom(ok);
     const stationRes = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(stationRes.status).toBe(200);
+  });
+
+  it("GET /api/device/me reports an enrolled handheld's kind", async () => {
+    // The client boot probe (Task 7): `requireDevice` resolves the device cookie to its binding, and the
+    // route echoes it back so the till client can pick which shell to render. A handheld binds to no
+    // station, so `stationId` is null.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const { deviceId, jar } = await enrolHandheld(app, venue.managerCookie);
+    const res = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
+  });
+
+  it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
+    // I4 (whole-branch review): before the handheld kind existed, EVERY device was a `kds_station`,
+    // always station-bound, so `GET /api/device/station`'s `stationId === null` branch was unreachable
+    // (and was `/* v8 ignore */`d). A `handheld` binds to no station (`stationId` is null), and
+    // `requireDevice` authenticates ANY active device regardless of kind, so a handheld now REACHES that
+    // branch — it throws `device.unauthorized` (401), the honest "this device has no station queue". The
+    // branch is now genuinely reachable and tested, no longer ignored.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const { jar } = await enrolHandheld(app, venue.managerCookie);
+    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.unauthorized" },
+    });
+  });
+
+  it("GET /api/device/me 401s a request with no device cookie", async () => {
+    // No cookie folds straight through `requireDevice` to `device.unauthorized` (401) — the route adds no
+    // handling of its own.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const res = await send(app, "GET", "/api/device/me", { cookie: null });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.unauthorized" },
+    });
   });
 });

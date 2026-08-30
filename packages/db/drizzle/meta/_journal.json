@@ -526,6 +526,20 @@
       "when": 1788079157678,
       "tag": "0074_location_catalogues_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1788092803689,
+      "tag": "0075_narrow_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1788092852889,
+      "tag": "0076_shocking_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

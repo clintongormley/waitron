@@ -17,6 +17,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
+import "./screens/till-handheld-enrol-screen.js";
 import "./screens/till-expo-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
@@ -58,6 +59,18 @@ import type {
  */
 type Screen =
   "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
+
+/**
+ * The phone face-set for a `handheld` device (handheld-tableside spec §6a) — the screens a waiter's
+ * phone offers, in order: `lock` (PIN sign-in), then the live `floor`, then per-table ordering
+ * (`table-order`). No counter POS, KDS, expo or schedule. This is the CONFIGURABLE SEAM: it ships as a
+ * constant keyed by device kind (the only kind with a bespoke face-set today), and a later slice
+ * persists it per device and adds a dashboard editor (spec §6a/§9). Kept beside {@link Screen} so a new
+ * face is a compile error here the moment the union changes. `#onLoggedIn` lands a handheld on its
+ * post-lock face (`HANDHELD_FACES[1]`, the `floor`); the persisted slice will drive the rest of the
+ * handheld's navigation from this list directly.
+ */
+const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -193,6 +206,25 @@ export class TillApp extends LitElement {
    * `case "station"`; default `false` keeps the operator "Kitchen" nav path unchanged.
    */
   @state() private deviceMode = false;
+  /**
+   * Whether this browser is an enrolled HANDHELD device (handheld-tableside Task 7) — a waiter's phone,
+   * as opposed to a `kds_station` display ({@link deviceMode}) or a normal operator till. Set `true` by
+   * {@link #boot} when the device probe's {@link DeviceIdentity.kind} is `handheld`; a handheld STAYS on
+   * the lock screen (unlike a KDS display, which boots past it) — the waiter PIN-logs-in — and then lands
+   * on the live floor rather than the counter POS ({@link #onLoggedIn} reads this to pick the post-login
+   * face, {@link HANDHELD_FACES}). Default `false` keeps every normal operator till's counter landing
+   * unchanged.
+   */
+  @state() private handheldMode = false;
+  /**
+   * Whether the lock screen's "set up as waiter handheld" affordance has opened the handheld ENROL view
+   * (handheld-tableside Task 8) — the twin of {@link deviceMode}'s station-screen enrol path, but for a
+   * FRESH phone that holds no device cookie yet. Set `true` by {@link #onSetupHandheld}; while set,
+   * `render` shows `<till-handheld-enrol-screen>` in place of the normal screen. Cleared by
+   * {@link #onHandheldEnrolled} once the code is redeemed, which then re-runs {@link #boot} so the now-set
+   * `handheld` cookie routes the app into the phone shell.
+   */
+  @state() private handheldEnrolling = false;
   /**
    * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
    * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
@@ -497,20 +529,44 @@ export class TillApp extends LitElement {
       this.errorKey = "boot.error";
       return;
     }
-    // DEVICE PROBE (device-identity-1 §5a). An already-ENROLLED display holds the device cookie, so this
-    // succeeds and the app boots STRAIGHT into device mode — the station screen with no login (it re-reads
-    // its own bound queue). A normal operator till has no such cookie → 401 (`device.unauthorized`), the
-    // EXPECTED not-a-device case: swallow it and stay on `lock`. Deliberately NOT `boot.error` — a
-    // device-station 401 is not a boot failure (that is getTill's alone). State-only writes, so no
-    // isConnected guard is needed (the DISCONNECT SAFETY note; the module-global `setLocale` above is the
-    // only effect that took one).
+    // DEVICE PROBE (device-identity §3b, handheld-tableside Task 7). An already-ENROLLED device holds the
+    // device cookie, so `GET /api/device/me` succeeds and reports its KIND; the boot then picks the shell:
+    //  - `handheld` (a waiter's phone): enter handheld mode but STAY on `lock` — the waiter PIN-logs-in and
+    //    `#onLoggedIn` lands them on the floor. It binds to no station, so nothing is prefetched here.
+    //  - `kds_station` (a kitchen display): boot STRAIGHT into device mode — the station screen with no
+    //    login. This makes a SECOND authenticated read (`getDeviceStation`) after the identity read — a
+    //    DELIBERATE, accepted cost (one extra read per KDS display boot) that PRESERVES the
+    //    `initialDeviceStation` prefetch, so the station screen adopts the queue instead of re-reading it
+    //    on mount (`#loadDevice`).
+    //  - any other kind: fall through and remain a normal operator till on `lock` (forward-compatible — an
+    //    older client ignores a kind it does not know).
+    // A normal operator till has no device cookie → 401 (`device.unauthorized`), the EXPECTED not-a-device
+    // case: swallow it and stay on `lock`. Deliberately NOT `boot.error` — a device 401 is not a boot
+    // failure (that is getTill's alone). State-only writes, so no isConnected guard is needed (the
+    // DISCONNECT SAFETY note; the module-global `setLocale` above is the only effect that took one).
+    // RESET the device-mode state to a clean baseline BEFORE re-probing. `#boot` runs more than once —
+    // `#onHandheldEnrolled` re-runs it after a fresh phone enrols — and the branches below only ever SET
+    // their mode, never clear a prior one, so state from an earlier boot (or a prior `#onSetupDevice` that
+    // set `deviceMode`/`screen = "station"`) would otherwise survive and mis-render. The reset is
+    // unconditional so every boot starts known: `screen` falls back to the normal `lock`, then the probe's
+    // branches re-establish the correct mode (`kds_station` moves to `station`; `handheld` and the
+    // no-device case both legitimately stay on `lock`).
+    this.handheldMode = false;
+    this.deviceMode = false;
+    this.screen = "lock";
     try {
-      // Stash the probe's resolved station and hand it to the station screen as `.initialDeviceStation`,
-      // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — one
-      // authenticated queue read per enrolled-display boot, not two.
-      this.initialDeviceStation = await this.api.getDeviceStation();
-      this.deviceMode = true;
-      this.screen = "station";
+      const identity = await this.api.getDeviceIdentity();
+      if (identity.kind === "handheld") {
+        // Stay on `lock`; the waiter PIN-logs-in, then `#onLoggedIn` lands them on the floor.
+        this.handheldMode = true;
+      } else if (identity.kind === "kds_station") {
+        // Prefetch the bound station's queue and hand it to the station screen as `.initialDeviceStation`,
+        // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — the
+        // second read here is the accepted cost of keeping that one-mount-read optimisation (see above).
+        this.initialDeviceStation = await this.api.getDeviceStation();
+        this.deviceMode = true;
+        this.screen = "station";
+      }
     } catch {
       // Not an enrolled device (or a transient probe failure) — remain a normal operator till on `lock`.
     }
@@ -539,18 +595,36 @@ export class TillApp extends LitElement {
     // in the session response. Convenience only — the placement route re-checks server-side.
     this.canEdit = canConfigureTill;
     this.errorKey = undefined;
-    this.screen = "counter";
-    await this.#refreshHeldOrders();
-    await this.#refreshStationQueue();
-    // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
-    // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
-    // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
-    // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
-    // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
-    try {
-      this.staff = await this.api.listStaff();
-    } catch {
-      // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
+    // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
+    // (HANDHELD_FACES[1], the live floor); a normal operator till opens the counter POS.
+    const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
+    if (landingFace === "floor") {
+      // LOAD the floor the way counter→floor navigation does — `<till-floor-screen>` renders purely from
+      // the app-owned `.zones`/`.tables`/`.statuses` props, which ONLY `#onShowFloor` fetches (it then
+      // sets `screen = "floor"`). A handheld's face-set has no counter/`@show-floor` affordance and no
+      // populated table to tap, so a bare `this.screen = "floor"` would strand the waiter on an empty,
+      // unusable floor. `#onShowFloor` swallows a failed load (degrade gracefully), so this never blocks.
+      await this.#onShowFloor();
+    } else {
+      this.screen = landingFace;
+      // The counter's cross-till held list + default-station queue — counter concerns a handheld's floor
+      // landing never shows, so they run only on the counter path (mirroring counter→floor nav, which
+      // likewise fetches neither).
+      await this.#refreshHeldOrders();
+      await this.#refreshStationQueue();
+      // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
+      // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
+      // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
+      // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
+      // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
+      // ON THE COUNTER PATH ONLY: `staff` is consumed exclusively by `case "schedule":`, a face a
+      // handheld's face-set can never reach ({@link HANDHELD_FACES}), so a handheld landing on the floor
+      // never fetches it — mirroring the held-list/station-queue guard above.
+      try {
+        this.staff = await this.api.listStaff();
+      } catch {
+        // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
+      }
     }
   }
 
@@ -887,12 +961,45 @@ export class TillApp extends LitElement {
    * Route a FRESH (unenrolled) display into device mode from the lock screen's "set up as kitchen display"
    * affordance (device-identity-1 §5a). The station screen mounts in device mode, probes its own device
    * station (401, since there is no cookie yet), and shows the enrol view so the operator can pair the
-   * display with a code. State-only switch, like {@link #onShowStation}.
+   * display with a code.
+   *
+   * Defense-in-depth (§C2): a handheld returns to the lock screen on every logout and cold boot, so a
+   * leaked/bubbled `setup-device` must not let it become a KDS. The `handheldMode` guard withholds BOTH
+   * the identity flip (`deviceMode`) and the navigation — and the navigation itself goes through
+   * {@link #goToScreen}, whose face-set gate ({@link HANDHELD_FACES} excludes `station`) is the single
+   * place that refusal lives. The lock screen already hides this affordance from an enrolled device
+   * (`deviceEnrolled`); this is the second line if the event reaches the app anyway.
    */
   #onSetupDevice(): void {
+    if (this.handheldMode) return;
     this.errorKey = undefined;
     this.deviceMode = true;
-    this.screen = "station";
+    this.#goToScreen("station");
+  }
+
+  /**
+   * Route a FRESH phone into the handheld enrol view from the lock screen's "set up as waiter handheld"
+   * affordance (handheld-tableside Task 8) — the twin of {@link #onSetupDevice}. State-only switch: while
+   * `handheldEnrolling` is set, `render` shows `<till-handheld-enrol-screen>` instead of the lock screen,
+   * so the operator can pair the phone with a code. Unlike the KDS path this does NOT touch `screen` —
+   * the enrol screen is an overlay on the boot state, and a successful enrol re-boots into the shell
+   * rather than navigating within this session.
+   */
+  #onSetupHandheld(): void {
+    this.errorKey = undefined;
+    this.handheldEnrolling = true;
+  }
+
+  /**
+   * The handheld enrol view redeemed a pairing code (handheld-tableside Task 8): the device cookie is now
+   * set, so leave the enrol view and re-run {@link #boot}. The boot's device probe reads the fresh cookie
+   * as `handheld`, sets {@link handheldMode}, and keeps the app on the lock screen — the phone shell — for
+   * the waiter to PIN-log-in. Re-boot (not a bare state flip) so the phone picks up its shell exactly as a
+   * cold load of an already-enrolled handheld would, one code path for both.
+   */
+  async #onHandheldEnrolled(): Promise<void> {
+    this.handheldEnrolling = false;
+    await this.#boot();
   }
 
   /** Show the expo/pass display screen (KDS-3) — the expediter's cross-station board, reached from the
@@ -1329,11 +1436,41 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * The face-set gate for the transitions that can fire WHILE A HANDHELD IS ACTIVE (handheld-tableside
+   * §6a). A normal operator till may reach every {@link Screen}; a handheld may reach ONLY
+   * {@link HANDHELD_FACES} (`lock`/`floor`/`table-order`), so a `target` outside that set is REFUSED —
+   * the handheld stays put. This makes {@link HANDHELD_FACES} the genuine gate rather than a scattered
+   * `handheldMode` read.
+   *
+   * The handlers routed through here are exactly the two whose events can reach the app from inside the
+   * phone shell:
+   *  - {@link #onBackToCounter} — a `back-to-counter` from the floor's Back or bubbled from the
+   *    table-order subtree; the gate keeps it off the counter POS (and the `station`/`expo`/`schedule`
+   *    it leads to).
+   *  - {@link #onSetupDevice} — a leaked/bubbled `setup-device` from the lock screen, itself a handheld
+   *    face; the gate refuses `station` (that handler ALSO guards its `deviceMode` identity flip on
+   *    `handheldMode`, which this gate cannot).
+   *
+   * The remaining counter-side setters — {@link #onShowStation}, {@link #onShowExpo},
+   * {@link #onShowSchedule} and the payment→`ticket` transitions — assign `this.screen` directly and are
+   * NOT gated, because their affordances are emitted only by the counter screen
+   * (`till-counter-screen`), which a handheld never reaches: unreachable-by-affordance, not gated.
+   * Proven by deletion: drop the guard and a handheld's `back-to-counter` lands it on the counter (the
+   * §6a containment test goes red).
+   */
+  #goToScreen(target: Screen): void {
+    if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
+    this.screen = target;
+  }
+
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
-   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). */
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip).
+   * Routed through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use
+   * it to escape the phone shell; a normal till reaches the counter exactly as before. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
-    this.screen = "counter";
+    this.#goToScreen("counter");
   }
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
@@ -1422,6 +1559,8 @@ export class TillApp extends LitElement {
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
         @setup-device=${() => this.#onSetupDevice()}
+        @setup-handheld=${() => this.#onSetupHandheld()}
+        @handheld-enrolled=${() => void this.#onHandheldEnrolled()}
         @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
@@ -1458,10 +1597,18 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        <!-- keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
-             the whole screen subtree, repainting every child in the new language (the screens hold no
-             LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it. -->
-        ${keyed(currentLocale(), this.#renderScreen())}
+        <!-- The handheld enrol view (handheld-tableside Task 8) overlays the boot/lock state when the
+             lock screen's "set up as waiter handheld" affordance opened it — a FRESH phone pairing
+             itself. Its handheld-enrolled event (wired above) re-boots into the phone shell. Shown ahead
+             of the normal screen so it takes precedence over whatever screen the boot left set. -->
+        ${
+          this.handheldEnrolling
+            ? html`<till-handheld-enrol-screen .api=${this.api}></till-handheld-enrol-screen>`
+            : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
+              // the whole screen subtree, repainting every child in the new language (the screens hold no
+              // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+              keyed(currentLocale(), this.#renderScreen())
+        }
       </div>
     `;
   }
@@ -1469,7 +1616,13 @@ export class TillApp extends LitElement {
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "lock":
-        return html`<till-lock-screen .api=${this.api}></till-lock-screen>`;
+        // `deviceEnrolled` gates the lock screen's device-setup affordances (§C2): an already-enrolled
+        // device — a handheld (which STAYS on lock) or a KDS — must not offer "set up as kitchen
+        // display", or a waiter could re-enrol an in-service phone as a KDS and escape the shell.
+        return html`<till-lock-screen
+          .api=${this.api}
+          .deviceEnrolled=${this.handheldMode || this.deviceMode}
+        ></till-lock-screen>`;
       case "counter":
         return html`<till-counter-screen
           .api=${this.api}
@@ -1509,6 +1662,7 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .api=${this.api}
           .canEdit=${this.canEdit}
+          .canExitToCounter=${!this.handheldMode}
         ></till-floor-screen>`;
       // FP-1 (Ruling FP-D): the per-table ordering screen. It renders from the app-owned tab lines
       // (loaded via `getTabLines`, reloaded after each round/serve) and emits `send-round`/`serve-line`/
@@ -1525,6 +1679,7 @@ export class TillApp extends LitElement {
           .fireControl=${this.fireControl}
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
+          .canSettle=${!this.handheldMode}
         ></till-table-order-screen>`;
       // KDS-1 (design §5a): the kitchen's station-display screen. It OWNS its own fetching via `.api`
       // (the station list + the active station's queue) and handles its own advances, so the app just

@@ -67,6 +67,13 @@ function pickStation(el: DevicesScreen, value: string): void {
   select.dispatchEvent(new Event("change"));
 }
 
+/** Pick a device kind in the native <select> and fire its `change`. */
+function pickKind(el: DevicesScreen, value: string): void {
+  const select = q(el, "[data-test=kind-select]") as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event("change"));
+}
+
 describe("devices-screen", () => {
   it("loads devices and stations on connect and renders a row per device", async () => {
     const api = stubApi();
@@ -162,6 +169,47 @@ describe("devices-screen", () => {
     expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
     // Generating reloads the device list so the new device appears.
     expect(api.listDevices).toHaveBeenCalledTimes(2);
+  });
+
+  // Picking the handheld kind HIDES the station picker (a handheld binds to no station) and mints a
+  // station-less code: the body carries `{ kind: "handheld", label }` with NO stationId. Proven by
+  // deletion: without the kind-gated branch #generate always sends kds_station + stationId.
+  it("generates a handheld code with no station picker", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "handheld");
+    await el.updateComplete;
+    // The station picker is gone once the kind is a handheld.
+    expect(q(el, "[data-test=station-select]")).toBeNull();
+
+    typeLabel(el, "Waiter phone");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).toHaveBeenCalledWith({ kind: "handheld", label: "Waiter phone" });
+    expect(q(el, "[data-test=code-panel]")).toBeTruthy();
+    expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
+    expect(api.listDevices).toHaveBeenCalledTimes(2);
+  });
+
+  // A handheld needs no station, so an empty station set (nothing to bind to) does NOT block a handheld
+  // generate — the station guard applies only to the kds_station kind.
+  it("generates a handheld code even with no stations configured", async () => {
+    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "handheld");
+    await el.updateComplete;
+    typeLabel(el, "Waiter phone");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).toHaveBeenCalledWith({ kind: "handheld", label: "Waiter phone" });
   });
 
   it("uses the first station by default when the picker is left untouched", async () => {

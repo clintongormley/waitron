@@ -174,8 +174,10 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     // The direct FK the spec's `shifts` shape uses guarantees referential integrity to `locations`
     // (it does NOT enforce tenant-consistency — that would need the composite (tenant_id, location_id)
     // FK, which shifts and this table deliberately do not use). A never-seeded location → 23503.
+    // A valid station (STATION_A) is supplied so the per-kind station CHECK is satisfied and the ONLY
+    // violated constraint is the location FK.
     const e = await captureError(() =>
-      seedDevice(TENANT_A, null, "Ghost location", GHOST_LOCATION),
+      seedDevice(TENANT_A, STATION_A, "Ghost location", GHOST_LOCATION),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
   });
@@ -310,6 +312,87 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
         )
         .then((r) => r.rows[0]!.n);
       expect(foreign).toBeGreaterThan(0);
+    });
+  });
+
+  // ---- per-kind station CHECK (kds_station ⇒ a station, handheld ⇒ none) --------------------
+
+  it("devices: the per-kind station CHECK ties station presence to device_kind", async () => {
+    // handheld is location-wide, never station-bound (spec §8a): a station on a handheld violates
+    // the CHECK. asApp so the insert runs the SAME app-role path the real enrolment does.
+    const withStation = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
+              values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${STATION_A}, 'Bad handheld', ${TOKEN_HASH})`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
+
+    // handheld WITHOUT a station succeeds — the location-wide binding.
+    const ok = await asApp(TENANT_A, (tx) =>
+      tx.execute<{ id: string }>(
+        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
+            values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${null}, 'Good handheld', ${TOKEN_HASH}) returning id`,
+      ),
+    );
+    expect(ok.rows).toHaveLength(1);
+
+    // kds_station WITHOUT a station is the opposite violation — a kitchen screen needs its station.
+    const kdsNoStation = await captureError(() => seedDevice(TENANT_A, null, "Bad kds"));
+    expect(pgErrorCode(kdsNoStation)).toBe("23514");
+
+    // Proof by deletion of the guard (§4): with the CHECK dropped inside a ROLLED-BACK tx, the SAME
+    // bad handheld-with-station insert now succeeds — attributing the 23514 above to this CHECK, not
+    // to some other constraint. The rollback restores it for the shared template clone. DROP runs as
+    // the owner (app_user holds no DDL), then `set local role app_user` inserts the app path.
+    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+      await tx.execute(sql`alter table devices drop constraint devices_station_kind_ck`);
+      await tx.execute(sql`set local role app_user`);
+      const inserted = await tx.execute<{ id: string }>(
+        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
+            values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${STATION_A}, 'Now allowed', ${TOKEN_HASH}) returning id`,
+      );
+      expect(inserted.rows).toHaveLength(1); // the bad row inserts once the CHECK is gone
+    });
+  });
+
+  it("device_pairing_codes: the per-kind station CHECK ties station presence to device_kind", async () => {
+    const withStation = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+              values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-bad', 'handheld', ${STATION_A}, 'Bad handheld code')`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
+
+    const ok = await asApp(TENANT_A, (tx) =>
+      tx.execute<{ id: string }>(
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-ok', 'handheld', ${null}, 'Good handheld code') returning id`,
+      ),
+    );
+    expect(ok.rows).toHaveLength(1);
+
+    const kdsNoStation = await captureError(() =>
+      seedPairingCode(TENANT_A, null, "sha-kds-nostation", "Bad kds code"),
+    );
+    expect(pgErrorCode(kdsNoStation)).toBe("23514");
+
+    // Proof by deletion of the guard on this table too.
+    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+      await tx.execute(
+        sql`alter table device_pairing_codes drop constraint device_pairing_codes_station_kind_ck`,
+      );
+      await tx.execute(sql`set local role app_user`);
+      const inserted = await tx.execute<{ id: string }>(
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-bad2', 'handheld', ${STATION_A}, 'Now allowed') returning id`,
+      );
+      expect(inserted.rows).toHaveLength(1);
     });
   });
 

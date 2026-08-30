@@ -130,14 +130,31 @@ export class TillLockScreen extends LitElement {
         border-top: 1px solid var(--wt-color-border);
       }
 
-      .setup-device {
+      .setup-device,
+      .setup-handheld {
         width: 100%;
+      }
+
+      /* Space the handheld twin off the kitchen-display affordance above it so the two full-width
+         secondary buttons read as a stack of choices, not one control. */
+      .setup-handheld {
+        margin-top: var(--wt-space-2);
       }
     `,
   ];
 
   /** The HTTP face of the till. Set before the element connects (its lifecycle fetches the roster). */
   @property({ attribute: false }) api!: TillApi;
+
+  /**
+   * Whether THIS browser is already an enrolled device — a waiter's handheld or a KDS (`till-app`
+   * passes `handheldMode || deviceMode`). An enrolled handheld returns to this lock screen on every
+   * logout and cold boot, so the device-setup affordances are gated on this being `false`
+   * (device-identity §C2): showing "Set up as kitchen display" to an already-enrolled phone would let a
+   * waiter re-enrol it as a `kds_station` — silently replacing its device cookie and escaping the phone
+   * shell. A FRESH browser (`false`, the default) still shows both so a first-time enrolment works.
+   */
+  @property({ type: Boolean }) deviceEnrolled = false;
 
   /** The roster: `undefined` while the fetch is in flight, then the (possibly empty) list. */
   @state() private staff?: StaffMember[];
@@ -224,14 +241,32 @@ export class TillLockScreen extends LitElement {
       <h1 class="heading">${t("login.pick_operator")}</h1>
       ${this.#renderRoster()}
       <div class="device-setup">
-        <wt-button
-          class="setup-device"
-          data-setup-device
-          variant="secondary"
-          @click=${() => this.#setupDevice()}
-        >
-          ${t("device.setup")}
-        </wt-button>
+        <!-- Device-setup affordances (device-identity §5a / handheld Task 8), shown only to a FRESH
+             browser. An already-enrolled device (deviceEnrolled) hides both — see §C2: a waiter must
+             not be able to re-enrol an in-service handheld as a KDS (swapping its device cookie) or
+             escape the phone shell to the station screen. -->
+        ${
+          this.deviceEnrolled
+            ? nothing
+            : html`
+                <wt-button
+                  class="setup-device"
+                  data-setup-device
+                  variant="secondary"
+                  @click=${() => this.#setupDevice()}
+                >
+                  ${t("device.setup")}
+                </wt-button>
+                <wt-button
+                  class="setup-handheld"
+                  data-setup-handheld
+                  variant="secondary"
+                  @click=${() => this.#setupHandheld()}
+                >
+                  ${t("device.setup_handheld")}
+                </wt-button>
+              `
+        }
         <!-- Pre-login language chooser (per-user-language-preference). It only EMITS a bubbling,
              composed locale-selected event; till-app turns a pre-login pick into a transient setLocale
              (never a preference write). The lock screen neither handles the event nor switches locale. -->
@@ -247,6 +282,14 @@ export class TillLockScreen extends LitElement {
    * off the PIN view (roster mode only), so an operator logging in never sees it. */
   #setupDevice(): void {
     this.dispatchEvent(new CustomEvent("setup-device", { bubbles: true, composed: true }));
+  }
+
+  /** Route a FRESH phone into the handheld enrol view (handheld-tableside Task 8) — the twin of
+   * {@link #setupDevice}: emit a composed, bubbling `setup-handheld` the app turns into the handheld
+   * enrol screen. Kept in roster mode beside "set up as kitchen display", off the PIN view, so an
+   * operator logging in never sees it. */
+  #setupHandheld(): void {
+    this.dispatchEvent(new CustomEvent("setup-handheld", { bubbles: true, composed: true }));
   }
 
   #renderRoster() {

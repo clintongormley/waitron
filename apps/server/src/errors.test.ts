@@ -151,6 +151,12 @@ describe("the device error codes carry their declared params", () => {
     expect(error.params).toEqual({ stationId });
   });
 
+  it("constructs device.forbidden_action naming the refused action (the order-only fiscal boundary)", () => {
+    const error = new AppError("device.forbidden_action", { action: "record_sale" });
+    expect(error.code).toBe("device.forbidden_action");
+    expect(error.params).toEqual({ action: "record_sale" });
+  });
+
   it("constructs device.pairing_invalid with no params (a pairing code is never echoed)", () => {
     const error = new AppError("device.pairing_invalid", {});
     expect(error.code).toBe("device.pairing_invalid");

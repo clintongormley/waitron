@@ -1371,11 +1371,11 @@ export class DashboardApi {
     return this.#request<DeviceRow[]>("/management-api/devices", "GET");
   }
 
-  /** `POST /management-api/device-codes` — mint a single-use pairing code bound to a station, returning
-   * the plaintext code ONCE (201). The code is never re-readable (like a passkey challenge handle); a
-   * bad/absent/retired station rejects `{ code: "station.not_found" }`. `kind` is a `device_kind` value —
-   * only `"kds_station"` today. */
-  createDeviceCode(input: { kind: string; stationId: string; label: string }): Promise<{
+  /** `POST /management-api/device-codes` — mint a single-use pairing code, returning the plaintext code
+   * ONCE (201). The code is never re-readable (like a passkey challenge handle). `kind` is a `device_kind`
+   * value: a `"kds_station"` binds to a station (`stationId` required; a bad/absent/retired station rejects
+   * `{ code: "station.not_found" }`), while a `"handheld"` is station-less (`stationId` omitted). */
+  createDeviceCode(input: { kind: string; stationId?: string; label: string }): Promise<{
     code: string;
   }> {
     return this.#request<{ code: string }>("/management-api/device-codes", "POST", input);

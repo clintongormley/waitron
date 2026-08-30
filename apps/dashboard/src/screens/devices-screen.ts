@@ -21,10 +21,11 @@ import type { DashboardApi, DeviceRow, Station } from "../api/client.js";
  *    rendered as-is. A null `stationId` (a future non-station kind) and a station no longer in the active
  *    list (retired) both show a neutral placeholder; a never-authenticated device shows a "Never"
  *    last-seen.
- *  - GENERATES a pairing code: pick a station + type a label → `api.createDeviceCode({ kind: "kds_station",
- *    stationId, label })`. The returned code is shown ONCE in a prominent, copyable panel and lives ONLY
- *    in component state — it is NOT re-fetchable (like a passkey challenge handle), so dismissing the panel
- *    is final. Generating reloads the device list.
+ *  - GENERATES a pairing code: pick a kind + type a label → `api.createDeviceCode({ kind, [stationId], label })`.
+ *    A `kds_station` kind binds to a picked station (`stationId` sent); a `handheld` kind is station-less, so
+ *    the station picker is hidden and no `stationId` is sent. The returned code is shown ONCE in a prominent,
+ *    copyable panel and lives ONLY in component state — it is NOT re-fetchable (like a passkey challenge
+ *    handle), so dismissing the panel is final. Generating reloads the device list.
  *  - REVOKES a device (`api.revokeDevice(id)`) behind a TWO-STEP confirm (the purchase-list idiom): the
  *    first click on a row's Revoke ARMS it (label → confirm prompt), a second click confirms — a revoke
  *    stops a working kitchen screen, so an accidental single click must not fire it. Only ACTIVE devices
@@ -146,7 +147,10 @@ export class DevicesScreen extends LitElement {
   // The venue's ACTIVE kitchen stations — both the generate-code picker's options and the source that
   // resolves a device row's stationId to a display name.
   @state() private stations: Station[] = [];
-  // The generate-code form's fields: the picked station (seeded to the first on load) and the label.
+  // The generate-code form's fields: the device kind, the picked station (seeded to the first on load)
+  // and the label. `kind` gates the station field — a "kds_station" binds to a station, a "handheld" is
+  // station-less, so its picker is hidden and no stationId is sent.
+  @state() private kind = "kds_station";
   @state() private selectedStation = "";
   @state() private label = "";
   // The one-time pairing code, held ONLY here — never re-fetchable. null when no code is being shown.
@@ -213,6 +217,13 @@ export class DevicesScreen extends LitElement {
     this.devices = await this.api.listDevices();
   }
 
+  /** Capture the picked device kind. Switching to a handheld hides the station field; #generate gates the
+   * station requirement on this value. Same defensive `stopPropagation` as the station picker. */
+  #onKindChange(event: Event): void {
+    event.stopPropagation();
+    this.kind = (event.target as HTMLSelectElement).value;
+  }
+
   /** Capture the picked station. A native `<select>` `change` is `composed: false`, so `stopPropagation`
    * here is defensive consistency with the composed `wt-change` handler below, not a boundary guard. */
   #onStationChange(event: Event): void {
@@ -226,18 +237,23 @@ export class DevicesScreen extends LitElement {
     this.label = event.detail.value;
   }
 
-  /** Mint a pairing code for the picked station + label, then show it ONCE and reload the list. A blank
-   * label or an unpicked station (no stations configured) is a no-op — the same blank-name guard the
-   * kitchen screen's create uses. On success the code goes into state (never re-fetched) and the label
-   * resets; on rejection the `errorKey` banner shows and the form is left intact for a retry. */
+  /** Mint a pairing code for the chosen kind + label, then show it ONCE and reload the list. A blank
+   * label is a no-op — the same blank-name guard the kitchen screen's create uses. A "kds_station" also
+   * needs a picked station (no-op when none configured); a "handheld" is station-less, so it sends no
+   * stationId and the station guard does not apply. On success the code goes into state (never re-fetched)
+   * and the label resets; on rejection the `errorKey` banner shows and the form is left intact for a retry. */
   async #generate(): Promise<void> {
     this.errorKey = null;
     const label = this.label.trim();
-    if (label === "" || this.selectedStation === "") return;
+    if (label === "") return;
+    const needsStation = this.kind === "kds_station";
+    if (needsStation && this.selectedStation === "") return;
     try {
       const { code } = await this.api.createDeviceCode({
-        kind: "kds_station",
-        stationId: this.selectedStation,
+        kind: this.kind,
+        // A `kds_station` binds to the picked station; a station-less `handheld` sends `undefined`,
+        // which `JSON.stringify` drops from the wire payload — so the request shape is unchanged.
+        stationId: needsStation ? this.selectedStation : undefined,
         label,
       });
       this.generatedCode = code;
@@ -389,15 +405,26 @@ export class DevicesScreen extends LitElement {
         <h2 class="panel-title">${t("devices.generate_title")}</h2>
         <div class="new">
           <label class="field"
-            >${t("devices.station")}
-            <select
-              ${ref(this.#stationSelect)}
-              data-test="station-select"
-              @change=${(e: Event) => this.#onStationChange(e)}
-            >
-              ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+            >${t("devices.kind")}
+            <select data-test="kind-select" @change=${(e: Event) => this.#onKindChange(e)}>
+              <option value="kds_station">${t("devices.kind_kds_station")}</option>
+              <option value="handheld">${t("devices.kind_handheld")}</option>
             </select>
           </label>
+          ${
+            this.kind === "kds_station"
+              ? html`<label class="field"
+                  >${t("devices.station")}
+                  <select
+                    ${ref(this.#stationSelect)}
+                    data-test="station-select"
+                    @change=${(e: Event) => this.#onStationChange(e)}
+                  >
+                    ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+                  </select>
+                </label>`
+              : nothing
+          }
           <wt-input
             label=${t("devices.label")}
             data-test="code-label"

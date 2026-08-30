@@ -315,6 +315,11 @@ export class TillTableOrderScreen extends LitElement {
   /** A tab settlement is in flight (the app's `submitting`), threaded to the embedded pay widget so it
    * disables its confirm affordance — the visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
+  /** Whether this face may SETTLE the tab. A counter/fixed till pays (default `true`); an ORDER-ONLY
+   * handheld does not — the app threads `!handheldMode`, and when `false` the embedded pay section is
+   * not rendered. UI honesty only: the server firewall (handheld-tableside Tasks 5–6) is the real
+   * guarantee that a handheld cannot take payment. The tab total stays visible either way. */
+  @property({ type: Boolean }) canSettle = true;
 
   /** Whether the pull-out tab drawer is open (its handle toggles it). */
   @state() private drawerOpen = false;
@@ -597,14 +602,18 @@ export class TillTableOrderScreen extends LitElement {
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total>${formatMoney(this.#payStore!.total)}</span>
         </div>
-        <section
-          class="pay"
-          @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
-          @park-order=${(event: Event) => this.#onTenderPark(event)}
-        >
-          <h2>${t("table.pay_title")}</h2>
-          <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
-        </section>
+        ${
+          this.canSettle
+            ? html`<section
+                class="pay"
+                @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
+                @park-order=${(event: Event) => this.#onTenderPark(event)}
+              >
+                <h2>${t("table.pay_title")}</h2>
+                <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
+              </section>`
+            : nothing
+        }
         ${this.#statusSection()}
         <wt-button class="move-split" data-move-split variant="secondary" ?disabled=${true}>
           ${t("table.move_split")}

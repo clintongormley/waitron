@@ -19,7 +19,7 @@ import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireEnum } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
@@ -71,9 +71,10 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work),
  *    `device.pairing_code_unavailable` (a mint whose digest collided with an outstanding code's, 409 —
  *    `generatePairingCode` maps the `device_pairing_codes_lookup_idx` 23505 rather than surfacing a raw
- *    500), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
- *    `station.not_found` (minting a code against an unknown/foreign/retired station, 404, via
- *    `requireLiveStation`).
+ *    500), `device.station_required` (minting a station-binding code with NO station, a validation
+ *    failure, 400), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
+ *    `station.not_found` (minting a code against an unknown/foreign/retired station that WAS supplied,
+ *    404, via `requireLiveStation`).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
  *    `person.suspended`/`authorization.not_permitted` (403), thrown by `requireManagementSession` /
  *    `authorizeManager`, plus `management.request_invalid` (400) from the body/id screens.
@@ -88,6 +89,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.pairing_expired": 400,
   "device.pairing_rate_limited": 429,
   "device.pairing_code_unavailable": 409,
+  "device.station_required": 400,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -185,16 +187,30 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
+  // ── Who am I? (DEVICE-GUARDED) ───────────────────────────────────────────────────────────────────────
+  // The client boot probe (Task 7): `requireDevice` resolves the cookie to its binding, and the route
+  // echoes it back so the till client can decide which shell to render for this device KIND. A missing
+  // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
+  app.get("/api/device/me", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      return c.json({ deviceId: device.deviceId, kind: device.kind, stationId: device.stationId });
+    }),
+  );
+
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
       // A `kds_station` device is ALWAYS station-bound: enrolDevice copies the code's station, itself a
-      // live station `requireLiveStation` confirmed at mint. The null branch is the honest handling of
-      // `DeviceBinding`'s `string | null` for a future non-station kind — unreachable today.
-      /* v8 ignore start */
+      // live station `requireLiveStation` confirmed at mint. But `requireDevice` authenticates ANY active
+      // device regardless of kind, and a `handheld` binds to NO station (`stationId` is null,
+      // `kindRequiresStation("handheld")` is false — device.ts), so a handheld cookie now REACHES this
+      // branch. It throws `device.unauthorized` (401) — the honest "this device has no station queue",
+      // the same 401 a missing/invalid cookie folds to, confirming neither the device's existence nor its
+      // kind. (Previously this was `/* v8 ignore */`d as unreachable, when every device was a station-
+      // bound `kds_station`; the handheld kind makes it reachable and it is now covered by a test.)
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
-      /* v8 ignore stop */
       const stationId = device.stationId;
       const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -250,7 +266,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `requireLiveStation` → an opaque 500). Both refuse a bad value as `management.request_invalid`
       // naming the field — the SHARED request-screens the other gated surfaces validate through.
       const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
-      const stationId = requireBodyUuid(body.stationId, "stationId");
+      // The station is conditional on the kind (Task 2's `kindRequiresStation`): a `kds_station` code
+      // binds to a station so `stationId` is still required (a missing one 400s here); a `handheld` code
+      // binds to none, so we pass `null` and never screen `stationId` at all.
+      const stationId = kindRequiresStation(kind)
+        ? requireBodyUuid(body.stationId, "stationId")
+        : null;
       const label = requireString(body.label, "label");
       const result = await gated(sessionId, (tx) =>
         generatePairingCode(tx, deps.cfg, { kind, stationId, label }),

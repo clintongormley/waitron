@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
@@ -150,6 +150,34 @@ describe("device pairing-code generation + enrolment", () => {
     // The WebAuthn semantic: the throw rolls back the tx, UNDOING the consume-DELETE, so the code
     // survives to lapse by its TTL rather than being burned by a too-late attempt.
     expect(await pairingCodeCount(cfg)).toBe(1);
+  });
+
+  it("mints a station-less handheld pairing code (no requireLiveStation, station_id NULL)", async () => {
+    // A handheld is a roving, location-wide waiter device (spec §D2): it binds no kitchen station, so
+    // generatePairingCode must NOT call requireLiveStation and must store station_id = NULL. The Task-1
+    // CHECK ((device_kind = 'handheld' AND station_id IS NULL)) would reject any non-null station here.
+    const cfg = await setupVenue();
+    const { code } = await asApp(cfg, (tx) =>
+      generatePairingCode(tx, cfg, { kind: "handheld", stationId: null, label: "Waiter phone" }),
+    );
+    const codeSha256 = createHash("sha256").update(code).digest("hex");
+    const { rows } = await db.execute<{ device_kind: string; station_id: string | null }>(
+      sql`select device_kind, station_id from device_pairing_codes where code_sha256 = ${codeSha256}`,
+    );
+    expect(rows[0]!.device_kind).toBe("handheld");
+    expect(rows[0]!.station_id).toBeNull();
+  });
+
+  it("rejects a kds_station pairing code minted with no station (device.station_required)", async () => {
+    // A kds_station code REQUIRES a station: a NULL one is a validation failure — `device.station_required`,
+    // before any write. Distinct from the `station.not_found` requireLiveStation raises for a station that
+    // WAS supplied but is unknown/foreign/retired (that code echoes the supplied uuid; there is none here).
+    const cfg = await setupVenue();
+    await expect(
+      asApp(cfg, (tx) =>
+        generatePairingCode(tx, cfg, { kind: "kds_station", stationId: null, label: "X" }),
+      ),
+    ).rejects.toMatchObject({ code: "device.station_required" });
   });
 
   it("generatePairingCode rejects a station of another venue / an unknown station with station.not_found", async () => {
