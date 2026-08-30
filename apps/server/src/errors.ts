@@ -1141,8 +1141,12 @@ declare module "@waitron/shared" {
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
      * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a
      * non-loopback host over plain http). `POST /setup-api/adopt` is UNAUTHENTICATED, so this validation
-     * is the choke point that stops an attacker driving the mirror to POST its admin credential at the
-     * cloud metadata endpoint or an internal host. A CLIENT fault — the operator's request is malformed —
+     * is the choke point that stops an attacker driving the mirror to POST its admin credential at a
+     * private/metadata literal IP (e.g. `169.254.169.254`) or a non-https target. It covers LITERAL-IP
+     * SSRF only: a public DNS hostname over https is still trusted (no resolve-time IP pinning), so
+     * DNS-rebinding to an internal address is NOT blocked here — that is the deferred first-contact
+     * trust-bootstrap concern (C2b #4; the adjacent TRUST BOOTSTRAP note in `mirror-bundle-fetch.ts`
+     * carries the same caveat), out of scope until real hosting. A CLIENT fault — the request is malformed —
      * so it is reported as HTTP 400 by the adopt route's local STATUS map (`ADOPT_STATUS` in setup-api.ts),
      * the declare-here / status-in-route split every code in this file follows. Distinct from
      * `mirror.bundle_fetch_failed` (a well-formed request whose UPSTREAM primary then failed, a 502).

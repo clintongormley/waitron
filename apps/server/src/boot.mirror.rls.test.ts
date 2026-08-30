@@ -269,7 +269,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
       // The operational agent/device groups are NOT mounted on a mirror — boot.ts wraps both mounts in
-      // `if (!isMirror)` (boot.ts:844, Task 4). These are GETs, so the read-only gate would pass them
+      // its `if (!isMirror)` mount guard (boot.ts, Task 4). These are GETs, so the read-only gate would pass them
       // through; the guarantee that a mirror never runs their write-behind-a-GET (`GET /print-api/agent/
       // jobs` → claimPrintJobs, a locking UPDATE — read-only-gate.ts's own comment flags exactly this)
       // rests on the route being ABSENT (404), not on the verb. The primary control below reaches each

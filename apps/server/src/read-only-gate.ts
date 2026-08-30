@@ -14,7 +14,7 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * refuses a CLIENT'S write verb, not the server's own bookkeeping (`mirror-session.ts:49` spells this out).
  *
  * The operational agent/device groups are no longer mounted under `mode='mirror'`: boot.ts wraps both
- * `mountDeviceApi`/`mountPrintApi` in `if (!isMirror)` (boot.ts:844). That closes the one actual
+ * `mountDeviceApi`/`mountPrintApi` in its `if (!isMirror)` mount guard (boot.ts). That closes the one actual
  * write-behind-a-GET on this surface — `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking
  * `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/runtime.ts:145-179) that the verb
  * gate cannot catch. (The device group's own writes are all non-safe verbs the gate already refuses; it is
