@@ -65,6 +65,21 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  it("renders the handheld kind (station picker hidden) accessibly", async () => {
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    // Switch the kind picker to a handheld — the station <select> is removed from the form.
+    const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=kind-select]")!;
+    kind.value = "handheld";
+    kind.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the shown-once code panel accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
