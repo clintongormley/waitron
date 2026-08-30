@@ -413,6 +413,156 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(await readRow()).toEqual(before);
   });
 
+  // ── Email (dashboard sign-in identifier) on create + edit + listing (Task 6) ────────────────────
+
+  it("creates a person with an email and lists it back", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const created = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Owner",
+        role: "manager",
+        pin: "1234",
+        email: "owner@x.com",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    // The gated admin roster carries the login email straight through `listPersons`'s projection.
+    const listed = await app.request("/management-api/staff", { headers: { cookie } });
+    const people = (await listed.json()) as { personId: string; email: string | null }[];
+    expect(people.find((p) => p.personId === id)?.email).toBe("owner@x.com");
+  });
+
+  it("PATCH sets a person's email", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: "newclerk@x.com" }),
+    });
+    expect(res.status).toBe(204);
+
+    const listed = await app.request("/management-api/staff", { headers: { cookie } });
+    const people = (await listed.json()) as { personId: string; email: string | null }[];
+    expect(people.find((p) => p.personId === staffId)?.email).toBe("newclerk@x.com");
+  });
+
+  it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
+    // The seeded manager already holds MANAGER_EMAIL, so a second person in the SAME tenant claiming
+    // it collides on `persons_tenant_email_uq` → `person.email_taken` (409), before the row lands.
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Dup",
+        role: "staff",
+        pin: "1234",
+        email: MANAGER_EMAIL,
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_taken" },
+    });
+    expect(await countPersonsNamed(tenantId, "Dup")).toBe(0);
+  });
+
+  it("PATCH to a duplicate email → 409 person.email_taken", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: MANAGER_EMAIL }),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_taken" },
+    });
+  });
+
+  it("create with a malformed email → 400 person.email_invalid, no row lands", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Bad",
+        role: "staff",
+        pin: "1234",
+        email: "not-an-email",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_invalid" },
+    });
+    expect(await countPersonsNamed(tenantId, "Bad")).toBe(0);
+  });
+
+  it("PATCH with a malformed email → 400 person.email_invalid", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_invalid" },
+    });
+  });
+
+  it("create/PATCH with a non-string email → 400 management.request_invalid (field email)", async () => {
+    // A PRESENT-but-non-string email is refused by the route's typeof screen naming the FIELD (never
+    // the value), the same shape as the sibling create/PATCH field screens — it never reaches identity.
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const badCreate = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ displayName: "Nope", role: "staff", pin: "1234", email: 123 }),
+    });
+    expect(badCreate.status).toBe(400);
+    expect(
+      (await badCreate.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
+    expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
+
+    const badPatch = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: 123 }),
+    });
+    expect(badPatch.status).toBe(400);
+    expect(
+      (await badPatch.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
+  });
+
   it("resets a PIN and sets a password, then the new password logs in", async () => {
     const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);

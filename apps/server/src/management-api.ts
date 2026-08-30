@@ -30,6 +30,7 @@ import {
   loginManager,
   reactivatePerson,
   resetPin,
+  setEmail,
   setPassword,
   setRole,
   suspendPerson,
@@ -177,6 +178,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `credential_id`, not merely their email.
   "person.suspended": 403,
   "person.not_found": 404,
+  // The email write boundary (`createPerson`/`setEmail`): a malformed address is a request-shape
+  // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
+  // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
+  // not the `?? 400` default).
+  "person.email_invalid": 400,
+  "person.email_taken": 409,
   "authorization.not_permitted": 403,
   "pin.too_short": 400,
   "password.too_short": 400,
@@ -541,7 +548,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
   // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why) and screened: a missing
   // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
-  // is refused as `management.request_invalid` naming the FIELDS, never their values. The narrowed
+  // is refused as `management.request_invalid` naming the FIELDS, never their values. `email` is
+  // OPTIONAL (till-only PIN staff carry none) and screened typeof-only when present; its SHAPE and
+  // per-tenant uniqueness are `createPerson`'s job (`person.email_invalid` → 400, `person.email_taken`
+  // → 409). The narrowed
   // fields are bound to locals AFTER the guard because that narrowing does not survive into the
   // `withTenant` closure — the same pattern the login route above uses. Returns the new id at 201.
   app.post("/management-api/staff", (c) =>
@@ -551,6 +561,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         displayName?: string;
         role?: PersonRoleValue;
         pin?: string;
+        email?: string;
       }>(c);
       if (
         typeof body.displayName !== "string" ||
@@ -559,7 +570,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         throw new AppError("management.request_invalid", { field: "displayName|role|pin" });
       }
-      const { displayName, role, pin } = body;
+      // `email` is OPTIONAL (till-only PIN staff carry none). A PRESENT-but-non-string value is a
+      // request-shape fault named by FIELD, the same typeof-only screen the required fields get; a
+      // present string flows on to `createPerson`, which validates its SHAPE (`person.email_invalid`)
+      // and per-tenant uniqueness (`person.email_taken`). An absent field stays `undefined` → no email.
+      if (body.email !== undefined && typeof body.email !== "string") {
+        throw new AppError("management.request_invalid", { field: "email" });
+      }
+      const { displayName, role, pin, email } = body;
       const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createPerson(tx, {
@@ -568,13 +586,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           displayName,
           role,
           pin,
+          email,
         });
       });
       return c.json(created, 201);
     }),
   );
 
-  // Update a person's role and/or status. Gated. `:id` is screened with `isUuid` first — a
+  // Update a person's role, status and/or login email. Gated. `:id` is screened with `isUuid` first — a
   // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
   // echo) rather than a request-shape error. Both fields are OPTIONAL, but each is type-screened the
   // way the three sibling write routes screen their required fields: a field PRESENT with a
@@ -593,16 +612,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // otherwise throw on the destructure below, and an empty/unparseable body would otherwise reach `run`
   // as a SyntaxError → `server.internal` 500; `readJsonBody` averts both.) `role`/`status` are bound to
   // locals before the closure and narrowed inside
-  // it, so no field narrowing has to cross the closure boundary. The identity calls enforce
-  // `person.manage`.
+  // it, so no field narrowing has to cross the closure boundary. `email` is OPTIONAL too and
+  // independent: present-and-a-string drives `setEmail` (shape → `person.email_invalid` 400,
+  // per-tenant collision → `person.email_taken` 409); a non-string is a 400 naming the field; absent
+  // is a no-op. The identity calls enforce `person.manage`.
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await readJsonBody<{ role?: PersonRoleValue; status?: "active" | "suspended" }>(
-        c,
-      );
-      const { role, status } = body;
+      const body = await readJsonBody<{
+        role?: PersonRoleValue;
+        status?: "active" | "suspended";
+        email?: string;
+      }>(c);
+      const { role, status, email } = body;
       // Typeof screen mirroring the create/reset-pin/set-password routes: refuse a PRESENT field that
       // is not a string (leaving an absent one as the no-op it should be). This is where a non-string
       // `role` would otherwise reach the `person_role` pgEnum and 500; a non-string `status` would
@@ -614,6 +637,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (status !== undefined && typeof status !== "string") {
         throw new AppError("management.request_invalid", { field: "status" });
       }
+      // `email` is OPTIONAL and independent of role/status: a PRESENT-but-non-string value is a
+      // request-shape 400 named by field; a present string drives `setEmail`, which validates the
+      // address (`person.email_invalid` → 400) and per-tenant uniqueness (`person.email_taken` → 409).
+      if (email !== undefined && typeof email !== "string") {
+        throw new AppError("management.request_invalid", { field: "email" });
+      }
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         if (role !== undefined) {
@@ -624,6 +653,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         }
         if (status === "active") {
           await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+        if (typeof email === "string") {
+          await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
         }
       });
       return c.body(null, 204);
