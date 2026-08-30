@@ -396,6 +396,7 @@ export const en = {
   "booking.table_none": "No table",
   "booking.seat": "Seat",
   "booking.confirm_seat": "Confirm seat",
+  "booking.complete": "Complete",
   "booking.no_show": "No-show",
   "booking.cancel": "Cancel",
   // Business-overview home screen (the "today at a glance" post-login landing for non-staff roles)
@@ -786,6 +787,7 @@ export const es: Record<StringKey, string> = {
   "booking.table_none": "Sin mesa",
   "booking.seat": "Sentar",
   "booking.confirm_seat": "Confirmar mesa",
+  "booking.complete": "Completar",
   "booking.no_show": "No presentada",
   "booking.cancel": "Cancelar",
   "overview.title": "Hoy de un vistazo",

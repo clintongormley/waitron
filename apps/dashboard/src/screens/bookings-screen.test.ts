@@ -247,6 +247,58 @@ describe("bookings-screen", () => {
     expect(api.listBookings).toHaveBeenCalledTimes(2);
   });
 
+  // ── Per-row actions gated on booking.status (design §6) ────────────────────────────────────────────
+  const q = (el: BookingsScreen, testId: string): HTMLElement | null =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${testId}"]`);
+
+  it("a booked row shows Seat/Edit/No-show/Cancel and NOT Complete", async () => {
+    const api = stubApi({
+      listBookings: vi.fn().mockResolvedValue([booking({ id: "bk-b", status: "booked" })]),
+    });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    expect(q(el, "seat-bk-b")).not.toBeNull();
+    expect(q(el, "edit-bk-b")).not.toBeNull();
+    expect(q(el, "no-show-bk-b")).not.toBeNull();
+    expect(q(el, "cancel-bk-b")).not.toBeNull();
+    expect(q(el, "complete-bk-b")).toBeNull();
+  });
+
+  it("a seated row shows only Complete (and clicking it completes) — no Seat/Edit/No-show/Cancel", async () => {
+    const api = stubApi({
+      listBookings: vi
+        .fn()
+        .mockResolvedValue([booking({ id: "bk-s", status: "seated", tableId: "t-2" })]),
+    });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    expect(q(el, "complete-bk-s")).not.toBeNull();
+    expect(q(el, "seat-bk-s")).toBeNull();
+    expect(q(el, "edit-bk-s")).toBeNull();
+    expect(q(el, "no-show-bk-s")).toBeNull();
+    expect(q(el, "cancel-bk-s")).toBeNull();
+    await click(el, "complete-bk-s");
+    await flush(el);
+    expect(api.completeBooking).toHaveBeenCalledWith("bk-s");
+    // listBookings: once on connect + once after the complete.
+    expect(api.listBookings).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["completed", "no_show", "cancelled"] as const)(
+    "a terminal (%s) row shows no action buttons",
+    async (status) => {
+      const api = stubApi({
+        listBookings: vi.fn().mockResolvedValue([booking({ id: "bk-t", status })]),
+      });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=row]")).not.toBeNull();
+      for (const action of ["seat", "edit", "no-show", "cancel", "complete"]) {
+        expect(q(el, `${action}-bk-t`)).toBeNull();
+      }
+    },
+  );
+
   it("shows the error when a seat fails (table busy) and keeps the list", async () => {
     const api = stubApi({ seatBooking: vi.fn().mockRejectedValue({ code: "tab.already_open" }) });
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });

@@ -15,6 +15,8 @@ const TABLES: DashboardTable[] = [
   { id: "t-1", label: "Mesa 1", zoneId: null, capacity: 4, active: true, createdAt: "2026-01-01" },
 ];
 
+// One booked row (seat / no-show / cancel / edit actions) and one seated row (the Complete action), so
+// axe scans BOTH per-row control shapes the status-gating renders (design §6).
 const BOOKINGS: Booking[] = [
   {
     id: "bk-1",
@@ -27,6 +29,20 @@ const BOOKINGS: Booking[] = [
     tableId: null,
     tabId: null,
     status: "booked",
+    createdBy: "p1",
+    createdAt: "2026-08-19T10:00:00.000Z",
+  },
+  {
+    id: "bk-2",
+    bookingDate: "2026-08-20",
+    bookingTime: "21:00:00",
+    partySize: 2,
+    contactName: "Pérez",
+    contactPhone: null,
+    notes: null,
+    tableId: "t-1",
+    tabId: "tab-1",
+    status: "seated",
     createdBy: "p1",
     createdAt: "2026-08-19T10:00:00.000Z",
   },

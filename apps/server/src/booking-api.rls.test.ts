@@ -521,4 +521,39 @@ describe("Bookings API over real Postgres (RLS end-to-end)", () => {
       });
     }
   });
+
+  it("accepts an explicit null for the blank optionals a create body carries (the real-form shape)", async () => {
+    // The dashboard's booking form sends `contactPhone`/`notes`/`tableId` as explicit `null` when the
+    // field is left blank (booking-form.ts `#confirm`: `trim() === "" ? null : …`), the COMMON case. The
+    // old `screenCreate` screened each with the NON-nullable `requireString`/`requireBodyUuid` gated on
+    // `!== undefined` only, so `requireString(null)` threw `management.request_invalid` → a blank-phone
+    // booking created via the real UI 400'd. On a CREATE a `null` blank is equivalent to absent (no prior
+    // value to clear), so it must SUCCEED and store the column null.
+    const { cfg, managerCookie } = await setupVenue();
+    const app = mountApp(cfg);
+    const res = await send(app, "POST", "/management-api/bookings", managerCookie, {
+      ...bookingBody(),
+      contactPhone: null,
+      notes: null,
+      tableId: null,
+    });
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { id: string }).id;
+
+    // Read the row back off the day list and confirm the three optional columns landed null.
+    const listRes = await send(
+      app,
+      "GET",
+      "/management-api/bookings?date=2026-08-20",
+      managerCookie,
+    );
+    expect(listRes.status).toBe(200);
+    const row = ((await listRes.json()) as Array<Record<string, unknown>>).find((r) => r.id === id);
+    expect(row).toMatchObject({
+      status: "booked",
+      contactPhone: null,
+      notes: null,
+      tableId: null,
+    });
+  });
 });

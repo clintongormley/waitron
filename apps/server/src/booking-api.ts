@@ -116,8 +116,14 @@ function requireTime(v: unknown, field: string): string {
 /**
  * Screen the create body into a `CreateBookingInput` MINUS `createdBy` (the route supplies that from
  * `authorizeManager`'s `authorizedBy`, never the body). Every required scalar present and well-typed;
- * the optional `contactPhone`/`notes`/`tableId` screened ONLY when present. A malformed value is a
- * clean `management.request_invalid` naming the field, never a downstream column 500.
+ * the optional `contactPhone`/`notes`/`tableId` screened ONLY when present as a NON-null value. On a
+ * CREATE there is no prior value to clear, so an explicit `null` — the shape the dashboard's booking
+ * form sends for a blank optional (`contactPhone: trim === "" ? null : …`, same for notes/tableId) — is
+ * equivalent to absent: the field is left unset, `createBooking` coalesces the missing key to a null
+ * column. A present, non-null value is still screened with the NON-nullable `requireString`/
+ * `requireBodyUuid`, so a wrong-typed one (e.g. a number) is a clean `management.request_invalid` naming
+ * the field, never a downstream column 500. (PATCH differs: there `null` MEANS "clear", so `screenPatch`
+ * uses the nullable screens.)
  */
 function screenCreate(v: Record<string, unknown>): Omit<CreateBookingInput, "createdBy"> {
   const input: Omit<CreateBookingInput, "createdBy"> = {
@@ -126,10 +132,11 @@ function screenCreate(v: Record<string, unknown>): Omit<CreateBookingInput, "cre
     partySize: requireInteger(v.partySize, "partySize"),
     contactName: requireString(v.contactName, "contactName"),
   };
-  if (v.contactPhone !== undefined)
+  if (v.contactPhone !== undefined && v.contactPhone !== null)
     input.contactPhone = requireString(v.contactPhone, "contactPhone");
-  if (v.notes !== undefined) input.notes = requireString(v.notes, "notes");
-  if (v.tableId !== undefined) input.tableId = requireBodyUuid(v.tableId, "tableId");
+  if (v.notes !== undefined && v.notes !== null) input.notes = requireString(v.notes, "notes");
+  if (v.tableId !== undefined && v.tableId !== null)
+    input.tableId = requireBodyUuid(v.tableId, "tableId");
   return input;
 }
 

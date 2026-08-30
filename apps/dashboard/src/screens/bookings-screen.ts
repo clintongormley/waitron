@@ -16,7 +16,10 @@ import type { Booking, BookingInput, DashboardApi, DashboardTable } from "../api
 
 /**
  * The management dashboard's BOOKINGS SCREEN (Bookings-1 §6): a per-day list of staff-entered table
- * reservations with create/edit and the lifecycle actions (seat / no-show / cancel). Modelled on
+ * reservations with create/edit and the lifecycle actions, GATED per row on the booking's status
+ * (`#renderControls`): a `booked` row offers seat / no-show / cancel / edit, a `seated` row offers only
+ * Complete, and a terminal row (completed / no_show / cancelled) offers none — so the UI never presents a
+ * move the server would reject with `booking.invalid_transition`. Modelled on
  * `purchases-screen` — it is the single owner of the loaded bookings, the selected day, the loaded
  * tables (for the form's picker + the seat prompt), the form's open/edit state and the error banner,
  * wiring the injected `DashboardApi` to the `<dashboard-booking-form>` dialog.
@@ -275,6 +278,59 @@ export class BookingsScreen extends LitElement {
     return [...this.bookings].sort((a, b) => a.bookingTime.localeCompare(b.bookingTime));
   }
 
+  /** The per-row action buttons, GATED on `b.status` (design §6): a `booked` row can be seated, edited,
+   * marked no-show or cancelled; a `seated` row's only lifecycle exit is Complete; a terminal row
+   * (`completed`/`no_show`/`cancelled`) has none. Rendering an action a booking cannot take just surfaces
+   * a `booking.invalid_transition` (or `booking.not_found` for edit) banner on click, so the UI offers
+   * only the moves the server will accept. */
+  #renderControls(b: Booking): TemplateResult | typeof nothing {
+    if (b.status === "booked") {
+      return html`<div class="controls">
+        <wt-button
+          size="sm"
+          variant="primary"
+          data-test=${`seat-${b.id}`}
+          @click=${() => this.#onSeatClick(b)}
+          >${t("booking.seat")}</wt-button
+        >
+        <wt-button
+          size="sm"
+          variant="secondary"
+          data-test=${`no-show-${b.id}`}
+          @click=${() => void this.#lifecycle((id) => this.api.markNoShow(id), b.id)}
+          >${t("booking.no_show")}</wt-button
+        >
+        <wt-button
+          size="sm"
+          variant="danger"
+          data-test=${`cancel-${b.id}`}
+          @click=${() => void this.#lifecycle((id) => this.api.cancelBooking(id), b.id)}
+          >${t("booking.cancel")}</wt-button
+        >
+        <wt-button
+          size="sm"
+          variant="ghost"
+          data-test=${`edit-${b.id}`}
+          @click=${() => this.#onEdit(b.id)}
+          >${t("action.edit")}</wt-button
+        >
+      </div>`;
+    }
+    if (b.status === "seated") {
+      return html`<div class="controls">
+        <wt-button
+          size="sm"
+          variant="primary"
+          data-test=${`complete-${b.id}`}
+          @click=${() => void this.#lifecycle((id) => this.api.completeBooking(id), b.id)}
+          >${t("booking.complete")}</wt-button
+        >
+      </div>`;
+    }
+    // Terminal (completed / no_show / cancelled): no lifecycle moves remain, so no action buttons.
+    return nothing;
+  }
+
   #renderRow(b: Booking): TemplateResult {
     const arming = this.seatingId === b.id;
     return html`<wt-card data-test="row">
@@ -285,36 +341,7 @@ export class BookingsScreen extends LitElement {
           <span class="party" data-test="row-party">${b.partySize}</span>
           <span class="status" data-test="row-status">${bookingStatusName(b.status)}</span>
         </div>
-        <div class="controls">
-          <wt-button
-            size="sm"
-            variant="primary"
-            data-test=${`seat-${b.id}`}
-            @click=${() => this.#onSeatClick(b)}
-            >${t("booking.seat")}</wt-button
-          >
-          <wt-button
-            size="sm"
-            variant="secondary"
-            data-test=${`no-show-${b.id}`}
-            @click=${() => void this.#lifecycle((id) => this.api.markNoShow(id), b.id)}
-            >${t("booking.no_show")}</wt-button
-          >
-          <wt-button
-            size="sm"
-            variant="danger"
-            data-test=${`cancel-${b.id}`}
-            @click=${() => void this.#lifecycle((id) => this.api.cancelBooking(id), b.id)}
-            >${t("booking.cancel")}</wt-button
-          >
-          <wt-button
-            size="sm"
-            variant="ghost"
-            data-test=${`edit-${b.id}`}
-            @click=${() => this.#onEdit(b.id)}
-            >${t("action.edit")}</wt-button
-          >
-        </div>
+        ${this.#renderControls(b)}
       </div>
       ${
         arming
