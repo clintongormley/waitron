@@ -271,13 +271,16 @@ to be proven against a local stand-in cloud. Spec + plan:
     primary-only workers (fiscal drain, reconcile, sync source, retention, tunnel client). Real-PG e2e
     proves pull-through-tunnel + apply + read-only serve. Spec + plan:
     [c2a-mirror-server](superpowers/specs/2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md).
-    **Deferred (C2b / hosting slice), named so they are not dropped:** (1) the unauthenticated
-    ambient-admin dashboard MUST be network-gated before any reachable deployment — accepted local
-    stand-in posture, real per-user auth/TLS belongs to the hosting slice; (2) a later slice that syncs
-    or provisions `print_agents`/`devices`/`kitchen_stations` MUST revisit the read-only method-gate — a
-    few operational GET handlers write (e.g. `GET /print-api/agent/jobs`'s `claimPrintJobs`), inert on a
-    mirror today only because those tables are not synced; (3) the promote **action** itself + starting
-    the primary-only workers on promotion.
+    **Hardening follow-ups — (1) + (2) LANDED (#164); (3) still deferred:** (1) the unauthenticated
+    ambient-admin dashboard is now network-gated — a fail-closed boot guard (`server.mirror_bind_exposed`)
+    refuses a non-loopback bind under `mode='mirror'` unless an explicit `WAITRON_MIRROR_ALLOW_EXPOSED`
+    opt-in is set (real per-user auth/TLS is still owed to the hosting slice); (2) the read-only
+    method-gate hole is closed — `mountPrintApi`/`mountDeviceApi` are no longer mounted under
+    `mode='mirror'`, so the write-behind-a-GET (`GET /print-api/agent/jobs`'s `claimPrintJobs`) is
+    404-unreachable rather than merely inert by table-absence (a later slice that RE-mounts those groups
+    on a mirror must convert this boot gate to a request-time gate — promotion-runbook §3a, and read-only-
+    gate.ts's own header records the tradeoff); (3) STILL DEFERRED — the promote **action** itself +
+    starting the primary-only workers on promotion (gated on reserved-SIF staging).
   - **C2b — the operator flow. LANDED (#162).** The primary emits a **"mirror bundle"** from an
     admin-gated `POST /management-api/mirror-bundle` (new `mirror.create` permission): the venue's five
     identity ids + full parent rows + CA + relay coords + a freshly-minted per-peer sync token. The setup
@@ -288,17 +291,19 @@ to be proven against a local stand-in cloud. Spec + plan:
     `mirror_config` singleton, and restarts into C2a's mirror mode. Connection config moved from env to
     DB+vault. Spec + plan:
     [c2b-operator-flow](superpowers/specs/2026-08-29-sync-cloud-mirror-c2b-operator-flow-design.md).
-    **Deferred follow-ups (named, not dropped):** (1) a fully wizard-adopted mirror still needs
-    `WAITRON_SYNC_DATABASE_URL` from deploy-level env — `persistTrading` writes the app/migrations DB URLs
-    but not the sync-pool one, so the mirror boot fails closed (`server.config_missing`) without it
-    (pre-existing since C2a; the most material gap before an appliance mirror is usable end-to-end);
-    (2) blind SSRF on `/setup-api/adopt`'s operator-supplied `primaryUrl` — consistent with setup-api's
-    existing unauthenticated-LAN posture, harden before real hosting; (3) mirror fidelity — `adoptVenue`
-    nulls the two out-of-scope FK columns (`locations.catalogue_id`, `tills.receipt_printer_id`) because
-    those tables aren't present at adopt, so the mirror loses only the location→catalogue *pointer*
-    (dashboard unaffected — it reads catalogues directly; restoring it needs carrying catalogues in the
-    bundle or syncing `locations`); (4) the first-contact trust bootstrap for an untrusted-network primary
-    (v1 stand-in is localhost; deferred with the constraint recorded in the spec §9).
+    **Deferred follow-ups — (1) + (2) LANDED (#164); (3) + (4) still deferred:** (1) `WAITRON_SYNC_DATABASE_URL`
+    is now threaded through adopt into `trading.env` — a wizard-adopted mirror gets its sync-pool URL, and
+    adopt fails LOUD (`server.config_missing`) if the deploy env lacks it, rather than silently at reboot;
+    (2) the blind SSRF on `/setup-api/adopt`'s `primaryUrl` is closed — `assertSafePrimaryUrl`
+    (`mirror.primary_url_invalid`, backed by Node's `node:net` BlockList) rejects non-http/https schemes and
+    private/link-local/CGNAT/metadata/IPv4-compatible(::/96)/IPv4-mapped literal IPs, loopback over http/https,
+    non-loopback DNS/public-IP https-only (literal-IP SSRF only — DNS-rebinding is #4's concern);
+    (3) STILL DEFERRED — mirror fidelity: `adoptVenue` nulls the two out-of-scope FK columns
+    (`locations.catalogue_id`, `tills.receipt_printer_id`); the nulling is deliberately correct, restoring
+    the pointers needs config replication (carry catalogues in the bundle or sync `locations`); (4) STILL
+    DEFERRED — the first-contact trust bootstrap for an untrusted-network primary (gated on real hosting;
+    constraint recorded in the spec §9 and `mirror-bundle-fetch.ts`). Plan:
+    [cloud-mirror-hardening](superpowers/plans/2026-08-29-cloud-mirror-hardening-followups.md).
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
