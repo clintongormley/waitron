@@ -32,8 +32,9 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * because (a) it is the tighter read-only-mirror posture — no operational agent/device surface is exposed
  * at all — and (b) the verb-based request gate cannot catch a write-behind-a-GET without adding a new
  * path-level deny-list. Converting this to the §3a request-time form belongs with Slice 3, which already
- * has to convert the analogous boot-`const isMirror` worker gates (sync source / retention / tunnel, §3c)
- * to runtime-startable — so this gate rides with that work rather than adding standalone debt. */
+ * has to convert the analogous boot-`const isSingletonPrimary` worker gates (sync source / retention /
+ * backup / tunnel, §3c — re-gated onto `singleton_role` in #168) to runtime-startable — so this gate
+ * rides with that work rather than adding standalone debt. */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
