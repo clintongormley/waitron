@@ -21,6 +21,8 @@ import "../widgets/menu-switcher.js";
 import type {
   TabLine,
   TableServiceStatus,
+  TableState,
+  TabTransfer,
   TillCourse,
   TillMenu,
   TillProduct,
@@ -68,7 +70,9 @@ class TabPayStore extends WorkingOrderStore {
  *    **Pendiente de servir** (each a `Servido` tick → `serve-line`), **Servido**, the tab **total**
  *    (summed from the LOCKED add-time prices — never a catalogue recompute), **Cobrar** (the reused
  *    `till-tender-pay`, whose terminal tender the screen re-emits as `pay-tab`), **Estado** (a status
- *    picker → `set-status`) and a **disabled Mover · Dividir** placeholder (TS-3/TS-5 are out of scope).
+ *    picker → `set-status`) and **Acciones de mesa** — an in-drawer move/join/merge/transfer flow
+ *    (TS-3/TS-4) whose target pick dispatches `move-tab`/`join-table`/`merge-tabs`/`transfer-lines`
+ *    upward for the app to persist (Split is a disabled placeholder, TS-5 out of scope).
  *
  * FISCAL FIREWALL (H2). The screen owns NO fiscal path. Rounds, served ticks and status are pre-fiscal
  * signals the app turns into `addTabRound`/`markLineServed`/`setTableStatus`. Pay is the one
@@ -81,8 +85,8 @@ class TabPayStore extends WorkingOrderStore {
  *
  * COPY. Every user-facing label goes through `t()` (`table.*`, plus `label.total`), rendered in the
  * active locale — English by default ("Send round", "To serve", "Served", "Charge", "Status",
- * "Move · Split"), Spanish for a Spanish venue ("Enviar ronda", "Pendiente de servir", "Servido",
- * "Cobrar", "Estado", "Mover · Dividir"). Lit + `@waitron/ui` `baseStyles` + theme tokens only — no
+ * "Table actions"), Spanish for a Spanish venue ("Enviar ronda", "Pendiente de servir", "Servido",
+ * "Cobrar", "Estado", "Acciones de mesa"). Lit + `@waitron/ui` `baseStyles` + theme tokens only — no
  * hardcoded chrome (the status swatch is DATA colour, like the floor screen's badge).
  *
  * DISCONNECT SAFETY: every handler only writes reactive state or dispatches upward — Lit never paints a
@@ -230,6 +234,16 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      .action-options {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .transfer-line[aria-pressed="true"] {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .dot {
         display: inline-block;
         width: var(--wt-space-2);
@@ -320,9 +334,31 @@ export class TillTableOrderScreen extends LitElement {
    * not rendered. UI honesty only: the server firewall (handheld-tableside Tasks 5–6) is the real
    * guarantee that a handheld cannot take payment. The tab total stays visible either way. */
   @property({ type: Boolean }) canSettle = true;
+  /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
+   * the floor screen renders. The move/join/merge/transfer action flow (TS-3/TS-4) reads it for its
+   * target lists: FREE tables to move/join onto, and OTHER open tabs to merge/transfer with. Empty until
+   * the app supplies it; an empty list simply yields the picker's "no targets" empty-state. */
+  @property({ attribute: false }) tables: TableState[] = [];
 
   /** Whether the pull-out tab drawer is open (its handle toggles it). */
   @state() private drawerOpen = false;
+
+  /** Which step of the in-drawer table-action flow (TS-3/TS-4) is showing — `closed` is the resting
+   * state (only the "Table actions" trigger visible). The trigger opens the `menu`; a verb pick moves to
+   * the target `pick` step (free tables for move/join, other open tabs for merge/transfer — the two are
+   * told apart by {@link actionVerb}); a transfer then advances to `transfer-lines` to choose which lines
+   * to move. */
+  @state() private actionStep: "closed" | "menu" | "pick" | "transfer-lines" = "closed";
+  /** The verb the operator picked in the action menu — decides which target list the picker shows and
+   * which event a target pick dispatches. `null` while the flow is closed or on the menu. */
+  @state() private actionVerb: "move" | "join" | "merge" | "transfer" | null = null;
+  /** The destination tab's working-order id for an in-flight transfer, captured when the operator picks
+   * it in the `pick` step; the `transfer-lines` step dispatches `transfer-lines` against it. `null`
+   * otherwise. */
+  @state() private transferToTabId: string | null = null;
+  /** The lines selected for a transfer, by `lineNo` (v1 moves whole lines only, so no per-line quantity
+   * is stored). A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
+  @state() private transferLineNos = new Set<number>();
 
   /** The CURRENT round the product grid rings into and the round basket shows — its own store, distinct
    * from the tab (which is server-side). Cleared by {@link #sendRound}. */
@@ -359,6 +395,13 @@ export class TillTableOrderScreen extends LitElement {
         this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
       );
       this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
+    }
+    // A tab switch (the app re-points `orderId` at a different working order) must not carry a half-open
+    // action flow across — its target lists and captured transfer destination belong to the OLD tab. Reset
+    // to the trigger. Guarded on a real change (not the first update, where the old value is undefined and
+    // there is nothing open to reset).
+    if (changed.has("orderId") && changed.get("orderId") !== undefined) {
+      this.#closeActions();
     }
   }
 
@@ -614,10 +657,7 @@ export class TillTableOrderScreen extends LitElement {
               </section>`
             : nothing
         }
-        ${this.#statusSection()}
-        <wt-button class="move-split" data-move-split variant="secondary" ?disabled=${true}>
-          ${t("table.move_split")}
-        </wt-button>
+        ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
   }
@@ -727,6 +767,237 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
       </div>
     </section>`;
+  }
+
+  // ── Table actions (TS-3/TS-4): move / join / merge / transfer ─────────────────────────────────────
+
+  /** The FREE tables a move/join can target — the read-model rows in the `free` state. */
+  #freeTables(): TableState[] {
+    return this.tables.filter((table) => table.state === "free");
+  }
+
+  /** The OTHER open tabs a merge/transfer can target — every row with an open tab whose working-order id
+   * is present and is NOT this tab's own (a tab cannot merge/transfer with itself). Deduplicated BY TAB:
+   * a joined tab spans several `dining_tables` rows all pointing at one `tabId`, and the picker chooses a
+   * BILL, not a table — so it shows one entry per tab (the first covering row's label). */
+  #otherTabs(): TableState[] {
+    const seen = new Set<string>();
+    return this.tables.filter((table) => {
+      if (!table.hasOpenTab || table.tabId == null || table.tabId === this.orderId) return false;
+      if (seen.has(table.tabId)) return false;
+      seen.add(table.tabId);
+      return true;
+    });
+  }
+
+  /** Reset the whole action flow to its resting state (only the trigger visible). */
+  #closeActions(): void {
+    this.actionStep = "closed";
+    this.actionVerb = null;
+    this.transferToTabId = null;
+    this.transferLineNos = new Set();
+  }
+
+  /** Emit one composed, bubbling CustomEvent — the same event shape as this screen's other dispatch sites
+   * (`send-round`, `serve-line`, `set-status`, …), factored here because the action flow has several. */
+  #dispatch(type: string, detail: unknown): void {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /** The action-menu verb pick: all four verbs advance to the single `pick` step, which shows free tables
+   * (move/join) or other open tabs (merge/transfer) per {@link actionVerb}. */
+  #chooseVerb(verb: "move" | "join" | "merge" | "transfer"): void {
+    this.actionVerb = verb;
+    this.actionStep = "pick";
+  }
+
+  /** A target pick in the picker. Move/join/merge dispatch immediately and close; transfer captures the
+   * destination tab and advances to the line-picker step (nothing is dispatched until the lines are chosen). */
+  #pickTarget(table: TableState): void {
+    switch (this.actionVerb) {
+      case "move":
+        this.#dispatch("move-tab", { toTableId: table.id });
+        this.#closeActions();
+        break;
+      case "join":
+        this.#dispatch("join-table", { tableId: table.id });
+        this.#closeActions();
+        break;
+      case "merge":
+        this.#dispatch("merge-tabs", { fromTabId: table.tabId, freeSourceTable: true });
+        this.#closeActions();
+        break;
+      case "transfer":
+        this.transferToTabId = table.tabId ?? null;
+        this.actionStep = "transfer-lines";
+        break;
+    }
+  }
+
+  /** Toggle a whole line into/out of the transfer selection (v1 moves whole lines only). A NEW Set is
+   * assigned so Lit re-renders. */
+  #toggleTransferLine(line: TabLine): void {
+    const next = new Set(this.transferLineNos);
+    if (next.has(line.lineNo)) next.delete(line.lineNo);
+    else next.add(line.lineNo);
+    this.transferLineNos = next;
+  }
+
+  /** Build the `transfers` list from the selected lines and dispatch `transfer-lines`, then close. v1 moves
+   * whole lines only, so every entry is `{ lineNo }` with no `quantity`; when a partial-quantity stepper is
+   * added, reintroduce the split (a `quantity` < the line's) there. No-op with nothing selected or no
+   * destination captured. */
+  #confirmTransfer(): void {
+    if (this.transferToTabId === null || this.transferLineNos.size === 0) return;
+    const transfers: TabTransfer[] = this.lines
+      .filter((line) => this.transferLineNos.has(line.lineNo))
+      .map((line) => ({ lineNo: line.lineNo }));
+    this.#dispatch("transfer-lines", { toTabId: this.transferToTabId, transfers });
+    this.#closeActions();
+  }
+
+  /** The Back control: from the menu it closes the flow; from the picker it returns to the menu; from the
+   * transfer line-picker it returns to the picker. */
+  #actionBack(): void {
+    switch (this.actionStep) {
+      case "menu":
+        this.#closeActions();
+        break;
+      case "pick":
+        this.actionStep = "menu";
+        this.actionVerb = null;
+        break;
+      case "transfer-lines":
+        this.transferToTabId = null;
+        this.transferLineNos = new Set();
+        this.actionStep = "pick";
+        break;
+    }
+  }
+
+  /** The in-drawer action flow (TS-3/TS-4). Renders the trigger when resting, else the active step. */
+  #actionSection(): TemplateResult {
+    switch (this.actionStep) {
+      case "closed":
+        return html`<wt-button
+          class="move-split"
+          data-move-split
+          variant="secondary"
+          @click=${() => (this.actionStep = "menu")}
+        >
+          ${t("table.actions_title")}
+        </wt-button>`;
+      case "menu":
+        return this.#actionMenu();
+      case "pick":
+        return this.#targetPicker();
+      case "transfer-lines":
+        return this.#transferLinesStep();
+    }
+  }
+
+  #actionMenu(): TemplateResult {
+    const verb = (
+      name: "move" | "join" | "merge" | "transfer",
+      key:
+        "table.action_move" | "table.action_join" | "table.action_merge" | "table.action_transfer",
+    ) =>
+      html`<wt-button
+        class="action"
+        data-action=${name}
+        variant="secondary"
+        @click=${() => this.#chooseVerb(name)}
+      >
+        ${t(key)}
+      </wt-button>`;
+    return html`<section class="actions" data-action-menu>
+      <h2>${t("table.actions_title")}</h2>
+      <div class="action-options">
+        ${verb("move", "table.action_move")} ${verb("join", "table.action_join")}
+        ${verb("merge", "table.action_merge")} ${verb("transfer", "table.action_transfer")}
+        <wt-button class="action" data-action="split" variant="secondary" ?disabled=${true}>
+          ${t("table.action_split")}
+        </wt-button>
+      </div>
+      ${this.#backButton()}
+    </section>`;
+  }
+
+  #targetPicker(): TemplateResult {
+    const forTables = this.actionVerb === "move" || this.actionVerb === "join";
+    const targets = forTables ? this.#freeTables() : this.#otherTabs();
+    const emptyKey = forTables ? "table.no_free_tables" : "table.no_other_tabs";
+    return html`<section class="actions" data-target-picker>
+      <h2>${t("table.actions_title")}</h2>
+      ${
+        targets.length === 0
+          ? html`<p class="empty">${t(emptyKey)}</p>`
+          : html`<div class="action-options">
+              ${targets.map(
+                (table) =>
+                  html`<wt-button
+                    class="target"
+                    data-target=${forTables ? table.id : table.tabId!}
+                    variant="secondary"
+                    @click=${() => this.#pickTarget(table)}
+                  >
+                    ${table.label}
+                  </wt-button>`,
+              )}
+            </div>`
+      }
+      ${this.#backButton()}
+    </section>`;
+  }
+
+  #transferLinesStep(): TemplateResult {
+    const canConfirm = this.transferToTabId !== null && this.transferLineNos.size > 0;
+    return html`<section class="actions" data-transfer-lines>
+      <h2>${t("table.transfer_pick_lines")}</h2>
+      ${
+        this.lines.length === 0
+          ? html`<p class="empty">${t("table.transfer_no_lines")}</p>`
+          : html`<div class="action-options">
+              ${this.lines.map((line) => this.#transferLineRow(line))}
+            </div>`
+      }
+      <wt-button
+        class="transfer-confirm"
+        data-transfer-confirm
+        variant="primary"
+        ?disabled=${!canConfirm}
+        @click=${() => this.#confirmTransfer()}
+      >
+        ${t("table.transfer_confirm")}
+      </wt-button>
+      ${this.#backButton()}
+    </section>`;
+  }
+
+  #transferLineRow(line: TabLine): TemplateResult {
+    const name = this.#nameFor(line.productId);
+    const selected = this.transferLineNos.has(line.lineNo);
+    return html`<wt-button
+      class="transfer-line ${selected ? "selected" : ""}"
+      data-transfer-line=${line.lineNo}
+      variant="secondary"
+      aria-pressed=${selected}
+      @click=${() => this.#toggleTransferLine(line)}
+    >
+      <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
+      <span class="qty">${this.#displayQty(line.quantity)}</span>
+    </wt-button>`;
+  }
+
+  #backButton(): TemplateResult {
+    return html`<wt-button
+      class="action-back"
+      data-action-back
+      variant="secondary"
+      @click=${() => this.#actionBack()}
+    >
+      ${this.actionStep === "menu" ? t("action.cancel") : t("action.back")}
+    </wt-button>`;
   }
 }
 

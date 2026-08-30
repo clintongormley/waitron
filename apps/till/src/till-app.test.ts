@@ -247,6 +247,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
+    // TS-3/TS-4 table actions: move/join/merge/transfer. Each defaults to a resolved void; a test
+    // overrides any with its own spy. `getTablesState` above is re-read after each on the success path.
+    moveTab: vi.fn().mockResolvedValue(undefined),
+    joinTable: vi.fn().mockResolvedValue(undefined),
+    mergeTabs: vi.fn().mockResolvedValue(undefined),
+    transferLines: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     // Device mode (device-identity-1 §5a): the boot device probe. `getDeviceIdentity` is the kind-aware
@@ -2191,6 +2197,114 @@ describe("till-app", () => {
 
         // Keyed by the TABLE id "t2" (Ruling FP-F), never the tab's order id "wo-7".
         expect(setTableStatus).toHaveBeenCalledWith("t2", "s1");
+      });
+
+      // ── TS-3/TS-4: move / join / merge / transfer table actions ──────────────────────────────────
+      it("move-tab relocates the tab then reloads the floor (staying on the screen)", async () => {
+        const moveTab = vi.fn().mockResolvedValue(undefined);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          moveTab,
+        });
+        const screen = await toTableOrder(el, openTable);
+        // One floor load reached the screen (entering the floor).
+        expect(getTablesState).toHaveBeenCalledTimes(1);
+
+        emit(screen, "move-tab", { toTableId: "t9" });
+        await flush(el);
+
+        expect(moveTab).toHaveBeenCalledWith("wo-7", "t9");
+        // Re-reads the floor so the freed/occupied tables reconcile, and stays on the table-order screen.
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+        expect(tableOrder(el)).not.toBeNull();
+      });
+
+      it("join-table extends the tab onto a table then reloads the floor", async () => {
+        const joinTable = vi.fn().mockResolvedValue(undefined);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          joinTable,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTablesState).toHaveBeenCalledTimes(1);
+
+        emit(screen, "join-table", { tableId: "t9" });
+        await flush(el);
+
+        expect(joinTable).toHaveBeenCalledWith("wo-7", "t9");
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+        expect(tableOrder(el)).not.toBeNull();
+      });
+
+      it("merge-tabs absorbs another tab then reloads this tab's lines AND the floor", async () => {
+        const mergeTabs = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          mergeTabs,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+        expect(getTablesState).toHaveBeenCalledTimes(1);
+
+        emit(screen, "merge-tabs", { fromTabId: "wo-9", freeSourceTable: true });
+        await flush(el);
+
+        expect(mergeTabs).toHaveBeenCalledWith("wo-7", "wo-9", true);
+        // The current tab absorbed the other's lines (reload) and the floor changed (reload).
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+      });
+
+      it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
+        const transferLines = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          transferLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
+        await flush(el);
+
+        expect(transferLines).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }]);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+        expect(getTablesState).toHaveBeenCalledTimes(2);
+      });
+
+      it("a failed table action surfaces a non-fatal banner, leaving the screen up", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+          moveTab: vi.fn().mockRejectedValue({ code: "table.occupied" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+        emit(screen, "move-tab", { toTableId: "t9" });
+        await flush(el);
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+      });
+
+      it("threads the occupancy read-model to the table-order screen for its action targets", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable, freeTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(screen.tables).toEqual([openTable, freeTable]);
       });
 
       it("pay-tab settles the WHOLE tab via recordSale with the tab id and NO re-price, then shows the ticket", async () => {

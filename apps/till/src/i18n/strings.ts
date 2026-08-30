@@ -246,7 +246,6 @@ export const en = {
   "table.pay_title": "Charge",
   "table.status_title": "Status",
   "table.status_clear": "No status",
-  "table.move_split": "Move · Split",
   // KDS-2 (§5b): the round bar's per-line course picker + the waiter-fire drawer section.
   // `table.course_label` labels each round line's course select; `table.course_default` is its
   // "use the product's default" placeholder (there is no explicit "no course" option). `table.fire_title`
@@ -255,6 +254,22 @@ export const en = {
   "table.course_default": "Default",
   "table.fire_title": "Courses to fire",
   "table.fire_course": "Fire",
+  // Table actions (TS-3/TS-4): the in-drawer move/join/merge/transfer flow. `table.actions_title` heads
+  // the flow and labels its trigger (replacing the old disabled "Move · Split" placeholder). The
+  // `table.action_*` keys name the four verbs + the disabled Split placeholder (Back/Cancel reuse the
+  // shared `action.back`/`action.cancel`). The empty-state keys cover a picker with no valid targets;
+  // the transfer keys head the line-picker step.
+  "table.actions_title": "Table actions",
+  "table.action_move": "Move to table",
+  "table.action_join": "Join a table",
+  "table.action_merge": "Merge a bill",
+  "table.action_transfer": "Transfer items",
+  "table.action_split": "Split (soon)",
+  "table.no_free_tables": "No free tables",
+  "table.no_other_tabs": "No other open tabs",
+  "table.transfer_pick_lines": "Choose items to transfer",
+  "table.transfer_confirm": "Transfer",
+  "table.transfer_no_lines": "No items to transfer",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -454,11 +469,21 @@ export const es: Record<StringKey, string> = {
   "table.pay_title": "Cobrar",
   "table.status_title": "Estado",
   "table.status_clear": "Sin estado",
-  "table.move_split": "Mover · Dividir",
   "table.course_label": "Curso",
   "table.course_default": "Por defecto",
   "table.fire_title": "Cursos por marchar",
   "table.fire_course": "Marchar",
+  "table.actions_title": "Acciones de mesa",
+  "table.action_move": "Mover a mesa",
+  "table.action_join": "Unir una mesa",
+  "table.action_merge": "Combinar cuenta",
+  "table.action_transfer": "Transferir artículos",
+  "table.action_split": "Dividir (próximamente)",
+  "table.no_free_tables": "No hay mesas libres",
+  "table.no_other_tabs": "No hay otras cuentas abiertas",
+  "table.transfer_pick_lines": "Elige artículos para transferir",
+  "table.transfer_confirm": "Transferir",
+  "table.transfer_no_lines": "No hay artículos para transferir",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
