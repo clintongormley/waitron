@@ -4,7 +4,7 @@
 // the handler authenticates it and authorizes the admin-only `mirror.create` permission with the same
 // identity primitives the dashboard login uses (`loginManager*` → `authorizeManager`), but it
 // authenticates by PERSON ID, not email: this is a server-to-server flow carrying the admin's id (the
-// operator types it into the adopt screen), NOT the email login form. The primary's admin MAY now carry
+// operator types it into the setup connect screen), NOT the email login form. The primary's admin MAY now carry
 // an email (onboarding via the setup UI sets one; the bare `venue` CLI may not), but this path never
 // uses it — it keeps the id-based `loginManagerById` sibling (see the route body for why).
 //

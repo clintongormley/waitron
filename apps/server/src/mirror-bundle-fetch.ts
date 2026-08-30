@@ -7,7 +7,7 @@
 // (`POST /management-api/mirror-bundle`, mirror-bundle-api.ts) authenticates by id via `loginManagerById`
 // (it screens exactly those fields). This is deliberately NOT the dashboard login body — dashboard sign-in
 // authenticates `{ email, password, totp }` by email, but this is a server-to-server flow carrying the
-// admin's id (the operator types it into the adopt screen), so the mirror path authenticates it by id
+// admin's id (the operator types it into the setup connect screen), so the mirror path authenticates it by id
 // instead. It travels as a structured type end to end (connect screen →
 // `/setup-api/adopt` → here → the primary), so this fetcher simply serialises it as the JSON request body —
 // no string-threading, and a wrong shape is rejected at the mirror's own `/setup-api/adopt` boundary
