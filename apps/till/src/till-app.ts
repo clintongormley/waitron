@@ -1768,7 +1768,6 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
-          .canSettle=${true}
           .cashOnly=${this.handheldMode}
         ></till-table-order-screen>`;
       // KDS-1 (design §5a): the kitchen's station-display screen. It OWNS its own fetching via `.api`

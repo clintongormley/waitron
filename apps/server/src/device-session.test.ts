@@ -182,34 +182,30 @@ async function probeTry(
   return (await res.json()) as DeviceBinding | null;
 }
 
-/** Run `assertNotHandheld` behind the shared scaffold: `{ ok: true }` when it passes (no throw), or the
- * thrown code when it refuses. */
-async function probeAssert(
+/** Run one firewall guard behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
+ * the thrown code when it refuses. `probeAssert`/`probeTender` are the per-guard wrappers. */
+async function probeGuard(
   cfg: TillConfig,
   cookieValue: string | null,
+  runGuard: (deps: { db: Database; cfg: { tenantId: string } }, c: Context) => Promise<void>,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
   const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
-    await assertNotHandheld(deps, c, "record_sale");
+    await runGuard(deps, c);
     return c.body(null, 204);
   });
   if (res.status === 204) return { ok: true };
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Run the tender-aware `assertHandheldTenderAllowed` behind the shared scaffold, threading the tender
- * method the sale route now knows before the guard: `{ ok: true }` when it passes (no throw), or the
- * thrown code when it refuses. Mirrors `probeAssert`. */
-async function probeTender(
-  cfg: TillConfig,
-  cookieValue: string | null,
-  method: "cash" | "card",
-): Promise<{ ok: true } | { ok: false; code: string }> {
-  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
-    await assertHandheldTenderAllowed(deps, c, method);
-    return c.body(null, 204);
-  });
-  if (res.status === 204) return { ok: true };
-  return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
+/** Run `assertNotHandheld` behind the shared scaffold. */
+function probeAssert(cfg: TillConfig, cookieValue: string | null) {
+  return probeGuard(cfg, cookieValue, (deps, c) => assertNotHandheld(deps, c, "record_sale"));
+}
+
+/** Run the tender-aware `assertHandheldTenderAllowed`, threading the tender method the sale route now
+ * knows before the guard. Mirrors `probeAssert`. */
+function probeTender(cfg: TillConfig, cookieValue: string | null, method: "cash" | "card") {
+  return probeGuard(cfg, cookieValue, (deps, c) => assertHandheldTenderAllowed(deps, c, method));
 }
 
 const COOKIE_VALUE = "11111111-1111-4111-8111-111111111111.token_ABC-123";

@@ -329,12 +329,12 @@ export class TillTableOrderScreen extends LitElement {
   /** A tab settlement is in flight (the app's `submitting`), threaded to the embedded pay widget so it
    * disables its confirm affordance — the visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
-  /** Whether this face may SETTLE the tab. Both the counter/fixed till and the handheld pay (the app
-   * threads `true`), so the embedded pay section renders; a handheld is narrowed to cash by
-   * {@link cashOnly} below rather than hidden outright. When `false` the pay section is not rendered
-   * at all. UI honesty only: the server firewall (Task 1's tender-aware `/api/sales`) is the real
-   * guarantee — it permits a handheld cash tender and fences a handheld card. The tab total stays
-   * visible either way. */
+  /** Whether this face may SETTLE the tab. Both the counter/fixed till and the handheld pay, so this
+   * DEFAULTS to `true` and the app leaves it unset — the embedded pay section renders; a handheld is
+   * narrowed to cash by {@link cashOnly} below rather than hidden outright. A caller that passes `false`
+   * (a future non-settling face) hides the pay section entirely. UI honesty only: the server firewall
+   * (Task 1's tender-aware `/api/sales`) is the real guarantee — it permits a handheld cash tender and
+   * fences a handheld card. The tab total stays visible either way. */
   @property({ type: Boolean }) canSettle = true;
   /** Whether this face may settle CASH ONLY — hide the embedded pay widget's Card button. A handheld
    * settles cash but not card (the server `/api/sales` firewall fences a handheld card), so the app

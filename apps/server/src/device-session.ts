@@ -213,8 +213,9 @@ export async function assertHandheldTenderAllowed(
   c: Context,
   tenderMethod: "cash" | "card",
 ): Promise<void> {
-  const device = await tryReadDevice(deps, c);
-  if (device?.kind === "handheld" && tenderMethod !== "cash") {
-    throw new AppError("device.forbidden_action", { action: "record_sale_card" });
-  }
+  // A cash tender passes for every device, so it needs no device read at all; a non-cash tender is
+  // refused for a handheld with EXACTLY {@link assertNotHandheld}'s behaviour (same code, same throw),
+  // so delegate to it rather than re-implement the read/kind-check/throw.
+  if (tenderMethod === "cash") return;
+  await assertNotHandheld(deps, c, "record_sale_card");
 }

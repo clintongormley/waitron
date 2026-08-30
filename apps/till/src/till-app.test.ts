@@ -2001,7 +2001,7 @@ describe("till-app", () => {
         expect(screen.products).toEqual([cafe]);
       });
 
-      it("lets a normal (counter/fixed) till settle the tab — canSettle threads through as true", async () => {
+      it("lets a normal (counter/fixed) till settle the tab — canSettle true (default), cashOnly false", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
