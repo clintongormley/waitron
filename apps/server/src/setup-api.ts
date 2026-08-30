@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { hashPassword, hashPin, isValidEmail, normalizeEmail } from "@waitron/identity";
+import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
@@ -185,8 +185,8 @@ function asStringArray(value: unknown, field: string): string[] {
  * `setup.request_invalid` naming the field, before any hashing or provisioning. Domain rules the plan
  * owns (locale cardinality, series-code equality, territory) are left to `planVenue` inside
  * `provisionVenue`. This screen is structural (presence/shape) for every field EXCEPT one: the admin
- * email is additionally FORMAT-validated — `parseAdminEmail` normalizes it and runs `isValidEmail`,
- * throwing `person.email_invalid` on a present-but-malformed address (see the `email:` field below).
+ * email is additionally FORMAT-validated — identity's `normalizeAndValidateEmail` normalizes it and
+ * validates it, throwing `person.email_invalid` on a present-but-malformed address (see the `email:` field below).
  */
 function parseVenue(venueRaw: unknown): VenueRequest {
   const v = asObject(venueRaw, "venue");
@@ -218,22 +218,14 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
       // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`
       // (`setup.request_invalid`, like every sibling field), then NORMALIZED (trim + lowercase) and
-      // screened by identity's `isValidEmail` — a present-but-malformed value is `person.email_invalid`,
-      // the domain-named code the management API raises for the same write-boundary check. NOT hashed:
-      // the email is not a secret, so the normalized value reaches `provision` verbatim for the seeded
-      // `persons` row (venue-apply.ts writes it) so the email-based dashboard login can resolve it.
-      email: parseAdminEmail(asString(admin.email, "admin.email")),
+      // format-validated by identity's own write-boundary rule `normalizeAndValidateEmail` — the SAME
+      // helper `createPerson`/`setEmail` use, so the onboarding path cannot drift from the dashboard's
+      // (a present-but-malformed value is `person.email_invalid`). NOT hashed: the email is not a
+      // secret, so the normalized value reaches `provision` verbatim for the seeded `persons` row
+      // (venue-apply.ts writes it) so the email-based dashboard login can resolve it.
+      email: normalizeAndValidateEmail(asString(admin.email, "admin.email")),
     },
   };
-}
-
-/** Normalize (trim + lowercase) then screen the admin email, throwing `person.email_invalid` (400)
- * on a malformed value — identity's write-boundary rule (`normalizeAndValidateEmail` in staff.ts),
- * applied here at the setup boundary before anything is provisioned. Returns the normalized address. */
-function parseAdminEmail(raw: string): string {
-  const email = normalizeEmail(raw);
-  if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
-  return email;
 }
 
 /** Validate the OPTIONAL AEAT cert. First the SHAPE (present fields, right types), then the VALUES

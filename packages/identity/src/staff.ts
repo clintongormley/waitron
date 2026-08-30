@@ -39,7 +39,7 @@ export function asEmailTaken(err: unknown, email: string): never {
 /** Normalize a REQUIRED email and validate it, throwing `person.email_invalid` on a malformed value
  * BEFORE any write. The single source of the email write-boundary rule, shared by `screenEmail`
  * (create) and `setEmail` (edit) so the two cannot drift. */
-function normalizeAndValidateEmail(raw: string): string {
+export function normalizeAndValidateEmail(raw: string): string {
   const email = normalizeEmail(raw);
   if (!isValidEmail(email)) throw new AppError("person.email_invalid", {});
   return email;
