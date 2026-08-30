@@ -1470,6 +1470,31 @@ describe("TillApi", () => {
     });
   });
 
+  it("getDeviceIdentity GETs /api/device/me and returns the device's non-secret identity", async () => {
+    const identity = { deviceId: "dev-1", kind: "handheld", stationId: null };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(identity));
+
+    const r = await new TillApi("", fetchStub).getDeviceIdentity();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/me",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(identity);
+  });
+
+  it("getDeviceIdentity surfaces { code: 'device.unauthorized' } when the cookie is missing/rejected", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.unauthorized" } }), {
+        status: 401,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).getDeviceIdentity()).rejects.toMatchObject({
+      code: "device.unauthorized",
+    });
+  });
+
   it("deviceAdvance POSTs { to } to the device ticket-item advance route (empty 204 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 

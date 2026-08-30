@@ -248,10 +248,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
-    // Device mode (device-identity-1 §5a): the boot device probe. Defaults to a 401 — a NORMAL operator
-    // till is not an enrolled device — so every existing test boots to the lock screen as before; the
-    // device-boot test overrides it to resolve. `enrolDevice`/`deviceAdvance` are the station screen's
-    // (device mode), present so its own probe/enrol paths never hit an undefined method.
+    // Device mode (device-identity-1 §5a): the boot device probe. `getDeviceIdentity` is the kind-aware
+    // probe the boot runs FIRST (handheld-tableside Task 7); it defaults to a 401 — a NORMAL operator till
+    // is not an enrolled device — so every existing test boots to the lock screen as before. The KDS-boot
+    // test overrides it to `kds_station` (then `getDeviceStation` prefetches the queue); the handheld-boot
+    // test overrides it to `handheld`. `getDeviceStation` keeps its own 401 default so the KDS end-state is
+    // unchanged. `enrolDevice`/`deviceAdvance` are the station screen's (device mode), present so its own
+    // probe/enrol paths never hit an undefined method.
+    getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     enrolDevice: vi.fn().mockResolvedValue({
       deviceId: "dev-1",
@@ -459,13 +463,20 @@ describe("till-app", () => {
   // Device mode (device-identity-1 §5a): an enrolled display boots straight into its bound station; a
   // normal operator till's 401 device probe leaves it on the lock screen with no boot error; and the
   // lock screen's set-up affordance routes a fresh display into device mode to reach the enrol view.
-  it("boots an ENROLLED device straight into the station screen in device mode", async () => {
+  it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
       // Drive the venue default to en-GB (≠ the es-ES starting point) so the device path's venue-default
       // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
       // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
       // guard must never withhold the venue default from the operator-less device path.
       getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
+      // The kind-aware probe (Task 7): a `kds_station` identity keeps the existing behaviour — the boot
+      // then PREFETCHES the bound station's queue (`getDeviceStation`), a DELIBERATE second authenticated
+      // read that preserves the `initialDeviceStation` optimisation. Only the mock plumbing changes here;
+      // the end-state assertions (lands on `station`, `deviceMode` true) are exactly as before.
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
@@ -479,13 +490,39 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  it("a normal operator till (401 device probe) stays on the lock screen with NO boot error", async () => {
-    // The default stub's getDeviceStation rejects `device.unauthorized` — the expected not-a-device case.
+  it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
+    // The kind-aware probe (Task 7): a `handheld` identity puts the till into handheld mode but STAYS on
+    // the lock screen — the waiter PIN-logs-in, then lands on the floor rather than the counter POS.
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    // A handheld waits on the lock screen (unlike a kds_station, which skips it) — but in handheld mode.
+    expect(lock(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // A handheld is NOT a KDS display — the kind branch never prefetches the station queue.
+    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    // After login the waiter lands on the FLOOR (the face-set's post-lock face), never the counter.
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+  });
+
+  it("a normal operator till (401 identity probe) stays on the lock screen with NO boot error", async () => {
+    // The default stub's getDeviceIdentity rejects `device.unauthorized` — the expected not-a-device case.
     const { el } = await mountApp();
     await flush(el);
     expect(lock(el)).not.toBeNull();
     expect(station(el)).toBeNull();
-    // A device-station 401 must NOT surface `boot.error` (that is only for a failed getTill).
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
+    // A rejected identity probe never falls through to the KDS station prefetch.
+    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    // A device 401 must NOT surface `boot.error` (that is only for a failed getTill).
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 

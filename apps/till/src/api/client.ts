@@ -416,6 +416,21 @@ export interface DeviceEnrolment {
 }
 
 /**
+ * `GET /api/device/me` success (device-identity §3b, handheld-tableside Task 4) — the enrolled device's
+ * own NON-SECRET identity: its `deviceId`, its `kind` (`kds_station` for a kitchen display, `handheld`
+ * for a waiter's phone), and the `stationId` it is bound to (`null` for a kind that binds to no station,
+ * such as a handheld). Read once on boot ({@link TillApp}'s device probe) to decide which shell the till
+ * boots into. A LOCAL mirror of the server's response, NOT imported — the bundle-decoupling rule. `kind`
+ * is a plain `string` (not a union): the client only branches on the values it knows and treats any other
+ * as "not a special device", so a server that adds a new kind never breaks an older client.
+ */
+export interface DeviceIdentity {
+  deviceId: string;
+  kind: string;
+  stationId: string | null;
+}
+
+/**
  * `GET /api/device/station` success (device-identity-1 §5a) — the enrolled display's OWN bound station:
  * its `id` and current `queue` (grouped by order, the SAME {@link StationQueueGroup} shape the
  * session-gated `getStationQueue` returns). The station is fixed by enrolment, so there is no picker and
@@ -968,6 +983,17 @@ export class TillApi {
    */
   getDeviceStation(): Promise<DeviceStation> {
     return this.#request<DeviceStation>("/api/device/station", "GET");
+  }
+
+  /**
+   * This enrolled device's OWN identity (device-identity §3b, handheld-tableside Task 4) →
+   * `GET /api/device/me`. The device cookie names the device server-side, so there is no id to pass. The
+   * boot probe reads {@link DeviceIdentity.kind} to pick the till's shell (a `handheld` phone shell, a
+   * `kds_station` display, or a normal operator till). A missing/rejected/revoked cookie rejects
+   * `{ code: "device.unauthorized" }` (401) — the signal that this browser is not an enrolled device.
+   */
+  getDeviceIdentity(): Promise<DeviceIdentity> {
+    return this.#request<DeviceIdentity>("/api/device/me", "GET");
   }
 
   /**
