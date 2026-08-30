@@ -110,6 +110,7 @@ function buildApp(
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
       readReplicationLag: undefined,
+      readBackup: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },

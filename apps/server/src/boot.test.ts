@@ -1569,6 +1569,81 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("does not schedule the backup sweep when WAITRON_BACKUP_DIR is unset, and boots unaffected", async () => {
+    // The backup off-switch (slice 4b-ii): no WAITRON_BACKUP_DIR, so loadBackupConfig returns undefined
+    // and boot runs neither the RLS probe nor the sweep — it logs the backup-off line and leaves backup
+    // OFF. Every OTHER trading boot in this suite is this same case (none sets WAITRON_BACKUP_*), so the
+    // real guard is that they all still pass; this asserts the off branch explicitly. Proven via the
+    // logged backup.disabled event (the wiring ran the else branch) plus a clean shutdown. Box-status's
+    // own configured:false report on this branch is covered directly by box-status.route.test.ts.
+    const port = await freePort();
+    const [server, disabled] = await withCapturedStdout(async (lines) => {
+      const started = await startServer({
+        ...KEY_ENV,
+        DATABASE_URL: databaseUrl,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      });
+      const event = await waitForEvent(lines, "backup.disabled");
+      return [started, event] as const;
+    });
+    try {
+      expect(disabled.event).toBe("backup.disabled");
+    } finally {
+      await server.close();
+    }
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
+  }, 60_000);
+
+  it("boots and TRADES when the backup DB is unreachable — the RLS probe failure disables backup, never aborts boot (§5)", async () => {
+    // The strict CLAUDE.md §5 case, driven through startServer rather than reasoned about: WAITRON_BACKUP_DIR
+    // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
+    // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).
+    // The probe's createPostgresDb therefore throws; boot's fail-safe catch swallows it, logs
+    // backup.disabled_probe_failed, and leaves backup OFF. What must hold: startServer RESOLVES (a bad backup
+    // role must not brick the till), /health serves (the box trades), and box-status reports
+    // backup.configured:false (backup left off). Uses a real container for the MAIN db as every trading boot
+    // here does; only the backup URL is the dead one.
+    const port = await freePort();
+    const backupDir = mkdtempSync(join(tmpdir(), "waitron-boot-backup-"));
+    const [server, disabled] = await withCapturedStdout(async (lines) => {
+      const started = await startServer({
+        ...KEY_ENV,
+        DATABASE_URL: databaseUrl,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+        WAITRON_BACKUP_DIR: backupDir,
+        // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
+        WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
+      });
+      // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
+      // whose arrival also means startServer got past the probe rather than throwing out of it.
+      const event = await waitForEvent(lines, "backup.disabled_probe_failed");
+      // Then wait for the first pass to complete (loop.sleeping is logged strictly after onPass ->
+      // recordPass, same as the main boot test) so /health has flipped past its pre-first-pass 503 startup
+      // grace — the box genuinely trades, and with no due fiscal work seeded both duties report ok.
+      await waitForEvent(lines, "loop.sleeping");
+      return [started, event] as const;
+    });
+    try {
+      // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
+      expect(disabled.event).toBe("backup.disabled_probe_failed");
+      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(health.status).toBe(200);
+      // The captured backup.disabled_probe_failed line means backupWorker stayed undefined, so mountBoxStatusApi
+      // received readBackup: undefined — and box-status's `backup: { configured: false }` for that exact
+      // undefined-reader case is asserted directly (over the management gate) in box-status.route.test.ts, so
+      // it is not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
+      // be the heavy scaffolding the slice brief says to avoid).
+    } finally {
+      await server.close();
+      rmSync(backupDir, { recursive: true, force: true });
+    }
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
+  }, 60_000);
+
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
     const port = await freePort();
     const server = await startServer({

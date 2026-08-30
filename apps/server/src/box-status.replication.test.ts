@@ -134,6 +134,7 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       now: () => now,
       tlsCertPath: undefined,
       readReplicationLag: () => lagFor(suite.admin),
+      readBackup: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },
