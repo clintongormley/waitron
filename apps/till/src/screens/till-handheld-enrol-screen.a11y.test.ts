@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-handheld-enrol-screen.js";
 import type { TillHandheldEnrolScreen } from "./till-handheld-enrol-screen.js";
@@ -43,13 +43,15 @@ describe.each(["light", "dark"] as const)("till-handheld-enrol-screen a11y (%s t
       theme,
     );
     await flush(el);
-    // Drive an enrol failure so the role="alert" banner renders for the sweep.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-code]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "STALE" }, bubbles: true, composed: true }),
-    );
-    await el.updateComplete;
+    // Drive an enrol failure so the role="alert" banner renders for the sweep. `#enrol` reads the code
+    // LIVE off the field, so the field's own `.value` must be set (not just a synthetic wt-change, which
+    // only updates tracked state) — otherwise the submit early-returns and the banner never appears.
+    el.shadowRoot!.querySelector<HTMLInputElement>("[data-code]")!.value = "STALE";
     el.shadowRoot!.querySelector<HTMLElement>("[data-enrol]")!.click();
     await flush(el);
+    // Guard against a vacuous sweep: the banner must actually be present, so a regression that stops it
+    // rendering fails HERE rather than silently re-checking the plain enrol view.
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

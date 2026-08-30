@@ -107,7 +107,7 @@ export class TillHandheldEnrolScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <section class="screen" aria-label=${t("device.handheld_enrol_title")}>
+      <section class="screen">
         <h1 class="title">${t("device.handheld_enrol_title")}</h1>
         <p class="hint">${t("device.handheld_enrol_hint")}</p>
         ${
