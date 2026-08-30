@@ -158,12 +158,15 @@ export const locations = pgTable(
     // cash accountability, not an open drawer. Read per-location by the drawer route (a later task); no
     // read logic here.
     drawerOpenPolicy: drawerOpenPolicy("drawer_open_policy").notNull().default("gated"),
-    // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
-    // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
-    // each other; the cycle is harmless because every cross-module reference is a lazy
-    // `.references(() => …)` thunk, evaluated only after both modules have finished loading, never
-    // at import time. The receipt is CI, not an assertion: `pnpm --filter @waitron/db db:generate`
-    // emits this FK (see drizzle/0028_dapper_tiger_shark.sql) and `pnpm --filter @waitron/db
+    // This location's DEFAULT catalogue (menu) — nullable (a venue may exist before a menu is
+    // assigned). Not the only menu a location sells from: `location_catalogues` may add further
+    // catalogues to the accessible set, resolved by `resolveAccessibleCatalogueIds`
+    // (`packages/catalogue/src/operations.ts`). This FK and `catalogue.ts`'s own `tenants` FK make
+    // the two schema modules import each other; the cycle is harmless because every cross-module
+    // reference is a lazy `.references(() => …)` thunk, evaluated only after both modules have
+    // finished loading, never at import time. The receipt is CI, not an assertion:
+    // `pnpm --filter @waitron/db db:generate` emits this FK (see
+    // drizzle/0028_dapper_tiger_shark.sql) and `pnpm --filter @waitron/db
     // typecheck` compiles the mutually-importing pair — both run green in CI, so a dependency bump
     // that broke thunk resolution would fail those same commands rather than slip through here.
     // (Cross-tenant integrity — that the catalogue belongs to THIS tenant — remains RLS's job, not
