@@ -9,7 +9,6 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setSingletonRole, stampDeployment, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing } from "@waitron/credentials";
 import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,10 +17,13 @@ import { roleUrl } from "./testing/postgres.js";
 
 // The four primary-only SINGLETON duties (sync SOURCE, retention sweep, scheduled backup, outbound
 // tunnel client) gate on `singleton_role`, not on `mode` (promotion #158 follow-on). This suite pins
-// the topology no OTHER boot suite exercises: a SELL-ONLY LOCAL SECONDARY — `deployment.mode='primary'`
-// AND `singleton_role='secondary'` — which is NOT a mirror (so `isMirror` is false and the old `!isMirror`
-// gate ran all four, the active-active duplication this change fixes) yet must run NONE of the four,
-// because the one singleton primary owns them. TWO manifest clones of the SAME identity: a
+// the topology no other boot suite exercises WITH THE FOUR SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY
+// LOCAL SECONDARY — `deployment.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
+// (so `isMirror` is false and the old `!isMirror` gate ran all four, the active-active duplication this
+// change fixes) yet must run NONE of the four, because the one singleton primary owns them.
+// (`boot.promote.test.ts` boots the same `(primary, secondary)` topology but never configures
+// sync/backup/tunnel, so it never exercised the buggy gate for these duties.) TWO manifest clones of the
+// SAME identity: a
 // `(primary, secondary)` one that runs none, and a default-`primary` one that runs all four — the control
 // proving the secondary's absence is real, not a boot that silently wired nothing (CLAUDE.md §1).
 //
@@ -94,9 +96,6 @@ const SYNC_PEERS = JSON.stringify([
     token: "peer-token",
   },
 ]);
-// `loadKeyRing` is required by the trading branch even for a secondary; unused directly here beyond that.
-loadKeyRing(KEY_ENV);
-
 let migrationsRoot: string;
 let backupDir: string;
 let secondaryDatabaseUrl: string;
