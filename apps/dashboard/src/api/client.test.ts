@@ -21,13 +21,13 @@ describe("DashboardApi", () => {
   it("posts login credentials with cookies included", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);
-    const out = await api.login({ personId: "p1", password: "correct horse" });
+    const out = await api.login({ email: "owner@x.com", password: "correct horse" });
     expect(out).toEqual({ personId: "p1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/session", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: "p1", password: "correct horse" }),
+      body: JSON.stringify({ email: "owner@x.com", password: "correct horse" }),
     });
   });
 
@@ -36,7 +36,7 @@ describe("DashboardApi", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "password.invalid" } }, false, 401));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.login({ personId: "p1", password: "x" })).rejects.toMatchObject({
+    await expect(api.login({ email: "owner@x.com", password: "x" })).rejects.toMatchObject({
       code: "password.invalid",
     });
   });
@@ -50,6 +50,7 @@ describe("DashboardApi", () => {
         status: "active",
         hasPassword: true,
         hasTotp: false,
+        email: "ada@x.com",
       },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(roster));
@@ -75,12 +76,12 @@ describe("DashboardApi", () => {
   it("login carries an optional totp when supplied", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
     const api = new DashboardApi("", fetchImpl);
-    await api.login({ personId: "p1", password: "correct horse", totp: "123456" });
+    await api.login({ email: "owner@x.com", password: "correct horse", totp: "123456" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/session", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: "p1", password: "correct horse", totp: "123456" }),
+      body: JSON.stringify({ email: "owner@x.com", password: "correct horse", totp: "123456" }),
     });
   });
 
@@ -107,6 +108,23 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("createPerson carries an optional email when supplied", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p2" }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.createPerson({
+      displayName: "Bea",
+      role: "staff",
+      pin: "4321",
+      email: "bea@x.com",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Bea", role: "staff", pin: "4321", email: "bea@x.com" }),
+    });
+  });
+
   it("updatePerson PATCHes the addressed person (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -118,6 +136,18 @@ describe("DashboardApi", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ role: "supervisor", status: "suspended" }),
+    });
+  });
+
+  it("updatePerson carries an email in the PATCH body when supplied", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updatePerson("p1", { email: "new@x.com" })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "new@x.com" }),
     });
   });
 

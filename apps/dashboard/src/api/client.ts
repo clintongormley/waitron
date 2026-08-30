@@ -33,6 +33,8 @@ export interface PersonSummary {
   status: "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
+  /** The person's login email, or null when none is set. */
+  email: string | null;
 }
 
 /**
@@ -906,14 +908,10 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/session` — log in with a password (and an optional TOTP second factor).
-   * Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
+   * `POST /management-api/session` — log in with an email + password (and an optional TOTP second
+   * factor). Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
    */
-  login(input: {
-    personId: string;
-    password: string;
-    totp?: string;
-  }): Promise<{ personId: string }> {
+  login(input: { email: string; password: string; totp?: string }): Promise<{ personId: string }> {
     return this.#request<{ personId: string }>("/management-api/session", "POST", input);
   }
 
@@ -927,22 +925,24 @@ export class DashboardApi {
     return this.#request<PersonSummary[]>("/management-api/staff", "GET");
   }
 
-  /** `POST /management-api/staff` — create a person with a starting role and PIN; returns its id. */
+  /** `POST /management-api/staff` — create a person with a starting role and PIN (and an optional
+   * login email); returns its id. */
   createPerson(input: {
     displayName: string;
     role: PersonRole;
     pin: string;
+    email?: string;
   }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/staff", "POST", input);
   }
 
   /**
-   * `PATCH /management-api/staff/:id` — change a person's role and/or active status. Answers an
-   * empty 204.
+   * `PATCH /management-api/staff/:id` — change a person's role, active status and/or login email.
+   * Answers an empty 204.
    */
   updatePerson(
     id: string,
-    patch: { role?: PersonRole; status?: "active" | "suspended" },
+    patch: { role?: PersonRole; status?: "active" | "suspended"; email?: string },
   ): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}`, "PATCH", patch);
   }
