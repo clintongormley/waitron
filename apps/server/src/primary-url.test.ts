@@ -47,6 +47,8 @@ describe("assertSafePrimaryUrl", () => {
     ["https to an IPv6 ULA (fc00::/7)", "https://[fc00::1]"],
     ["https to an IPv6 link-local (fe80::/10)", "https://[fe80::1]"],
     ["https to an IPv4-mapped IPv6 private literal", "https://[::ffff:10.0.0.5]"],
+    ["https to an IPv4-compatible IPv6 metadata literal (::/96)", "https://[::169.254.169.254]"],
+    ["https to an IPv4-compatible IPv6 private literal (::/96)", "https://[::10.0.0.5]"],
     ["http to a non-loopback DNS host", "http://primary.example"],
     ["a file: URL", "file:///etc/passwd"],
     ["an ftp: URL", "ftp://x"],
@@ -102,12 +104,16 @@ describe("isBlockedIpLiteral", () => {
       "fd00::1",
       "fe80::1",
       "::ffff:10.0.0.5",
+      "::169.254.169.254", // IPv4-compatible IPv6 (::/96) — deprecated but must not slip through
+      "::10.0.0.5",
+      "::", // the unspecified address, also inside ::/96
     ]) {
       expect(isBlockedIpLiteral(host)).toBe(true);
     }
   });
 
   it("does not block public literals, loopback, or DNS names", () => {
+    // `::1` is inside the ::/96 block but is explicitly re-allowed as loopback (kept out of the blocked set).
     for (const host of ["93.184.216.34", "172.32.0.1", "127.0.0.1", "::1", "primary.example"]) {
       expect(isBlockedIpLiteral(host)).toBe(false);
     }

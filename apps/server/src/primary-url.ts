@@ -5,6 +5,12 @@
 // choke point: `assertSafePrimaryUrl` runs at the setup-api boundary BEFORE any fetch, and `fetchMirrorBundle`
 // builds its request from the parsed `URL` this returns rather than re-concatenating the raw string.
 //
+// SCOPE: this stops LITERAL-IP SSRF (a private/link-local/metadata IP, any non-http/https scheme). It does
+// NOT defend DNS rebinding — a public hostname over https is trusted with no resolve-time IP pinning, so a
+// name whose A record points inside is not caught here. That is the deferred first-contact trust-bootstrap
+// concern (C2b #4; `mirror-bundle-fetch.ts`'s TRUST BOOTSTRAP note carries the same caveat), out of scope
+// until real hosting.
+//
 // Ruling 2 (task brief "Decision needed", the controller's resolution):
 //   1. reject any scheme other than http/https;
 //   2. reject any literal IP in the private/link-local/CGNAT/metadata/0.0.0.0/8 ranges (BOTH schemes),
@@ -22,8 +28,12 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 // The blocked ranges (rule 2). One list, both families: IPv4 10/8, 172.16/12, 192.168/16, 169.254/16
-// (link-local + cloud metadata), 100.64/10 (CGNAT), 0/8; IPv6 fc00::/7 (ULA), fe80::/10 (link-local).
-// Loopback (127/8, ::1) is deliberately absent — it is allowed by `isLoopbackHost` before this is consulted.
+// (link-local + cloud metadata), 100.64/10 (CGNAT), 0/8; IPv6 fc00::/7 (ULA), fe80::/10 (link-local),
+// ::/96 (the deprecated IPv4-COMPATIBLE form `::a.b.c.d` and the unspecified `::` — otherwise
+// `https://[::169.254.169.254]` would slip through as a non-loopback host; distinct from the
+// IPv4-MAPPED `::ffff:a.b.c.d`, which `check` decodes to the v4 rules above). Loopback (127/8, ::1) is
+// deliberately absent — it is allowed by `isLoopbackHost` before this is consulted; `::1` falls inside
+// ::/96 so `isBlockedIpLiteral` re-excludes it explicitly to keep loopback out of the blocked set.
 const BLOCKED = new BlockList();
 BLOCKED.addSubnet("10.0.0.0", 8, "ipv4");
 BLOCKED.addSubnet("172.16.0.0", 12, "ipv4");
@@ -33,6 +43,7 @@ BLOCKED.addSubnet("100.64.0.0", 10, "ipv4");
 BLOCKED.addSubnet("0.0.0.0", 8, "ipv4");
 BLOCKED.addSubnet("fc00::", 7, "ipv6");
 BLOCKED.addSubnet("fe80::", 10, "ipv6");
+BLOCKED.addSubnet("::", 96, "ipv6");
 
 // Loopback (rule 3), kept in TWO family-scoped lists rather than one. A single mixed list would let
 // `check(addr, 'ipv6')` match an IPv4-mapped literal (`::ffff:127.0.0.1`) against the 127/8 IPv4 rule via
@@ -115,14 +126,17 @@ export function isLoopbackHost(host: string): boolean {
 /**
  * True when `host` is a LITERAL IP (v4, v6, or IPv4-mapped v6) inside a private, link-local, CGNAT,
  * metadata, or `0.0.0.0/8` range: IPv4 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, 0/8; IPv6
- * fc00::/7 (ULA), fe80::/10 (link-local). Loopback (127/8, ::1) is NOT blocked here — it is allowed by
- * `isLoopbackHost` before this is consulted. A DNS hostname is not a literal, so returns false.
- * Exported for its own unit test (it is not consumed elsewhere — `mirror-bind-guard.ts` imports only
- * `isLoopbackHost`), kept beside `isLoopbackHost` as the sibling half of the literal-IP classification.
+ * fc00::/7 (ULA), fe80::/10 (link-local), ::/96 (IPv4-compatible + unspecified). Loopback (127/8, ::1)
+ * is NOT blocked here — it is allowed by `isLoopbackHost` before this is consulted; `::1` falls inside
+ * ::/96, so it is re-excluded here to keep the "loopback is not blocked" contract. A DNS hostname is not
+ * a literal, so returns false. Exported for its own unit test (it is not consumed elsewhere —
+ * `mirror-bind-guard.ts` imports only `isLoopbackHost`), the sibling half of the literal-IP classification.
  */
 export function isBlockedIpLiteral(host: string): boolean {
   const h = stripLiteral(host.toLowerCase());
   const kind = isIP(h);
   if (kind === 0) return false;
+  // `::1` is inside the ::/96 block above but is loopback, allowed at the policy layer — keep it out here.
+  if (kind === 6 && LOOPBACK_V6.check(h, "ipv6")) return false;
   return BLOCKED.check(h, kind === 4 ? "ipv4" : "ipv6");
 }
