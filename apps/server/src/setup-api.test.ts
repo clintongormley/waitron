@@ -150,7 +150,12 @@ function demoBody(): Record<string, unknown> {
       tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pin: "1357", password: "correct-horse-battery" },
+      admin: {
+        displayName: "Administradora",
+        pin: "1357",
+        password: "correct-horse-battery",
+        email: "admin@waitron.dev",
+      },
     },
   };
 }
@@ -258,6 +263,46 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
       environment: "preproduction",
     });
+  });
+
+  // The admin's dashboard-login email is captured at onboarding, NORMALIZED (trim + lowercase) at this
+  // boundary, and threaded into the provisioning `admin` shape. It is NOT a secret, so it is not hashed
+  // — it reaches `provision` verbatim (normalized) so the seeded `persons` row carries it and the
+  // email-based dashboard login can resolve it. Deletion-proof: drop the `normalizeAndValidateEmail`
+  // call in setup-api.ts and this goes RED (the stored value keeps the request's mixed case).
+  it("normalizes the admin email and threads it into the provision request", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    asRec(asRec(body.venue).admin).email = "Owner@X.com";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    await tick();
+    // Normalized to lowercase/trimmed, and not hashed — the email is not a credential.
+    expect(provisionRequests[0].venue.admin.email).toBe("owner@x.com");
+  });
+
+  // A present-but-malformed email fails identity's `normalizeAndValidateEmail` at the write boundary,
+  // refused with the domain-named `person.email_invalid` (400) — the same code the management API's
+  // create/edit-email paths raise — BEFORE anything is provisioned. Deletion-proof: drop the
+  // `normalizeAndValidateEmail` call in setup-api.ts and this goes RED (the bad email reaches `provision`).
+  it("refuses a malformed admin email with 400 person.email_invalid, without provisioning", async () => {
+    const app = new Hono();
+    const { deps, provision, requestRestart } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    asRec(asRec(body.venue).admin).email = "nope";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("person.email_invalid");
+    expect(provision).not.toHaveBeenCalled();
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
   });
 
   it("refuses a live ES-common provision with no AEAT cert (400), without provisioning", async () => {
@@ -445,6 +490,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       (b) => void (asRec(asRec(b.venue).location).invoiceLocales = [42]),
     ],
     ["a missing admin.pin", "admin.pin", (b) => void delete asRec(asRec(b.venue).admin).pin],
+    ["a missing admin.email", "admin.email", (b) => void delete asRec(asRec(b.venue).admin).email],
   ])(
     "rejects %s with 400 setup.request_invalid naming the field, without provisioning",
     async (_label, field, mutate) => {

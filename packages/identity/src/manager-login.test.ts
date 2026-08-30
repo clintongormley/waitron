@@ -142,8 +142,9 @@ describe("loginManager", () => {
   });
 });
 
-// The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin, which is
-// provisioned WITHOUT an email (so the email path cannot resolve it). Behaviour is `loginManager`'s,
+// The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin — a
+// server-to-server flow carrying an id, so it resolves by id regardless of whether the admin carries an
+// email (the bare `venue` CLI seeds it emailless; onboarding may set one). Behaviour is `loginManager`'s,
 // minus email lookup: an UNKNOWN id is `person.not_found` (no enumeration surface here), and every
 // post-lookup check is the shared `completeManagerLogin`.
 describe("loginManagerById", () => {

@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
@@ -114,6 +114,10 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "setup.aeat_cert_required": 400,
+  // A present-but-malformed `admin.email` fails identity's `isValidEmail` screen (see `parseVenue`).
+  // The domain-named code identity raises for the same write-boundary check; defaults to 400 anyway,
+  // enumerated so this map stays the surface's whole 4xx contract.
+  "person.email_invalid": 400,
   "setup.already_provisioned": 409,
   "deployment.already_stamped": 409,
 };
@@ -180,7 +184,9 @@ function asStringArray(value: unknown, field: string): string[] {
  * never enter the plan or any action (venue-plan.ts's admin note). A missing/mistyped field throws
  * `setup.request_invalid` naming the field, before any hashing or provisioning. Domain rules the plan
  * owns (locale cardinality, series-code equality, territory) are left to `planVenue` inside
- * `provisionVenue`; this screen is structural only.
+ * `provisionVenue`. This screen is structural (presence/shape) for every field EXCEPT one: the admin
+ * email is additionally FORMAT-validated — identity's `normalizeAndValidateEmail` normalizes it and
+ * validates it, throwing `person.email_invalid` on a present-but-malformed address (see the `email:` field below).
  */
 function parseVenue(venueRaw: unknown): VenueRequest {
   const v = asObject(venueRaw, "venue");
@@ -210,6 +216,14 @@ function parseVenue(venueRaw: unknown): VenueRequest {
       displayName: asString(admin.displayName, "admin.displayName"),
       pinHash: hashPin(asString(admin.pin, "admin.pin")),
       passwordHash: hashPassword(asString(admin.password, "admin.password")),
+      // The admin's REQUIRED dashboard-login email. Presence/shape screened by `asString`
+      // (`setup.request_invalid`, like every sibling field), then NORMALIZED (trim + lowercase) and
+      // format-validated by identity's own write-boundary rule `normalizeAndValidateEmail` — the SAME
+      // helper `createPerson`/`setEmail` use, so the onboarding path cannot drift from the dashboard's
+      // (a present-but-malformed value is `person.email_invalid`). NOT hashed: the email is not a
+      // secret, so the normalized value reaches `provision` verbatim for the seeded `persons` row
+      // (venue-apply.ts writes it) so the email-based dashboard login can resolve it.
+      email: normalizeAndValidateEmail(asString(admin.email, "admin.email")),
     },
   };
 }

@@ -451,7 +451,12 @@ function provisionVenueBody(taxId: string) {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Administradora", pin: "1234", password: "dashPass123" },
+    admin: {
+      displayName: "Administradora",
+      pin: "1234",
+      password: "dashPass123",
+      email: "admin@waitron.dev",
+    },
   };
 }
 

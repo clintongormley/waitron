@@ -84,10 +84,12 @@ export async function applyVenue(
           // identity migrations run before a venue is applied. `pin_hash` (till) and `password_hash`
           // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
           // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
-          // actions from day one.
+          // actions from day one. `email` is the admin's dashboard-login address, captured during
+          // onboarding — OPTIONAL, so NULL when the request omits it (the CLI/dev-setup/e2e paths seed
+          // an emailless admin); validated/normalized at the setup-api boundary, written verbatim here.
           await tx.execute(sql`
-            insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-            select ${tenantId}, ${action.displayName}, ${action.pinHash}, ${action.passwordHash}, 'admin'
+            insert into persons (tenant_id, display_name, pin_hash, password_hash, email, role)
+            select ${tenantId}, ${action.displayName}, ${action.pinHash}, ${action.passwordHash}, ${action.email ?? null}, 'admin'
             where not exists (
               select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
           break;

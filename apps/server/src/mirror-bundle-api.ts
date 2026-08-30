@@ -3,9 +3,10 @@
 // The mirror calls this SERVER-SIDE, so the admin credential rides in the REQUEST BODY (not a cookie):
 // the handler authenticates it and authorizes the admin-only `mirror.create` permission with the same
 // identity primitives the dashboard login uses (`loginManager*` → `authorizeManager`), but it
-// authenticates by PERSON ID, not email: the dashboard login (`POST /management-api/session`) moved to
-// email, while the primary's admin is provisioned with no email, so this flow keeps the id-based
-// `loginManagerById` sibling (see the route body for why).
+// authenticates by PERSON ID, not email: this is a server-to-server flow carrying the admin's id (the
+// operator types it into the setup connect screen), NOT the email login form. The primary's admin MAY now carry
+// an email (onboarding via the setup UI sets one; the bare `venue` CLI may not), but this path never
+// uses it — it keeps the id-based `loginManagerById` sibling (see the route body for why).
 //
 // Mounted ONLY on a trading + primary node (boot.ts) — a mirror emits no bundle. If the primary has no
 // relay configured there is nothing for the mirror to dial, so the endpoint refuses `mirror.no_relay`
@@ -78,9 +79,10 @@ export function mountMirrorBundleApi(
   app.post("/management-api/mirror-bundle", (c) =>
     run(c, log, async () => {
       // The credential rides in the body (the mirror calls server-side) and is authenticated by PERSON
-      // ID (the admin has no email — see below). The body screen: a non-string/non-UUID `personId`, a
-      // non-string `password`, or a present non-string `totp` is refused as `password.invalid` — the
-      // SAME code a wrong password gets, so the response never tells the caller which field failed.
+      // ID (a server-to-server flow carrying an id, not the email form — see below). The body screen: a
+      // non-string/non-UUID `personId`, a non-string `password`, or a present non-string `totp` is
+      // refused as `password.invalid` — the SAME code a wrong password gets, so the response never
+      // tells the caller which field failed.
       // (The `isUuid` screen turns a malformed id into this clean 401 rather than a `22P02` → opaque 500
       // when it reaches the `uuid` column.) `readJsonBody` coerces an empty/malformed/`null` body to
       // `{}` so a degenerate body falls through to this screen rather than a 500.
@@ -98,10 +100,12 @@ export function mountMirrorBundleApi(
       // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when enrolled),
       // `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user` under the
       // designated tenant, so RLS scopes the person + session reads to this venue. This flow
-      // authenticates by PERSON ID, not email: the primary's admin is provisioned WITHOUT an email
-      // (`packages/provisioning/src/venue-apply.ts`), so the email-based dashboard login `loginManager`
-      // cannot resolve it — `loginManagerById` is the id sibling that shares all the same credential
-      // checks (`packages/identity/src/manager-login.ts`).
+      // authenticates by PERSON ID, not email, because it is a server-to-server flow carrying an id the
+      // operator typed — not the email dashboard-login form. The primary's admin MAY now carry an email
+      // (onboarding via the setup UI sets one; the bare `venue` CLI seeds it emailless, since email is
+      // OPTIONAL in provisioning — `packages/provisioning/src/venue-apply.ts`), but this path never uses
+      // it: `loginManagerById` is the id sibling that shares all the same credential checks
+      // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
       await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
         await asAppUser(tx);
         const session = await loginManagerById(tx, {

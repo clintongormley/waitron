@@ -118,6 +118,31 @@ describe("applyVenue", () => {
     });
   });
 
+  it("writes the admin's dashboard email when the request carries one, and NULL when it omits it", async () => {
+    // Onboarding captures the admin's dashboard-login email; provisioning threads it into the seeded
+    // `persons` row so the email-based dashboard login can resolve the address. It is OPTIONAL — the
+    // CLI/dev-setup/e2e paths seed an admin with no email — so an absent email must write NULL, not a
+    // throw or an empty string. Two distinct obligados so each admin is this run's alone.
+    const withEmail = request("B66666666");
+    withEmail.admin = {
+      displayName: "Owner",
+      pinHash: "scrypt$abc$def",
+      passwordHash: "scrypt$pwd$hash",
+      email: "owner@x.com",
+    };
+    const withEmailResult = await applyVenue(planVenue(withEmail), { db: suite.db });
+
+    const seeded = await suite.db.execute<{ email: string | null }>(sql`
+      select email from persons where tenant_id = ${withEmailResult.tenantId} and role = 'admin'`);
+    expect(seeded.rows[0]?.email).toBe("owner@x.com");
+
+    // Omitted email → NULL. request() builds an admin with no `email` key.
+    const withoutEmailResult = await applyVenue(planVenue(request("B67676767")), { db: suite.db });
+    const emailless = await suite.db.execute<{ email: string | null }>(sql`
+      select email from persons where tenant_id = ${withoutEmailResult.tenantId} and role = 'admin'`);
+    expect(emailless.rows[0]?.email).toBeNull();
+  });
+
   it("reuses the obligado on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {
     const first = await applyVenue(planVenue(request("B99999999")), { db: suite.db });
     const second = await applyVenue(planVenue(request("B99999999")), { db: suite.db });

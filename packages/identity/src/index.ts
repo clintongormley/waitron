@@ -32,6 +32,7 @@ export {
   listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
+  normalizeAndValidateEmail,
   reactivatePerson,
   resetPin,
   setEmail,
