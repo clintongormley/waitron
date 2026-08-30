@@ -168,15 +168,16 @@ describe("device pairing-code generation + enrolment", () => {
     expect(rows[0]!.station_id).toBeNull();
   });
 
-  it("rejects a kds_station pairing code minted with no station (station.not_found)", async () => {
-    // A kds_station code REQUIRES a station: a null one is rejected up front with station.not_found,
-    // before any write, the same code requireLiveStation folds an unknown/foreign/retired station into.
+  it("rejects a kds_station pairing code minted with no station (device.station_required)", async () => {
+    // A kds_station code REQUIRES a station: a NULL one is a validation failure — `device.station_required`,
+    // before any write. Distinct from the `station.not_found` requireLiveStation raises for a station that
+    // WAS supplied but is unknown/foreign/retired (that code echoes the supplied uuid; there is none here).
     const cfg = await setupVenue();
     await expect(
       asApp(cfg, (tx) =>
         generatePairingCode(tx, cfg, { kind: "kds_station", stationId: null, label: "X" }),
       ),
-    ).rejects.toMatchObject({ code: "station.not_found" });
+    ).rejects.toMatchObject({ code: "device.station_required" });
   });
 
   it("generatePairingCode rejects a station of another venue / an unknown station with station.not_found", async () => {

@@ -71,9 +71,10 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work),
  *    `device.pairing_code_unavailable` (a mint whose digest collided with an outstanding code's, 409 —
  *    `generatePairingCode` maps the `device_pairing_codes_lookup_idx` 23505 rather than surfacing a raw
- *    500), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
- *    `station.not_found` (minting a code against an unknown/foreign/retired station, 404, via
- *    `requireLiveStation`).
+ *    500), `device.station_required` (minting a station-binding code with NO station, a validation
+ *    failure, 400), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
+ *    `station.not_found` (minting a code against an unknown/foreign/retired station that WAS supplied,
+ *    404, via `requireLiveStation`).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
  *    `person.suspended`/`authorization.not_permitted` (403), thrown by `requireManagementSession` /
  *    `authorizeManager`, plus `management.request_invalid` (400) from the body/id screens.
@@ -88,6 +89,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.pairing_expired": 400,
   "device.pairing_rate_limited": 429,
   "device.pairing_code_unavailable": 409,
+  "device.station_required": 400,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,

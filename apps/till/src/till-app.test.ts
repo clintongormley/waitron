@@ -602,6 +602,57 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  // A RE-BOOT resets the device-mode state before re-probing (`#boot` runs more than once — notably
+  // `#onHandheldEnrolled` re-runs it after a fresh phone enrols). Device state left by a PRIOR boot (or a
+  // prior `#onSetupDevice`) must not survive into a later one: the probe RESETS `handheldMode`/`deviceMode`
+  // and the `screen` baseline before re-establishing the correct mode, so every boot starts clean.
+  it("a re-boot resolving handheld after a prior device-mode state ends on lock in handheld mode (not station)", async () => {
+    // First boot 401s → normal lock; `setup-device` then leaves deviceMode=true / screen=station; the
+    // re-boot's identity probe resolves `handheld`.
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await flush(el);
+    // Leave a stale device-mode state behind: setup-device flips deviceMode on and navigates to station.
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    expect(station(el)).not.toBeNull();
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
+    // Re-boot (the enrol path) with the identity now `handheld`. Emit from the station element — it
+    // bubbles to the app's `@handheld-enrolled` handler, which re-runs `#boot`.
+    emit(station(el)!, "handheld-enrolled");
+    await flush(el);
+    // The re-boot reset the stale device state before re-probing: a handheld waits on the lock screen,
+    // never the station the prior setup-device left it on, and deviceMode is cleared.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+  });
+
+  it("a re-boot resolving NO device after a prior handheld boot returns to the normal lock (both modes false)", async () => {
+    // First boot resolves `handheld` (handheldMode=true, on lock); the re-boot's probe 401s — no device.
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValueOnce({ deviceId: "d1", kind: "handheld", stationId: null })
+        .mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    await flush(el);
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Re-boot with no device — `#onHandheldEnrolled`'s path, but the cookie no longer resolves.
+    emit(lock(el)!, "handheld-enrolled");
+    await flush(el);
+    // The stale handheld mode did not survive: back to a normal operator lock, both device modes false.
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+  });
+
   it("the lock screen's set-up affordance routes a fresh display into device mode", async () => {
     const { el } = await mountApp();
     await flush(el);

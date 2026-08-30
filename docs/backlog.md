@@ -97,7 +97,7 @@ demo or behind-the-scenes".
    planned (`2026-08-17-table-service-ts5-*`).
 4. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
    centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
-   **Order-only handheld slice in flight on `feat/handheld-tableside-ordering`** (spec
+   **Order-only handheld slice — LANDED (#173)** (spec
    `docs/superpowers/specs/2026-08-30-handheld-tableside-ordering-design.md`, plan alongside): a
    `handheld` `device_kind` (enrolled via a pairing code, station-less, location-bound) whose browser
    boots a **phone shell** (lock → floor → table-order) via a kind-aware `GET /api/device/me` probe; a

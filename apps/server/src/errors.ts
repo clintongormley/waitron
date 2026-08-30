@@ -905,6 +905,23 @@ declare module "@waitron/shared" {
      */
     "device.pairing_code_unavailable": Record<string, never>;
     /**
+     * A pairing code for a STATION-BINDING kind (`kds_station`, {@link kindRequiresStation}) was minted
+     * with NO station — `generatePairingCode`'s `stationId` was `null` for a kind that requires one. This
+     * is a VALIDATION failure on the mint, not a lookup miss: nothing was looked up, so there is no
+     * caller-supplied station id to echo. Distinct from `station.not_found`, which `requireLiveStation`
+     * raises when a station WAS supplied but is unknown/foreign/retired (that path still throws
+     * `station.not_found`, echoing the supplied uuid); the null case was previously folded into
+     * `station.not_found` with an empty `stationId: ""`, which violated that code's contract (it echoes a
+     * caller-supplied station uuid) — hence its own code here.
+     *
+     * NO params: there is no station id (it was null), and a "name a station" validation carries nothing
+     * else non-secret. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS map
+     * (a request that named no station), not here — the route layer owns the status. Never renamed once
+     * shipped.
+     */
+    "device.station_required": Record<string, never>;
+    /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
      * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no

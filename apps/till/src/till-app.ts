@@ -544,6 +544,16 @@ export class TillApp extends LitElement {
     // case: swallow it and stay on `lock`. Deliberately NOT `boot.error` — a device 401 is not a boot
     // failure (that is getTill's alone). State-only writes, so no isConnected guard is needed (the
     // DISCONNECT SAFETY note; the module-global `setLocale` above is the only effect that took one).
+    // RESET the device-mode state to a clean baseline BEFORE re-probing. `#boot` runs more than once —
+    // `#onHandheldEnrolled` re-runs it after a fresh phone enrols — and the branches below only ever SET
+    // their mode, never clear a prior one, so state from an earlier boot (or a prior `#onSetupDevice` that
+    // set `deviceMode`/`screen = "station"`) would otherwise survive and mis-render. The reset is
+    // unconditional so every boot starts known: `screen` falls back to the normal `lock`, then the probe's
+    // branches re-establish the correct mode (`kds_station` moves to `station`; `handheld` and the
+    // no-device case both legitimately stay on `lock`).
+    this.handheldMode = false;
+    this.deviceMode = false;
+    this.screen = "lock";
     try {
       const identity = await this.api.getDeviceIdentity();
       if (identity.kind === "handheld") {

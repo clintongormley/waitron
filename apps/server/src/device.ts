@@ -105,7 +105,8 @@ export function kindRequiresStation(kind: DeviceKind): boolean {
  * station-binding kind ({@link kindRequiresStation}) the station must be a LIVE station of THIS venue —
  * `requireLiveStation` (kitchen.ts, `station.not_found` otherwise) is REUSED verbatim so a code can
  * never be minted against a retired, foreign-venue or non-existent station, and a null one is rejected
- * up front with the SAME code; that check runs BEFORE any write. A non-binding kind (a handheld) stores
+ * up front as `device.station_required` (a validation failure, no uuid to echo — distinct from the
+ * `station.not_found` a SUPPLIED-but-invalid station raises); that check runs BEFORE any write. A non-binding kind (a handheld) stores
  * `station_id = NULL` and never calls `requireLiveStation`. Stores only the code's SHA-256 (never the
  * plaintext) plus the kind/station/label to stamp on the enrolled device, and returns the plaintext
  * code ONCE for the operator to read into the pairing screen.
@@ -120,14 +121,16 @@ export async function generatePairingCode(
   // the default.
   codeSource: () => string = () => encodePairingCode(randomBytes(PAIRING_CODE_BYTES)),
 ): Promise<{ code: string }> {
-  // A station-binding kind must name a live station; a null one is folded into the SAME `station.not_found`
-  // requireLiveStation raises for an unknown/foreign/retired station, before any write. A non-binding kind
-  // (handheld) carries no station and skips the check, so `stationId` is forced NULL for the insert — the
-  // Task-1 CHECK (`handheld ⇒ station_id IS NULL`) would reject a non-null one anyway.
+  // A station-binding kind must NAME a station and it must be LIVE. A null station is a VALIDATION
+  // failure — `device.station_required` (nothing was looked up, so there is no uuid to echo) — distinct
+  // from `station.not_found`, which `requireLiveStation` raises for an unknown/foreign/retired station
+  // that WAS supplied (echoing that uuid). Both run before any write. A non-binding kind (handheld)
+  // carries no station and skips the check, so `stationId` is forced NULL for the insert — the Task-1
+  // CHECK (`handheld ⇒ station_id IS NULL`) would reject a non-null one anyway.
   const requiresStation = kindRequiresStation(input.kind);
   let stationId: string | null = null;
   if (requiresStation) {
-    if (input.stationId === null) throw new AppError("station.not_found", { stationId: "" });
+    if (input.stationId === null) throw new AppError("device.station_required", {});
     await requireLiveStation(tx, cfg, input.stationId);
     stationId = input.stationId;
   }
