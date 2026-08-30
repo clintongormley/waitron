@@ -59,6 +59,22 @@ reach** — a standalone handheld, or a single-box venue where the till *is* the
 | N7 | **Direct USB / serial peripheral from the till device itself** | WebUSB and Web Serial are unsupported in Safari / iOS (hardware spec §1 receipt: MDN `browser-compat-data`) | hardware spec §1 | **Hard blocker on iOS** — but the server-side driver model is exactly what avoids needing this |
 | N8 | **Single-app kiosk lockdown / MDM-managed handheld** | A device locked to a single app is managed at the OS/MDM layer | unverified — needs a check | Quality/ops, not a payments blocker |
 | N9 | **Reliable background push on the handheld** | Web Push exists on iOS 16.4+, but requires the PWA to be installed to the home screen and has EU/DMA caveats worth confirming for Spain | Web Push on iOS 16.4+ per browser-compat, 2026-08-30 — verify the EU/home-screen conditions | Borderline — verify before counting it as a reason |
+| N10 | **Automatic request routing to the primary, with failover to secondaries** (the `[primary → secondary → cloud]` list) | A browser client points at one origin; failing over to another host mid-session normally loses the auth cookie, cache and session. A **stable local endpoint** (`localhost:agent`) that never changes while the agent swaps its upstream is what keeps the browser's world stable across the switch — and only a native on-device agent can provide it | topology spec §3, "Route B — the on-device agent" | **Strong quality/security argument, not a strict hard blocker.** The browser-only path (Route A, a service worker holding the failover list) ships failover with no native code, but **downgrades auth to an XSS-exfiltratable bearer token**, needs CORS on every server, and can't cold-start on iOS if the origin is gone and the cache was evicted. The topology spec's destination is Route B |
+
+## Several of these are one component — that is the whole point
+
+The rows are not each a separate app. **N4 (the print bridge) and N10 (the failover routing /
+stable local endpoint) are the same native process** — the topology spec's on-device agent, which
+holds the servers' credentials, provides the unchanging `localhost:agent` origin the PWA talks to,
+swaps its upstream on failover, and forwards print jobs to the LAN printer. N3 (on-device
+store-and-forward) and the direct-hardware rows (N5–N7) would fold into that same agent too.
+
+This is exactly why the decision must be made **once against the whole set**. Weighed alone, each
+row has a browser-only workaround or a hardware escape hatch and "don't build the app" wins every
+time. Weighed together, one on-device agent discharges N3, N4, N10 and the hardware rows at once —
+and the auth model (N10's Route B) and the cloud-primary printer bridge (N4) both point at building
+it rather than papering over each in the browser. The list exists so that compounding is visible
+instead of being lost across four separate feature decisions.
 
 ## How to use this list
 
