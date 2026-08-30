@@ -15,6 +15,8 @@ import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { bookings, diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
+import type { TillConfig } from "./till-config.js";
+import { openTab } from "./working-order.js";
 
 /** A stored reservation row, exactly as `listBookings`/`getBooking` return it (camelCase columns). */
 export type Booking = InferSelectModel<typeof bookings>;
@@ -238,4 +240,48 @@ export async function completeBooking(
   id: string,
 ): Promise<void> {
   await advanceStatus(tx, id, ["seated"], "completed");
+}
+
+/**
+ * Seat a reservation: open a TS-1 tab on its table and link the two (design §3b). The party has
+ * arrived, so this is the `booked → seated` move — but unlike the pure-status lifecycle verbs it takes
+ * the FULL `TillConfig`, not `BookingConfig`: `openTab` → `createOpenOrder` → `allocateOrderNumber`
+ * read `cfg.tillId`/`cfg.nodeId` to mint the order number, which the narrow config cannot supply. A
+ * `TillConfig` is a structural superset of `BookingConfig`, so Task 5 mounts every verb with the same
+ * object; only this one is typed for the wider shape.
+ *
+ * 1. the booking must exist (`booking.not_found`) and be `booked` (`booking.invalid_transition`) —
+ *    the not_found/invalid_transition split the other lifecycle verbs draw;
+ * 2. resolve the table — the passed `tableId` ?? the booking's own — or `booking.table_required` when
+ *    neither is set (a booking with no table cannot be seated without one);
+ * 3. `openTab` opens the pre-fiscal working order and takes the table `FOR UPDATE`, enforcing
+ *    one-open-tab-per-table; its `table.not_found`/`table.inactive`/`tab.already_open` bubble up
+ *    unchanged (a busy or missing table is the caller's to resolve). Its `orderNumber` is discarded —
+ *    the booking links to the tab, not to the order number.
+ * 4. stamp `table_id` (in case it was newly chosen via `req.tableId`), `tab_id`, and `status = seated`
+ *    on the booking. RLS scopes the write to the tenant, as it does every by-id verb here.
+ *
+ * No fiscal path is touched: `openTab` writes a pre-fiscal working order, never a
+ * `registros_facturacion` row / `huella` / invoice number (design §3b, §5).
+ */
+export async function seatBooking(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  req: { tableId?: string },
+): Promise<{ tabId: string }> {
+  const booking = await getBooking(tx, cfg, id);
+  if (booking === undefined) {
+    throw new AppError("booking.not_found", { bookingId: id });
+  }
+  if (booking.status !== "booked") {
+    throw new AppError("booking.invalid_transition", { bookingId: id });
+  }
+  const tableId = req.tableId ?? booking.tableId;
+  if (tableId === null || tableId === undefined) {
+    throw new AppError("booking.table_required", {});
+  }
+  const { tabId } = await openTab(tx, cfg, { tableId });
+  await tx.update(bookings).set({ tableId, tabId, status: "seated" }).where(eq(bookings.id, id));
+  return { tabId };
 }

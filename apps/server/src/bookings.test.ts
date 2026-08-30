@@ -4,8 +4,17 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, bookings, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
+import type { TillConfig } from "./till-config.js";
+import { createTable } from "./tables.js";
+import { openTab } from "./working-order.js";
 import {
   cancelBooking,
   completeBooking,
@@ -13,6 +22,7 @@ import {
   getBooking,
   listBookings,
   markNoShow,
+  seatBooking,
   updateBooking,
   type BookingConfig,
 } from "./bookings.js";
@@ -382,5 +392,156 @@ describe("getBooking", () => {
   it("returns undefined for an absent id", async () => {
     const { cfg } = await setupVenue();
     expect(await scoped(cfg, (tx) => getBooking(tx, cfg, randomUUID()))).toBeUndefined();
+  });
+});
+
+// `seatBooking` opens a REAL TS-1 tab (a `working_orders` row via `openTab`), whose order-number
+// allocation reads `cfg.tillId`/`cfg.nodeId` — so unlike the CRUD verbs above it needs a FULL
+// `TillConfig` (a structural superset of `BookingConfig`) seeded with a till + node, not just a
+// tenant + location. This mirrors `tables.test.ts`/`tabs.test.ts`'s `openTab` fixture exactly.
+describe("seatBooking", () => {
+  async function setupTillVenue(): Promise<{ cfg: TillConfig; createdBy: string }> {
+    const tenantId = await seedTenant(db);
+    const loc = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    const locationId = loc.rows[0]!.id;
+    const till = await db.execute<{ id: string }>(sql`
+      insert into tills (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    return {
+      cfg: {
+        tenantId: brandTenantId(tenantId),
+        tillId: brandTillId(till.rows[0]!.id),
+        nodeId: brandNodeId(nodeId),
+        seriesId: brandSeriesId(randomUUID()),
+        locationId: brandLocationId(locationId),
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        cardProvider: "none",
+        tipsEnabled: false,
+        orderFlow: "prepay",
+      },
+      createdBy: randomUUID(),
+    };
+  }
+
+  it("seats a booking: opens a tab on the assigned table and links it", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "4" }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        tableId,
+        createdBy,
+      }),
+    );
+    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}));
+    expect(tabId).toEqual(expect.any(String));
+    const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+    expect(b).toMatchObject({ status: "seated", tabId, tableId });
+  });
+
+  it("uses req.tableId when the booking has no table, and stores it", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "7" }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Ruiz",
+        createdBy,
+      }),
+    );
+    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, cfg, id, { tableId }));
+    const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+    expect(b).toMatchObject({ status: "seated", tabId, tableId });
+  });
+
+  it("requires a table: booking.table_required when neither the booking nor req has one", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Ruiz",
+        createdBy,
+      }),
+    );
+    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}))).rejects.toMatchObject({
+      code: "booking.table_required",
+    });
+  });
+
+  it("refuses a non-booked booking with booking.invalid_transition", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "9" }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Ruiz",
+        tableId,
+        createdBy,
+      }),
+    );
+    await scoped(cfg, (tx) => cancelBooking(tx, cfg, id));
+    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}))).rejects.toMatchObject({
+      code: "booking.invalid_transition",
+    });
+  });
+
+  it("refuses an absent booking with booking.not_found", async () => {
+    const { cfg } = await setupTillVenue();
+    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, randomUUID(), {}))).rejects.toMatchObject(
+      {
+        code: "booking.not_found",
+      },
+    );
+  });
+
+  it("bubbles tab.already_open when the target table already has an open tab", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "5" }));
+    // Open a tab directly on the table first, then a booking that would seat onto the same table.
+    await scoped(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "García",
+        tableId,
+        createdBy,
+      }),
+    );
+    await expect(scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}))).rejects.toMatchObject({
+      code: "tab.already_open",
+    });
+  });
+
+  it("seats then completes end-to-end (booked → seated → completed)", async () => {
+    const { cfg, createdBy } = await setupTillVenue();
+    const { id: tableId } = await scoped(cfg, (tx) => createTable(tx, cfg, { label: "6" }));
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 3,
+        contactName: "Díaz",
+        tableId,
+        createdBy,
+      }),
+    );
+    await scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}));
+    await scoped(cfg, (tx) => completeBooking(tx, cfg, id));
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.status).toBe("completed");
   });
 });
