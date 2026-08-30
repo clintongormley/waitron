@@ -708,6 +708,18 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
+- **Localized `descriptions` maps are keyed inconsistently across the tree (#167).** Grep on
+  2026-08-30: `descriptions: { "es-ES"` appears ~123× (full BCP-47 tag, the invoice/receipt path —
+  `receipt-ticket.ts`/`kitchen-print.ts` look up `descriptions[invoiceLocale]`) vs `descriptions: { es`
+  ~62× (short subtag, the catalogue/product path — `product-list.ts`/`recipe-screen.ts` look up
+  `descriptions["es"]`). So there are **three near-identical resolvers** with divergent key assumptions.
+  #167's dashboard `localizedName` now tries full-tag → short-subtag → first-value, which is robust to
+  both, but the underlying inconsistency is unresolved: **(1)** pick ONE key convention at the data
+  layer (what products/`sale_lines` actually store), and **(2)** route `product-list.ts`/`recipe-screen.ts`
+  through the shared `localizedName` (generalizing its fallback arg) so one resolver serves all. Latent
+  bug for genuinely bilingual venues (`invoiceLocales` of two langs is a first-class config); harmless
+  while venues are single-locale.
+
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
   ten route files (recipe/catalogue/me/workforce/management/schedule/purchasing/device/print/till-locale)
