@@ -295,10 +295,19 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
 The command seeds the venue's first **admin** person. `--admin-name` is the display name (not a secret,
 so it stays a flag), while the admin's two login secrets are read only from the environment or an
 echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and `WAITRON_ADMIN_PASSWORD` (the
-dashboard password, ≥8 characters), both required. This is the only place the FIRST admin's dashboard
-password is set — `setPassword` and passkey enrollment both require an already-authenticated management
-session — so **after `venue`, sign in to the management dashboard with the admin display name and this
-password**; that is the first dashboard login.
+dashboard password, ≥8 characters), both required.
+
+**This admin cannot yet sign in to the dashboard, by design.** Dashboard (management) login is
+**email + password** — the login screen POSTs an `{ email }`, and `loginManager` resolves the person by
+email. But `venue` seeds the admin with a `password_hash` and **no email** (its `seed-admin` insert
+names only `tenant_id`/`display_name`/`pin_hash`/`password_hash`/`role`), and `setEmail` requires an
+already-authenticated management session — so a venue-provisioned admin has no dashboard sign-in path
+until an email is set for it out-of-band. Today only the demo bootstrap (`apps/server/scripts/dev-setup.ts`,
+via `seedStaff`) does that, giving its admin `owner@demo.waitron.local`. Production bootstrap has no such
+step yet; the open decision — add a `venue --admin-email`, or treat the provisioned admin as
+mirror-only (it authenticates by id via `loginManagerById`, the mirror-bundle path) — is tracked in
+`docs/backlog.md`. The provisioned password is still exercised: it is what the mirror-bundle adoption
+route and `venue-apply.e2e.test.ts` authenticate by id.
 
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
 `--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only

@@ -919,6 +919,14 @@ here is the cross-cutting or genuinely-decision-bearing work.
 - **The €0 comped-sale settles at the settlement instant, not backdated to `issued_at`.** Till-UX
   question (is a comp ever finalised long after the invoice printed, in invoice-first mode?) — bears
   on the till design, nothing to decide until then.
+- **The `venue`-provisioned admin has no dashboard sign-in path.** Email-only dashboard login (Tier A
+  #2) resolves the person by email, but `venue`'s `seed-admin` insert seeds the admin **emailless**
+  (tenant_id/display_name/pin_hash/password_hash/role only) and `setEmail` needs an already-authenticated
+  management session — so a production-bootstrapped admin cannot log in until an email is set out-of-band
+  (today only the demo `dev-setup.ts` does so). Decide: give `venue` an `--admin-email` for production
+  bootstrap, or treat the provisioned admin as deliberately **mirror-only** (it authenticates by id via
+  `loginManagerById`, the mirror-bundle path, never by email). Surfaced by the whole-branch review of the
+  email-login branch; blocks nothing pre-demo.
 
 ---
 

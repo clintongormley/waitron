@@ -12,7 +12,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin, verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
-import { DEMO_PIN } from "./staff.js";
+import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./staff.js";
 
 const LOCALE = "en-GB";
 
@@ -96,6 +96,44 @@ describe("seedStaff", () => {
     // Never plaintext, and never the un-hashed PIN string.
     for (const person of persons) {
       expect(person.pin_hash).not.toBe(DEMO_PIN);
+    }
+  });
+
+  it("gives the dashboard-login persons (admin + manager) a login email + password", async () => {
+    const { tenantId } = await provisionVenue();
+
+    const rows = await withTenant(suite.admin, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await seedStaff(tx);
+
+      const { rows } = await tx.execute<{
+        display_name: string;
+        role: PersonRoleValue;
+        email: string | null;
+        password_hash: string | null;
+      }>(sql`select display_name, role, email, password_hash from persons order by created_at`);
+      return rows;
+    });
+
+    // The provisioned admin ("Administradora") is a dashboard-login person: seedStaff gives it a login
+    // email, and it keeps the password it was provisioned with.
+    const admin = rows.find((p) => p.role === "admin");
+    expect(admin?.email).toBe(DEMO_ADMIN_EMAIL);
+    expect(admin?.email).toMatch(/@/);
+    expect(admin?.password_hash).not.toBeNull();
+
+    // The seeded manager (Marta Ruiz) is a functional dashboard login: a DISTINCT email + a password.
+    const manager = rows.find((p) => p.role === "manager");
+    expect(manager?.email).toBe("manager@demo.waitron.local");
+    expect(manager?.email).toMatch(/@/);
+    expect(manager?.email).not.toBe(admin?.email);
+    expect(manager?.password_hash).not.toBeNull();
+
+    // Till-only (PIN-only) staff carry NEITHER an email NOR a password — email login is for
+    // dashboard persons only, and the email index is NULL-permissive so many rows may be null.
+    for (const person of rows.filter((p) => p.role === "supervisor" || p.role === "staff")) {
+      expect(person.email).toBeNull();
+      expect(person.password_hash).toBeNull();
     }
   });
 });

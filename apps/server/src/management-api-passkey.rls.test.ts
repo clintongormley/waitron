@@ -79,6 +79,9 @@ function authVerified(
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's seeded password.
+// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
+// (per-tenant unique — persons_tenant_email_uq).
+const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -138,8 +141,8 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   const { managerId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return { managerId: manager.rows[0]!.id };
   });
@@ -166,14 +169,14 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
-/** Log in over HTTP as `personId` with `password`, returning just the `waitron_management_session=…`
+/** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
  * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale or
  * absent cookie forward silently. */
-async function login(app: Hono, personId: string, password = PASSWORD): Promise<string> {
+async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password }),
+    body: JSON.stringify({ email, password }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -220,7 +223,7 @@ beforeEach(() => {
 
 describe("Management API passkey routes over real Postgres (RLS end-to-end, mocked ceremony)", () => {
   it("register/options is gated: 401 without a cookie, 200 with the manager's", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
     // No cookie → refused before any DB work.
@@ -231,7 +234,7 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
     });
 
     // The manager's cookie → the ceremony's creation options + an opaque challenge handle.
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie },
@@ -245,7 +248,7 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
   it("register/verify (gated) persists a tenant-scoped credential", async () => {
     const { tenantId, managerId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // Begin, then finish with the ceremony mocked to verify.
     const options = await app.request("/management-api/passkey/register/options", {
@@ -274,7 +277,7 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
   it("register/verify surfaces a duplicate credential as 409, not an opaque 500", async () => {
     const { tenantId, managerId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // First registration of `cred-dup` succeeds.
     await registerPasskey(app, cookie, "cred-dup");
@@ -326,7 +329,7 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
     const app = mountApp(tenantId);
 
     // Register "cred-abc" for the manager first (the credential auth/verify resolves the person from).
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-abc");
 
     // A fresh, cookieless authentication ceremony: begin (ungated) then verify.
@@ -388,9 +391,9 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
   });
 
   it("register/verify screens a malformed challengeHandle as 400 (gated route, same guard)", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const badUuid = await app.request("/management-api/passkey/register/verify", {
       method: "POST",
@@ -453,9 +456,9 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
   });
 
   it("register/verify screens a missing response as 400 (gated route, same guard)", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // A well-formed challengeHandle but NO `response`: the same non-null-object screen the auth route
     // applies, refused as management.request_invalid naming the field.

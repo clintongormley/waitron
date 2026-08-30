@@ -1,6 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+
+/**
+ * Installs a CONTROLLABLE stub for `window.matchMedia`, targeting only the drawer breakpoint
+ * (`(max-width: 48rem)`); every other query (e.g. prefers-color-scheme) delegates to the real one, so
+ * theming is untouched. Returns `set(narrow)` — which flips `matches` and fires the shell's registered
+ * change listener — and `restore()`. Used instead of a real viewport resize because a genuine
+ * desktop↔narrow resize does NOT reliably re-fire matchMedia in this headless browser within a test
+ * budget (proven: the narrow→desktop transition timed out). This drives the shell's `narrow` state
+ * deterministically. Install it BEFORE mountWidget so the element's connectedCallback reads the stub.
+ */
+function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () => void } {
+  const DRAWER_QUERY = "(max-width: 48rem)";
+  const listeners = new Set<(e: MediaQueryListEvent) => void>();
+  let matches = false;
+  const mql = {
+    get matches() {
+      return matches;
+    },
+    media: DRAWER_QUERY,
+    onchange: null,
+    addEventListener: (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+      listeners.add(cb);
+    },
+    removeEventListener: (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+      listeners.delete(cb);
+    },
+    addListener: (cb: (e: MediaQueryListEvent) => void) => listeners.add(cb),
+    removeListener: (cb: (e: MediaQueryListEvent) => void) => listeners.delete(cb),
+    dispatchEvent: () => true,
+  } as unknown as MediaQueryList;
+  const original = window.matchMedia.bind(window);
+  window.matchMedia = ((query: string) =>
+    query === DRAWER_QUERY ? mql : original(query)) as typeof window.matchMedia;
+  return {
+    set(narrow: boolean) {
+      matches = narrow;
+      for (const cb of listeners) cb({ matches: narrow } as MediaQueryListEvent);
+    },
+    restore() {
+      window.matchMedia = original;
+    },
+  };
+}
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
@@ -12,6 +55,7 @@ const people: PersonSummary[] = [
     status: "active",
     hasPassword: true,
     hasTotp: true,
+    email: null,
   },
 ];
 
@@ -172,6 +216,42 @@ const navDevices = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-devices]");
 const navPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printers]");
+/** The sidebar's navigation landmark (present only for a non-staff logged-in session). */
+const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-label]");
+/** A nav item by its stable `data-test="nav-<screen>"` id (the ids every downstream consumer pins). */
+const navItem = (el: DashboardApp, screen: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
+
+/** The sixteen manager faces the grouped sidebar switches between, every one keeping its `data-test`
+ * id. Order is the sidebar's render order (pinned overview+sales, then Menu / Service / Team /
+ * Purchasing / Configuration). */
+const NAV_SCREENS = [
+  "overview",
+  "sales",
+  "catalogue",
+  "recipe",
+  "floor",
+  "statuses",
+  "kitchen",
+  "staff",
+  "roster",
+  "approvals",
+  "planned-actual",
+  "purchases",
+  "layout",
+  "receipt",
+  "devices",
+  "printers",
+] as const;
+
+/** The five group-header i18n keys the sidebar renders (the pinned overview+sales group has none). */
+const NAV_GROUP_KEYS = [
+  "nav.group.menu",
+  "nav.group.service",
+  "nav.group.team",
+  "nav.group.purchasing",
+  "nav.group.configuration",
+] as const;
 /** The chooser in the logged-in header chrome (present only when logged in). */
 const headerChooser = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
@@ -588,6 +668,190 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
+  // The grouped static sidebar (Task 11): every group header renders, every one of the sixteen manager
+  // faces keeps its `data-test="nav-<screen>"` id, and the active face is marked `aria-current="page"`.
+  it("renders each nav group header and all 16 nav items", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // Every group header (an <h2 class="nav-group">) renders its localised label…
+    const headers = [...el.shadowRoot!.querySelectorAll("h2.nav-group")].map((h) =>
+      h.textContent?.trim(),
+    );
+    for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
+    // …and every one of the sixteen manager faces is present by its stable data-test id.
+    for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
+    expect(NAV_SCREENS).toHaveLength(16);
+  });
+
+  it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // Opens on overview (Task 9's landing) → overview is the current item.
+    expect(navItem(el, "overview")!.getAttribute("aria-current")).toBe("page");
+
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    // The clicked item becomes current, and the previously-current one drops the marker.
+    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
+  });
+
+  // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
+  // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
+  // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
+  it("hamburger toggles the drawer open, a nav click closes it", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const layout = () => el.shadowRoot!.querySelector(".layout")!;
+    expect(layout().classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+
+    // Open it via the hamburger.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeTruthy();
+
+    // Selecting a nav item closes the drawer AND switches the screen.
+    navCatalogue(el)!.click();
+    await flush(el);
+    expect(layout().classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+    expect(catalogue(el)).toBeTruthy();
+  });
+
+  it("clicking the scrim closes the drawer", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    const scrim = el.shadowRoot!.querySelector<HTMLElement>(".scrim");
+    expect(scrim).toBeTruthy();
+
+    scrim!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+  });
+
+  // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
+  // its sixteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
+  // every visible control. It stays interactive at desktop width and whenever the drawer is open.
+  // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
+  // sidebar never-inert, so the narrow+closed assertion below goes red.
+  it("makes the off-canvas sidebar inert only when narrow and closed", async () => {
+    // Drive the breakpoint via a controllable matchMedia stub (installed BEFORE mount so the shell's
+    // connectedCallback reads it) — deterministic, unlike a real viewport resize here.
+    const mq = stubDrawerMatchMedia();
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+
+      // Desktop (matchMedia does not match): in-flow and fully interactive.
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+
+      // Narrow + closed → inert (the sixteen nav buttons leave the tab order + a11y tree).
+      mq.set(true);
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(true);
+
+      // Opening the drawer makes it interactive again (narrow but open)…
+      const toggle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
+      toggle.click();
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+      // …and closing it again re-inerts it (still narrow).
+      toggle.click();
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(true);
+
+      // Back to desktop width while still CLOSED → interactive again (desktop overrides closed).
+      mq.set(false);
+      await el.updateComplete;
+      expect(sidebar().hasAttribute("inert")).toBe(false);
+    } finally {
+      mq.restore();
+    }
+  });
+
+  // Task 12 (regression): a drawer opened at narrow width must be force-closed when the viewport
+  // crosses to desktop — otherwise its full-viewport scrim keeps veiling the desktop layout after a
+  // resize/rotate. Proof-by-deletion: dropping `if (!e.matches) this.drawerOpen = false` from
+  // #onBreakpointChange leaves `.drawer-open` + `.scrim` present at desktop, so the last two
+  // assertions go red.
+  it("force-closes the drawer (and drops the scrim) when widened from narrow to desktop", async () => {
+    const mq = stubDrawerMatchMedia();
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+      const scrim = () => el.shadowRoot!.querySelector<HTMLElement>(".scrim");
+
+      // Narrow, then open the drawer via the hamburger: drawer-open class + scrim both present.
+      mq.set(true);
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+      await el.updateComplete;
+      expect(layout().classList.contains("drawer-open")).toBe(true);
+      expect(scrim()).not.toBeNull();
+
+      // Widen to desktop WITHOUT first closing the drawer → the drawer is force-closed and the scrim
+      // (which would otherwise veil the whole desktop app) is gone.
+      mq.set(false);
+      await el.updateComplete;
+      expect(layout().classList.contains("drawer-open")).toBe(false);
+      expect(scrim()).toBeNull();
+    } finally {
+      mq.restore();
+    }
+  });
+
+  it("Escape closes an open drawer", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(true);
+
+    // A keydown anywhere inside the layout bubbles to the wrapper's handler.
+    layout().dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(false);
+  });
+
+  it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=nav-toggle]")).toBeNull();
+  });
+
+  it("a staff session still gets no nav (no navigation landmark)", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(sidebarNav(el)).toBeNull();
+  });
+
   it("does not show the nav on the login screen", async () => {
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
@@ -660,9 +924,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(login(el)).toBeTruthy();
     expect(currentLocale()).toBe("en-GB");
-    const rosterField = login(el)!.shadowRoot!.querySelector(".field")!;
-    expect(rosterField.textContent).toContain(t("login.roster", "en-GB")); // "User"
-    expect(rosterField.textContent).not.toContain(t("login.roster", "es-ES")); // not "Usuario"
+    // The email/password field labels live inside the wt-input primitive's own shadow root, so a
+    // localised string that renders in the login screen's OWN shadow is the observable proxy: the
+    // submit button's slotted text. It differs across locales, so it proves the keyed re-render
+    // reached this deep child in the seeded venue default (en-GB), not the module default (es-ES).
+    const submit = login(el)!.shadowRoot!.querySelector("[data-test=submit]")!;
+    expect(submit.textContent).toContain(t("action.login", "en-GB")); // "Log in"
+    expect(submit.textContent).not.toContain(t("action.login", "es-ES")); // not "Entrar"
   });
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {

@@ -19,6 +19,9 @@ import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 // (`applyVenue`/`planVenue` + password `login`) is the one `management-api.status.test.ts` uses.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
+// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
+// (per-tenant unique — persons_tenant_email_uq).
+const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -70,8 +73,8 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
   const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
@@ -119,12 +122,12 @@ function buildApp(
   return app;
 }
 
-/** Log in over HTTP as `personId`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, personId: string): Promise<string> {
+/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
+async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -135,12 +138,12 @@ describe("GET /api/box/status (real postgres)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId, managerId } = await setupTenant();
+    const { tenantId, nodeId } = await setupTenant();
     app = buildApp(tenantId, nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
     });
-    managerCookie = await login(app, managerId);
+    managerCookie = await login(app, MANAGER_EMAIL);
   });
 
   it("401s without a management session", async () => {
@@ -168,7 +171,7 @@ describe("GET /api/box/status with a configured TLS cert (real postgres)", () =>
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId, managerId } = await setupTenant();
+    const { tenantId, nodeId } = await setupTenant();
     // A real leaf on disk exercises the cert-configured branch + `readCertExpiry` closure end-to-end
     // (the undefined-cert suite above never touches them). `now` is 30 days before the fixture's
     // notAfter, so `daysRemaining` is a deterministic 30.
@@ -178,7 +181,7 @@ describe("GET /api/box/status with a configured TLS cert (real postgres)", () =>
       now: new Date("2036-07-27T13:07:51.000Z"),
       tlsCertPath: certPath,
     });
-    managerCookie = await login(app, managerId);
+    managerCookie = await login(app, MANAGER_EMAIL);
   });
 
   it("reports cert.available:true with the fixture's notAfter and daysRemaining", async () => {

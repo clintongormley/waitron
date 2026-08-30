@@ -28,6 +28,15 @@ export const en = {
   "action.deactivate": "Deactivate",
   // Shell nav
   "nav.sections": "Sections",
+  // The hamburger that opens/closes the off-canvas nav drawer on narrow screens (icon-only, so this is
+  // its accessible name).
+  "nav.toggle": "Toggle navigation",
+  // Sidebar group headers (grouping the sixteen manager faces; the pinned overview+sales group has none)
+  "nav.group.menu": "Menu",
+  "nav.group.service": "Service",
+  "nav.group.team": "Team",
+  "nav.group.purchasing": "Purchasing",
+  "nav.group.configuration": "Configuration",
   "nav.overview": "Overview",
   "nav.sales": "Sales & takings",
   "nav.staff": "Users",
@@ -45,7 +54,7 @@ export const en = {
   "nav.devices": "Devices",
   "nav.printers": "Printers",
   // Login screen
-  "login.roster": "User",
+  "login.email": "Email",
   "login.password": "Password",
   "login.totp": "Code (if applicable)",
   "login.with_passkey": "Log in with passkey",
@@ -218,6 +227,9 @@ export const en = {
   "person.name": "Name",
   "person.role": "Role",
   "person.pin": "PIN",
+  // The dashboard sign-in email — grouped with the password as the dashboard credential (the PIN is
+  // the till credential); shown on both the create and edit forms and in the staff list.
+  "person.email": "Email",
   // Person edit
   "person.edit": "Edit user",
   "person.save_role": "Save role",
@@ -227,6 +239,7 @@ export const en = {
   "person.reset_pin": "Reset PIN",
   "person.password": "Password",
   "person.set_password": "Set password",
+  "person.save_email": "Save email",
   // Allergen picker
   "allergen.reviewed": "Reviewed",
   "allergen.origin": "Origin",
@@ -416,6 +429,12 @@ export const es: Record<StringKey, string> = {
   "action.move_down": "Bajar",
   "action.deactivate": "Desactivar",
   "nav.sections": "Secciones",
+  "nav.toggle": "Mostrar u ocultar la navegación",
+  "nav.group.menu": "Carta",
+  "nav.group.service": "Servicio",
+  "nav.group.team": "Equipo",
+  "nav.group.purchasing": "Compras",
+  "nav.group.configuration": "Configuración",
   "nav.overview": "Resumen",
   "nav.sales": "Ventas y recaudación",
   "nav.staff": "Usuarios",
@@ -432,7 +451,7 @@ export const es: Record<StringKey, string> = {
   "nav.kitchen": "Cocina",
   "nav.devices": "Dispositivos",
   "nav.printers": "Impresoras",
-  "login.roster": "Usuario",
+  "login.email": "Correo electrónico",
   "login.password": "Contraseña",
   "login.totp": "Código (si procede)",
   "login.with_passkey": "Entrar con passkey",
@@ -589,6 +608,7 @@ export const es: Record<StringKey, string> = {
   "person.name": "Nombre",
   "person.role": "Rol",
   "person.pin": "PIN",
+  "person.email": "Correo electrónico",
   "person.edit": "Editar usuario",
   "person.save_role": "Guardar rol",
   "person.status_label": "Estado",
@@ -597,6 +617,7 @@ export const es: Record<StringKey, string> = {
   "person.reset_pin": "Restablecer PIN",
   "person.password": "Contraseña",
   "person.set_password": "Establecer contraseña",
+  "person.save_email": "Guardar correo",
   "allergen.reviewed": "Revisado",
   "allergen.origin": "Origen",
   "allergen.contains": "Contiene",

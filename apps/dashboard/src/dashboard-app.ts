@@ -1,10 +1,12 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import type { StringKey } from "./i18n/strings.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 // Side-effect imports register the screen elements this shell swaps between; it names them only as
 // tags below, so the wiring — not the screens — is what lives here.
@@ -63,6 +65,69 @@ type Screen =
   | "devices"
   | "printers";
 
+/** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
+ * single source so the JS `matchMedia` query and the CSS `@media` block below cannot drift — a media
+ * query cannot read a `--custom-property`, so the breakpoint is a literal in both places, and `48rem`
+ * matches the existing repo precedent in `apps/till/src/screens/till-counter-screen.ts:111`. */
+const DRAWER_BREAKPOINT = "(max-width: 48rem)";
+
+/** One nav entry: the face it switches to and the i18n key for its label. */
+type NavItem = { screen: Screen; labelKey: StringKey };
+/** One sidebar group: an optional header label (the pinned first group has none) and its items. */
+type NavGroup = { headerKey?: StringKey; items: NavItem[] };
+
+/**
+ * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the sixteen manager faces are
+ * described here once rather than spelled out sixteen times in the template. The pinned first group
+ * (overview + sales) carries no header — the two reporting faces lead. Each item keeps the stable
+ * `data-test="nav-<screen>"` id every downstream consumer (tests included) pins.
+ */
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { screen: "overview", labelKey: "nav.overview" },
+      { screen: "sales", labelKey: "nav.sales" },
+    ],
+  },
+  {
+    headerKey: "nav.group.menu",
+    items: [
+      { screen: "catalogue", labelKey: "nav.catalogue" },
+      { screen: "recipe", labelKey: "nav.recipe" },
+    ],
+  },
+  {
+    headerKey: "nav.group.service",
+    items: [
+      { screen: "floor", labelKey: "nav.floor" },
+      { screen: "statuses", labelKey: "nav.statuses" },
+      { screen: "kitchen", labelKey: "nav.kitchen" },
+    ],
+  },
+  {
+    headerKey: "nav.group.team",
+    items: [
+      { screen: "staff", labelKey: "nav.staff" },
+      { screen: "roster", labelKey: "nav.roster" },
+      { screen: "approvals", labelKey: "nav.approvals" },
+      { screen: "planned-actual", labelKey: "nav.planned_actual" },
+    ],
+  },
+  {
+    headerKey: "nav.group.purchasing",
+    items: [{ screen: "purchases", labelKey: "nav.purchases" }],
+  },
+  {
+    headerKey: "nav.group.configuration",
+    items: [
+      { screen: "layout", labelKey: "nav.layout" },
+      { screen: "receipt", labelKey: "nav.receipt" },
+      { screen: "devices", labelKey: "nav.devices" },
+      { screen: "printers", labelKey: "nav.printers" },
+    ],
+  },
+];
+
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
@@ -106,9 +171,10 @@ type Screen =
  * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, `dashboard-devices-screen` the sole
  * `<h1>Dispositivos</h1>`, `dashboard-printers-screen` the sole `<h1>Impresoras</h1>`, and
  * `dashboard-login-screen`
- * none — so the shell adds no competing `<h1>`: its
- * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
- * exactly one `<h1>` in the DOM at a time.
+ * none — so the shell adds no competing `<h1>`: its logged-in chrome is a two-column layout — a
+ * sidebar `<nav>` (whose group labels are `<h2 class="nav-group">`, never `<h1>`) beside a `<header
+ * class="topbar">` carrying the language chooser + logout button — keeping exactly one `<h1>` in the
+ * DOM at a time.
  *
  * DISCONNECT SAFETY (per-user-language-preference). `setLocale` mutates module-global locale, so it is
  * the one effect that can outlive the element. It runs on FOUR post-await paths, and each carries
@@ -129,33 +195,108 @@ export class DashboardApp extends LitElement {
     css`
       :host {
         display: block;
+        /* Sidebar column width — a documented LOCAL custom property, not design-system chrome.
+           Override it on the host to reflow. Expressed in ch (not rem/em, not a pixel guess) so the
+           column tracks its own nav text; the responsive drawer (Task 12) layers over this. */
+        --dashboard-sidebar-width: 18ch;
       }
 
-      .chrome {
+      /* Two-column app chrome: a fixed-width sidebar beside the scrolling main column. */
+      .layout {
+        display: flex;
+        align-items: stretch;
+        min-height: 100vh;
+      }
+
+      /* The desktop sidebar: fixed width, scrolls vertically on its own when the nav is tall. */
+      .sidebar {
+        flex: 0 0 var(--dashboard-sidebar-width);
+        box-sizing: border-box;
+        max-height: 100vh;
+        overflow-y: auto;
+        padding: var(--wt-space-3);
+        border-right: 1px solid var(--wt-color-border);
+      }
+
+      /* One vertical stack of grouped nav items. */
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+
+      /* Group header: a quiet, small label above its items — not a competing heading. */
+      .nav-group {
+        margin: var(--wt-space-3) 0 var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* The main column: top bar (chooser + logout) over the scrolling screen body. */
+      .main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .topbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
         padding: var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
       }
 
-      .nav {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
+      /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
+         in-flow there); the narrow-screen media query below reveals it. Pushed to the LEADING edge so
+         the chooser + logout stay grouped at the trailing edge (the topbar is otherwise flex-end). */
+      .nav-toggle {
+        display: none;
+        margin-inline-end: auto;
       }
 
-      /* The right-hand chrome group: the language chooser sits beside the logout button, so the two
-         travel together while the nav stays on the far side (space-between). */
-      .actions {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
+      /* The veil behind the open drawer: it dims the main column and closes the drawer on a tap. Only
+         rendered while the drawer is open, and the drawer only opens on narrow screens — crossing to
+         desktop force-closes it (#onBreakpointChange), so this full-viewport veil never shows at
+         desktop width. Sits under the sliding sidebar but over the main content. */
+      .scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: var(--wt-color-scrim);
       }
 
       .body {
         padding: var(--wt-space-4);
+      }
+
+      /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER. It leaves
+         the flow (position: fixed, translated off the leading edge) and slides in when the layout gains
+         the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
+         --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
+         constant that drives the narrow state); 48rem matches the existing repo precedent in
+         apps/till/src/screens/till-counter-screen.ts:111. */
+      @media (max-width: 48rem) {
+        .nav-toggle {
+          display: inline-block;
+        }
+        .sidebar {
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 30;
+          /* Opaque so the dimmed main column never shows through the sliding panel. */
+          background: var(--wt-color-bg);
+          transform: translateX(-100%);
+          transition: transform 150ms ease;
+        }
+        .layout.drawer-open .sidebar {
+          transform: translateX(0);
+        }
       }
     `,
   ];
@@ -168,6 +309,32 @@ export class DashboardApp extends LitElement {
   /** Which screen is showing. Defaults to `login`, so a cold load never flashes a logged-in face
    * before the probe confirms a session (see the class doc). */
   @state() private screen: Screen = "login";
+
+  /** Whether the off-canvas nav drawer is open (Task 12). Only meaningful on narrow screens, where the
+   * sidebar slides in over the main column; at desktop width the sidebar is always in-flow and the
+   * hamburger + scrim are hidden, so this flag is inert there. The hamburger toggles it, and selecting
+   * ANY nav item — or clicking the scrim — sets it back to `false`. */
+  @state() private drawerOpen = false;
+
+  /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
+   * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
+   * render) or its sixteen nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through sixteen invisible controls before reaching a visible one. At
+   * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
+  @state() private narrow = false;
+
+  /** The live breakpoint query the shell listens to. Held so {@link disconnectedCallback} can detach the
+   * listener; created in {@link connectedCallback}. */
+  #breakpoint?: MediaQueryList;
+
+  /** The breakpoint listener — a stable bound reference so add/removeEventListener pair up. */
+  readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
+    this.narrow = e.matches;
+    // Crossing to desktop force-closes the drawer. At desktop the sidebar is in-flow and there is no
+    // hamburger to reopen it, so a drawer left open at narrow width would otherwise leave its
+    // full-viewport scrim veiling the whole desktop layout after a resize/rotate until the next click.
+    if (!e.matches) this.drawerOpen = false;
+  };
 
   /** The logged-in person's role, learned from `getMe()`. `undefined` until a probe/login resolves.
    * `staff` suppresses the manager nav; the four other values keep it. NOT named `role` — that
@@ -193,6 +360,22 @@ export class DashboardApp extends LitElement {
     // controller calls requestUpdate(), re-running render() so `keyed(currentLocale(), …)` re-keys and the
     // screen repaints. The screens read `t()` at render time, so recreating them applies the switch.
     new LocaleChangeController(this);
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Track the drawer breakpoint so a CLOSED off-canvas sidebar can be made inert (see render). Read
+    // the current match once up front (matchMedia only fires `change` on a TRANSITION, never for the
+    // initial state), then follow changes.
+    this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
+    this.narrow = this.#breakpoint.matches;
+    this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
+  }
+
+  override disconnectedCallback(): void {
+    this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
+    this.#breakpoint = undefined;
+    super.disconnectedCallback();
   }
 
   override firstUpdated(): void {
@@ -357,130 +540,112 @@ export class DashboardApp extends LitElement {
         )}
       </div>`;
     }
+    // A non-staff session carries the nav; a staff person has only the self-service view, so it gets no
+    // sidebar, no hamburger and no drawer at all.
+    const hasNav = this.sessionRole !== "staff";
     return html`
-      <header
-        class="chrome"
+      <div
+        class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}
+        @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
-        ${this.sessionRole === "staff" ? nothing : this.#nav()}
-        <div class="actions">
-          <dashboard-language-chooser
-            .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-          ></dashboard-language-chooser>
-          <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
-            >${t("action.logout")}</wt-button
-          >
+        <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
+             breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
+             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its sixteen nav buttons
+             leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
+             control; it is interactive at desktop width and whenever the drawer is open. -->
+        ${
+          hasNav
+            ? html`<aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>
+                ${this.#nav()}
+              </aside>`
+            : nothing
+        }
+        <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
+             (and only a non-staff session can open one); the drawer is force-closed on the transition
+             to desktop (#onBreakpointChange), so this never renders at desktop width.
+             aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
+        ${
+          hasNav && this.drawerOpen
+            ? html`<div
+                class="scrim"
+                aria-hidden="true"
+                @click=${() => (this.drawerOpen = false)}
+              ></div>`
+            : nothing
+        }
+        <div class="main">
+          <header class="topbar">
+            <!-- The hamburger: opens/closes the off-canvas drawer. Present only for a non-staff session
+                 (a staff person has no nav to reveal); hidden at desktop width by the CSS above. -->
+            ${
+              hasNav
+                ? html`<wt-button
+                    class="nav-toggle"
+                    variant="ghost"
+                    data-test="nav-toggle"
+                    aria-label=${t("nav.toggle")}
+                    @click=${() => (this.drawerOpen = !this.drawerOpen)}
+                    >☰</wt-button
+                  >`
+                : nothing
+            }
+            <dashboard-language-chooser
+              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+            ></dashboard-language-chooser>
+            <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
+              >${t("action.logout")}</wt-button
+            >
+          </header>
+          <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
+               screen subtree, repainting every child in the new language (screens hold no controller). -->
+          <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
         </div>
-      </header>
-      <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the screen
-           subtree, repainting every child in the new language (the screens hold no controller). -->
-      <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
+      </div>
     `;
   }
 
+  /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating
+   * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
+   * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
+  #selectScreen(screen: Screen): void {
+    this.screen = screen;
+    this.drawerOpen = false;
+  }
+
+  /** Escape closes the open drawer (Task 12) — completing keyboard operability: open via the hamburger,
+   * close via Escape, the scrim, or selecting a nav item. Bound on the `.layout` wrapper, which contains
+   * every logged-in control, so a keydown anywhere inside (the hamburger, a nav button) bubbles to it.
+   * A no-op when the drawer is already closed, so it never swallows Escape from anything else. */
+  #onLayoutKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
+  }
+
   /** The manager nav — the sixteen-face switcher, shown only for a NON-staff session (a `staff` person
-   * has just the self-service view, so no nav). `overview` leads (it's the post-login landing/home),
-   * `sales` follows it (the two reporting faces sit together). Extracted so the `render` chrome reads
-   * as "nav-or-nothing, then logout". */
+   * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
+   * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
+   * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
+   * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
+   * Every item keeps its stable `data-test="nav-<screen>"` id. */
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
-        <wt-button
-          variant=${this.screen === "overview" ? "primary" : "secondary"}
-          data-test="nav-overview"
-          @click=${() => (this.screen = "overview")}
-          >${t("nav.overview")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "sales" ? "primary" : "secondary"}
-          data-test="nav-sales"
-          @click=${() => (this.screen = "sales")}
-          >${t("nav.sales")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "staff" ? "primary" : "secondary"}
-          data-test="nav-staff"
-          @click=${() => (this.screen = "staff")}
-          >${t("nav.staff")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "catalogue" ? "primary" : "secondary"}
-          data-test="nav-catalogue"
-          @click=${() => (this.screen = "catalogue")}
-          >${t("nav.catalogue")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "layout" ? "primary" : "secondary"}
-          data-test="nav-layout"
-          @click=${() => (this.screen = "layout")}
-          >${t("nav.layout")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "receipt" ? "primary" : "secondary"}
-          data-test="nav-receipt"
-          @click=${() => (this.screen = "receipt")}
-          >${t("nav.receipt")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "statuses" ? "primary" : "secondary"}
-          data-test="nav-statuses"
-          @click=${() => (this.screen = "statuses")}
-          >${t("nav.statuses")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "floor" ? "primary" : "secondary"}
-          data-test="nav-floor"
-          @click=${() => (this.screen = "floor")}
-          >${t("nav.floor")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "kitchen" ? "primary" : "secondary"}
-          data-test="nav-kitchen"
-          @click=${() => (this.screen = "kitchen")}
-          >${t("nav.kitchen")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "roster" ? "primary" : "secondary"}
-          data-test="nav-roster"
-          @click=${() => (this.screen = "roster")}
-          >${t("nav.roster")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "approvals" ? "primary" : "secondary"}
-          data-test="nav-approvals"
-          @click=${() => (this.screen = "approvals")}
-          >${t("nav.approvals")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "planned-actual" ? "primary" : "secondary"}
-          data-test="nav-planned-actual"
-          @click=${() => (this.screen = "planned-actual")}
-          >${t("nav.planned_actual")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "purchases" ? "primary" : "secondary"}
-          data-test="nav-purchases"
-          @click=${() => (this.screen = "purchases")}
-          >${t("nav.purchases")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "recipe" ? "primary" : "secondary"}
-          data-test="nav-recipe"
-          @click=${() => (this.screen = "recipe")}
-          >${t("nav.recipe")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "devices" ? "primary" : "secondary"}
-          data-test="nav-devices"
-          @click=${() => (this.screen = "devices")}
-          >${t("nav.devices")}</wt-button
-        >
-        <wt-button
-          variant=${this.screen === "printers" ? "primary" : "secondary"}
-          data-test="nav-printers"
-          @click=${() => (this.screen = "printers")}
-          >${t("nav.printers")}</wt-button
-        >
+        ${NAV_GROUPS.map(
+          (group) => html`
+            ${group.headerKey ? html`<h2 class="nav-group">${t(group.headerKey)}</h2>` : nothing}
+            ${group.items.map(
+              (item) =>
+                html`<wt-button
+                  class="nav-item"
+                  variant=${this.screen === item.screen ? "primary" : "secondary"}
+                  aria-current=${this.screen === item.screen ? "page" : nothing}
+                  data-test="nav-${item.screen}"
+                  @click=${() => this.#selectScreen(item.screen)}
+                  >${t(item.labelKey)}</wt-button
+                >`,
+            )}
+          `,
+        )}
       </nav>
     `;
   }

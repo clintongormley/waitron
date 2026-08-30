@@ -9,8 +9,8 @@ import type { PersonSummary } from "../api/client.js";
 
 /**
  * The management dashboard's STAFF LIST: one `wt-card` row per person, showing their display name,
- * role, active/suspended status and which login credentials they hold (a password, a TOTP second
- * factor), plus an Edit control per row.
+ * role, active/suspended status, dashboard sign-in email (an em-dash when none is set) and which
+ * login credentials they hold (a password, a TOTP second factor), plus an Edit control per row.
  *
  * It is a PURE DISPLAY widget — it holds no state and never talks to the API (unlike the login
  * screen, which owns an injected `api`). The staff screen owns the list (`GET /management-api/staff`
@@ -64,6 +64,16 @@ export class StaffList extends LitElement {
         gap: var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* The dashboard sign-in email under the role/status meta — muted, and truncated so a long
+         address never widens the row. An email-less person shows an em-dash placeholder. */
+      .email {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .badges {
@@ -123,6 +133,7 @@ export class StaffList extends LitElement {
                     <span class="role">${roleName(person.role)}</span>
                     <span class="status">${statusName(person.status)}</span>
                   </span>
+                  <span class="email">${person.email ?? "—"}</span>
                   <span class="badges">
                     ${
                       person.hasPassword

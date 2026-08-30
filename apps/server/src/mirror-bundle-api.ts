@@ -1,8 +1,11 @@
 // The PRIMARY side of the C2b cloud-mirror operator flow (design §4). `POST /management-api/mirror-bundle`
 // mints a `MirrorBundle` (venue rows + connection + a fresh per-peer sync token) for a mirror to adopt.
 // The mirror calls this SERVER-SIDE, so the admin credential rides in the REQUEST BODY (not a cookie):
-// the handler authenticates it and authorizes the admin-only `mirror.create` permission the SAME way the
-// dashboard login does (`loginManager` → `authorizeManager`, management-api.ts's `POST /management-api/session`).
+// the handler authenticates it and authorizes the admin-only `mirror.create` permission with the same
+// identity primitives the dashboard login uses (`loginManager*` → `authorizeManager`), but it
+// authenticates by PERSON ID, not email: the dashboard login (`POST /management-api/session`) moved to
+// email, while the primary's admin is provisioned with no email, so this flow keeps the id-based
+// `loginManagerById` sibling (see the route body for why).
 //
 // Mounted ONLY on a trading + primary node (boot.ts) — a mirror emits no bundle. If the primary has no
 // relay configured there is nothing for the mirror to dial, so the endpoint refuses `mirror.no_relay`
@@ -13,7 +16,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
-import { authorizeManager, endManagementSession, loginManager } from "@waitron/identity";
+import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -43,8 +46,10 @@ export interface MirrorBundleApiDeps {
 /**
  * Every AppError CODE this route answers + its HTTP status (the management-api STATUS parallel). CLIENT
  * faults only: a genuine SERVER fault reaches `run` as a non-AppError → an opaque 500. The credential
- * codes mirror the dashboard login (`POST /management-api/session`): a wrong/short/missing credential is
- * a 401, a suspended person or an unauthorised role a 403, an unknown person a 404. `mirror.no_relay` is
+ * codes: a wrong/short/missing credential is a 401, a suspended person or an unauthorised role a 403,
+ * an unknown person a 404 (`loginManagerById` throws `person.not_found` for an id that resolves to no
+ * row — unlike the email dashboard login, which folds unknown-vs-wrong into `password.invalid`; there
+ * is no enumeration surface to hide on this trusted server-to-server path). `mirror.no_relay` is
  * the primary-has-no-tunnel refusal (this task wires its 400). A registered code absent here defaults to
  * 400 via `run` — which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary
  * is always stamped) would land if `assembleMirrorBundle` ever threw it.
@@ -72,11 +77,13 @@ export function mountMirrorBundleApi(
 
   app.post("/management-api/mirror-bundle", (c) =>
     run(c, log, async () => {
-      // The credential rides in the body (the mirror calls server-side). Screened exactly as the
-      // dashboard login route: a non-string/non-UUID `personId`, a non-string `password`, or a present
-      // non-string `totp` is refused as `password.invalid` — the SAME code a wrong password gets, so the
-      // response never tells the caller which field failed. `readJsonBody` coerces an empty/malformed/
-      // `null` body to `{}` so a degenerate body falls through to this screen rather than a 500.
+      // The credential rides in the body (the mirror calls server-side) and is authenticated by PERSON
+      // ID (the admin has no email — see below). The body screen: a non-string/non-UUID `personId`, a
+      // non-string `password`, or a present non-string `totp` is refused as `password.invalid` — the
+      // SAME code a wrong password gets, so the response never tells the caller which field failed.
+      // (The `isUuid` screen turns a malformed id into this clean 401 rather than a `22P02` → opaque 500
+      // when it reaches the `uuid` column.) `readJsonBody` coerces an empty/malformed/`null` body to
+      // `{}` so a degenerate body falls through to this screen rather than a 500.
       const body = await readJsonBody<{ personId?: string; password?: string; totp?: string }>(c);
       if (
         typeof body.personId !== "string" ||
@@ -88,12 +95,16 @@ export function mountMirrorBundleApi(
       }
       const { personId, password, totp } = body;
 
-      // Authenticate + authorize as the dashboard does: `loginManager` mints a session (password + TOTP
-      // when enrolled), `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user`
-      // under the designated tenant, so RLS scopes the person + session reads to this venue.
+      // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when enrolled),
+      // `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user` under the
+      // designated tenant, so RLS scopes the person + session reads to this venue. This flow
+      // authenticates by PERSON ID, not email: the primary's admin is provisioned WITHOUT an email
+      // (`packages/provisioning/src/venue-apply.ts`), so the email-based dashboard login `loginManager`
+      // cannot resolve it — `loginManagerById` is the id sibling that shares all the same credential
+      // checks (`packages/identity/src/manager-login.ts`).
       await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
         await asAppUser(tx);
-        const session = await loginManager(tx, {
+        const session = await loginManagerById(tx, {
           tenantId: deps.designated.tenantId,
           personId,
           password,

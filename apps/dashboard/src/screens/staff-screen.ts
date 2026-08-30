@@ -221,6 +221,14 @@ export class StaffScreen extends LitElement {
     this.#editWith((id) => this.api.setPassword(id, event.detail.password));
   }
 
+  // The dashboard sign-in email rides the same PATCH as role/status — `updatePerson({ email })`, which
+  // the server turns into a `setEmail` — so it routes through the shared single-flight edit runner
+  // exactly like the other edits, no dedicated subroute.
+  #onSetEmail(event: CustomEvent<{ email: string }>): void {
+    event.stopPropagation();
+    this.#editWith((id) => this.api.updatePerson(id, { email: event.detail.email }));
+  }
+
   /**
    * Resolve the open dialog's person id and run `action(id)` through the single-flight edit runner.
    * The shared head of the four edit handlers, so the `editingPerson` null-narrowing lives in ONE
@@ -275,7 +283,7 @@ export class StaffScreen extends LitElement {
    * and close the form; on rejection set `errorKey` and leave the form open with its values intact.
    */
   async #onCreatePerson(
-    event: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>,
+    event: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email?: string }>,
   ): Promise<void> {
     event.stopPropagation();
     if (this.#creating) return; // single-flight: drop a double-click's second create-person
@@ -325,8 +333,9 @@ export class StaffScreen extends LitElement {
       <dashboard-person-form
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
-        @create-person=${(e: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>) =>
-          void this.#onCreatePerson(e)}
+        @create-person=${(
+          e: CustomEvent<{ displayName: string; role: PersonRole; pin: string; email?: string }>,
+        ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
@@ -337,6 +346,7 @@ export class StaffScreen extends LitElement {
         @set-status=${(e: CustomEvent<{ status: "active" | "suspended" }>) => this.#onSetStatus(e)}
         @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}
         @set-password=${(e: CustomEvent<{ password: string }>) => this.#onSetPassword(e)}
+        @set-email=${(e: CustomEvent<{ email: string }>) => this.#onSetEmail(e)}
         @wt-close=${() => this.#closeEdit()}
       ></dashboard-person-edit>
     `;

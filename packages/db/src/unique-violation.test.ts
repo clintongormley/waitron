@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUniqueViolation } from "./unique-violation.js";
+import { isUniqueViolation, uniqueViolationConstraint } from "./unique-violation.js";
 
 // Mirrors packages/fiscal-verifactu/src/chain.test.ts's identical suite for its own,
 // independently-written copy of this exact check — see ./unique-violation.ts's own doc comment
@@ -36,5 +36,41 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation(null)).toBe(false);
     expect(isUniqueViolation(undefined)).toBe(false);
     expect(isUniqueViolation("dup key")).toBe(false);
+  });
+});
+
+describe("uniqueViolationConstraint", () => {
+  it("returns the constraint name from a bare 23505 driver error", () => {
+    expect(
+      uniqueViolationConstraint(
+        Object.assign(new Error("dup"), { code: "23505", constraint: "persons_tenant_email_uq" }),
+      ),
+    ).toBe("persons_tenant_email_uq");
+  });
+
+  it("returns the constraint name through a Drizzle-wrapped cause chain", () => {
+    const inner = Object.assign(new Error("dup"), { code: "23505", constraint: "some_uq" });
+    expect(uniqueViolationConstraint(new Error("outer", { cause: inner }))).toBe("some_uq");
+  });
+
+  it("returns undefined when the 23505 layer carries no constraint name (e.g. PGlite)", () => {
+    expect(uniqueViolationConstraint(Object.assign(new Error("dup"), { code: "23505" }))).toBe(
+      undefined,
+    );
+  });
+
+  it("returns undefined for a non-23505 error", () => {
+    expect(
+      uniqueViolationConstraint(
+        Object.assign(new Error("fk"), { code: "23503", constraint: "some_fk" }),
+      ),
+    ).toBe(undefined);
+  });
+
+  it("returns undefined for a non-object value and terminates on a self-referential chain", () => {
+    expect(uniqueViolationConstraint(null)).toBe(undefined);
+    const looped: { code: string; cause?: unknown } = { code: "1" };
+    looped.cause = looped;
+    expect(uniqueViolationConstraint(looped)).toBe(undefined);
   });
 });

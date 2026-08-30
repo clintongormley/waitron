@@ -1,35 +1,32 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { createRef, ref } from "lit/directives/ref.js";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, RosterEntry } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
 // The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
 // `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
 import "../widgets/language-chooser.js";
 
 /**
- * The dashboard's pre-session login screen: a roster picker (native `<select>` — there is no
- * `wt-select` primitive), a password field, an optional TOTP field, and a submit button.
+ * The dashboard's pre-session login screen: an email field, a password field, an optional TOTP field,
+ * and a submit button (plus a passkey button and the pre-login language chooser).
  *
  * It talks to the world through one injected `api` (`@property({ attribute: false })`) and one
  * event: on a successful `api.login(...)` it dispatches `logged-in` carrying `{ personId }`,
- * `bubbles`/`composed` so the app shell above the shadow boundary hears it. A rejected login — or a
- * rejected roster fetch — sets `errorKey` from the thrown `{ code }` (falling back to
- * `server.internal`); the raw code is kept in state, and `codeMessage` (`../i18n/codes.js`) maps it to
- * localised copy at the render edge, so the `role="alert"` paragraph shows a sentence and never the
- * raw wire code.
+ * `bubbles`/`composed` so the app shell above the shadow boundary hears it. A rejected login sets
+ * `errorKey` from the thrown `{ code }` (falling back to `server.internal`); the raw code is kept in
+ * state, and `codeMessage` (`../i18n/codes.js`) maps it to localised copy at the render edge, so the
+ * `role="alert"` paragraph shows a sentence and never the raw wire code.
  */
 @customElement("dashboard-login-screen")
 export class LoginScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       .field {
         display: block;
@@ -43,65 +40,18 @@ export class LoginScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private roster: RosterEntry[] = [];
-  @state() private selected = "";
+  @state() private email = "";
   @state() private password = "";
   @state() private totp = "";
   @state() private errorKey: string | null = null;
 
-  // A handle to the native roster <select>, reconciled to `selected` in `updated()` (see that method
-  // for why a template binding cannot do this on a native select).
-  #rosterSelect = createRef<HTMLSelectElement>();
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    void this.#loadRoster();
-  }
-
   /**
-   * Reconcile the native roster <select>'s live value to `selected` after every render, once its
-   * <option> children are in the DOM. A `.value` bound in the template commits BEFORE the options
-   * exist, so a selection that is not the first roster entry would fall back to the first (the latent
-   * picker bug #73 fixed in the edit dialog; the create form mirrors it). Today `#loadRoster` always
-   * selects roster[0] — the first option — so a template binding renders right only by luck; setting
-   * `.value` here keeps the picker correct even if the initial-selection policy ever changes. Setting
-   * `.value` imperatively does not trigger a reactive update, so this does not loop.
-   *
-   * The ref is normally live (the `<select>` renders unconditionally). The one case it is NOT: when the
-   * shell re-keys this screen to repaint it in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`),
-   * a pending update can flush on the OUTGOING element after Lit has cleared its refs on disconnect. So
-   * GUARD the access — a reconcile with no live `<select>` is simply a no-op (the element is on its way
-   * out). Without the guard that flush throws `Cannot set properties of undefined`, an unhandled
-   * rejection the pristine-output rule forbids.
+   * Capture the email field's new value. `wt-change` is dispatched `bubbles`+`composed`, so
+   * `stopPropagation` is what stops it leaking past this screen's shadow boundary to the app shell.
    */
-  override updated(): void {
-    if (this.#rosterSelect.value) this.#rosterSelect.value.value = this.selected;
-  }
-
-  /**
-   * Fetch the roster once on connect. Called via `void this.#loadRoster()`, so a rejected
-   * `getStaffRoster()` MUST be caught here — otherwise it is an unhandled promise rejection and the
-   * operator is stranded at an empty `<select>` with no feedback. A rejection becomes the same
-   * `errorKey`-in-a-`role="alert"`-banner state a failed login uses, mirroring the till's
-   * `#loadStaff`.
-   */
-  async #loadRoster(): Promise<void> {
-    try {
-      this.roster = await this.api.getStaffRoster();
-      if (this.roster[0]) this.selected = this.roster[0].personId;
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
-  }
-
-  /**
-   * Capture the picked person. A native `<select>` `change` is `composed: false`, so it cannot cross
-   * this screen's shadow boundary anyway — the `stopPropagation` here is defensive consistency with the
-   * composed `wt-change` handlers below, not a boundary guard.
-   */
-  #onRosterChange(event: Event): void {
+  #onEmailChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.selected = (event.target as HTMLSelectElement).value;
+    this.email = event.detail.value;
   }
 
   /**
@@ -124,7 +74,7 @@ export class LoginScreen extends LitElement {
     this.errorKey = null;
     try {
       const out = await this.api.login({
-        personId: this.selected,
+        email: this.email,
         password: this.password,
         totp: this.totp === "" ? undefined : this.totp,
       });
@@ -179,12 +129,13 @@ export class LoginScreen extends LitElement {
       <dashboard-language-chooser
         .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
       ></dashboard-language-chooser>
-      <label class="field"
-        >${t("login.roster")}
-        <select ${ref(this.#rosterSelect)} @change=${(e: Event) => this.#onRosterChange(e)}>
-          ${this.roster.map((p) => html`<option value=${p.personId}>${p.displayName}</option>`)}
-        </select>
-      </label>
+      <wt-input
+        class="field"
+        label=${t("login.email")}
+        type="email"
+        .value=${this.email}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
+      ></wt-input>
       <wt-input
         class="field"
         label=${t("login.password")}

@@ -2,6 +2,7 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -10,11 +11,13 @@ import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
 import {
   MIN_PIN_LENGTH,
+  asEmailTaken,
   createPerson,
   listActiveStaff,
   listPersons,
   reactivatePerson,
   resetPin,
+  setEmail,
   setPassword,
   setRole,
   suspendPerson,
@@ -62,6 +65,14 @@ async function personRow(
     password_hash: string | null;
   }>(sql`select role, status, pin_hash, password_hash from persons where id = ${id}`);
   return rows.rows[0]!;
+}
+
+// The stored login email, read as the superuser owner (RLS bypassed on PGlite).
+async function emailOf(id: string): Promise<string | null> {
+  const rows = await suite.db.execute<{ email: string | null }>(
+    sql`select email from persons where id = ${id}`,
+  );
+  return rows.rows[0]!.email;
 }
 
 describe("createPerson", () => {
@@ -140,6 +151,149 @@ describe("createPerson", () => {
     );
     expect(code).toBe("pin.too_short");
     expect(await personCount()).toBe(before);
+  });
+});
+
+describe("createPerson email", () => {
+  it("stores a normalized (trimmed, lower-cased) email", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { id } = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Owner",
+        role: "manager",
+        pin: "5678",
+        email: "  Owner@X.com  ",
+      }),
+    );
+    expect(await emailOf(id)).toBe("owner@x.com");
+  });
+
+  it("rejects a malformed email with person.email_invalid, writing no row", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const before = await personCount();
+    const code = await codeOf(() =>
+      run((tx) =>
+        createPerson(tx, {
+          tenantId,
+          managementSessionId: sessionId,
+          displayName: "Nope",
+          role: "staff",
+          pin: "5678",
+          email: "nope",
+        }),
+      ),
+    );
+    expect(code).toBe("person.email_invalid");
+    // The screen runs before the INSERT, so a malformed email creates no row.
+    expect(await personCount()).toBe(before);
+  });
+
+  it("leaves email null when the param is omitted", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { id } = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "PinOnly",
+        role: "staff",
+        pin: "5678",
+      }),
+    );
+    expect(await emailOf(id)).toBeNull();
+  });
+});
+
+describe("setEmail", () => {
+  it("sets a normalized login email a manager can then sign in with", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const target = await seedPerson(suite.db, tenantId, "supervisor");
+    await run((tx) =>
+      setEmail(tx, { managementSessionId: sessionId, personId: target, email: "  New@X.com " }),
+    );
+    expect(await emailOf(target)).toBe("new@x.com");
+  });
+
+  it("rejects a malformed email with person.email_invalid, leaving the email unchanged", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const target = await seedPerson(suite.db, tenantId, "staff"); // email null
+    const code = await codeOf(() =>
+      run((tx) =>
+        setEmail(tx, { managementSessionId: sessionId, personId: target, email: "nope" }),
+      ),
+    );
+    expect(code).toBe("person.email_invalid");
+    expect(await emailOf(target)).toBeNull();
+  });
+
+  it("throws authorization.not_permitted for a staff actor, leaving the email unchanged", async () => {
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
+    const target = await seedPerson(suite.db, tenantId, "staff"); // email null
+
+    // A genuine staff management session, no person.manage: rewriting a colleague's login email (an
+    // account-takeover vector) must be rejected before the UPDATE. "ok@x.com" is a valid email, so
+    // ONLY the gate can be the cause here.
+    const code = await codeOf(() =>
+      run((tx) =>
+        setEmail(tx, { managementSessionId: staffSession, personId: target, email: "ok@x.com" }),
+      ),
+    );
+    expect(code).toBe("authorization.not_permitted");
+    // authorizeManager() runs before the UPDATE, so a denied actor writes no email.
+    expect(await emailOf(target)).toBeNull();
+  });
+});
+
+// The duplicate-email → person.email_taken translation, proven end to end against the DB unique
+// index in staff.email.test.ts (real Postgres). Here we pin the translator's two branches directly
+// with crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
+// exported from staff.ts for exactly this, not from the package barrel.
+describe("asEmailTaken", () => {
+  it("translates a Drizzle-wrapped unique violation (23505) to person.email_taken", () => {
+    let thrown: unknown;
+    try {
+      asEmailTaken({ cause: { code: "23505" } }, "owner@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
+    expect(isAppError(thrown) && thrown.params).toEqual({ email: "owner@x.com" });
+  });
+
+  it("translates a 23505 whose constraint is persons_tenant_email_uq", () => {
+    let thrown: unknown;
+    try {
+      asEmailTaken({ cause: { code: "23505", constraint: "persons_tenant_email_uq" } }, "o@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
+  });
+
+  // A 23505 on a DIFFERENT persons constraint (the id PK, or any added later) must NOT be mislabelled
+  // person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate in
+  // asEmailTaken and this fails (the error becomes person.email_taken). (Copilot, PR #172.)
+  it("re-throws a 23505 whose constraint is not the email index", () => {
+    const original = { cause: { code: "23505", constraint: "persons_pkey" } };
+    let thrown: unknown;
+    try {
+      asEmailTaken(original, "owner@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
+  });
+
+  it("re-throws a non-unique error unchanged", () => {
+    const original = { code: "42501" };
+    let thrown: unknown;
+    try {
+      asEmailTaken(original, "owner@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
   });
 });
 
@@ -254,6 +408,10 @@ describe("setPassword", () => {
   it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const target = await seedPerson(suite.db, tenantId, "supervisor");
+    // The target needs an email to sign in on the dashboard: loginManager now resolves by email.
+    await run((tx) =>
+      tx.execute(sql`update persons set email = 'granted@x.com' where id = ${target}`),
+    );
     await run((tx) =>
       setPassword(tx, {
         managementSessionId: sessionId,
@@ -262,7 +420,7 @@ describe("setPassword", () => {
       }),
     );
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, personId: target, password: "second horse" }),
+      loginManager(tx, { tenantId, email: "granted@x.com", password: "second horse" }),
     );
     expect(session.personId).toBe(target);
   });
@@ -444,6 +602,35 @@ describe("listPersons", () => {
       ]),
     );
     expect(JSON.stringify(roster)).not.toContain("scrypt$");
+  });
+
+  it("projects each person's email — the stored value, and null when unset", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const withEmail = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Mailed",
+        role: "supervisor",
+        pin: "4321",
+        email: "mailed@x.com",
+      }),
+    );
+    const withoutEmail = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Unmailed",
+        role: "staff",
+        pin: "4321",
+      }),
+    );
+
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+    expect(roster.find((p) => p.personId === withEmail.id)!.email).toBe("mailed@x.com");
+    expect(roster.find((p) => p.personId === withoutEmail.id)!.email).toBeNull();
+    // email is part of the summary shape.
+    expect(Object.keys(roster[0]!)).toEqual(expect.arrayContaining(["email"]));
   });
 
   it("listPersons refuses a staff role", async () => {

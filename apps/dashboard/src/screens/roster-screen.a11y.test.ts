@@ -21,6 +21,7 @@ const staff: PersonSummary[] = [
     status: "active",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
   {
     personId: "p2",
@@ -29,6 +30,7 @@ const staff: PersonSummary[] = [
     status: "active",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
 ];
 const locations = [{ id: "loc-1", name: "Main" }];

@@ -3,11 +3,14 @@
 // `POST /management-api/mirror-bundle` (mirror-bundle-api.ts) and parses the returned `MirrorBundle`.
 //
 // CREDENTIAL SHAPE. `credential` is NOT an opaque string — it is the primary's login OBJECT
-// (`AdoptCredential`: `{ personId, password, totp? }`), the SAME body the primary's dashboard login
-// authenticates (mirror-bundle-api.ts screens exactly those fields). It travels as a structured type end
-// to end (connect screen → `/setup-api/adopt` → here → the primary), so this fetcher simply serialises
-// it as the JSON request body — no string-threading, and a wrong shape is rejected at the mirror's own
-// `/setup-api/adopt` boundary (a clean 4xx) before it ever reaches this transport.
+// (`AdoptCredential`: `{ personId, password, totp? }`), the body the primary's MIRROR-BUNDLE route
+// (`POST /management-api/mirror-bundle`, mirror-bundle-api.ts) authenticates by id via `loginManagerById`
+// (it screens exactly those fields). This is deliberately NOT the dashboard login body — dashboard sign-in
+// authenticates `{ email, password, totp }` by email, but the provisioned admin has no email, so the
+// mirror path authenticates it by id instead. It travels as a structured type end to end (connect screen →
+// `/setup-api/adopt` → here → the primary), so this fetcher simply serialises it as the JSON request body —
+// no string-threading, and a wrong shape is rejected at the mirror's own `/setup-api/adopt` boundary
+// (a clean 4xx) before it ever reaches this transport.
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";

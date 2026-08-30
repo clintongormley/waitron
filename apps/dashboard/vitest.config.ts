@@ -5,6 +5,7 @@ type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  setViewportSize(size: { width: number; height: number }): Promise<void>;
 }
 
 /**
@@ -19,6 +20,22 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+/**
+ * Resizes the Playwright page viewport so a test can exercise the responsive breakpoints (Task 12's
+ * off-canvas drawer at `max-width: 48rem`). Changing the viewport re-evaluates the page's media
+ * queries and fires `matchMedia` `change` listeners, which is what flips the shell's `narrow` state.
+ * Same narrow cast at the boundary as `emulateColorScheme` — only the playwright provider's context
+ * carries a `page`. Tests must restore a desktop width afterwards so it never leaks between them.
+ */
+const setViewportSize: BrowserCommand<[width: number, height: number]> = async (
+  context,
+  width,
+  height,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.setViewportSize({ width, height });
 };
 
 export default defineConfig({
@@ -42,6 +59,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        setViewportSize,
       },
     },
     coverage: {

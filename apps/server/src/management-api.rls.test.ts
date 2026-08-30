@@ -19,6 +19,11 @@ import { mountManagementApi } from "./management-api.js";
 // wires no card provider, so every DB op goes through `withTenant` + `asAppUser` from `suite.admin`.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
+// Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
+// carries a login email. Uniqueness is per-tenant (persons_tenant_email_uq), so the same constants
+// serve every tenant these tests provision — including the two in the cross-tenant isolation case.
+const MANAGER_EMAIL = "manager@x.com";
+const STAFF_EMAIL = "clerk@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -76,12 +81,12 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -109,14 +114,14 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
-/** Log in over HTTP as `personId` with `password`, returning just the `waitron_management_session=…`
+/** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
  * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale
  * or absent cookie forward silently. */
-async function login(app: Hono, personId: string, password = PASSWORD): Promise<string> {
+async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password }),
+    body: JSON.stringify({ email, password }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -139,14 +144,14 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   // ── The four required core assertions (task-6 brief) ───────────────────────────────────────────
 
   it("login → list → create → verify persistence", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
     // Log in through the HTTP surface and capture the session cookie the route sets.
     const loginRes = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: managerId, password: PASSWORD }),
+      body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
     });
     expect(loginRes.status).toBe(200);
     const cookie = loginRes.headers.get("set-cookie")!.split(";")[0];
@@ -184,13 +189,13 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("rejects a wrong password with 401 and sets no cookie", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: managerId, password: "wrong password" }),
+      body: JSON.stringify({ email: MANAGER_EMAIL, password: "wrong password" }),
     });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -201,11 +206,11 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("refuses staff-role creation with 403", async () => {
-    const { tenantId, staffId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
     // The staff-role person CAN log in (login checks the credential, not the role)…
-    const cookie = await login(app, staffId);
+    const cookie = await login(app, STAFF_EMAIL);
     // …but holds no `person.manage`, so creating a person is refused before any write.
     const res = await app.request("/management-api/staff", {
       method: "POST",
@@ -235,7 +240,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     // `withTenant` + `asAppUser` RLS, so were `asAppUser` ever dropped from the handler the list would
     // run as the superuser `suite.admin` connection (which bypasses FORCE RLS) and would leak B's rows,
     // failing the `not.toContain` assertions below.
-    const cookieA = await login(appA, a.managerId);
+    const cookieA = await login(appA, MANAGER_EMAIL);
     const listedA = await appA.request("/management-api/staff", { headers: { cookie: cookieA } });
     expect(listedA.status).toBe(200);
     const idsA = ((await listedA.json()) as { personId: string }[]).map((p) => p.personId);
@@ -245,7 +250,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
 
     // The reverse direction: tenant B's manager sees only B's persons, never A's — proving the
     // isolation is symmetric and not an artefact of which tenant was provisioned first.
-    const cookieB = await login(appB, b.managerId);
+    const cookieB = await login(appB, MANAGER_EMAIL);
     const listedB = await appB.request("/management-api/staff", { headers: { cookie: cookieB } });
     expect(listedB.status).toBe(200);
     const idsB = ((await listedB.json()) as { personId: string }[]).map((p) => p.personId);
@@ -257,9 +262,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   // ── Additional coverage: the remaining routes + guard branches ─────────────────────────────────
 
   it("logs out — ends the session, clears the cookie, and a reused cookie is refused", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // The cookie works before logout.
     expect((await app.request("/management-api/staff", { headers: { cookie } })).status).toBe(200);
@@ -302,9 +307,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("updates a person's role and status via PATCH", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // Promote the staff person to supervisor and suspend them.
     const patched = await app.request(`/management-api/staff/${staffId}`, {
@@ -345,9 +350,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("PATCH with a non-string role → 400 management.request_invalid, person unchanged", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const readRow = async () =>
       withTenant(suite.admin, tenantId, async (tx) => {
@@ -378,9 +383,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("PATCH with a non-string status → 400 management.request_invalid, person unchanged", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const readRow = async () =>
       withTenant(suite.admin, tenantId, async (tx) => {
@@ -408,10 +413,160 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(await readRow()).toEqual(before);
   });
 
-  it("resets a PIN and sets a password, then the new password logs in", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+  // ── Email (dashboard sign-in identifier) on create + edit + listing (Task 6) ────────────────────
+
+  it("creates a person with an email and lists it back", async () => {
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const created = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Owner",
+        role: "manager",
+        pin: "1234",
+        email: "owner@x.com",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    // The gated admin roster carries the login email straight through `listPersons`'s projection.
+    const listed = await app.request("/management-api/staff", { headers: { cookie } });
+    const people = (await listed.json()) as { personId: string; email: string | null }[];
+    expect(people.find((p) => p.personId === id)?.email).toBe("owner@x.com");
+  });
+
+  it("PATCH sets a person's email", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: "newclerk@x.com" }),
+    });
+    expect(res.status).toBe(204);
+
+    const listed = await app.request("/management-api/staff", { headers: { cookie } });
+    const people = (await listed.json()) as { personId: string; email: string | null }[];
+    expect(people.find((p) => p.personId === staffId)?.email).toBe("newclerk@x.com");
+  });
+
+  it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
+    // The seeded manager already holds MANAGER_EMAIL, so a second person in the SAME tenant claiming
+    // it collides on `persons_tenant_email_uq` → `person.email_taken` (409), before the row lands.
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Dup",
+        role: "staff",
+        pin: "1234",
+        email: MANAGER_EMAIL,
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_taken" },
+    });
+    expect(await countPersonsNamed(tenantId, "Dup")).toBe(0);
+  });
+
+  it("PATCH to a duplicate email → 409 person.email_taken", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: MANAGER_EMAIL }),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_taken" },
+    });
+  });
+
+  it("create with a malformed email → 400 person.email_invalid, no row lands", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "Bad",
+        role: "staff",
+        pin: "1234",
+        email: "not-an-email",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_invalid" },
+    });
+    expect(await countPersonsNamed(tenantId, "Bad")).toBe(0);
+  });
+
+  it("PATCH with a malformed email → 400 person.email_invalid", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "person.email_invalid" },
+    });
+  });
+
+  it("create/PATCH with a non-string email → 400 management.request_invalid (field email)", async () => {
+    // A PRESENT-but-non-string email is refused by the route's typeof screen naming the FIELD (never
+    // the value), the same shape as the sibling create/PATCH field screens — it never reaches identity.
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const badCreate = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ displayName: "Nope", role: "staff", pin: "1234", email: 123 }),
+    });
+    expect(badCreate.status).toBe(400);
+    expect(
+      (await badCreate.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
+    expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
+
+    const badPatch = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ email: 123 }),
+    });
+    expect(badPatch.status).toBe(400);
+    expect(
+      (await badPatch.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
+  });
+
+  it("resets a PIN and sets a password, then the new password logs in", async () => {
+    const { tenantId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
       method: "POST",
@@ -432,15 +587,15 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     const relogin = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: staffId, password: NEW_PASSWORD }),
+      body: JSON.stringify({ email: STAFF_EMAIL, password: NEW_PASSWORD }),
     });
     expect(relogin.status).toBe(200);
   });
 
   it("screens malformed bodies and ids on the gated write routes", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // POST /staff missing fields → management.request_invalid (400).
     const badCreate = await app.request("/management-api/staff", {
@@ -484,14 +639,16 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(pwBadId.status).toBe(404);
   });
 
-  it("refuses a login with a non-UUID personId as password.invalid (leaking no field)", async () => {
+  it("refuses a login with an unknown email as password.invalid (leaking no field)", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
+    // An email that resolves to no person is indistinguishable from a wrong password — both throw
+    // `password.invalid`, so nothing in the response reveals whether the address has an account.
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: "not-a-uuid", password: PASSWORD }),
+      body: JSON.stringify({ email: "ghost@x.com", password: PASSWORD }),
     });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -525,7 +682,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("login with a non-string totp → 401 password.invalid (screened before loginManager)", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
 
     // The seeded manager has a correct password and is NOT TOTP-enrolled, so `loginManager` would
@@ -535,7 +692,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: managerId, password: PASSWORD, totp: 123 }),
+      body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD, totp: 123 }),
     });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -545,9 +702,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("create with a null JSON body → 400 management.request_invalid", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const res = await app.request("/management-api/staff", {
       method: "POST",
@@ -561,9 +718,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("reset-pin and password with a null JSON body → 400 each", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
       method: "POST",
@@ -587,9 +744,9 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("PATCH with a null JSON body → 204 no-op, person unchanged", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const readRow = async () =>
       withTenant(suite.admin, tenantId, async (tx) => {
@@ -616,7 +773,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("maps an unparseable request body to the route's own 4xx (guarded parse, never a 500)", async () => {
-    const { tenantId, managerId, staffId } = await setupTenant();
+    const { tenantId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
 
     // `c.req.json()` throws a SyntaxError on a malformed body; the shared `readJsonBody` coerces that
@@ -638,7 +795,7 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(loginRes.headers.get("set-cookie")).toBeNull();
 
     // An authenticated write route → the field-screen 400.
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     const create = await app.request("/management-api/staff", {
       method: "POST",
       headers: { ...malformedHeaders, cookie },
@@ -718,11 +875,11 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("refuses all three routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
-    const { tenantId, staffId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     // A staff person CAN log in (login checks the credential, not the role) but holds no
     // `till.configure`, so each route is refused 403 before any read/write.
-    const cookie = await login(app, staffId);
+    const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
     // GET is gated by the ROUTE's own explicit `authorizeManager` call (getLayout does not authorize,
@@ -752,18 +909,18 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("GET returns the built-in defaults for a tenant that has never authored a layout", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     const body = await getLayoutOverHttp(app, cookie);
     expect(body).toEqual({ definition: DEFAULT_LAYOUT, receipt: DEFAULT_RECEIPT });
   });
 
   it("manager PUT /management-api/layout → 204, then GET reads it back (round-trip)", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     const definition = saleLayout(4);
 
     const put = await app.request("/management-api/layout", {
@@ -782,9 +939,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("manager PUT /management-api/receipt → 204, then GET reads the receipt back (round-trip)", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     const receipt = { footerMessage: "Gracias por su visita" };
 
     const put = await app.request("/management-api/receipt", {
@@ -803,9 +960,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("PUT /management-api/layout with an invalid definition → 400 layout.invalid", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // An array missing the sale-critical `total` widget — putLayout's validateLayout refuses it as
     // `layout.invalid` (missing_required), which STATUS maps to 400. This proves the layouts error
@@ -827,9 +984,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("PUT /management-api/receipt with an unknown field → 400 receipt.invalid", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
 
     // An unknown receipt field is rejected fail-closed (design D8) as `receipt.invalid`, 400.
     const res = await app.request("/management-api/receipt", {
@@ -844,9 +1001,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
   });
 
   it("PUT with a body that is not an object / omits the required key → 400 management.request_invalid", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
-    const cookie = await login(app, managerId);
+    const cookie = await login(app, MANAGER_EMAIL);
     const json = { "content-type": "application/json" };
 
     // Each degenerate body is refused as `management.request_invalid` naming the FIELD, before the
@@ -915,8 +1072,8 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     const b = await setupTenant();
     const appA = mountApp(a.tenantId);
     const appB = mountApp(b.tenantId);
-    const cookieA = await login(appA, a.managerId);
-    const cookieB = await login(appB, b.managerId);
+    const cookieA = await login(appA, MANAGER_EMAIL);
+    const cookieB = await login(appB, MANAGER_EMAIL);
 
     // Each manager authors a DISTINCT layout through the full HTTP surface.
     const putA = await appA.request("/management-api/layout", {

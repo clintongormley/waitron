@@ -14,6 +14,7 @@ const people: PersonSummary[] = [
     status: "active",
     hasPassword: true,
     hasTotp: false,
+    email: "ada@x.com",
   },
   {
     personId: "p2",
@@ -22,6 +23,7 @@ const people: PersonSummary[] = [
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
+    email: null,
   },
 ];
 
@@ -36,6 +38,18 @@ describe("staff-list", () => {
     expect(rows[0]!.textContent).not.toContain("manager");
     expect(rows[1]!.textContent).toContain(statusName("suspended", "es-ES"));
     expect(rows[1]!.textContent).not.toContain("suspended");
+  });
+
+  // The row shows the person's dashboard sign-in email so a manager can see it at a glance. A person
+  // WITH an email shows the address; one WITHOUT (email: null) shows an em-dash placeholder, never
+  // the literal "null".
+  it("shows the person's email, and an em-dash when there is none", async () => {
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+    const rows = el.shadowRoot!.querySelectorAll("[data-test=row]");
+    expect(rows[0]!.querySelector(".email")!.textContent).toContain("ada@x.com");
+    // The email-less person shows the em-dash placeholder, not the raw null.
+    expect(rows[1]!.querySelector(".email")!.textContent).toContain("—");
+    expect(rows[1]!.querySelector(".email")!.textContent).not.toContain("null");
   });
 
   it("emits edit-person when a row's edit control is clicked", async () => {
@@ -70,6 +84,7 @@ describe("staff-list", () => {
         status: "active",
         hasPassword: true,
         hasTotp: true,
+        email: "cy@x.com",
       },
     ];
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: withBoth });

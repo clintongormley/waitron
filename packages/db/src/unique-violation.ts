@@ -47,3 +47,27 @@ export function isPgError(error: unknown, sqlstate: string): boolean {
 export function isUniqueViolation(error: unknown): boolean {
   return isPgError(error, UNIQUE_VIOLATION);
 }
+
+/**
+ * The NAME of the violated unique constraint from a `23505` error (or anything it wraps), or
+ * `undefined` when the SQLSTATE is not `23505` or the driver reported no constraint name. Walks the
+ * same cause chain as {@link isPgError}: node-postgres puts the constraint on the `23505` layer's
+ * `.constraint`; PGlite may omit it, so `undefined` means "unknown", NOT "no violation".
+ *
+ * A write path that maps a duplicate to a domain error uses this to translate ONLY its own
+ * constraint and re-throw a different `23505` (a PK, or a constraint added later) rather than
+ * mislabelling every unique violation. `@waitron/identity`'s `asEmailTaken` is the first caller.
+ */
+export function uniqueViolationConstraint(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    if (typeof current === "object" && (current as { code?: unknown }).code === UNIQUE_VIOLATION) {
+      const constraint = (current as { constraint?: unknown }).constraint;
+      return typeof constraint === "string" ? constraint : undefined;
+    }
+    const next = (current as { cause?: unknown }).cause;
+    if (next === current) return undefined;
+    current = next;
+  }
+  return undefined;
+}

@@ -26,6 +26,11 @@ import { mountManagementApi } from "./management-api.js";
 // whose harness (`applyVenue`/`planVenue` + password `login`) this file reuses.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
+// Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
+// carries a login email. Uniqueness is per-tenant (persons_tenant_email_uq), so these constants are
+// safe across the container's accumulating tenants.
+const MANAGER_EMAIL = "manager@x.com";
+const STAFF_EMAIL = "clerk@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -89,12 +94,12 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -137,12 +142,12 @@ function mountApp(venue: VenueResult): Hono {
   return app;
 }
 
-/** Log in over HTTP as `personId`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, personId: string): Promise<string> {
+/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
+async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -162,8 +167,8 @@ beforeAll(async () => {
   const setup = await setupTenant();
   venue = setup.venue;
   app = mountApp(venue);
-  managerCookie = await login(app, setup.managerId);
-  staffCookie = await login(app, setup.staffId);
+  managerCookie = await login(app, MANAGER_EMAIL);
+  staffCookie = await login(app, STAFF_EMAIL);
 });
 
 /** Request a `/management-api<path>` route with the given cookie. */
@@ -434,7 +439,7 @@ describe("/management-api/zones", () => {
   it("a manager cannot see another tenant's zones (cross-tenant isolation)", async () => {
     const other = await setupTenant();
     const otherApp = mountApp(other.venue);
-    const otherManager = await login(otherApp, other.managerId);
+    const otherManager = await login(otherApp, MANAGER_EMAIL);
 
     const mine = unique("MineOnly");
     const id = await createZone(mine);
@@ -444,6 +449,31 @@ describe("/management-api/zones", () => {
     ).json()) as { id: string; name: string }[];
     expect(theirs.find((z) => z.id === id)).toBeUndefined();
     expect(theirs.find((z) => z.name === mine)).toBeUndefined();
+  });
+});
+
+describe("POST /management-api/session (email login)", () => {
+  it("logs in with email + password and sets the cookie", async () => {
+    const res = await app.request("/management-api/session", {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toMatch(/management/i);
+  });
+
+  it("unknown email returns 401 password.invalid, no cookie", async () => {
+    // An email that resolves to no person is indistinguishable from a wrong password: both are
+    // `password.invalid`, so the response never reveals which addresses have accounts.
+    const res = await app.request("/management-api/session", {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ email: "ghost@x.com", password: PASSWORD }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "password.invalid" } });
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 });
 

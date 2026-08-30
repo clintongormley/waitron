@@ -19,7 +19,7 @@
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
-/** One `GET /management-api/staff-roster` entry — the pre-login picker list, no role or status. */
+/** One `GET /management-api/staff-roster` entry — the colleague-picker list, no role or status. */
 export interface RosterEntry {
   personId: string;
   displayName: string;
@@ -33,6 +33,8 @@ export interface PersonSummary {
   status: "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
+  /** The person's login email, or null when none is set. */
+  email: string | null;
 }
 
 /**
@@ -881,14 +883,16 @@ export class DashboardApi {
     this.#fetchImpl = fetchImpl;
   }
 
-  /** `GET /management-api/staff-roster` — the pre-login person picker (id + display name only). */
+  /** `GET /management-api/staff-roster` — the staff self-service colleague picker in
+   * `my-schedule-screen.ts` (id + display name only). UNAUTHENTICATED but no longer part of login:
+   * the login screen POSTs `{ email }` and no longer reads this. */
   getStaffRoster(): Promise<RosterEntry[]> {
     return this.#request<RosterEntry[]>("/management-api/staff-roster", "GET");
   }
 
   /**
    * `GET /management-api/locales` — the venue's offered languages (per-user-language-preference,
-   * Task 4). PUBLIC (pre-login, like {@link getStaffRoster}): each `{ code, label }` is a
+   * Task 4). PUBLIC and read pre-login by the login screen's language chooser: each `{ code, label }` is a
    * `SUPPORTED_LOCALES` entry, and `venueDefault` the tenant's fallback locale. The language chooser
    * reads the list; the app decides what to do with a pick, so the client only surfaces the shape.
    */
@@ -906,14 +910,10 @@ export class DashboardApi {
   }
 
   /**
-   * `POST /management-api/session` — log in with a password (and an optional TOTP second factor).
-   * Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
+   * `POST /management-api/session` — log in with an email + password (and an optional TOTP second
+   * factor). Returns who is now logged in; a bad credential rejects with the server's `{ code }`.
    */
-  login(input: {
-    personId: string;
-    password: string;
-    totp?: string;
-  }): Promise<{ personId: string }> {
+  login(input: { email: string; password: string; totp?: string }): Promise<{ personId: string }> {
     return this.#request<{ personId: string }>("/management-api/session", "POST", input);
   }
 
@@ -927,22 +927,24 @@ export class DashboardApi {
     return this.#request<PersonSummary[]>("/management-api/staff", "GET");
   }
 
-  /** `POST /management-api/staff` — create a person with a starting role and PIN; returns its id. */
+  /** `POST /management-api/staff` — create a person with a starting role and PIN (and an optional
+   * login email); returns its id. */
   createPerson(input: {
     displayName: string;
     role: PersonRole;
     pin: string;
+    email?: string;
   }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/staff", "POST", input);
   }
 
   /**
-   * `PATCH /management-api/staff/:id` — change a person's role and/or active status. Answers an
-   * empty 204.
+   * `PATCH /management-api/staff/:id` — change a person's role, active status and/or login email.
+   * Answers an empty 204.
    */
   updatePerson(
     id: string,
-    patch: { role?: PersonRole; status?: "active" | "suspended" },
+    patch: { role?: PersonRole; status?: "active" | "suspended"; email?: string },
   ): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}`, "PATCH", patch);
   }

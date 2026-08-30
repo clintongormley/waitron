@@ -30,6 +30,7 @@ import {
   loginManager,
   reactivatePerson,
   resetPin,
+  setEmail,
   setPassword,
   setRole,
   suspendPerson,
@@ -157,25 +158,32 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
   "passkey.already_registered": 409,
-  // Login-enumeration trade-off, ACCEPTED and recorded here (not changed). This map is SHARED with the
-  // authenticated staff routes, where 404/403 are the CORRECT semantics: the write routes
+  // Login-enumeration posture, recorded here. This map is SHARED with the authenticated staff routes,
+  // where 404/403 are the CORRECT semantics: the write routes
   // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a
   // malformed one as `person.not_found` (404), and `resolveManagementSession` re-reads `persons.status`
   // on every gated request and throws `person.suspended` (403) when the logged-in manager was
-  // suspended mid-session (`packages/identity/src/management-session.ts`). A global remap to 401 to
-  // hide enumeration would mislabel both. The cost falls on the LOGIN route
-  // (`POST /management-api/session`): an unknown `personId` surfaces 404 and a suspended one 403, so a
-  // caller can distinguish either from a wrong password (`password.invalid`, 401) — where the till
-  // login deliberately maps `person.not_found → 401` instead (till-api.ts's `STATUS`). The enumeration
-  // value is negligible: active person ids are ALREADY public via the unauthenticated
-  // `GET /management-api/staff-roster` (`listActiveStaff` returns `{personId, displayName}` for every
-  // active person), so a 404-vs-401 split reveals nothing new about them; a suspended person is
-  // excluded from that roster, so a 403 can only be provoked by already holding their id — a 122-bit
-  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess. The passkey auth-verify
-  // route surfaces the same 403 (a suspended credential owner), and provoking it there is HARDER still:
-  // it needs the owner's random `credential_id`, not merely their person id.
+  // suspended mid-session (`packages/identity/src/management-session.ts`). The LOGIN route
+  // (`POST /management-api/session`) resolves the person by EMAIL and `loginManager` hardens it against
+  // enumeration itself: an unknown email is INDISTINGUISHABLE from a wrong password — both
+  // `password.invalid` (401) — so `person.not_found` is NOT reachable on login, and its only sources on
+  // this surface are the write routes' malformed-`:id` screens above. `person.suspended` (403) IS still
+  // surfaced by login: `loginManager` throws it pre-password, so a suspended account is revealed to an
+  // unauthenticated caller BY DESIGN — the accepted trade-off (see `loginManager`'s own note on the
+  // suspension-before-password ordering). The residual enumeration value is negligible: a suspended
+  // person is excluded from the unauthenticated `GET /management-api/staff-roster`
+  // (`listActiveStaff` returns only ACTIVE persons), so provoking the 403 needs the account's email,
+  // which is published nowhere. The passkey auth-verify route surfaces the same 403 (a suspended
+  // credential owner), and provoking it there is HARDER still: it needs the owner's random
+  // `credential_id`, not merely their email.
   "person.suspended": 403,
   "person.not_found": 404,
+  // The email write boundary (`createPerson`/`setEmail`): a malformed address is a request-shape
+  // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
+  // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
+  // not the `?? 400` default).
+  "person.email_invalid": 400,
+  "person.email_taken": 409,
   "authorization.not_permitted": 403,
   "pin.too_short": 400,
   "password.too_short": 400,
@@ -421,18 +429,24 @@ async function parsePasskeyVerifyBody(
 }
 
 /**
- * Mounts the dashboard's management-session routes on an existing Hono app: the pre-login staff
- * roster, login and logout. Task 4 adds the gated staff CRUD routes to THIS same function, each
+ * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster (read
+ * post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff CRUD routes
+ * to THIS same function, each
  * handler wrapped in `run` (above) so the whole surface maps errors identically. Mirrors
  * `mountTillApi`'s shape — `withTenant(deps.db, deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB
  * touch, so RLS scopes each read/write to this dashboard's own tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
-  // Pre-login roster for the login screen. Deliberately UNAUTHENTICATED — it is what the manager picks
-  // their name from before any session exists — so it calls `listActiveStaff` under `withTenant` +
-  // `asAppUser` (RLS scopes it to this dashboard's tenant) rather than `requireManagementSession`.
-  // `listActiveStaff` returns `{ personId, displayName }` only: no password material, role or status,
-  // so there is nothing here a bystander must not see. The till's `GET /api/staff` parallel.
+  // Roster of active persons. Deliberately UNAUTHENTICATED — it exposes no secret, so it calls
+  // `listActiveStaff` under `withTenant` + `asAppUser` (RLS scopes it to this dashboard's tenant)
+  // rather than `requireManagementSession`. One dashboard screen fetches it via `api.getStaffRoster()`
+  // at HEAD: `my-schedule-screen.ts`'s staff self-service view (the colleague picker + name
+  // resolution). The login screen no longer uses it — spec §4.4's email-login migration landed, so
+  // `login-screen.ts`'s `#submit` now POSTs `{ email }` (`loginManager` resolves the person by email),
+  // not the old `{ personId }` roster picker. So the route stays for `my-schedule-screen.ts`. (The till
+  // has its OWN active-staff route, `GET /api/staff` in till-api.ts — not this one.) `listActiveStaff`
+  // returns `{ personId, displayName }` only: no password material, role or status, so there is nothing
+  // here a bystander must not see.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -443,18 +457,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Login: password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as the app
-  // role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person lookup and
-  // a wrong password, missing/wrong TOTP, unknown or suspended person surfaces as the identity
-  // credential codes `STATUS` maps to 401/403/404. The body is read via `readJsonBody`
+  // Login: EMAIL + password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as
+  // the app role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person
+  // lookup. `loginManager` resolves the person by EMAIL (not a client-supplied id) and hardens against
+  // enumeration: an unknown email and a wrong password BOTH surface as `password.invalid` (401), so the
+  // response never reveals which addresses have accounts; a suspended person surfaces as
+  // `person.suspended` (403), a missing/wrong TOTP as `totp.invalid` (401) — the identity credential
+  // codes `STATUS` maps. The body is read via `readJsonBody`
   // (`read-json-body.ts`), which coerces an empty/malformed/`null` body to `{}` so it never reaches
   // `run` as an opaque 500 — see its doc for the two degenerate-body cases it handles. This is the
   // representative site the other body-parsing routes point at: a degenerate body falls through to the
   // screen as the route's OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on
-  // it is `undefined`, not a throw.) The body is then screened: a non-string or
-  // non-UUID `personId`, a non-string `password`, or a `totp` present but not a string, is refused as
-  // `password.invalid` — the SAME code a wrong password gets, so nothing in the response tells an
-  // unauthenticated caller which field failed. (Screening `totp` does NOT avert a 500: `verifyTotp`
+  // it is `undefined`, not a throw.) The body is then screened: a missing/empty `email` (not a string,
+  // or a string that trims to empty), a non-string `password`, or a `totp` present but not a string, is
+  // refused as `password.invalid` — the SAME code a wrong password or unknown email gets, so nothing in
+  // the response tells an unauthenticated caller which field failed. Email FORMAT is validated at
+  // WRITE-time (`createPerson`/`setEmail`'s `screenEmail`), NOT here: login screens only that a
+  // non-empty string was supplied and leaves a well-formed-but-unknown address to `loginManager`, which
+  // answers `password.invalid` uniformly. (Screening `totp` does NOT avert a 500: `verifyTotp`
   // fails closed — probed against otplib@13.4.1, `verifyTotp` returns `false` for a non-string `totp`
   // (number/null/undefined/object/boolean/non-six-digit string all tested): v13's `verifySync` throws
   // on such input and `verifyTotp`'s catch swallows the throw, so the wrapper never surfaces it — a
@@ -464,24 +484,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // the review's "totp → 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
-      const body = await readJsonBody<{ personId?: string; password?: string; totp?: string }>(c);
+      const body = await readJsonBody<{ email?: string; password?: string; totp?: string }>(c);
       if (
-        typeof body.personId !== "string" ||
-        !isUuid(body.personId) ||
+        typeof body.email !== "string" ||
+        body.email.trim() === "" ||
         typeof body.password !== "string" ||
         (body.totp !== undefined && typeof body.totp !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
-      // Bind the validated fields to locals: the guard narrows `body.personId`/`body.password` to
+      // Bind the validated fields to locals: the guard narrows `body.email`/`body.password` to
       // `string` HERE, but that narrowing does not survive into the `withTenant` closure below (TS
       // resets a captured property to its declared `string | undefined`), so the closure reads these.
-      const { personId, password, totp } = body;
+      const { email, password, totp } = body;
       const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return loginManager(tx, {
           tenantId: deps.cfg.tenantId,
-          personId,
+          email,
           password,
           totp,
         });
@@ -529,7 +549,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
   // The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why) and screened: a missing
   // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
-  // is refused as `management.request_invalid` naming the FIELDS, never their values. The narrowed
+  // is refused as `management.request_invalid` naming the FIELDS, never their values. `email` is
+  // OPTIONAL (till-only PIN staff carry none) and screened typeof-only when present; its SHAPE and
+  // per-tenant uniqueness are `createPerson`'s job (`person.email_invalid` → 400, `person.email_taken`
+  // → 409). The narrowed
   // fields are bound to locals AFTER the guard because that narrowing does not survive into the
   // `withTenant` closure — the same pattern the login route above uses. Returns the new id at 201.
   app.post("/management-api/staff", (c) =>
@@ -539,6 +562,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         displayName?: string;
         role?: PersonRoleValue;
         pin?: string;
+        email?: string;
       }>(c);
       if (
         typeof body.displayName !== "string" ||
@@ -547,7 +571,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         throw new AppError("management.request_invalid", { field: "displayName|role|pin" });
       }
-      const { displayName, role, pin } = body;
+      // `email` is OPTIONAL (till-only PIN staff carry none). A PRESENT-but-non-string value is a
+      // request-shape fault named by FIELD, the same typeof-only screen the required fields get; a
+      // present string flows on to `createPerson`, which validates its SHAPE (`person.email_invalid`)
+      // and per-tenant uniqueness (`person.email_taken`). An absent field stays `undefined` → no email.
+      if (body.email !== undefined && typeof body.email !== "string") {
+        throw new AppError("management.request_invalid", { field: "email" });
+      }
+      const { displayName, role, pin, email } = body;
       const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createPerson(tx, {
@@ -556,13 +587,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           displayName,
           role,
           pin,
+          email,
         });
       });
       return c.json(created, 201);
     }),
   );
 
-  // Update a person's role and/or status. Gated. `:id` is screened with `isUuid` first — a
+  // Update a person's role, status and/or login email. Gated. `:id` is screened with `isUuid` first — a
   // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
   // echo) rather than a request-shape error. Both fields are OPTIONAL, but each is type-screened the
   // way the three sibling write routes screen their required fields: a field PRESENT with a
@@ -581,16 +613,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // otherwise throw on the destructure below, and an empty/unparseable body would otherwise reach `run`
   // as a SyntaxError → `server.internal` 500; `readJsonBody` averts both.) `role`/`status` are bound to
   // locals before the closure and narrowed inside
-  // it, so no field narrowing has to cross the closure boundary. The identity calls enforce
-  // `person.manage`.
+  // it, so no field narrowing has to cross the closure boundary. `email` is OPTIONAL too and
+  // independent: present-and-a-string drives `setEmail` (shape → `person.email_invalid` 400,
+  // per-tenant collision → `person.email_taken` 409); a non-string is a 400 naming the field; absent
+  // is a no-op. The identity calls enforce `person.manage`.
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await readJsonBody<{ role?: PersonRoleValue; status?: "active" | "suspended" }>(
-        c,
-      );
-      const { role, status } = body;
+      const body = await readJsonBody<{
+        role?: PersonRoleValue;
+        status?: "active" | "suspended";
+        email?: string;
+      }>(c);
+      const { role, status, email } = body;
       // Typeof screen mirroring the create/reset-pin/set-password routes: refuse a PRESENT field that
       // is not a string (leaving an absent one as the no-op it should be). This is where a non-string
       // `role` would otherwise reach the `person_role` pgEnum and 500; a non-string `status` would
@@ -602,6 +638,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (status !== undefined && typeof status !== "string") {
         throw new AppError("management.request_invalid", { field: "status" });
       }
+      // `email` is OPTIONAL and independent of role/status: a PRESENT-but-non-string value is a
+      // request-shape 400 named by field; a present string drives `setEmail`, which validates the
+      // address (`person.email_invalid` → 400) and per-tenant uniqueness (`person.email_taken` → 409).
+      if (email !== undefined && typeof email !== "string") {
+        throw new AppError("management.request_invalid", { field: "email" });
+      }
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         if (role !== undefined) {
@@ -612,6 +654,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         }
         if (status === "active") {
           await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+        if (typeof email === "string") {
+          await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
         }
       });
       return c.body(null, 204);
@@ -1586,7 +1631,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // shape of the password login route. Same body coercion + `challengeHandle` UUID screen as
   // register/verify above; the UUID screen matters MORE here because this route is UNAUTHENTICATED, so
   // a non-UUID `challengeHandle` reaching the `uuid` PK column (`22P02` → opaque 500) would be an
-  // unauthenticated 500 — the login route's own `isUuid(body.personId)` screen exists for exactly this.
+  // unauthenticated 500 — the same failure the write routes' `requirePersonId` `isUuid` screen prevents
+  // (the password login route no longer screens a UUID: it screens a non-empty `email` string).
   // `response` is then required to be a non-null object (else `management.request_invalid`): this route
   // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
   // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.

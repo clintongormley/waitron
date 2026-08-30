@@ -78,17 +78,39 @@ export async function seedPersonWithPassword(
 }
 
 /**
- * Seeds a person of `role` with a known password and returns an OPEN management session for them —
- * the dashboard analogue of `openSession`.
+ * Seeds a person who can sign in on the DASHBOARD (management) path: a known `email`, the known
+ * password "correct horse", plus an explicit `role`/`status`. `loginManager` now resolves by email,
+ * so every management-login fixture must carry one (unique per tenant, case-insensitive — the seeded
+ * value is already lowercase). Returns the person id.
+ */
+export async function seedManager(
+  db: Database,
+  tenantId: string,
+  opts: { email: string; role?: PersonRoleValue; status?: "active" | "suspended" },
+): Promise<string> {
+  const personId = await seedPerson(db, tenantId, opts.role ?? "manager", opts.status ?? "active");
+  await withTenant(db, tenantId, (tx) =>
+    tx.execute(
+      sql`update persons set password_hash = ${hashPassword("correct horse")}, email = ${opts.email} where id = ${personId}`,
+    ),
+  );
+  return personId;
+}
+
+/**
+ * Seeds a manager (known email + password) and returns an OPEN management session for them — the
+ * dashboard analogue of `openSession`. The email is unique per call so many managers can be seeded in
+ * one tenant without colliding on the per-tenant email index.
  */
 export async function openManagementSession(
   db: Database,
   tenantId: string,
   role: PersonRoleValue = "manager",
 ): Promise<{ personId: string; sessionId: string }> {
-  const personId = await seedPersonWithPassword(db, tenantId, role);
+  const email = `mgr-${crypto.randomUUID()}@example.test`;
+  const personId = await seedManager(db, tenantId, { email, role });
   const session = await withTenant(db, tenantId, (tx) =>
-    loginManager(tx, { tenantId, personId, password: "correct horse" }),
+    loginManager(tx, { tenantId, email, password: "correct horse" }),
   );
   return { personId, sessionId: session.id };
 }
