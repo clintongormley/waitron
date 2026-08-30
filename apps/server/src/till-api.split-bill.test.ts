@@ -277,6 +277,35 @@ describe("POST /api/tabs/:id/split", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
   });
+
+  it("400 management.request_invalid when transfers is absent, not an opaque 500", async () => {
+    const { app, tabA, cookie } = await setupTabApp();
+    // Body `{}` → `transfers` undefined → `splitOffCheck`'s `transfers.length` would throw a TypeError →
+    // opaque 500 without the route's array-shape screen. Screened at the boundary as the generic
+    // request-shape 400 naming the field (the `requireCapacity` sibling's discipline, till-api.ts:347).
+    const res = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "transfers" } },
+    });
+  });
+
+  it("400 management.request_invalid when transfers is not an array", async () => {
+    const { app, tabA, cookie } = await setupTabApp();
+    const res = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ transfers: 5 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "transfers" } },
+    });
+  });
 });
 
 describe("POST /api/tabs/:id/unjoin", () => {
@@ -375,5 +404,20 @@ describe("POST /api/tabs/:id/unjoin", () => {
       sql`select quantity from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(origin.rows).toEqual([{ quantity: "2.000" }]);
+  });
+
+  it("400 management.request_invalid when transfers is present but not an array", async () => {
+    const { app, tabA, tableB, cookie } = await setupJoinedApp();
+    // `transfers` is OPTIONAL here (absent = free-the-table, tested above), so the route screens only a
+    // PRESENT non-array — which `unjoinTable`'s `transferLines` would otherwise reach as `.length` → 500.
+    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ tableId: tableB, transfers: 5 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "transfers" } },
+    });
   });
 });

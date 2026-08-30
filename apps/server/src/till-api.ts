@@ -1695,6 +1695,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await c.req.json<{
         transfers: { lineNo: number; quantity?: string }[];
       }>();
+      // Screen the body shape BEFORE the verb: a non-array `transfers` ({}/null/5) reaches
+      // `splitOffCheck`'s `transfers.length` as a TypeError → opaque 500, the class the id screens above
+      // exist to prevent. Refused here as `management.request_invalid` naming the field (the generic
+      // request-shape 400, `requireCapacity`'s discipline). Only the array shape is screened — the verb +
+      // `assertDistinctTransferLines` + `carveOffLines` raise the domain errors for bad contents.
+      if (!Array.isArray(body.transfers)) {
+        throw new AppError("management.request_invalid", { field: "transfers" });
+      }
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
@@ -1721,6 +1729,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>();
       if (!isUuid(body.tableId))
         throw new AppError("table.not_joined", { tableId: body.tableId, tabId });
+      // `transfers` is OPTIONAL here (absent = free the table, a turnover), so screen only a PRESENT
+      // non-array before the verb: a present non-array reaches `unjoinTable`'s `transferLines` as
+      // `.length` → opaque 500. Same request-shape 400 as `/split`, naming the field.
+      if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
+        throw new AppError("management.request_invalid", { field: "transfers" });
+      }
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
