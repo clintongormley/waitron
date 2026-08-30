@@ -12,8 +12,36 @@
 //   3. loopback host (localhost / 127.0.0.0/8 / ::1) — allow over http OR https (the stand-in is localhost);
 //   4. non-loopback DNS hostname — allow over https, reject over http (real hosting is https);
 //   5. public literal IP — allow over https, reject over http.
+//
+// The IP CLASSIFICATION below is delegated to `node:net` (`isIP` + `BlockList`), the stdlib's own
+// allow/deny-list IP machinery — no hand-rolled octet/hextet parsing. `BlockList.check(addr, 'ipv6')`
+// matches an IPv4-mapped IPv6 literal (`::ffff:10.0.0.5`) against the IPv4 subnet rules automatically,
+// which is exactly the mapped-decode the SSRF policy needs, so no extra code carries it.
+import { BlockList, isIP } from "node:net";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
+
+// The blocked ranges (rule 2). One list, both families: IPv4 10/8, 172.16/12, 192.168/16, 169.254/16
+// (link-local + cloud metadata), 100.64/10 (CGNAT), 0/8; IPv6 fc00::/7 (ULA), fe80::/10 (link-local).
+// Loopback (127/8, ::1) is deliberately absent — it is allowed by `isLoopbackHost` before this is consulted.
+const BLOCKED = new BlockList();
+BLOCKED.addSubnet("10.0.0.0", 8, "ipv4");
+BLOCKED.addSubnet("172.16.0.0", 12, "ipv4");
+BLOCKED.addSubnet("192.168.0.0", 16, "ipv4");
+BLOCKED.addSubnet("169.254.0.0", 16, "ipv4");
+BLOCKED.addSubnet("100.64.0.0", 10, "ipv4");
+BLOCKED.addSubnet("0.0.0.0", 8, "ipv4");
+BLOCKED.addSubnet("fc00::", 7, "ipv6");
+BLOCKED.addSubnet("fe80::", 10, "ipv6");
+
+// Loopback (rule 3), kept in TWO family-scoped lists rather than one. A single mixed list would let
+// `check(addr, 'ipv6')` match an IPv4-mapped literal (`::ffff:127.0.0.1`) against the 127/8 IPv4 rule via
+// the mapped-decode above — which the hand-rolled predecessor did NOT treat as loopback. Splitting the
+// families keeps a mapped `::ffff:127.x` out of the loopback set, preserving that exact behaviour.
+const LOOPBACK_V4 = new BlockList();
+LOOPBACK_V4.addSubnet("127.0.0.0", 8, "ipv4");
+const LOOPBACK_V6 = new BlockList();
+LOOPBACK_V6.addAddress("::1", "ipv6");
 
 /**
  * Parse and validate an operator-supplied primary URL, returning the parsed `URL` on success.
@@ -52,6 +80,19 @@ function invalid(): AppError {
 }
 
 /**
+ * Strip the surrounding `[...]` brackets and any trailing `%zone` from a URL hostname so `node:net`
+ * (which accepts neither) can classify it. The WHATWG `url.hostname` for an IPv6 literal is bracketed
+ * (`[::1]`), and a link-local literal may carry a `%eth0` zone id; both must go before `isIP`/`check`.
+ */
+function stripLiteral(host: string): string {
+  let h = host;
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  const zone = h.indexOf("%");
+  if (zone !== -1) h = h.slice(0, zone);
+  return h;
+}
+
+/**
  * True when `host` (a URL hostname, bracketed IPv6 accepted) is a loopback address: `localhost`, any
  * IPv4 in 127.0.0.0/8, or the IPv6 `::1`. Loopback is the one host the adopt policy allows over plain
  * http. Exported so the mirror-bind guard (`mirror-bind-guard.ts`) shares one definition of loopback.
@@ -64,16 +105,11 @@ function invalid(): AppError {
  * loopback — the safe direction for a bind guard.
  */
 export function isLoopbackHost(host: string): boolean {
-  const h = host.toLowerCase();
+  const h = stripLiteral(host.toLowerCase());
   if (h === "localhost") return true;
-
-  const v4 = parseIpv4(h);
-  if (v4 !== null) return v4[0] === 127;
-
-  const v6 = parseIpv6(h);
-  if (v6 !== null) return isIpv6Loopback(v6);
-
-  return false;
+  const kind = isIP(h);
+  if (kind === 0) return false;
+  return kind === 4 ? LOOPBACK_V4.check(h, "ipv4") : LOOPBACK_V6.check(h, "ipv6");
 }
 
 /**
@@ -81,112 +117,12 @@ export function isLoopbackHost(host: string): boolean {
  * metadata, or `0.0.0.0/8` range: IPv4 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, 0/8; IPv6
  * fc00::/7 (ULA), fe80::/10 (link-local). Loopback (127/8, ::1) is NOT blocked here — it is allowed by
  * `isLoopbackHost` before this is consulted. A DNS hostname is not a literal, so returns false.
- * Exported so the private-range logic stays factored for reuse (Task 3).
+ * Exported for its own unit test (it is not consumed elsewhere — `mirror-bind-guard.ts` imports only
+ * `isLoopbackHost`), kept beside `isLoopbackHost` as the sibling half of the literal-IP classification.
  */
 export function isBlockedIpLiteral(host: string): boolean {
-  const h = host.toLowerCase();
-
-  const v4 = parseIpv4(h);
-  if (v4 !== null) return isBlockedIpv4(v4);
-
-  const v6 = parseIpv6(h);
-  if (v6 !== null) {
-    const mapped = ipv4Mapped(v6);
-    if (mapped !== null) return isBlockedIpv4(mapped);
-    return isBlockedIpv6(v6);
-  }
-
-  return false;
-}
-
-// --- IPv4 --------------------------------------------------------------------------------------
-
-/** Parse a dotted-quad into four octets, or null if `host` is not a well-formed IPv4 literal. */
-function parseIpv4(host: string): [number, number, number, number] | null {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (m === null) return null;
-  const octets = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
-  if (octets.some((o) => o > 255)) return null;
-  return octets as [number, number, number, number];
-}
-
-function isBlockedIpv4([a, b]: [number, number, number, number]): boolean {
-  if (a === 10) return true; // 10.0.0.0/8
-  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-  if (a === 192 && b === 168) return true; // 192.168.0.0/16
-  if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local + cloud metadata)
-  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
-  if (a === 0) return true; // 0.0.0.0/8
-  return false;
-}
-
-// --- IPv6 --------------------------------------------------------------------------------------
-
-/**
- * Parse an IPv6 literal (brackets and a %zone suffix tolerated, a trailing embedded IPv4 like
- * `::ffff:1.2.3.4` accepted) into 16 bytes, or null if it is not a well-formed IPv6 literal.
- */
-function parseIpv6(raw: string): number[] | null {
-  let host = raw;
-  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
-  const zone = host.indexOf("%");
-  if (zone !== -1) host = host.slice(0, zone);
-  if (!host.includes(":")) return null;
-
-  // Rewrite a trailing dotted IPv4 group (`::ffff:1.2.3.4`) as two hex hextets so the parse below is uniform.
-  const dot = host.indexOf(".");
-  if (dot !== -1) {
-    const lastColon = host.lastIndexOf(":", dot);
-    if (lastColon === -1) return null;
-    const v4 = parseIpv4(host.slice(lastColon + 1));
-    if (v4 === null) return null;
-    const hi = ((v4[0] << 8) | v4[1]).toString(16);
-    const lo = ((v4[2] << 8) | v4[3]).toString(16);
-    host = `${host.slice(0, lastColon + 1)}${hi}:${lo}`;
-  }
-
-  if ((host.match(/::/g) ?? []).length > 1) return null;
-  const hasDouble = host.includes("::");
-  const [headStr, tailStr] = hasDouble ? host.split("::") : [host, undefined];
-  const head = headStr === "" ? [] : headStr.split(":");
-  const tail = tailStr === undefined || tailStr === "" ? [] : tailStr.split(":");
-
-  const isHextet = (g: string): boolean => /^[0-9a-f]{1,4}$/.test(g);
-  if (!head.every(isHextet) || !tail.every(isHextet)) return null;
-
-  let groups: string[];
-  if (hasDouble) {
-    const fill = 8 - head.length - tail.length;
-    if (fill < 1) return null; // `::` must stand for at least one all-zero group
-    groups = [...head, ...Array<string>(fill).fill("0"), ...tail];
-  } else {
-    if (head.length !== 8) return null;
-    groups = head;
-  }
-
-  const bytes: number[] = [];
-  for (const g of groups) {
-    const v = parseInt(g, 16);
-    bytes.push((v >> 8) & 0xff, v & 0xff);
-  }
-  return bytes;
-}
-
-function isIpv6Loopback(bytes: number[]): boolean {
-  return bytes.slice(0, 15).every((b) => b === 0) && bytes[15] === 1;
-}
-
-/** If `bytes` is an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`), return the embedded IPv4 octets. */
-function ipv4Mapped(bytes: number[]): [number, number, number, number] | null {
-  const prefixIsZero = bytes.slice(0, 10).every((b) => b === 0);
-  if (prefixIsZero && bytes[10] === 0xff && bytes[11] === 0xff) {
-    return [bytes[12], bytes[13], bytes[14], bytes[15]];
-  }
-  return null;
-}
-
-function isBlockedIpv6(bytes: number[]): boolean {
-  if ((bytes[0] & 0xfe) === 0xfc) return true; // fc00::/7 (unique local)
-  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true; // fe80::/10 (link-local)
-  return false;
+  const h = stripLiteral(host.toLowerCase());
+  const kind = isIP(h);
+  if (kind === 0) return false;
+  return BLOCKED.check(h, kind === 4 ? "ipv4" : "ipv6");
 }
