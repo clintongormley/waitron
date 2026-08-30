@@ -1,132 +1,114 @@
 # Localization fallback via language negotiation — design sketch
 
-_2026-08-30 · a design note for the deferred debt item "descriptions maps are keyed inconsistently
-(#167)". Not yet scheduled; this records the model so the next session starts from the conclusion, not
-the argument._
+_2026-08-30 · a design note prompted by the #167 review (dashboard `localizedName`). Not yet scheduled;
+this records the model so the next session starts from the conclusion, not the argument. The model was
+worked out with the owner across several refinements; this is the settled version._
 
 ## Problem
 
-String resolution is done ad hoc in several places with divergent, and in some cases dead, fallback
+String resolution is done ad hoc in several places with divergent — and in one case dead — fallback
 logic:
 
 - `apps/dashboard/src/i18n/t.ts` `t(key, l)` = `catalogues[l]?.[key] ?? en[key]` — exact tag, then
-  straight to English; no language-subtag tier (so `es-PT` skips `es-ES` and drops to English).
-- `apps/dashboard/src/i18n/t.ts` `pickLocale({en,es}, l)` — region-strips then English (a *different*
-  fallback from `t()`, for the two-column entries).
+  straight to English; **no language-subtag tier**, so a region request (`es-ES`) that has no
+  region-specific catalogue drops to English instead of the base Spanish.
+- `apps/dashboard/src/i18n/t.ts` `pickLocale({en,es}, l)` — region-strips to the language then English (a
+  *different* fallback from `t()`, for the two-column entries).
 - `apps/dashboard/src/i18n/localized.ts` `localizedName(map)` (#167) — chosen-full → chosen-short →
-  first entry; no venue-default tier.
-- `apps/server/src/receipt-ticket.ts` `lineName` / `apps/server/src/kitchen-print.ts` — `map[locale]`
-  (full invoice tag) → first entry.
-- `apps/dashboard/src/widgets/product-list.ts` / `recipe-screen.ts` — `map["es"]` (hardcoded short) →
+  first entry. Correct today, but **no venue-default tier** (a chosen language absent from a map falls to
+  an arbitrary entry, not the venue's own language).
+- `apps/server/src/receipt-ticket.ts` `lineName` / `apps/server/src/kitchen-print.ts` — `map[locale]` →
   first entry.
+- `apps/dashboard/src/widgets/product-list.ts` / `recipe-screen.ts` — `map["es"]` (**hardcoded** "es") →
+  first entry: a non-Spanish venue's primary language is never preferred.
 
-And the stored `descriptions` maps are themselves keyed inconsistently: ~123 use the full tag
-(`{ "es-ES": … }`, the invoice/receipt path), ~62 use the short subtag (`{ es: … }`, the
-catalogue/product path). So no single exact-key lookup is correct.
+The stored `descriptions` maps use both `{ es: … }` and `{ es-ES: … }`. That is **not** a bug to
+normalize away — under the model below the two spellings *mean different things* (a venue's primary
+language vs. an explicitly-added Spain-Spanish variant).
 
-## Two domains, one algorithm
+## Two paths — same negotiation shape, keyed and terminated differently
 
-There are two string domains, and they differ **only in their terminal fallback**:
+Both paths run the **same descending-specificity walk**: exact tag → drop the region to the bare
+language → terminal. There is **no lateral sibling-region jump** (`es-PT` does not detour through
+`es-ES`). They differ in how strings are *keyed* and in the *terminal* (owner model, 2026-08-30):
 
-| Domain | Examples | Preference list | Terminal |
-| --- | --- | --- | --- |
-| **Software / UI strings** (shipped catalogues) | `t()`, `pickLocale`, nav/labels | `[chosen]` | the guaranteed **English base** (`en[key]` is always defined) |
-| **Venue-entered content** (authored per-locale) | product/menu `descriptions`, receipt line names | `[chosen, venue-default]` | **any available entry** (English has no special status — the venue may never have authored it) |
+| Path | Examples | How it is keyed | Resolution | Terminal |
+| --- | --- | --- | --- | --- |
+| **Software / UI chrome** | `t()`, `pickLocale`, `domain.ts`, `allergen-names.ts`, nav/labels | the bare-language catalogue IS our chosen default region: `es` ≡ es-ES, `en` ≡ en-GB. Optional partial region **overlays** (`en-US`, `es-PE`) carry only what differs and inherit the rest from the bare language | `es-PT → es → en` | the `en` source (always complete), reached for an unshipped language via the **deployment default** (e.g. en-GB) |
+| **Venue-entered content** | product/menu `descriptions`, receipt line names | the venue's **primary** language is keyed by the **bare** tag (`es` = "our Spanish", whatever regional flavour they speak — a Lima venue's `es` *is* Peruvian); explicitly-added variants use full tags (`es-ES` when they add Spain-Spanish) | `chosen → bare-lang (venue primary) → venue-default → any` | **any available entry** (English has no special status — the venue may never have authored it) |
 
-Both run the **same descending-specificity negotiation**: for each preferred locale, try the exact
-tag, then same-language-any-region (exact region preferred, else the venue-default region, else the
-first of that language); if nothing matches any preference, use the terminal.
+So a chosen `es-ES` looking up content keyed `{ es: … }` misses the exact tag and correctly lands on the
+venue's bare-`es` primary; a venue that has *added* `{ es-ES: … }` is hit exactly. **Content keyed by the
+bare language is correct — not a short-form to normalize.** #167's shipped `localizedName`
+(`map[chosen] ?? map[lang] ?? first`) already does the right thing for this model; the only gap is the
+missing venue-default tier and its hardcoded siblings.
 
-```
+The single-lookup primitive (RFC 4647 "lookup" / the `Intl.LocaleMatcher` shape):
+
+```text
 negotiate(prefs: string[], available: string[]): string | undefined
-  for pref in prefs:
-    if available has exact  pref            -> that
-    if available has some tag whose language == language(pref)
-        -> exact-region, else venue-default-region, else first-of-that-language
-  -> undefined   (caller supplies the terminal: English for software; first-entry for content)
+  for pref in prefs:                       # prefs already region-normalized by the chooser
+    if available has exact  pref      -> that
+    if available has  language(pref)  -> that          # drop the region; no lateral sibling jump
+  -> undefined                               # caller supplies the terminal
 ```
 
-- **Software:** `negotiate([chosen], catalogueLocales) ?? en[key]`. This gives `es-PT → es-ES → en`
-  (the `es` tier is region-tolerant matching, since no catalogue is literally keyed bare `es`).
+- **Software:** `negotiate([chosen], catalogueTags) ?? en[key]`; for an unshipped language, `chosen`
+  first falls to the deployment default. Gives `es-PT → es → en`.
 - **Content:** `negotiate([chosen, venueDefault], Object.keys(map)) ?? Object.values(map)[0] ?? ""`.
-  This gives `es-PT → es-ES → venue-default → any`.
-
-This is RFC 4647 "lookup"-style matching (the `Intl.LocaleMatcher` shape), applied uniformly.
+  Gives `chosen → bare-lang → venue-default → any`.
 
 ## Two phases
 
-1. **Chooser (once):** resolve a *requested* locale (browser/OS/URL/geography) to a *chosen* SUPPORTED
-   code. Already partly present: `resolveVenueLocale` (`override → province → country → English`,
-   always returns a supported code), `SUPPORTED_LOCALES`, `setLocale`/`currentLocale`.
+1. **Chooser (once):** resolve a *requested* locale (browser / OS / URL / geography) to a *chosen*
+   SUPPORTED code. Already partly present: `resolveVenueLocale` (`override → province → country →
+   English`, always returns a supported code), `SUPPORTED_LOCALES` (es-ES, en-GB today),
+   `setLocale`/`currentLocale`.
 2. **Per-string lookup (many):** the negotiation above, over the chosen code.
 
-The phase split is what makes region weirdness harmless: an *unsupported* `es-PT` is collapsed by the
-chooser (`es-PT → es → es-ES`) and never reaches phase 2. A *supported* `es-PT` (see below) flows
-through as-is and matches by exact tag or by language.
-
-## `es-PT` as a first-class supported primary — worked cases
-
-Supporting `es-PT` as a primary language (in both domains) must work. It does:
-
-- **Unsupported `es-PT`:** chooser → `es-ES`; phase 2 sees `es-ES`. Exact/lang match on content.
-- **Supported `es-PT`:** add to `SUPPORTED_LOCALES` (+ endonym label) and ship an `es-PT` software
-  catalogue; author content under `es-PT`. Chooser returns `es-PT`. Software: `es-PT → es-ES → en` per
-  key. Content authored `es-PT`: exact hit; content authored only `es-ES`: language match; else
-  venue-default; else any.
-- **Chosen `de-DE`, content only `{es-ES, en-GB}`:** `de-DE`/`de` miss → **venue-default** (`es-ES`)
-  hits → shows Spanish, not an arbitrary language. (This is the tier `localizedName` lacks today.)
+The split keeps region arithmetic in phase 1, against a small fixed set of supported languages, so
+phase 2 only ever sees normalized supported codes.
 
 ## Two invariants it rests on
 
 1. **The chosen and venue-default languages are ALWAYS chooser outputs** (normalized supported codes).
    Enforce at every `setLocale`/preference entry point, not only at boot — a stray `setLocale("es-PT")`
-   from a URL param or a stored preference would leak an unnormalized tag into phase 2. (Region-tolerant
+   from a URL param or stored preference would leak an unnormalized tag into phase 2. (Region-tolerant
    negotiation softens this, but the invariant keeps it predictable.)
 2. **The content "default language" is the presentational venue default — NOT fiscal `invoiceLocales`.**
    `invoiceLocales` is an *ordered, fiscally-significant, per-sale-snapshotted* value
    (`packages/db/src/schema/tenants.ts:82` — its order is what the customer's document said and must
-   reproduce on a reprint/rectificativa). It must never be repurposed as a UI display preference. The
+   reproduce on a reprint/rectificativa). Never repurpose it as a UI display preference. The
    presentational default is the venue UI locale (`resolveVenueLocale`).
 
-## Audience wrinkle (same map, different terminal — and sometimes not "pick one")
+## Audience wrinkle (same content map, different terminal — and sometimes not "pick one")
 
 The same `descriptions` map is resolved differently by audience:
 
 - **Operator UI** (dashboard top-sellers): terminal = venue UI default → any.
-- **Customer invoice/receipt** (`lineName`): the fiscal `invoiceLocales`, which may hold **two**
-  languages **both printed** on the document (spec §9 — a Barcelona venue showing Spanish + Catalan).
-  So the receipt path is "render each of `invoiceLocales`, in order", not "pick one" — a different
-  consumer shape from the operator UI. The negotiation primitive still serves the per-language name
-  resolution within it.
+- **Customer invoice/receipt** (`lineName`): driven by the fiscal `invoiceLocales`, which may hold **two**
+  languages **both printed** on the document (spec §9 — a Barcelona venue showing Spanish + Catalan). So
+  the receipt path is "render each of `invoiceLocales`, in order", not "pick one". The negotiation
+  primitive still resolves each language's name within it.
 
 ## Scope when this is built
 
-1. One shared `negotiate()` (region-tolerant, descending specificity) in `@waitron/shared` (or the
-   dashboard i18n module + a server twin, since the bundle boundary forbids sharing browser/server
-   freely — mirror the existing `pickLocale`).
-2. Route `localizedName`, `lineName`, `product-list`, `recipe-screen`, and `t()`/`pickLocale` through
-   it (software terminal = English; content terminal = any). Removes the 3–4 divergent resolvers and
-   gives `t()` the missing language tier.
-3. **Two coherent key conventions, bridged by the one resolver** (owner decision, 2026-08-30) — NOT one
-   convention everywhere:
-   - **Software UI catalogues stay keyed by the LANGUAGE subtag** (`{ en, es }` column tables in
-     `apps/dashboard/src/i18n/domain.ts`, `apps/till/src/i18n/allergen-names.ts`, `strings.ts`). UI
-     chrome is per-language, not per-region ("Spanish is Spanish"), so a bare-language key is correct,
-     not sloppy. Region granularity there is YAGNI until a same-language-two-regions UI is ever wanted
-     (`SUPPORTED_LOCALES` is two languages today). Terminal English.
-   - **Venue content `descriptions` maps normalize to the full BCP-47 tag** (`es` → `es-ES`, and any
-     sibling content language → its full supported tag), matching the fiscal/invoice path (already
-     `es-ES`) so "any entry" is a true last resort. Consumers to convert in lockstep: `product-list.ts`
-     `primaryLocale = "es"` and `recipe-screen.ts` `descriptions["es"]`, plus content test
-     fixtures/seeds (no stored data to migrate — pre-production drops-and-recreates, so this is a code
-     convention change). Trace every consumer before changing the keys.
+None of this blocks the demo — single-locale venues render correctly today via the first-entry fallback,
+and #167's `localizedName` is already correct. It matters for genuinely bilingual venues, for a
+non-Spanish venue, and for adding a new primary UI language cleanly.
 
-   The region-tolerant resolver bridges a full-tag request to either (strip `es-ES`→`es` for a software
-   field; exact/language match for content). The inconsistency #167 hit was *within* content (mixed
-   `es`/`es-ES`), not the software/content split. **Timing:** do the content normalization together with
-   building the shared resolver, so the two consumers are converted once (to call the resolver), not
-   twice.
-4. A first-class presentational **venue default UI language**, distinct from fiscal `invoiceLocales`.
-
-None of this blocks the demo; single-locale venues are correct today via the first-entry fallback. It
-matters for genuinely bilingual venues and for adding a new primary language cleanly.
+1. **One shared `negotiate()`** (region-tolerant, descending specificity, no lateral jump) — in
+   `@waitron/shared`, or the dashboard i18n module plus a server twin if the browser/server bundle
+   boundary forbids sharing (mirror how `pickLocale` is placed).
+2. **Route the resolvers through it:** `localizedName`, `lineName`, `product-list`, `recipe-screen`,
+   `t()`/`pickLocale`. Software terminal = English (via deployment default); content terminal =
+   venue-default → any. This removes the divergent copies and gives `t()` the missing language tier.
+3. **De-hardcode the content default:** `product-list.ts` `primaryLocale = "es"` and `recipe-screen.ts`
+   `descriptions["es"]` should use the **venue's configured primary language** (region-tolerant), not a
+   literal `"es"`, so a non-Spanish venue works. There is **no `es → es-ES` content normalization** — the
+   bare-language keys are correct.
+4. **A first-class presentational venue default UI language** (half-exists via `resolveVenueLocale`),
+   distinct from fiscal `invoiceLocales`, feeding both the chooser's terminal and the content
+   venue-default tier.
+5. **Region overlays** (`en-US`, `es-PE`) as an optional later capability: partial catalogues that
+   inherit from the bare language — the negotiation already supports them, so this is additive.

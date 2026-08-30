@@ -729,21 +729,19 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
-- **Localized `descriptions` maps are keyed inconsistently across the tree (#167).** Grep on
-  2026-08-30: `descriptions: { "es-ES"` appears ~123× (full BCP-47 tag, the invoice/receipt path —
-  `receipt-ticket.ts`/`kitchen-print.ts` look up `descriptions[invoiceLocale]`) vs `descriptions: { es`
-  ~62× (short subtag, the catalogue/product path — `product-list.ts`/`recipe-screen.ts` look up
-  `descriptions["es"]`). So there are **three near-identical resolvers** with divergent key assumptions.
-  #167's dashboard `localizedName` now tries full-tag → short-subtag → first-value, which is robust to
-  both, but the underlying inconsistency is unresolved: **(1)** pick ONE key convention at the data
-  layer (what products/`sale_lines` actually store), and **(2)** route `product-list.ts`/`recipe-screen.ts`
-  through the shared `localizedName` (generalizing its fallback arg) so one resolver serves all. Latent
-  bug for genuinely bilingual venues (`invoiceLocales` of two langs is a first-class config); harmless
-  while venues are single-locale. **Design sketch:**
-  `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md` — one region-tolerant
-  language-negotiation primitive (RFC 4647 lookup shape) for both software strings (terminal English)
-  and venue content (terminal venue-default → any), a two-phase chooser/lookup split, and the invariant
-  that the content default is the presentational venue default, never fiscal `invoiceLocales`.
+- **Unify string resolution behind one language-negotiation resolver (#167).** There are several
+  divergent name/label resolvers (`localizedName`, `lineName`, `product-list`/`recipe-screen`'s
+  hardcoded `descriptions["es"]`, `t()`/`pickLocale`) with different, in one case dead, fallbacks. The
+  fix is one region-tolerant descending-specificity primitive (RFC 4647 lookup shape) they all call.
+  **NOT an `es → es-ES` normalization** — a settled design decision (2026-08-30): venue content is keyed
+  by the venue's **primary language as the bare tag** (`es` = "our Spanish"), with full tags (`es-ES`)
+  only for explicitly-added regional variants, so the bare-`es` content is correct and #167's shipped
+  `localizedName` already resolves it right. The real remaining work: **(1)** the shared `negotiate()`;
+  **(2)** de-hardcode `product-list.ts`/`recipe-screen.ts`'s literal `"es"` to the venue's configured
+  primary language; **(3)** give `t()` its missing language-subtag tier; **(4)** a first-class
+  presentational venue-default UI language distinct from fiscal `invoiceLocales`. Latent (matters for
+  bilingual / non-Spanish venues, region overlays like en-US); harmless today. **Design:**
+  `docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md`.
 
 - **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 landed the shared
   `readJsonBody` helper and converted all 51 `?? {}` / exact-`.catch(() => ({})) ?? {}` sites across
