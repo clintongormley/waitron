@@ -31,10 +31,19 @@ async function type(el: SetupAdminScreen, field: string, value: string): Promise
 afterEach(cleanupWidgets);
 
 describe("setup-admin-screen", () => {
-  it("collects the three fields and advances to venue with the admin patch", async () => {
+  it("renders the email field as an email-typed wt-input", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const email = q(el, "[data-test=email]");
+    expect(email).not.toBeNull();
+    expect(email!.tagName.toLowerCase()).toBe("wt-input");
+    expect(email!.getAttribute("type")).toBe("email");
+  });
+
+  it("collects the four fields and advances to venue with the admin patch", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
     await type(el, "displayName", "Alba");
+    await type(el, "email", "alba@example.com");
     await type(el, "password", "correct horse");
     await type(el, "pin", "1234");
     q(el, "[data-test=next]")!.click();
@@ -43,12 +52,35 @@ describe("setup-admin-screen", () => {
         kind: "patch",
         detail: {
           patch: {
-            venue: { admin: { displayName: "Alba", pin: "1234", password: "correct horse" } },
+            venue: {
+              admin: {
+                displayName: "Alba",
+                email: "alba@example.com",
+                pin: "1234",
+                password: "correct horse",
+              },
+            },
           },
         },
       },
       { kind: "goto", detail: { screen: "venue" } },
     ]);
+  });
+
+  // The email non-empty guard: it is the admin's dashboard-login credential, required like the rest.
+  it("blocks Next and marks email invalid when email is left blank", async () => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const events = collect(host);
+    await type(el, "displayName", "Alba");
+    await type(el, "password", "correct horse");
+    await type(el, "pin", "1234");
+    // email left blank
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
   });
 
   // The non-empty guard. Prove-by-deletion: drop the `invalid.size > 0` return and this flips red —
@@ -88,6 +120,7 @@ describe("setup-admin-screen", () => {
     await el.updateComplete;
     expect(q(el, "[data-test=error]")).not.toBeNull();
     await type(el, "displayName", "Alba");
+    await type(el, "email", "alba@example.com");
     await type(el, "password", "pw");
     await type(el, "pin", "1234");
     q(el, "[data-test=next]")!.click();
@@ -107,24 +140,33 @@ describe("setup-admin-screen", () => {
   // restore the operator's typed credentials (password + PIN included) rather than blanking them.
   it("seeds the editable fields from a draft so Back-then-forward is non-destructive", async () => {
     const draft: DeepPartial<ProvisionBody> = {
-      venue: { admin: { displayName: "Alba", password: "correct horse", pin: "1234" } },
+      venue: {
+        admin: {
+          displayName: "Alba",
+          email: "alba@example.com",
+          password: "correct horse",
+          pin: "1234",
+        },
+      },
     };
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
     const val = (field: string) =>
       (q(el, `[data-test=${field}]`) as unknown as { value: string }).value;
     expect(val("displayName")).toBe("Alba");
+    expect(val("email")).toBe("alba@example.com");
     expect(val("password")).toBe("correct horse");
     expect(val("pin")).toBe("1234");
   });
 
   it("seeds only the fields a partial draft admin carries, leaving the rest blank", async () => {
     const draft: DeepPartial<ProvisionBody> = {
-      venue: { admin: { displayName: "Alba" } }, // no password, no pin
+      venue: { admin: { displayName: "Alba" } }, // no email, no password, no pin
     };
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", { draft });
     const val = (field: string) =>
       (q(el, `[data-test=${field}]`) as unknown as { value: string }).value;
     expect(val("displayName")).toBe("Alba");
+    expect(val("email")).toBe("");
     expect(val("password")).toBe("");
     expect(val("pin")).toBe("");
   });

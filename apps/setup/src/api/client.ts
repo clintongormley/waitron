@@ -36,9 +36,11 @@ export interface SetupStatus {
  * The first operator's credentials, collected on the admin step. Sent PLAINTEXT — the server hashes
  * `pin`/`password` with `hashPin`/`hashPassword` at the request boundary
  * (`apps/server/src/setup-api.ts`) into the stored `pinHash`/`passwordHash`; the browser never hashes.
+ * `email` is the admin's dashboard-login credential — REQUIRED, validated/normalised server-side.
  */
 export interface AdminDraft {
   displayName: string;
+  email: string;
   pin: string;
   password: string;
 }

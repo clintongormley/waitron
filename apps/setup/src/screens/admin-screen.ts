@@ -10,9 +10,10 @@ import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
 /**
- * The wizard's second step: the first operator's credentials — a display name, a login password, and
- * a numeric PIN. All three are required; the server hashes `pin`/`password` at the boundary
- * (`apps/server/src/setup-api.ts`), so they travel plaintext and the wizard never hashes.
+ * The wizard's second step: the first operator's credentials — a display name, a login email, a login
+ * password, and a numeric PIN. All four are required (the email is the admin's dashboard-login
+ * credential); the server hashes `pin`/`password` at the boundary (`apps/server/src/setup-api.ts`), so
+ * they travel plaintext and the wizard never hashes.
  *
  * On `Next` it client-validates that none is blank — a blank one shows a `role="alert"` banner and
  * marks the offending field(s) `invalid`, and nothing is emitted — then emits the admin slice as a
@@ -26,8 +27,8 @@ import type { ProvisionBody } from "../api/client.js";
  * `#seeded`/`#seedFromDraft` idiom in `apps/setup/src/screens/venue-screen.ts`.
  */
 
-/** The three credential fields, each a `wt-input`. */
-type AdminField = "displayName" | "password" | "pin";
+/** The four credential fields, each a `wt-input`. */
+type AdminField = "displayName" | "email" | "password" | "pin";
 
 @customElement("setup-admin-screen")
 export class SetupAdminScreen extends LitElement {
@@ -49,6 +50,7 @@ export class SetupAdminScreen extends LitElement {
   /** The editable credential fields. Seeding overlays whatever the draft already holds. */
   @state() private values: Record<AdminField, string> = {
     displayName: "",
+    email: "",
     password: "",
     pin: "",
   };
@@ -75,6 +77,7 @@ export class SetupAdminScreen extends LitElement {
     const admin = this.draft.venue?.admin ?? {};
     this.values = {
       displayName: admin.displayName ?? this.values.displayName,
+      email: admin.email ?? this.values.email,
       password: admin.password ?? this.values.password,
       pin: admin.pin ?? this.values.pin,
     };
@@ -93,6 +96,7 @@ export class SetupAdminScreen extends LitElement {
   #next(): void {
     const invalid = new Set<AdminField>();
     if (this.values.displayName.trim() === "") invalid.add("displayName");
+    if (this.values.email.trim() === "") invalid.add("email");
     if (this.values.password.trim() === "") invalid.add("password");
     if (this.values.pin.trim() === "") invalid.add("pin");
     this.invalid = invalid;
@@ -105,6 +109,7 @@ export class SetupAdminScreen extends LitElement {
       venue: {
         admin: {
           displayName: this.values.displayName,
+          email: this.values.email,
           pin: this.values.pin,
           password: this.values.password,
         },
@@ -135,12 +140,12 @@ export class SetupAdminScreen extends LitElement {
       <wt-card>
         <h1>The first operator</h1>
         <p>Create the account that manages this box. You can add more people later.</p>
-        ${this.#field("Display name", "displayName")}
+        ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
         ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
         ${
           this.showError
             ? html`<p class="error" role="alert" data-test="error">
-                Enter a display name, password and PIN for the first operator.
+                Enter a display name, email, password and PIN for the first operator.
               </p>`
             : nothing
         }
