@@ -1008,6 +1008,135 @@ describe("DashboardApi — purchase invoices", () => {
   });
 });
 
+describe("DashboardApi — bookings", () => {
+  const booking = {
+    id: "bk-1",
+    bookingDate: "2026-08-20",
+    bookingTime: "20:00:00",
+    partySize: 4,
+    contactName: "García",
+    contactPhone: null,
+    notes: null,
+    tableId: null,
+    tabId: null,
+    status: "booked",
+    createdBy: "p1",
+    createdAt: "2026-08-19T10:00:00.000Z",
+  };
+
+  it("listBookings GETs the day's collection with the date query and credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([booking]));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listBookings("2026-08-20")).toEqual([booking]);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings?date=2026-08-20", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createBooking POSTs the plain local date+time (NOT a UTC instant) and returns { id } (201)", async () => {
+    const input = {
+      bookingDate: "2026-08-20",
+      bookingTime: "20:00",
+      partySize: 4,
+      contactName: "García",
+      contactPhone: null,
+      notes: null,
+      tableId: null,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "bk-1" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createBooking(input)).toEqual({ id: "bk-1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    // Load-bearing (anti-#52): the body carries a plain `YYYY-MM-DD` + `HH:MM`, never a `…Z` instant.
+    const sentBody = fetchImpl.mock.calls[0]![1].body as string;
+    expect(sentBody).not.toContain("T20:00");
+    expect(sentBody).not.toContain("Z");
+  });
+
+  it("updateBooking PATCHes the patch and resolves undefined on a 204", async () => {
+    const patch = { partySize: 6, contactName: "García Pérez" };
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateBooking("bk-1", patch)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  });
+
+  it("seatBooking POSTs the optional table and returns { tabId }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ tabId: "tab-9" }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.seatBooking("bk-1", { tableId: "t-1" })).toEqual({ tabId: "tab-9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1/seat", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tableId: "t-1" }),
+    });
+  });
+
+  it("seatBooking POSTs an empty body when no table is passed (reuse the booking's own table)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ tabId: "tab-9" }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.seatBooking("bk-1")).toEqual({ tabId: "tab-9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1/seat", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+  });
+
+  it("cancelBooking POSTs .../cancel and resolves undefined on a 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.cancelBooking("bk-1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1/cancel", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("markNoShow POSTs .../no-show and resolves undefined on a 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.markNoShow("bk-1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1/no-show", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("completeBooking POSTs .../complete and resolves undefined on a 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.completeBooking("bk-1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings/bk-1/complete", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("rejects with the envelope code when the table is busy (tab.already_open)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "tab.already_open" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.seatBooking("bk-1", { tableId: "t-1" })).rejects.toMatchObject({
+      code: "tab.already_open",
+    });
+  });
+});
+
 describe("DashboardApi — ingredients + product recipe", () => {
   it("listIngredients GETs /management-api/ingredients with credentials", async () => {
     const rows = [

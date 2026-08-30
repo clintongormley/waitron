@@ -124,6 +124,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
+  // A tab is already open on the target table (TS-1's one-open-tab-per-table guard) — surfaced when a
+  // booking is seated onto a table that is already busy (Bookings-1 §3b).
+  "tab.already_open": {
+    en: "That table already has an open tab",
+    es: "Esa mesa ya tiene una cuenta abierta",
+  },
   // Floor-plan spatial placement (apps/server/src/tables.ts, FP-2). The Plano editor's canvas emits a
   // placement the server refuses when a coordinate is out of range, the shape/rotation is bad, or the
   // target zone is inactive — surfaced as this one code (its params name the FIELD, never the value).
@@ -304,6 +310,34 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "purchase.amounts_invalid": {
     en: "Check the amounts: rates 0–100, no negatives",
     es: "Revisa los importes: tipos 0–100, sin negativos",
+  },
+  // Bookings (staff-entered table reservations, Bookings-1). The server codes the booking routes reject
+  // with; `table.not_found` and `tab.already_open` (both above) cover an assigned table that no longer
+  // takes a party and a table already busy at seat time. The last two here are the form's own
+  // client-side validation messages (mirroring the op's checks for UX).
+  "booking.not_found": {
+    en: "That booking could not be found",
+    es: "No se ha encontrado esa reserva",
+  },
+  "booking.invalid": {
+    en: "The party size must be 1 or more",
+    es: "El número de comensales debe ser 1 o más",
+  },
+  "booking.invalid_transition": {
+    en: "That booking can't move to that state now",
+    es: "Esa reserva no puede pasar a ese estado ahora",
+  },
+  "booking.table_required": {
+    en: "Choose a table to seat this booking",
+    es: "Elige una mesa para sentar esta reserva",
+  },
+  "booking.fields_required": {
+    en: "Fill in the date, time, party size and name",
+    es: "Rellena la fecha, la hora, los comensales y el nombre",
+  },
+  "booking.party_invalid": {
+    en: "Party size must be a whole number of 1 or more",
+    es: "Los comensales deben ser un número entero de 1 o más",
   },
   "server.internal": {
     en: "Something went wrong, try again",

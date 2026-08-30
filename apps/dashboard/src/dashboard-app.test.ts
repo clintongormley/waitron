@@ -124,6 +124,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
     // no stray rejection.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
+    // The bookings screen the nav mounts loads both on connect (listTables for the form picker + seat
+    // prompt, then the day's bookings); resolve them so navigating to it leaves no stray rejection.
+    listTables: vi.fn().mockResolvedValue([]),
+    listBookings: vi.fn().mockResolvedValue([]),
     // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
     // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
@@ -222,7 +226,7 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The seventeen manager faces the grouped sidebar switches between, every one keeping its `data-test`
+/** The eighteen manager faces the grouped sidebar switches between, every one keeping its `data-test`
  * id. Order is the sidebar's render order (pinned overview+sales, then Menu / Service / Team /
  * Purchasing / Configuration). */
 const NAV_SCREENS = [
@@ -232,6 +236,7 @@ const NAV_SCREENS = [
   "location-menus",
   "recipe",
   "floor",
+  "bookings",
   "statuses",
   "kitchen",
   "staff",
@@ -669,7 +674,7 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the seventeen manager
+  // The grouped static sidebar (Task 11): every group header renders, every one of the eighteen manager
   // faces keeps its `data-test="nav-<screen>"` id, and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all 17 nav items", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -681,9 +686,9 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the seventeen manager faces is present by its stable data-test id.
+    // …and every one of the eighteen manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(17);
+    expect(NAV_SCREENS).toHaveLength(18);
   });
 
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
@@ -745,7 +750,7 @@ describe("dashboard-app", () => {
   });
 
   // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
-  // its seventeen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
+  // its eighteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
   // every visible control. It stays interactive at desktop width and whenever the drawer is open.
   // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
   // sidebar never-inert, so the narrow+closed assertion below goes red.
@@ -763,7 +768,7 @@ describe("dashboard-app", () => {
       // Desktop (matchMedia does not match): in-flow and fully interactive.
       expect(sidebar().hasAttribute("inert")).toBe(false);
 
-      // Narrow + closed → inert (the seventeen nav buttons leave the tab order + a11y tree).
+      // Narrow + closed → inert (the eighteen nav buttons leave the tab order + a11y tree).
       mq.set(true);
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(true);

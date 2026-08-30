@@ -149,6 +149,17 @@ const PURCHASE_VAT_KIND_NAMES: NameTable = {
   capital: { en: "Capital goods", es: "Bien de inversión" },
 };
 
+// The five booking lifecycle statuses (the `booking_status` pgEnum, Bookings-1), shown on the Bookings
+// day-list. English is the source of truth; the Spanish is user-facing translation. Feminine agreement
+// — "reserva" is feminine. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
+const BOOKING_STATUS_NAMES: NameTable = {
+  booked: { en: "Booked", es: "Reservada" },
+  seated: { en: "Seated", es: "Sentada" },
+  completed: { en: "Completed", es: "Completada" },
+  no_show: { en: "No-show", es: "No presentada" },
+  cancelled: { en: "Cancelled", es: "Cancelada" },
+};
+
 // The three printer transports (@waitron/printing PrintTransport / the `print_transport` pgEnum), shown
 // on the Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables
 // above. "USB" / "TCP" stay as-is in both columns (they are the wire/protocol names).
@@ -286,4 +297,10 @@ export function regimeName(value: string, locale: string = currentLocale()): str
 /** A purchase-invoice VAT kind (ordinary / capital) → its display name (raw-value fallback). */
 export function vatKindName(value: string, locale: string = currentLocale()): string {
   return resolve(PURCHASE_VAT_KIND_NAMES, value, locale);
+}
+
+/** A booking status (booked / seated / completed / no_show / cancelled) → its display name (raw-value
+ * fallback for an unmapped status). */
+export function bookingStatusName(value: string, locale: string = currentLocale()): string {
+  return resolve(BOOKING_STATUS_NAMES, value, locale);
 }

@@ -22,6 +22,7 @@ import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
+import "./screens/bookings-screen.js";
 import "./screens/kitchen-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
@@ -40,9 +41,9 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
  * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- * `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`,
- * `purchases`, `recipe`, `devices` and `printers` are the seventeen MANAGER faces the nav switches
- * between — `overview` is also
+ * `layout`, `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
+ * `planned-actual`, `purchases`, `recipe`, `devices` and `printers` are the eighteen MANAGER faces the
+ * nav switches between — `overview` is also
  * the post-login/post-probe LANDING for every non-staff role (Task 9); `my-schedule` is the sole face
  * of a `staff`-role session and carries no nav. All logged-in faces share the same chrome (logout, plus
  * the nav for a non-staff session).
@@ -59,6 +60,7 @@ type Screen =
   | "receipt"
   | "statuses"
   | "floor"
+  | "bookings"
   | "kitchen"
   | "roster"
   | "approvals"
@@ -104,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.service",
     items: [
       { screen: "floor", labelKey: "nav.floor" },
+      { screen: "bookings", labelKey: "nav.bookings" },
       { screen: "statuses", labelKey: "nav.statuses" },
       { screen: "kitchen", labelKey: "nav.kitchen" },
     ],
@@ -152,9 +155,10 @@ const NAV_GROUPS: NavGroup[] = [
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `overview` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the seventeen manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- *    `layout`, `receipt`, `statuses`, `floor`, `kitchen`, `roster`, `approvals`, `planned-actual`,
- *    `purchases`, `recipe`, `devices` and `printers` — a plain local state change, no server call. A `staff` session has no
+ *    the eighteen manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
+ *    `layout`, `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
+ *    `planned-actual`, `purchases`, `recipe`, `devices` and `printers` — a plain local state change, no
+ *    server call. A `staff` session has no
  *    nav (the self-service view is its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
@@ -688,6 +692,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-service-status-screen>`;
       case "floor":
         return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
+      case "bookings":
+        return html`<dashboard-bookings-screen .api=${this.api}></dashboard-bookings-screen>`;
       case "kitchen":
         return html`<dashboard-kitchen-screen .api=${this.api}></dashboard-kitchen-screen>`;
       case "roster":
