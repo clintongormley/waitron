@@ -1,1 +1,0 @@
-CREATE INDEX "bookings_tenant_table_status_date_time_idx" ON "bookings" USING btree ("tenant_id","table_id","status","booking_date","booking_time");
