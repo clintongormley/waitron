@@ -249,11 +249,13 @@ export class DevicesScreen extends LitElement {
     const needsStation = this.kind === "kds_station";
     if (needsStation && this.selectedStation === "") return;
     try {
-      const { code } = await this.api.createDeviceCode(
-        needsStation
-          ? { kind: this.kind, stationId: this.selectedStation, label }
-          : { kind: this.kind, label },
-      );
+      const { code } = await this.api.createDeviceCode({
+        kind: this.kind,
+        // A `kds_station` binds to the picked station; a station-less `handheld` sends `undefined`,
+        // which `JSON.stringify` drops from the wire payload — so the request shape is unchanged.
+        stationId: needsStation ? this.selectedStation : undefined,
+        label,
+      });
       this.generatedCode = code;
       this.copied = false;
       this.label = "";

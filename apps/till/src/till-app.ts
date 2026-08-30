@@ -602,16 +602,19 @@ export class TillApp extends LitElement {
       // likewise fetches neither).
       await this.#refreshHeldOrders();
       await this.#refreshStationQueue();
-    }
-    // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
-    // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
-    // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
-    // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
-    // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
-    try {
-      this.staff = await this.api.listStaff();
-    } catch {
-      // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
+      // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
+      // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
+      // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
+      // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
+      // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
+      // ON THE COUNTER PATH ONLY: `staff` is consumed exclusively by `case "schedule":`, a face a
+      // handheld's face-set can never reach ({@link HANDHELD_FACES}), so a handheld landing on the floor
+      // never fetches it — mirroring the held-list/station-queue guard above.
+      try {
+        this.staff = await this.api.listStaff();
+      } catch {
+        // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
+      }
     }
   }
 
@@ -1415,11 +1418,28 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * The ONE place a face-outside-the-current-shell transition is decided (handheld-tableside §6a). A
+   * normal operator till may reach every {@link Screen}; a handheld may reach ONLY {@link HANDHELD_FACES}
+   * (`lock`/`floor`/`table-order`), so a `target` outside that set is REFUSED — the handheld stays put.
+   * This makes {@link HANDHELD_FACES} the genuine gate (not a scattered `handheldMode` read): any handler
+   * that could move the app to a counter-side face while a handheld is active routes through here, so even
+   * a stray/bubbled `back-to-counter` cannot escape the phone shell into the counter POS (and the
+   * `station`/`expo`/`schedule` it leads to). Proven by deletion: drop the guard and a handheld's
+   * `back-to-counter` lands it on the counter (the §6a containment test goes red).
+   */
+  #goToScreen(target: Screen): void {
+    if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
+    this.screen = target;
+  }
+
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
-   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). */
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip).
+   * Routed through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use
+   * it to escape the phone shell; a normal till reaches the counter exactly as before. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
-    this.screen = "counter";
+    this.#goToScreen("counter");
   }
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
@@ -1605,6 +1625,7 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .api=${this.api}
           .canEdit=${this.canEdit}
+          .canExitToCounter=${!this.handheldMode}
         ></till-floor-screen>`;
       // FP-1 (Ruling FP-D): the per-table ordering screen. It renders from the app-owned tab lines
       // (loaded via `getTabLines`, reloaded after each round/serve) and emits `send-round`/`serve-line`/

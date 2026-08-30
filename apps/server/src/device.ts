@@ -25,7 +25,9 @@ import { requireLiveStation } from "./kitchen.js";
 // to read / the route to set the cookie); neither is ever logged or persisted in the clear.
 
 /** The kind of device an enrolment produces. Derived from the `device_kind` pgEnum so it stays in
- * lockstep with the schema — only `kds_station` is wired this slice (an always-on kitchen screen). */
+ * lockstep with the schema. Two kinds are wired end-to-end (mint, enrol, session, firewall): a
+ * `kds_station` (an always-on kitchen screen, station-bound) and a `handheld` (a roving, station-less
+ * waiter phone — the order-only tableside device). */
 export type DeviceKind = (typeof deviceKind.enumValues)[number];
 
 /**

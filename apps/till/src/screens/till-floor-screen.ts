@@ -271,6 +271,14 @@ export class TillFloorScreen extends LitElement {
    * write (FP-2 Task 4), so this is convenience, not security.
    */
   @property({ attribute: false }) canEdit = false;
+  /**
+   * Whether this face may return to the COUNTER (handheld-tableside §6a). A counter/fixed till can
+   * (default `true`); an order-only handheld's floor is the TOP of the phone shell — `HANDHELD_FACES`
+   * excludes `counter` — so the app threads `false` and the Back-to-counter affordance is not rendered.
+   * UI honesty only: the app's own face-set gate (`#goToScreen`) is what actually refuses the
+   * transition, so even a stray `back-to-counter` cannot escape the shell.
+   */
+  @property({ attribute: false }) canExitToCounter = true;
 
   /**
    * Which zone tab is showing: a zone id, `null` for the "Sin zona" tab, or `undefined` before the
@@ -444,9 +452,13 @@ export class TillFloorScreen extends LitElement {
                   </wt-button>`
                 : nothing
             }
-            <wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-              ${t("floor.back")}
-            </wt-button>
+            ${
+              this.canExitToCounter
+                ? html`<wt-button class="back" variant="secondary" @click=${() => this.#back()}>
+                    ${t("floor.back")}
+                  </wt-button>`
+                : nothing
+            }
           </div>
         </header>
         ${

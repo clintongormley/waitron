@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
@@ -110,13 +110,22 @@ type ProbeResult =
   | { ok: true; binding: { deviceId: string; kind: string; stationId: string | null } }
   | { ok: false; code: string };
 
-/** Run `requireDevice` behind a one-route Hono app carrying the given cookie value (or none), the
- * `management-session.test.ts` shape. Returns the binding on success or the thrown code on failure. */
-async function probe(cfg: TillConfig, cookieValue: string | null): Promise<ProbeResult> {
+/**
+ * The shared one-route scaffold every guard probe runs behind (the `management-session.test.ts`
+ * shape): a fresh Hono app whose sole `GET /probe` runs `handler` with the guard's `deps` + the request
+ * `Context`, carrying the given cookie value (or none), with an `onError` that captures any throw. The
+ * three probes below differ only in which guard they call and how they read the outcome — they supply
+ * `handler` and interpret `{ res, thrown }`; the setup lives here once.
+ */
+async function runProbe(
+  cfg: TillConfig,
+  cookieValue: string | null,
+  handler: (deps: { db: Database; cfg: { tenantId: string } }, c: Context) => Promise<Response>,
+): Promise<{ res: Response; thrown: unknown }> {
   const app = new Hono();
   const deps = { db: suite.admin, cfg: { tenantId: cfg.tenantId } };
   let thrown: unknown;
-  app.get("/probe", async (c) => c.json(await requireDevice(deps, c)));
+  app.get("/probe", (c) => handler(deps, c));
   app.onError((err, c) => {
     thrown = err;
     return c.body(null, 500);
@@ -124,6 +133,15 @@ async function probe(cfg: TillConfig, cookieValue: string | null): Promise<Probe
   const res = await app.request(
     "/probe",
     cookieValue === null ? undefined : { headers: { cookie: `${DEVICE_COOKIE}=${cookieValue}` } },
+  );
+  return { res, thrown };
+}
+
+/** Run `requireDevice` behind the shared scaffold. Returns the binding on success or the thrown code on
+ * failure. */
+async function probe(cfg: TillConfig, cookieValue: string | null): Promise<ProbeResult> {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) =>
+    c.json(await requireDevice(deps, c)),
   );
   if (res.status === 200) {
     return {
@@ -150,47 +168,29 @@ async function enrolHandheldFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
 
-/** Run the NON-throwing `tryReadDevice` behind a one-route app, returning the binding or `null` it
- * resolves the cookie to — the `probe` shape, but reading the value instead of catching a throw. */
+/** Run the NON-throwing `tryReadDevice` behind the shared scaffold, returning the binding or `null` it
+ * resolves the cookie to — the `probe` shape, but reading the JSON-encoded value instead of catching a
+ * throw (a `null` round-trips as `null`). */
 async function probeTry(
   cfg: TillConfig,
   cookieValue: string | null,
 ): Promise<DeviceBinding | null> {
-  const app = new Hono();
-  const deps = { db: suite.admin, cfg: { tenantId: cfg.tenantId } };
-  let out: DeviceBinding | null = null;
-  app.get("/probe", async (c) => {
-    out = await tryReadDevice(deps, c);
-    return c.body(null, 204);
-  });
-  await app.request(
-    "/probe",
-    cookieValue === null ? undefined : { headers: { cookie: `${DEVICE_COOKIE}=${cookieValue}` } },
+  const { res } = await runProbe(cfg, cookieValue, async (deps, c) =>
+    c.json((await tryReadDevice(deps, c)) ?? null),
   );
-  return out;
+  return (await res.json()) as DeviceBinding | null;
 }
 
-/** Run `assertNotHandheld` behind a one-route app: `{ ok: true }` when it passes (no throw), or the
+/** Run `assertNotHandheld` behind the shared scaffold: `{ ok: true }` when it passes (no throw), or the
  * thrown code when it refuses. */
 async function probeAssert(
   cfg: TillConfig,
   cookieValue: string | null,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
-  const app = new Hono();
-  const deps = { db: suite.admin, cfg: { tenantId: cfg.tenantId } };
-  let thrown: unknown;
-  app.get("/probe", async (c) => {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
     await assertNotHandheld(deps, c, "record_sale");
     return c.body(null, 204);
   });
-  app.onError((err, c) => {
-    thrown = err;
-    return c.body(null, 500);
-  });
-  const res = await app.request(
-    "/probe",
-    cookieValue === null ? undefined : { headers: { cookie: `${DEVICE_COOKIE}=${cookieValue}` } },
-  );
   if (res.status === 204) return { ok: true };
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }

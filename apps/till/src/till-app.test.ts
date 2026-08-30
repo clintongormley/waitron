@@ -534,6 +534,61 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
+  // Handheld face-set containment (§6a): the phone shell may reach ONLY `HANDHELD_FACES`
+  // (`lock`/`floor`/`table-order`). A `back-to-counter` — whether from the floor's Back affordance or
+  // bubbled from any child — must NOT land the handheld on the counter POS (from which `station`/`expo`/
+  // `schedule` are reachable). The screen state machine consults the face-set instead of navigating
+  // blindly; the floor's Back affordance is suppressed in handheld mode (`canExitToCounter`).
+  describe("handheld face-set containment (§6a)", () => {
+    /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
+    async function toHandheldFloor(): Promise<TillApp> {
+      const { el } = await mountApp({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([openTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        getTabLines: vi.fn().mockResolvedValue([]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      return el;
+    }
+
+    it("suppresses the floor's back-to-counter affordance in handheld mode (canExitToCounter=false)", async () => {
+      const el = await toHandheldFloor();
+      expect(floor(el)).not.toBeNull();
+      // UI honesty: the handheld floor is the top of the phone shell, so its Back-to-counter control is
+      // gone (a handheld has no counter to return to).
+      expect(floor(el)!.canExitToCounter).toBe(false);
+      expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
+    });
+
+    it("does NOT leave the face-set when back-to-counter fires from the floor (stays on floor)", async () => {
+      const el = await toHandheldFloor();
+      // Fire the escape event the floor's Back used to emit — the app's face-set gate must swallow it.
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+      // Still on the floor; the counter POS (and the station/expo/schedule it leads to) is unreachable.
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
+
+    it("does NOT leave the face-set when back-to-counter bubbles from the table-order screen", async () => {
+      const el = await toHandheldFloor();
+      emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      // A stray back-to-counter bubbling up from the table-order subtree must be gated too — the handheld
+      // stays on `table-order` (a face-set member), never falls through to the counter.
+      emit(tableOrder(el)!, "back-to-counter");
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
+  });
+
   it("a normal operator till (401 identity probe) stays on the lock screen with NO boot error", async () => {
     // The default stub's getDeviceIdentity rejects `device.unauthorized` — the expected not-a-device case.
     const { el } = await mountApp();
