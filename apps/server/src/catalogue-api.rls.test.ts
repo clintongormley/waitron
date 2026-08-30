@@ -49,6 +49,8 @@ function nextNif(): string {
 
 interface Venue {
   tenantId: string;
+  /** This venue's single location id — the `:locationId` the location-menu routes act on. */
+  locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
@@ -117,6 +119,7 @@ async function setupVenue(): Promise<Venue> {
 
   return {
     tenantId: venue.tenantId,
+    locationId: venue.locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
@@ -373,6 +376,80 @@ describe("Catalogue API over real Postgres (RLS end-to-end)", () => {
         { catalogueId: ZERO_UUID },
       ),
     );
+  });
+
+  it("refuses a cross-tenant catalogueId on the location-menu writes — 404, no cross-tenant default set", async () => {
+    // The guard that closes the single-column `locations.catalogue_id` FK hole (0028). That FK is NOT
+    // tenant-scoped and a FK check BYPASSES RLS, so WITHOUT `assertCatalogueVisible` a PUT default with
+    // another tenant's catalogueId would SUCCEED and set a cross-tenant catalogue as tenant A's default
+    // (`location_catalogues`' composite FK would 23503 the POST anyway; the guard makes both a clean 404).
+    //
+    // GUARD-BY-DELETION (assertCatalogueVisible), run on postgres:18 via Testcontainers
+    // (TESTCONTAINERS_RYUK_DISABLED=true): removed BOTH `await assertCatalogueVisible(tx, catalogueId);`
+    // calls from `catalogue-api.ts`. This test then FAILED — the PUT returned 204 and tenant A's location
+    // default became tenant B's catalogue id (the final `some(isDefault)` flipped true). Restored the two
+    // lines and it passed again; `git diff catalogue-api.ts` clean afterwards.
+    const a = await setupVenue();
+    const b = await setupVenue();
+    const appA = mountApp(a.tenantId);
+    const appB = mountApp(b.tenantId);
+    const catB = await createCatalogue(appB, b.managerCookie, "Carta B");
+
+    const putPath = `/management-api/locations/${a.locationId}/default-catalogue`;
+    const put = await send(appA, "PUT", putPath, a.managerCookie, { catalogueId: catB });
+    expect(put.status).toBe(404);
+    expect((await put.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "catalogue.not_found" },
+    });
+
+    const postPath = `/management-api/locations/${a.locationId}/catalogues`;
+    const post = await send(appA, "POST", postPath, a.managerCookie, { catalogueId: catB });
+    expect(post.status).toBe(404);
+
+    // Tenant A has NO default set — the cross-tenant id never landed. A cannot see catB at all, so every
+    // row A gets back reads `isDefault:false`.
+    const list = await send(appA, "GET", postPath, a.managerCookie);
+    const rows = (await list.json()) as { id: string; isDefault: boolean }[];
+    expect(rows.some((r) => r.isDefault)).toBe(false);
+  });
+
+  it("adds, defaults and removes a location's menus as the app role under RLS (grants proof)", async () => {
+    // The successful WRITE path on real Postgres — app_user doing INSERT/DELETE on `location_catalogues`
+    // and UPDATE on `locations` under RLS. PGlite (a superuser) cannot prove those grants; a missing GRANT
+    // would pass every PGlite test and fail only at runtime. Mirrors the product-image successful-write
+    // RLS test below.
+    const a = await setupVenue();
+    const app = mountApp(a.tenantId);
+    const casa = await createCatalogue(app, a.managerCookie, "Casa");
+    const dia = await createCatalogue(app, a.managerCookie, "Día");
+    const cataloguesPath = `/management-api/locations/${a.locationId}/catalogues`;
+    const defaultPath = `/management-api/locations/${a.locationId}/default-catalogue`;
+
+    expect(
+      (await send(app, "POST", cataloguesPath, a.managerCookie, { catalogueId: dia })).status,
+    ).toBe(204);
+    expect(
+      (await send(app, "PUT", defaultPath, a.managerCookie, { catalogueId: casa })).status,
+    ).toBe(204);
+    const afterAdd = (await (await send(app, "GET", cataloguesPath, a.managerCookie)).json()) as {
+      id: string;
+      sellable: boolean;
+      isDefault: boolean;
+    }[];
+    const byId = new Map(afterAdd.map((r) => [r.id, r]));
+    expect(byId.get(casa)).toMatchObject({ sellable: true, isDefault: true });
+    expect(byId.get(dia)).toMatchObject({ sellable: true, isDefault: false });
+
+    expect((await send(app, "DELETE", `${cataloguesPath}/${dia}`, a.managerCookie)).status).toBe(
+      204,
+    );
+    const afterRemove = (await (
+      await send(app, "GET", cataloguesPath, a.managerCookie)
+    ).json()) as {
+      id: string;
+      sellable: boolean;
+    }[];
+    expect(afterRemove.find((r) => r.id === dia)).toMatchObject({ sellable: false });
   });
 
   it("writes and reads the product image under RLS; a cross-tenant read returns nothing (design §5a)", async () => {

@@ -317,6 +317,24 @@ describe("mountCatalogueApi — location menus", () => {
     });
   });
 
+  it("POST with a valid-but-nonexistent catalogueId → catalogue.not_found 404", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", cataloguesPath(), {
+      body: { catalogueId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
+  });
+
+  it("PUT default-catalogue with a valid-but-nonexistent catalogueId → catalogue.not_found 404", async () => {
+    const app = mountApp();
+    const res = await send(app, "PUT", defaultPath(), {
+      body: { catalogueId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
+  });
+
   it("POST with a malformed-uuid catalogueId → shared.invalid_id 400", async () => {
     const app = mountApp();
     const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: "not-a-uuid" } });

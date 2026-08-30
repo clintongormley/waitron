@@ -24,5 +24,13 @@ declare module "@waitron/shared" {
      * stream before the file is measured — so a consumer must not render it as "your file was N bytes".
      */
     "media.too_large": { size: number; limit: number };
+    /**
+     * A catalogue id supplied to a location-menu write (add-member / set-default) names no catalogue
+     * VISIBLE to the current tenant — it is absent, or another tenant's (RLS hides it). Thrown at the
+     * trust boundary because `locations.catalogue_id`'s FK is single-column/global (not tenant-scoped),
+     * so a foreign id would otherwise be accepted as a location's default; the `location_catalogues`
+     * FK is composite, so it would `23503` instead — this guard makes both routes reject it cleanly.
+     */
+    "catalogue.not_found": { catalogueId: string };
   }
 }

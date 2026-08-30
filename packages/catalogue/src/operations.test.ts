@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -9,6 +10,7 @@ import {
   addCatalogueToLocation,
   applyRecipeDerivation,
   assignCatalogueToLocation,
+  catalogueExists,
   createCatalogue,
   createCategory,
   createProduct,
@@ -679,8 +681,11 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Re-setting the same catalogue as default is a no-op: it must NOT demote the catalogue to a member
-  // (which would leave it as both default and member) — the old==new branch skips the keep-sellable add.
+  // Re-setting the same catalogue as default must NOT insert a redundant `location_catalogues` member
+  // row for it (leaving it as both default and member) — the `defaultId !== catalogueId` branch skips
+  // the keep-sellable add. `listAccessibleCatalogues` de-duplicates, so it CANNOT see a redundant row;
+  // this asserts the member count DIRECTLY, so deleting that branch (which would then add the row) turns
+  // this test red. (Proven by deletion: `defaultId !== catalogueId` removed → member count becomes 1.)
   it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
     await asTenant(async (tx) => {
       const casa = await createCatalogue(tx, { name: "Casa" });
@@ -689,6 +694,21 @@ describe("catalogue operations", () => {
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: casa.id, name: "Casa", isDefault: true },
       ]);
+      const members = await tx.execute<{ count: number }>(
+        sql`select count(*)::int as count from location_catalogues where location_id = ${locationId}`,
+      );
+      expect(members.rows[0]!.count).toBe(0);
+    });
+  });
+
+  // The trust-boundary guard the location-menu write routes use: is this catalogue VISIBLE to the
+  // current tenant? A same-tenant id is true; an absent id is false. (The cross-tenant/RLS-hidden case
+  // is a superuser-blind PGlite can't show — proven in catalogue-api.rls.test.ts on real Postgres.)
+  it("catalogueExists is true for a tenant catalogue and false for an absent id", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Casa" });
+      expect(await catalogueExists(tx, cat.id)).toBe(true);
+      expect(await catalogueExists(tx, "00000000-0000-0000-0000-000000000000")).toBe(false);
     });
   });
 
