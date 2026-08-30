@@ -847,6 +847,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // those tables anyway, so it loses nothing by their absence; a primary mounts both. This guard skips
   // route REGISTRATION only — every shared boot value (`till`, `secureCookies`) is built above and read
   // by the sibling mounts, so nothing downstream depends on these mounts having run.
+  // ALTITUDE (deliberate, deferred): the landed promotion design (promotion-runbook-design.md §3a
+  // "Mount-and-gate everything") makes REQUEST-time gating the eventual form so live mirror→primary
+  // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
+  // and the verb gate can't catch a write-behind-a-GET without a new path deny-list — and converting it
+  // to the §3a form belongs with promotion Slice 3, which already converts the analogous mode-gated
+  // workers (sync source / retention / tunnel, §3c) to runtime-startable. See read-only-gate.ts's header.
   if (!isMirror) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
     // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and

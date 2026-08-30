@@ -23,7 +23,17 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * tables (`print_*`) are unprovisioned. This gate is unchanged; only the surface behind it shrank. A future
  * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
  * concern — keep them gated by `if (!isMirror)`, or allow-list the write-GETs here. The dashboard read
- * surface this mirror serves stays fully covered. */
+ * surface this mirror serves stays fully covered.
+ *
+ * ALTITUDE (deliberate, deferred to promotion Slice 3): the landed promotion design
+ * (docs/superpowers/specs/2026-08-29-promotion-runbook-design.md §3a "Mount-and-gate everything") sets the
+ * eventual direction — mount the whole surface in BOTH modes and gate at REQUEST time, so a live
+ * mirror→primary promotion re-mounts nothing and needs no restart. Boot-time un-mounting is chosen HERE
+ * because (a) it is the tighter read-only-mirror posture — no operational agent/device surface is exposed
+ * at all — and (b) the verb-based request gate cannot catch a write-behind-a-GET without adding a new
+ * path-level deny-list. Converting this to the §3a request-time form belongs with Slice 3, which already
+ * has to convert the analogous boot-`const isMirror` worker gates (sync source / retention / tunnel, §3c)
+ * to runtime-startable — so this gate rides with that work rather than adding standalone debt. */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
