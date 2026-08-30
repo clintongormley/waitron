@@ -429,11 +429,14 @@ async function parsePasskeyVerifyBody(
  * touch, so RLS scopes each read/write to this dashboard's own tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
-  // Pre-login roster for the login screen. Deliberately UNAUTHENTICATED — it is what the manager picks
-  // their name from before any session exists — so it calls `listActiveStaff` under `withTenant` +
-  // `asAppUser` (RLS scopes it to this dashboard's tenant) rather than `requireManagementSession`.
-  // `listActiveStaff` returns `{ personId, displayName }` only: no password material, role or status,
-  // so there is nothing here a bystander must not see. The till's `GET /api/staff` parallel.
+  // Pre-login roster of active persons. Deliberately UNAUTHENTICATED — it exposes no secret, so it
+  // calls `listActiveStaff` under `withTenant` + `asAppUser` (RLS scopes it to this dashboard's tenant)
+  // rather than `requireManagementSession`. The DASHBOARD login no longer uses it: sign-in is by EMAIL
+  // now (`POST /management-api/session`), not by picking a name from a dropdown, so this route feeds no
+  // dashboard login step. It STAYS because the TILL login may use it (spec §4.3), the name-picker shape
+  // the till's `GET /api/staff` parallel still wants. `listActiveStaff` returns `{ personId,
+  // displayName }` only: no password material, role or status, so there is nothing here a bystander
+  // must not see.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -1593,7 +1596,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // shape of the password login route. Same body coercion + `challengeHandle` UUID screen as
   // register/verify above; the UUID screen matters MORE here because this route is UNAUTHENTICATED, so
   // a non-UUID `challengeHandle` reaching the `uuid` PK column (`22P02` → opaque 500) would be an
-  // unauthenticated 500 — the login route's own `isUuid(body.personId)` screen exists for exactly this.
+  // unauthenticated 500 — the same failure the write routes' `requirePersonId` `isUuid` screen prevents
+  // (the password login route no longer screens a UUID: it screens a non-empty `email` string).
   // `response` is then required to be a non-null object (else `management.request_invalid`): this route
   // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
   // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.
