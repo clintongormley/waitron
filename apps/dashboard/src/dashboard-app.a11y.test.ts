@@ -150,6 +150,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("the responsive drawer is accessible both closed and open (Task 12)", async () => {
+    // The hamburger toggle carries an aria-label so it has an accessible name even icon-only, and the
+    // shell stays axe-clean with the drawer both closed (as it boots) and open (after the toggle, with
+    // the scrim shown). A non-staff manager session renders the nav + hamburger chrome.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    // Closed: the hamburger exists (with its accessible name) and axe passes.
+    const toggle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]");
+    expect(toggle).toBeTruthy();
+    await expectNoA11yViolations(host);
+    // Open the drawer, then scan again with the scrim present.
+    toggle!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   it("the staff screen renders accessibly with a single, well-ordered heading", async () => {
     // The shell now opens on `overview` (Task 9), so reach the staff screen via the nav. It renders the
     // ONLY <h1> ("Usuarios"); the shell's own chrome (nav + logout button) carries no competing

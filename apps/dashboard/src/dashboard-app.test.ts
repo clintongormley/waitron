@@ -658,6 +658,55 @@ describe("dashboard-app", () => {
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
 
+  // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
+  // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
+  // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
+  it("hamburger toggles the drawer open, a nav click closes it", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const layout = () => el.shadowRoot!.querySelector(".layout")!;
+    expect(layout().classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+
+    // Open it via the hamburger.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeTruthy();
+
+    // Selecting a nav item closes the drawer AND switches the screen.
+    navCatalogue(el)!.click();
+    await flush(el);
+    expect(layout().classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+    expect(catalogue(el)).toBeTruthy();
+  });
+
+  it("clicking the scrim closes the drawer", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    const scrim = el.shadowRoot!.querySelector<HTMLElement>(".scrim");
+    expect(scrim).toBeTruthy();
+
+    scrim!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
+  });
+
+  it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=nav-toggle]")).toBeNull();
+  });
+
   it("a staff session still gets no nav (no navigation landmark)", async () => {
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

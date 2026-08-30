@@ -28,6 +28,9 @@ export const en = {
   "action.deactivate": "Deactivate",
   // Shell nav
   "nav.sections": "Sections",
+  // The hamburger that opens/closes the off-canvas nav drawer on narrow screens (icon-only, so this is
+  // its accessible name).
+  "nav.toggle": "Toggle navigation",
   // Sidebar group headers (grouping the sixteen manager faces; the pinned overview+sales group has none)
   "nav.group.menu": "Menu",
   "nav.group.service": "Service",
@@ -426,6 +429,7 @@ export const es: Record<StringKey, string> = {
   "action.move_down": "Bajar",
   "action.deactivate": "Desactivar",
   "nav.sections": "Secciones",
+  "nav.toggle": "Mostrar u ocultar la navegación",
   "nav.group.menu": "Carta",
   "nav.group.service": "Servicio",
   "nav.group.team": "Equipo",

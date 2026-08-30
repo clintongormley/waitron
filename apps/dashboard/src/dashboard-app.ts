@@ -225,10 +225,6 @@ export class DashboardApp extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
       }
-      /* The pinned first group carries no header; keep its items flush with the sidebar padding. */
-      .nav-group:first-child {
-        margin-top: 0;
-      }
 
       /* The main column: top bar (chooser + logout) over the scrolling screen body. */
       .main {
@@ -247,8 +243,51 @@ export class DashboardApp extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
+      /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
+         in-flow there); the narrow-screen media query below reveals it. Pushed to the LEADING edge so
+         the chooser + logout stay grouped at the trailing edge (the topbar is otherwise flex-end). */
+      .nav-toggle {
+        display: none;
+        margin-inline-end: auto;
+      }
+
+      /* The veil behind the open drawer: it dims the main column and closes the drawer on a tap. Only
+         rendered while the drawer is open, and only meaningful on narrow screens (hidden at desktop
+         below). Sits under the sliding sidebar but over the main content. */
+      .scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: var(--wt-color-scrim);
+      }
+
       .body {
         padding: var(--wt-space-4);
+      }
+
+      /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER. It leaves
+         the flow (position: fixed, translated off the leading edge) and slides in when the layout gains
+         the drawer-open class; the hamburger appears to toggle it. The 48rem breakpoint (a common tablet
+         width, matching apps/till's counter screen) is a plain commented media query — CSS custom
+         properties cannot drive a media condition, so it is spelled here rather than tokenised. */
+      @media (max-width: 48rem) {
+        .nav-toggle {
+          display: inline-block;
+        }
+        .sidebar {
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 30;
+          /* Opaque so the dimmed main column never shows through the sliding panel. */
+          background: var(--wt-color-bg);
+          transform: translateX(-100%);
+          transition: transform 150ms ease;
+        }
+        .layout.drawer-open .sidebar {
+          transform: translateX(0);
+        }
       }
     `,
   ];
@@ -261,6 +300,12 @@ export class DashboardApp extends LitElement {
   /** Which screen is showing. Defaults to `login`, so a cold load never flashes a logged-in face
    * before the probe confirms a session (see the class doc). */
   @state() private screen: Screen = "login";
+
+  /** Whether the off-canvas nav drawer is open (Task 12). Only meaningful on narrow screens, where the
+   * sidebar slides in over the main column; at desktop width the sidebar is always in-flow and the
+   * hamburger + scrim are hidden, so this flag is inert there. The hamburger toggles it, and selecting
+   * ANY nav item — or clicking the scrim — sets it back to `false`. */
+  @state() private drawerOpen = false;
 
   /** The logged-in person's role, learned from `getMe()`. `undefined` until a probe/login resolves.
    * `staff` suppresses the manager nav; the four other values keep it. NOT named `role` — that
@@ -450,20 +495,45 @@ export class DashboardApp extends LitElement {
         )}
       </div>`;
     }
+    // A non-staff session carries the nav; a staff person has only the self-service view, so it gets no
+    // sidebar, no hamburger and no drawer at all.
+    const hasNav = this.sessionRole !== "staff";
     return html`
       <div
-        class="layout"
+        class="layout ${hasNav && this.drawerOpen ? "drawer-open" : ""}"
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
-        <!-- The desktop sidebar, shown only for a non-staff session (a staff person has only the
-             self-service view, so no nav landmark at all). The responsive drawer is Task 12. -->
+        <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
+             breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. -->
+        ${hasNav ? html`<aside class="sidebar">${this.#nav()}</aside>` : nothing}
+        <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open
+             (and only a non-staff session can open one); the CSS hides it at desktop width regardless.
+             aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
         ${
-          this.sessionRole === "staff"
-            ? nothing
-            : html`<aside class="sidebar">${this.#nav()}</aside>`
+          hasNav && this.drawerOpen
+            ? html`<div
+                class="scrim"
+                aria-hidden="true"
+                @click=${() => (this.drawerOpen = false)}
+              ></div>`
+            : nothing
         }
         <div class="main">
           <header class="topbar">
+            <!-- The hamburger: opens/closes the off-canvas drawer. Present only for a non-staff session
+                 (a staff person has no nav to reveal); hidden at desktop width by the CSS above. -->
+            ${
+              hasNav
+                ? html`<wt-button
+                    class="nav-toggle"
+                    variant="ghost"
+                    data-test="nav-toggle"
+                    aria-label=${t("nav.toggle")}
+                    @click=${() => (this.drawerOpen = !this.drawerOpen)}
+                    >☰</wt-button
+                  >`
+                : nothing
+            }
             <dashboard-language-chooser
               .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
             ></dashboard-language-chooser>
@@ -485,6 +555,14 @@ export class DashboardApp extends LitElement {
    * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
    * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
    * Every item keeps its stable `data-test="nav-<screen>"` id. */
+  /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating
+   * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
+   * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
+  #selectScreen(screen: Screen): void {
+    this.screen = screen;
+    this.drawerOpen = false;
+  }
+
   #nav(): TemplateResult {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
@@ -498,7 +576,7 @@ export class DashboardApp extends LitElement {
                   variant=${this.screen === item.screen ? "primary" : "secondary"}
                   aria-current=${this.screen === item.screen ? "page" : nothing}
                   data-test="nav-${item.screen}"
-                  @click=${() => (this.screen = item.screen)}
+                  @click=${() => this.#selectScreen(item.screen)}
                   >${t(item.labelKey)}</wt-button
                 >`,
             )}
