@@ -24,6 +24,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
+import { DEMO_ADMIN_EMAIL } from "./demo-seed/staff.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
 
 // Re-exported so `dev-setup.test.ts`'s round-trip assertion keeps importing it from here; the parser
@@ -36,7 +37,9 @@ export const DEV_DATABASE_URL = "postgres://postgres:pg@localhost:5432/postgres"
 /** The one demo PIN. Every login — the provisioned admin and every seeded staff member (seedStaff's
  * `DEMO_PIN`) — shares it, so the demo hands out a single number. */
 export const ADMIN_PIN = "5555";
-/** The provisioned admin's dashboard password — mirrors `till-demo.ts`. */
+/** The provisioned admin's ("Administradora") dashboard password — mirrors `till-demo.ts` and equals
+ * the demo dashboard password the seeded manager gets (`DEMO_DASHBOARD_PASSWORD`, staff.ts). The admin
+ * signs in to the dashboard with `DEMO_ADMIN_EMAIL` (set by `seedStaff`) + this password. */
 const ADMIN_PASSWORD = "dashPass123";
 
 /**
@@ -432,8 +435,9 @@ async function main(): Promise<void> {
   console.log("  dashboard  http://localhost:5191");
   console.log("  server     http://localhost:8080");
   console.log("");
-  console.log(`  demo PIN (every login):   ${ADMIN_PIN}`);
-  console.log(`  locale:                   ${result.env.WAITRON_TILL_LOCALE}`);
+  console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
+  console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(
