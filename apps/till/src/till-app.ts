@@ -33,6 +33,7 @@ import type {
   StationQueueGroup,
   StaffMember,
   TabLine,
+  TabTransfer,
   TableServiceStatus,
   TableState,
   TicketState,
@@ -1408,6 +1409,89 @@ export class TillApp extends LitElement {
     }
   }
 
+  /** Re-read the floor occupancy read-model into `this.tables` WITHOUT leaving the current screen — the
+   * shared primitive behind the table-order action handlers below (a move/join/merge/transfer changes
+   * which tables are free/occupied, so the action pickers must reconcile). Degrades to an empty floor on
+   * a failed read (the floor touches no fiscal path, design H2; distinct from {@link #refreshFloor}, which
+   * keeps the last-known floor because it runs ON the floor). Only writes reactive state — no guard. */
+  async #reloadTables(): Promise<void> {
+    try {
+      this.tables = await this.api.getTablesState();
+    } catch {
+      this.tables = [];
+    }
+  }
+
+  /** Relocate the whole tab to a FREE table (TS-3 move) then reconcile the floor, staying on the tab. The
+   * tab now lives on the new table, so remember it as {@link activeTableId} — a later `set-status` keys by
+   * TABLE id (Ruling FP-F). A failed move is non-fatal — surface a banner, leave the tab as it was — the
+   * same shape as {@link #onServeLine}. */
+  async #onMoveTab(event: Event): Promise<void> {
+    const { toTableId } = (event as CustomEvent<{ toTableId: string }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.moveTab(this.activeTabId, toTableId);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    this.activeTableId = toTableId;
+    await this.#reloadTables();
+  }
+
+  /** Extend the tab onto an ADDITIONAL free table (TS-3 join) then reconcile the floor. No status/tab id
+   * change (both tables point at the same tab). A failed join is non-fatal. */
+  async #onJoinTable(event: Event): Promise<void> {
+    const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.joinTable(this.activeTabId, tableId);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    await this.#reloadTables();
+  }
+
+  /** Combine ANOTHER open tab onto THIS bill (TS-3 merge) then reload this tab's lines (it absorbed the
+   * other's) AND the floor (the source table freed or re-pointed). A failed merge is non-fatal. */
+  async #onMergeTabs(event: Event): Promise<void> {
+    const { fromTabId, freeSourceTable } = (
+      event as CustomEvent<{ fromTabId: string; freeSourceTable: boolean }>
+    ).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.mergeTabs(this.activeTabId, fromTabId, freeSourceTable);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    // Two independent reads (each swallows its own error) — run them concurrently.
+    await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
+  }
+
+  /** Move SELECTED lines out of this tab into another open tab (TS-4 transfer) then reload this tab's
+   * lines (the moved lines left) AND the floor (both tabs' totals changed). A failed transfer is
+   * non-fatal. */
+  async #onTransferLines(event: Event): Promise<void> {
+    const { toTabId, transfers } = (
+      event as CustomEvent<{ toTabId: string; transfers: TabTransfer[] }>
+    ).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.transferLines(this.activeTabId, toTabId, transfers);
+    } catch {
+      this.errorKey = "table.error";
+      return;
+    }
+    // Two independent reads (each swallows its own error) — run them concurrently.
+    await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
+  }
+
   /**
    * Settle the WHOLE tab (FP-1, H2-critical). The tab is a PERSISTED OPEN working order, so the EXISTING
    * `recordSale` verb files its STORED LOCKED lines and IGNORES the sent basket — `payWorkingOrder`'s
@@ -1578,6 +1662,10 @@ export class TillApp extends LitElement {
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
+        @move-tab=${(event: Event) => void this.#onMoveTab(event)}
+        @join-table=${(event: Event) => void this.#onJoinTable(event)}
+        @merge-tabs=${(event: Event) => void this.#onMergeTabs(event)}
+        @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @back-to-floor=${() => void this.#onShowFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
@@ -1677,6 +1765,7 @@ export class TillApp extends LitElement {
           .statuses=${this.statuses}
           .courses=${this.courses}
           .fireControl=${this.fireControl}
+          .tables=${this.tables}
           .orderId=${this.activeTabId}
           .busy=${this.submitting}
           .canSettle=${!this.handheldMode}

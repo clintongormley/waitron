@@ -698,6 +698,17 @@ export interface TabLine {
   firedAt: string | null;
 }
 
+/**
+ * One entry in a TS-4 line transfer: which line to move and, for a PARTIAL move, how much of it. Omit
+ * `quantity` (or pass the whole line quantity) for a whole-line move; a smaller decimal string splits the
+ * line, the destination inheriting the same locked per-unit price. Mirrors the server's transfer entry
+ * shape, NOT imported (the bundle rule).
+ */
+export interface TabTransfer {
+  lineNo: number;
+  quantity?: string;
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -1205,6 +1216,51 @@ export class TillApi {
    */
   async setTableStatus(tableId: string, statusId: string | null): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/status`, "POST", { statusId });
+  }
+
+  /**
+   * Relocate this tab's party to a FREE table (TS-3 move) → `POST /api/tabs/:tabId/move`. Frees the
+   * tab's current table(s) and points `toTableId` at the tab. NO line move, PRE-FISCAL. The server
+   * answers an empty 200; re-read `getTablesState`/`getTabLines` after. Rejects `{ code: "table.occupied" }`
+   * / `"table.inactive"` / `"table.not_found"` / `"tab.not_open"`.
+   */
+  async moveTab(orderId: string, toTableId: string): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId });
+  }
+
+  /**
+   * Extend this tab's coverage onto an ADDITIONAL free table (TS-3 join) → `POST /api/tabs/:tabId/join`.
+   * Both the original and the new table then point at the tab. NO line move, no status turnover,
+   * PRE-FISCAL. Same rejection codes as {@link moveTab}.
+   */
+  async joinTable(orderId: string, tableId: string): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId });
+  }
+
+  /**
+   * Combine ANOTHER open tab onto THIS bill (TS-3 merge) → `POST /api/tabs/:tabId/merge`, where `:id` is
+   * the DESTINATION (into) tab and `fromTabId` is the source that gets absorbed (its lines move here, it
+   * is then abandoned). `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab
+   * (`false`). PRE-FISCAL. Rejects `{ code: "tab.not_open" }` / `"tab.merge_self"`.
+   */
+  async mergeTabs(orderId: string, fromTabId: string, freeSourceTable: boolean): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", { fromTabId, freeSourceTable });
+  }
+
+  /**
+   * Move SELECTED items OUT of this tab into another open tab (TS-4 transfer) → `POST
+   * /api/tabs/:tabId/transfer`, where `:id` is the SOURCE tab and `toTabId` the destination. Each entry
+   * omits `quantity` for a whole-line move or carries a `quantity` < the line's for a partial split (the
+   * locked per-unit price is carried, never re-priced). PRE-FISCAL. Rejects `{ code: "tab.not_open" }` /
+   * `"tab.transfer_self"` / `"tab.line_not_found"` / `"tab.transfer_quantity_invalid"` /
+   * `"tab.transfer_duplicate_line"`.
+   */
+  async transferLines(
+    orderId: string,
+    toTabId: string,
+    transfers: readonly TabTransfer[],
+  ): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", { toTabId, transfers });
   }
 
   /**

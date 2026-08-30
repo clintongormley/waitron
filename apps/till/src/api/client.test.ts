@@ -1317,6 +1317,99 @@ describe("TillApi", () => {
     });
   });
 
+  // --- Table actions (TS-3 move/join/merge, TS-4 transfer): the tab-relocation + bill-combining verbs
+  //     the till surfaces behind the drawer's action menu. Each POSTs to /api/tabs/:tabId/<verb>. ---
+
+  it("moveTab POSTs { toTableId } to the tab's /move route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).moveTab("wo-1", "tbl-9")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tabs/wo-1/move",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ toTableId: "tbl-9" }),
+      }),
+    );
+  });
+
+  it("joinTable POSTs { tableId } to the tab's /join route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).joinTable("wo-1", "tbl-9")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tabs/wo-1/join",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tableId: "tbl-9" }),
+      }),
+    );
+  });
+
+  it("mergeTabs POSTs { fromTabId, freeSourceTable } to the destination tab's /merge route", async () => {
+    // `:id` is the DESTINATION (into) tab; `fromTabId` is the source that gets absorbed. `freeSourceTable`
+    // rides the body as an explicit boolean (frees the vacated table vs re-points it at the destination).
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).mergeTabs("wo-into", "wo-from", true),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tabs/wo-into/merge",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fromTabId: "wo-from", freeSourceTable: true }),
+      }),
+    );
+  });
+
+  it("transferLines POSTs { toTabId, transfers } to the source tab's /transfer route", async () => {
+    // `:id` is the SOURCE tab items move OUT of; `toTabId` is the destination. A partial move carries a
+    // `quantity`; a whole-line move omits it.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).transferLines("wo-src", "wo-dst", [
+        { lineNo: 1 },
+        { lineNo: 2, quantity: "1.000" },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tabs/wo-src/transfer",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          toTabId: "wo-dst",
+          transfers: [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
+        }),
+      }),
+    );
+  });
+
+  it("moveTab surfaces { code } when the target table is occupied", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "table.occupied" } }), { status: 409 }),
+      );
+
+    await expect(new TillApi("", fetchStub).moveTab("wo-1", "tbl-busy")).rejects.toMatchObject({
+      code: "table.occupied",
+    });
+  });
+
   // --- Spatial floor-plan placement (FP-2, Task 4's on-till routes — NOT the management ones) ---
 
   it("setTablePlacement PUTs the placement body to the TABLE's /placement route (empty 204 body)", async () => {

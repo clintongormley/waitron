@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
-import type { TabLine, TillProduct } from "../api/client.js";
+import type { TabLine, TableState, TillProduct } from "../api/client.js";
 import type { TillProductGrid } from "../widgets/product-grid.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 
@@ -236,12 +236,18 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail).toEqual({ statusId: null });
   });
 
-  it("renders Mover · Dividir disabled (TS-3/TS-5 are out of scope)", async () => {
+  it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);
-    const move = el.shadowRoot!.querySelector("[data-move-split]")!;
-    expect(move.textContent).toContain(t("table.move_split"));
-    expect(move.hasAttribute("disabled")).toBe(true);
+    const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
+    // The old disabled "Move · Split" placeholder is now a live control reading "Table actions".
+    expect(trigger.textContent).toContain(t("table.actions_title"));
+    expect(trigger.hasAttribute("disabled")).toBe(false);
+    // Tapping it opens the in-drawer action menu.
+    expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    (trigger as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
   });
 
   it("emits a composed, bubbling back-to-floor event from the back control", async () => {
@@ -382,6 +388,229 @@ describe("till-table-order-screen", () => {
     const { el } = await mount({ lines: [pendingLine], courses, fireControl: "waiter" });
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
+  });
+
+  // ── TS-3/TS-4: the in-drawer move / join / merge / transfer table-action flow ──────────────────────
+  describe("table actions (TS-3/TS-4)", () => {
+    /** A TableState with sane defaults (all required fields) — override only what a case needs. */
+    const tableState = (over: Partial<TableState> = {}): TableState => ({
+      id: "t1",
+      label: "1",
+      zoneId: null,
+      capacity: null,
+      state: "free",
+      hasOpenTab: false,
+      pendingDeliveries: 0,
+      pendingToServe: 0,
+      readyToServe: 0,
+      enRoute: 0,
+      status: null,
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+      ...over,
+    });
+
+    /** Opens the drawer and taps the Table-actions trigger, leaving the action menu open. */
+    async function toMenu(el: TillTableOrderScreen): Promise<void> {
+      await openDrawer(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+      await el.updateComplete;
+    }
+    const click = (el: TillTableOrderScreen, selector: string) =>
+      el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+
+    it("shows the four action verbs plus a disabled Split and a Back control", async () => {
+      const { el } = await mount({ lines: [pendingLine], tables: [] });
+      await toMenu(el);
+      for (const verb of ["move", "join", "merge", "transfer"]) {
+        expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
+      }
+      const split = el.shadowRoot!.querySelector(`[data-action="split"]`)!;
+      expect(split.hasAttribute("disabled")).toBe(true);
+      expect(el.shadowRoot!.querySelector("[data-action-back]")).not.toBeNull();
+    });
+
+    it("move → free-table picker → dispatches move-tab { toTableId } and closes", async () => {
+      const free = tableState({ id: "t9", label: "9", state: "free" });
+      const occupied = tableState({ id: "t8", state: "open-tab", hasOpenTab: true, tabId: "wo-8" });
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-7",
+        tables: [free, occupied],
+      });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      // The picker lists only FREE tables (the occupied one is not a move target).
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-target="t8"]')).toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("move-tab", (e) => (captured = e as CustomEvent));
+      click(el, '[data-target="t9"]');
+      await el.updateComplete;
+      expect(captured).toBeInstanceOf(CustomEvent);
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+      expect(captured!.detail).toEqual({ toTableId: "t9" });
+      // The flow closes back to the trigger.
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+    });
+
+    it("join → free-table picker → dispatches join-table { tableId } and closes", async () => {
+      const free = tableState({ id: "t9", state: "free" });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
+      await toMenu(el);
+      click(el, '[data-action="join"]');
+      await el.updateComplete;
+      let captured: CustomEvent | undefined;
+      el.addEventListener("join-table", (e) => (captured = e as CustomEvent));
+      click(el, '[data-target="t9"]');
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({ tableId: "t9" });
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("merge → other-open-tab picker (EXCLUDES the current tab) → dispatches merge-tabs and closes", async () => {
+      const own = tableState({ id: "t2", state: "open-tab", hasOpenTab: true, tabId: "wo-7" });
+      const other = tableState({
+        id: "t3",
+        label: "3",
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-9",
+      });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [own, other] });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+      // The current tab's own table (tabId === orderId) is not a merge source.
+      expect(el.shadowRoot!.querySelector('[data-target="wo-7"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-target="wo-9"]')).not.toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("merge-tabs", (e) => (captured = e as CustomEvent));
+      click(el, '[data-target="wo-9"]');
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({ fromTabId: "wo-9", freeSourceTable: true });
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("lists a JOINED tab (two tables, one tabId) once in the merge picker", async () => {
+      // A joined tab spans several dining_tables rows all pointing at one tabId; the picker chooses a
+      // BILL, so it must dedupe to one entry (not one per covered table).
+      const joinedA = tableState({
+        id: "t3",
+        label: "3",
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-9",
+      });
+      const joinedB = tableState({
+        id: "t4",
+        label: "4",
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-9",
+      });
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-7",
+        tables: [joinedA, joinedB],
+      });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll('[data-target="wo-9"]')).toHaveLength(1);
+    });
+
+    it("transfer → tab picker → line selection → dispatches transfer-lines with a whole-line entry", async () => {
+      const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [other] });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      // Picking the destination tab advances to the line-picker step (does NOT dispatch yet).
+      click(el, '[data-target="wo-9"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-transfer-lines]")).not.toBeNull();
+      // Confirm is a no-op until at least one line is selected.
+      expect(
+        el.shadowRoot!.querySelector("[data-transfer-confirm]")!.hasAttribute("disabled"),
+      ).toBe(true);
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("transfer-lines", (e) => (captured = e as CustomEvent));
+      // Select the whole of line 1 (quantity 2.000) → a whole-line entry OMITS quantity.
+      click(el, '[data-transfer-line="1"]');
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector("[data-transfer-confirm]")!.hasAttribute("disabled"),
+      ).toBe(false);
+      click(el, "[data-transfer-confirm]");
+      await el.updateComplete;
+      expect(captured!.composed).toBe(true);
+      expect(captured!.detail).toEqual({ toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("shows an empty-state when there are no free tables to move to", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [] });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
+        t("table.no_free_tables"),
+      );
+    });
+
+    it("shows an empty-state when there are no other open tabs to merge", async () => {
+      const own = tableState({ id: "t2", state: "open-tab", hasOpenTab: true, tabId: "wo-7" });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [own] });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
+        t("table.no_other_tabs"),
+      );
+    });
+
+    it("Back from the menu closes; Back from a picker returns to the menu", async () => {
+      const free = tableState({ id: "t9", state: "free" });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
+      await toMenu(el);
+      // Into the move picker, then Back → the menu again.
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+      // Back from the menu closes the flow.
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+    });
+
+    it("resets a half-open flow when the tab changes (the app re-points orderId)", async () => {
+      const free = tableState({ id: "t9", state: "free" });
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      // Switching tabs must not carry the old tab's picker across — it resets to the trigger.
+      el.orderId = "wo-9";
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+    });
   });
 
   // Multi-menu: the round grid shows only the SELECTED menu's products, while a tab line's NAME still
