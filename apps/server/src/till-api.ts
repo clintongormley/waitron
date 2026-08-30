@@ -253,6 +253,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // the detach, the same 409 shape `table.occupied`/`tab.not_open` use. Thrown by `unjoinTable`. (Split's
   // `splitOffCheck` throws only already-mapped codes — `tab.not_open`, the reused transfer codes.)
   "table.not_joined": 409,
+  // Un-joining WITH items a table that solely anchors its tab — no other table shares the tab, so there
+  // is no join to split off — is `table.not_shared` (409): the ids may be valid, but the table's STATE
+  // (un-shared) forbids the un-join, the same 409 shape `table.not_joined`/`table.occupied` use. Thrown by
+  // `unjoinTable`'s with-items branch before it mints anything.
+  "table.not_shared": 409,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's

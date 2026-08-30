@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
@@ -22,6 +22,7 @@ import {
   listAvailableProducts,
   priceBasket,
 } from "@waitron/catalogue";
+import * as catalogue from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -884,6 +885,35 @@ const byProduct = (
   items: { productId: string; stationId: string; state: string }[],
   productId: string,
 ) => items.find((i) => i.productId === productId)!;
+
+describe("createOpenOrder empty-basket skips the full catalogue read (perf)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // A lineless order (every splitOffCheck, a lineless openTab, unjoin's new tab) has nothing to resolve
+  // or price, so priceOrderLines must NOT issue the full listAvailableProducts scan. Behaviour alone
+  // can't distinguish this (an empty basket yields an empty order either way), so SPY the catalogue read
+  // and assert it is skipped for [] and taken for a real line. Proven by deletion: remove the early
+  // return in priceOrderLines and the empty-lines case calls the spy → this test fails.
+  it("does NOT call listAvailableProducts for an empty basket", async () => {
+    const { cfg } = await setupVenue();
+    const spy = vi.spyOn(catalogue, "listAvailableProducts");
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createOpenOrder(tx, cfg, randomUUID(), [], null);
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("DOES call listAvailableProducts for a non-empty basket (negative control)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const spy = vi.spyOn(catalogue, "listAvailableProducts");
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createOpenOrder(tx, cfg, randomUUID(), [line(cafeId)], null);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("routes product > category > default and snapshots the station at fire time", async () => {

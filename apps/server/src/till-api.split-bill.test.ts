@@ -378,6 +378,21 @@ describe("POST /api/tabs/:id/unjoin", () => {
     });
   });
 
+  it("409 table.not_shared un-joining WITH items a table that solely anchors its tab", async () => {
+    // A plain single-table tab (setupTabApp): tableA is the ONLY table on tabA. A WITH-items un-join has
+    // no join to split off, so it must 409 table.not_shared rather than mint a new tab and strand it.
+    const { app, tabA, tableA, cookie } = await setupTabApp();
+    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ tableId: tableA, transfers: [{ lineNo: 1 }] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.not_shared", params: { tableId: tableA, tabId: tabA } },
+    });
+  });
+
   it("un-joins WITH items into a new anchored tab (200 { tabId })", async () => {
     const { app, tabA, tableB, cookie } = await setupJoinedApp();
     const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
