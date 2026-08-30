@@ -13,6 +13,16 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
+ * The default IANA time zone for a venue — the SINGLE source of truth for `"Europe/Madrid"`. It is
+ * `locations.time_zone`'s schema default (below) AND the runtime fallback the reserved-on-floor read
+ * uses for a missing/RLS-hidden row and a stored value `Intl` rejects (`safeTimeZone` /
+ * `listTablesWithState` in `apps/server/src/working-order.ts`). Exported so those three copies stay in
+ * sync from one literal rather than drifting. Changing it here changes the schema default, which
+ * `db:generate` re-emits as the same literal into the migration — verify no spurious migration results.
+ */
+export const DEFAULT_TIME_ZONE = "Europe/Madrid";
+
+/**
  * The per-venue pay-timing / service mode — see the `orderFlow` column on `locations` below for the
  * three modes and why the degenerate fourth cell is unrepresentable (design §3).
  */
@@ -124,7 +134,7 @@ export const locations = pgTable(
     postalCode: text("postal_code"),
     city: text("city"),
     province: text("province"),
-    timeZone: text("time_zone").notNull().default("Europe/Madrid"),
+    timeZone: text("time_zone").notNull().default(DEFAULT_TIME_ZONE),
     dayCutover: time("day_cutover").notNull().default("06:00:00"),
     // The per-venue pay-timing / service mode (design §3): WHEN payment happens (order vs collect) ×
     // WHEN the invoice issues (placing vs pay), collapsed to three meaningful modes by a single enum

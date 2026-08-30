@@ -58,6 +58,10 @@ export interface FloorTable {
   tabTotal?: string | null;
   pendingToServe: number;
   status?: TableServiceStatus | null;
+  /** The wall-clock "HH:MM" of the table's next imminent reservation (Bookings-1 §4, reserved-on-floor),
+   *  or `null`/absent when none. Optional so a consumer with no bookings read (the dashboard Plano
+   *  editor) omits it and the token draws no reserved chip. The token renders "<reserved> HH:MM". */
+  reservedTime?: string | null;
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -191,6 +195,9 @@ export interface FloorOccupancyInput {
   tabTotal?: string | null;
   pendingToServe: number;
   status?: TableServiceStatus | null;
+  /** The next reservation's wall-clock "HH:MM" (Bookings-1 §4), or `null`/absent when none. Optional so
+   *  the dashboard's no-occupancy mapper need not supply it. */
+  reservedTime?: string | null;
 }
 
 /**
@@ -216,5 +223,6 @@ export function toFloorTable(
     tabTotal: occupancy.tabTotal ?? null,
     pendingToServe: occupancy.pendingToServe,
     status: occupancy.status,
+    reservedTime: occupancy.reservedTime ?? null,
   };
 }

@@ -65,6 +65,15 @@ export const PERMISSIONS = [
   // only the central-management surface (printing design §7). Codes/permissions are never renamed
   // once shipped.
   "printer.manage",
+  // Authoring restaurant reservations (booking CRUD + lifecycle: create/edit/cancel/no-show/complete,
+  // and seat-a-booking which opens a tab) from the management dashboard (@waitron/bookings). A
+  // domain-named RESERVATION permission on the commercial lane, distinct from staff admin
+  // (person.manage); granted to manager + admin, the same roles as the other management write gates,
+  // mirroring purchase.manage. No front-of-house role exists (only staff/supervisor/manager/admin, and
+  // no operational write permission below manager); if floor staff should take bookings, granting this
+  // lower is a later decision and a new pattern (spec §7). Codes/permissions are never renamed once
+  // shipped.
+  "booking.manage",
   // Authorizing a cash-drawer OPEN when a location's drawer_open_policy is 'gated' (@waitron/db
   // drawer_opens audit log). A domain-named CASH-ACCOUNTABILITY permission on the floor lane, NOT a
   // management-dashboard config gate — so it sits in the SUPERVISOR set beside sale.void/refund/
@@ -106,6 +115,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "report.export",
   "device.manage",
   "printer.manage",
+  "booking.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 

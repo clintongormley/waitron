@@ -61,6 +61,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountBookingsApi } from "./booking-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi } from "./report-api.js";
@@ -943,6 +944,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
   // feeding the headless modelo 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // The dashboard's gated staff-reservation write group (create/list-by-day/edit + the seat + lifecycle
+  // moves) on the SAME app, the identical convention. Unlike the siblings it receives the FULL `till`
+  // config, not just `{ tenantId }`: `seatBooking` opens a real TS-1 tab whose order-number allocation
+  // reads `till.tillId`/`till.nodeId`, and create/list read `till.locationId` (the day-list scope RLS
+  // cannot supply). Reuses the EXACT `db` + this venue's `till` the trading surface holds so scope
+  // cannot drift. Routes only — no database work at boot; the `booking.manage` gate runs per request,
+  // and no fiscal path is touched (a seat writes a pre-fiscal working order only).
+  mountBookingsApi(app, { db, cfg: till }, log);
   // The dashboard's gated reporting surface on the SAME app, the identical convention. Reuses the EXACT
   // `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above receives so
   // the two cannot drift, plus `till.nodeId` — THIS server's own node, which the `/reports/overview`

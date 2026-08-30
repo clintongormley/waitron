@@ -215,6 +215,18 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
+      /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
+         chip (theme text on a neutral fill, so contrast stays token-fixed): distinct from the ready
+         chip's success border, the status chip's neutral border, and the en-route chip's filled primary.
+         An independent signal that sits beside the one service hint and the manual status, never in their
+         place. Mirrors @waitron/ui's wt-table-token .badge.reserved so the list card and the map token
+         match. */
+      .badge.reserved {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-primary);
+      }
+
       /* "N en camino" -- dispatched by the pass, awaiting the waiter (KDS-3 §3c). The TOP-precedence hint,
          so it carries the strongest weight: the filled primary chip (the primary/on-primary token pair
          guarantees contrast in both themes), a step up from the ready chip's border and the to-serve
@@ -387,7 +399,10 @@ export class TillFloorScreen extends LitElement {
    * {@link toFloorTable}. A `TableState` carries both the placement half and the live occupancy half, so
    * it is passed as both arguments; unplaced tables (the tray) have null coordinates the token ignores. */
   #toFloorTable(table: TableState): FloorTable {
-    return toFloorTable(table, table);
+    // The occupancy half carries the live read-model AND the reserved-on-floor time (Bookings-1 §4):
+    // the shared `FloorOccupancyInput` names it `reservedTime`, so derive it from `nextReservation.time`
+    // (the till's shape) here — the token then draws "Reserved HH:MM" on the map exactly as the list card.
+    return toFloorTable(table, { ...table, reservedTime: table.nextReservation?.time ?? null });
   }
 
   /** The till's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words). Only
@@ -397,6 +412,7 @@ export class TillFloorScreen extends LitElement {
       floor: t("floor.title"),
       covers: t("floor.capacity"),
       toServe: t("floor.to_serve"),
+      reserved: t("floor.reserved"),
       zone: t("floor.zone"),
       rotate: t("floor.rotate"),
       remove: t("floor.remove"),
@@ -523,7 +539,11 @@ export class TillFloorScreen extends LitElement {
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
-        .labels=${{ covers: t("floor.capacity"), toServe: t("floor.to_serve") }}
+        .labels=${{
+          covers: t("floor.capacity"),
+          toServe: t("floor.to_serve"),
+          reserved: t("floor.reserved"),
+        }}
       ></wt-table-token>
     </button>`;
   }
@@ -592,6 +612,13 @@ export class TillFloorScreen extends LitElement {
       ${this.#occupancy(table)}
       <span class="badges">
         ${this.#hint(table)}
+        ${
+          table.nextReservation !== null
+            ? html`<span class="badge reserved" data-reserved
+                >${t("floor.reserved")} ${table.nextReservation.time}</span
+              >`
+            : nothing
+        }
         ${
           table.status !== null
             ? html`<span

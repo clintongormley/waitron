@@ -554,6 +554,20 @@
       "when": 1788122838003,
       "tag": "0078_abnormal_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1788129818405,
+      "tag": "0079_rainy_lady_ursula",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1788129829177,
+      "tag": "0080_dark_caretaker",
+      "breakpoints": true
     }
   ]
 }

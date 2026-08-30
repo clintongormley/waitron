@@ -217,6 +217,9 @@ export const en = {
   "floor.line_count": "items",
   "floor.pending_delivery": "to deliver",
   "floor.free": "Free",
+  // The reserved-on-floor chip (Bookings-1 §4): rendered as `${t("floor.reserved")} ${time}`
+  // ("Reserved 20:30") — the label PREFIXES the wall-clock time, unlike the count-suffix labels above.
+  "floor.reserved": "Reserved",
   // Spatial floor plan (FP-2): the map/list toggle, the manager-only edit toggle, the unplaced tray,
   // and the edit-mode inspector copy threaded into `<wt-floor-canvas>`. `floor.view_map`/`view_list`
   // label the toggle with the view it SWITCHES TO. `floor.shape_*` name the three canvas shapes.
@@ -446,6 +449,7 @@ export const es: Record<StringKey, string> = {
   "floor.line_count": "art.",
   "floor.pending_delivery": "por entregar",
   "floor.free": "Libre",
+  "floor.reserved": "Reservada",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
   "floor.edit_plan": "Editar plano",

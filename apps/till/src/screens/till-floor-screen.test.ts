@@ -24,6 +24,7 @@ function table(over: Partial<TableState> = {}): TableState {
     readyToServe: 0,
     enRoute: 0,
     status: null,
+    nextReservation: null,
     posX: null,
     posY: null,
     shape: null,
@@ -323,6 +324,44 @@ describe("till-floor-screen", () => {
       tables: [table({ id: "t1", status: null })],
     });
     expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-status]')).toBeNull();
+  });
+
+  it("shows a 'Reservada HH:MM' chip on the list card when the table has a next reservation", async () => {
+    const { el } = await mount({
+      tables: [
+        table({
+          id: "t1",
+          nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
+        }),
+      ],
+    });
+    const chip = el.shadowRoot!.querySelector('[data-table="t1"] [data-reserved]')!;
+    expect(chip).not.toBeNull();
+    // The label ("Reservada"/"Reserved" per locale) precedes the wall-clock time.
+    expect(chip.textContent).toContain(t("floor.reserved"));
+    expect(chip.textContent).toContain("20:30");
+  });
+
+  it("omits the reserved chip when the table has no next reservation", async () => {
+    const { el } = await mount({
+      tables: [table({ id: "t1", nextReservation: null })],
+    });
+    expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-reserved]')).toBeNull();
+  });
+
+  it("renders the reserved chip on the map token for a placed reserved table", async () => {
+    const el = await mountFloor({
+      tables: [
+        placed("t1", { nextReservation: { time: "21:00", partySize: 2, contactName: "Bea" } }),
+      ],
+    });
+    const token = el
+      .shadowRoot!.querySelector("wt-floor-canvas")!
+      .shadowRoot!.querySelector("wt-table-token")!;
+    const chip = token.shadowRoot!.querySelector("[data-reserved]")!;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toContain(t("floor.reserved"));
+    expect(chip.textContent).toContain("21:00");
   });
 
   it("renders a table whose capacity is unknown without a pax count", async () => {

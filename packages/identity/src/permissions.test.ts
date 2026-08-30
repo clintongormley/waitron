@@ -130,6 +130,18 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "report.view")).toBe(true);
     expect(roleHasPermission("staff", "report.view")).toBe(false);
   });
+  it("grants booking.manage to manager and admin only (staff-reservations bookings-1)", () => {
+    // A domain-named reservation permission (booking CRUD + lifecycle from the management dashboard,
+    // @waitron/bookings), granted to exactly the roles that hold the other manager write gates — manager
+    // and admin — and NEVER to staff or supervisor. No front-of-house role exists; if floor staff should
+    // take bookings, granting it lower is a later decision and a new pattern (spec §7). Mirrors
+    // purchase.manage: manager + admin, never staff/supervisor.
+    expect(PERMISSIONS).toContain("booking.manage");
+    expect(roleHasPermission("manager", "booking.manage")).toBe(true);
+    expect(roleHasPermission("admin", "booking.manage")).toBe(true);
+    expect(roleHasPermission("staff", "booking.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "booking.manage")).toBe(false);
+  });
   it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
     // Minting a cloud-mirror bundle hands out a data-access sync token, so it is admin-only — reached via
     // ALL and NEVER placed in the SUPERVISOR/MANAGER sets. Not even a manager holds it (least privilege —

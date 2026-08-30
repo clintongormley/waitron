@@ -234,6 +234,50 @@ describe("the mirror error codes carry no params", () => {
   });
 });
 
+// Staff-reservations bookings-1 (Task 2). The four booking.* codes govern the reservation CRUD +
+// lifecycle verbs (Task 3) and their HTTP routes (Task 5). As with every block above, each `it` only
+// proves the code is REGISTERED with the right param SHAPE — the construction typechecks solely because
+// errors.ts's `declare module` augmentation is loaded (the side-effect import above), so the fail-first
+// signal for these registration tests is `tsc --noEmit`, NOT the runtime run (AppError does no runtime
+// validation of the code, so `new AppError("booking.not_found", {})` would run green even with the code
+// undeclared). The real throwers arrive in Task 3: createBooking (invalid party size), updateBooking/
+// cancelBooking/etc (not_found, invalid_transition) and seatBooking (table_required). Param NAMEs follow
+// shipped siblings: `bookingId` mirrors the qualified domain-record family (table.not_found's `tableId`,
+// zone.not_found's `zoneId`); booking.invalid_transition carries `bookingId` NOT a from/to pair,
+// matching order_prep.invalid_transition (`workingOrderId`) and ticket.invalid_transition
+// (`ticketItemId`). `partySize` echoes the offending count — not a secret, and actionable — the same
+// echo-the-value shape tab.transfer_quantity_invalid's `quantity` uses; booking.table_required carries
+// no params (the seat request itself identifies the booking). The HTTP statuses (404/400/409/400) are
+// NOT here — they live in booking-api.ts's local STATUS map (Task 5), the same declare-here /
+// status-in-route split the zone.*/station.*/device.* codes above follow.
+describe("the booking error codes carry their declared params", () => {
+  it("constructs booking.not_found with the qualified bookingId, matching table.not_found's shape", () => {
+    const bookingId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const error = new AppError("booking.not_found", { bookingId });
+    expect(error.code).toBe("booking.not_found");
+    expect(error.params).toEqual({ bookingId });
+  });
+
+  it("constructs booking.invalid echoing the offending party size, matching tab.transfer_quantity_invalid's echo shape", () => {
+    const error = new AppError("booking.invalid", { partySize: 0 });
+    expect(error.code).toBe("booking.invalid");
+    expect(error.params).toEqual({ partySize: 0 });
+  });
+
+  it("constructs booking.invalid_transition with the qualified bookingId, matching ticket.invalid_transition's shape", () => {
+    const bookingId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const error = new AppError("booking.invalid_transition", { bookingId });
+    expect(error.code).toBe("booking.invalid_transition");
+    expect(error.params).toEqual({ bookingId });
+  });
+
+  it("constructs booking.table_required with no params (the seat request identifies the booking)", () => {
+    const error = new AppError("booking.table_required", {});
+    expect(error.code).toBe("booking.table_required");
+    expect(error.params).toEqual({});
+  });
+});
+
 describe("the drawer error code carries its declared params and maps to HTTP 400", () => {
   it("constructs drawer.no_printer naming the misconfigured till, matching station.no_default's shape", () => {
     const tillId = "99999999-9999-9999-9999-999999999999";
