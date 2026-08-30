@@ -477,8 +477,7 @@ Provisioning/build*).
     box that lost its own secret files is a server fault — but per the `error-boundary` convention an
     `AppError` is logged at `warn` regardless of the mapped status; only an unexpected non-`AppError`
     takes the `error`/opaque-500 branch.)
-  - **4b-ii — scheduled DB backup — implemented on `feat/onboarding-4b-ii-scheduled-backup`** (a
-    post-merge docs commit flips this to LANDED). A scheduled worker takes one `pg_dump`
+  - **4b-ii — scheduled DB backup — LANDED #163**. A scheduled worker takes one `pg_dump`
     (`--format=custom`, so the whole DB incl. `sync_log`) into `WAITRON_BACKUP_DIR` each tick, prunes
     to the newest `WAITRON_BACKUP_RETAIN` dumps (default 7), and wires the newest dump's age +
     staleness into box-status's `backup` field (`{ configured, lastBackupAt, ageSeconds, stale }`;
