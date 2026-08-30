@@ -311,12 +311,18 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
   it("the singleton primary (primary, primary) of the same identity DOES run all four (control: the secondary's absence is real)", async () => {
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
-    const server = await startServer({
-      ...dutyEnv(port),
-      DATABASE_URL: primaryDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
-      WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
-      WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
+    const [server, lines] = await withCapturedStdout(async (captured) => {
+      const started = await startServer({
+        ...dutyEnv(port),
+        DATABASE_URL: primaryDatabaseUrl,
+        WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
+        WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
+        WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
+      });
+      // The backup gate runs during the (synchronous) boot, so its `backup.*` line is emitted before the
+      // first `loop.sleeping` — wait for that to be sure the gate has been decided before asserting.
+      await waitForEvent(captured, "loop.sleeping");
+      return [started, captured] as const;
     });
     try {
       // 1. Sync SOURCE — mounted and peer-authenticated (200 with the enrolled token).
@@ -327,6 +333,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
 
       // 2. Retention sweep — started once.
       expect(runRetentionSweep).toHaveBeenCalledTimes(1);
+
+      // 3. Backup — the gate RAN: with the port-1 backup DB the RLS probe fails, so a `backup.*` line
+      //    (backup.disabled_probe_failed) is emitted. This is the positive twin of the secondary's absence
+      //    assertion — the gate is entered on the singleton primary, skipped on the secondary.
+      expect(hasEventPrefixed(lines, "backup.")).toBe(true);
 
       // 4. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);
