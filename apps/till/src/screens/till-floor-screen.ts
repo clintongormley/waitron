@@ -273,7 +273,7 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) canEdit = false;
   /**
    * Whether this face may return to the COUNTER (handheld-tableside §6a). A counter/fixed till can
-   * (default `true`); an order-only handheld's floor is the TOP of the phone shell — `HANDHELD_FACES`
+   * (default `true`); a handheld's floor is the TOP of the phone shell — its face set `HANDHELD_FACES`
    * excludes `counter` — so the app threads `false` and the Back-to-counter affordance is not rendered.
    * UI honesty only: the app's own face-set gate (`#goToScreen`) is what actually refuses the
    * transition, so even a stray `back-to-counter` cannot escape the shell.

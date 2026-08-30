@@ -155,6 +155,16 @@ selects the shell and (via §5) fences the fiscal routes. No order-path code cha
 
 ## 5. The pre-fiscal firewall (fiscal safety, H2) — load-bearing
 
+> **Update (2026-08-30, branch `feat/handheld-cash-at-table`):** the order-only firewall below was
+> **partially reversed for the CASH tender only** (following the fiscal-model correction in §0.1,
+> lines 26–33). A handheld may now **settle a CASH sale on `POST /api/sales`**, filing under its
+> node's SIF exactly like a till; **card and every other fiscal/cash route stay fenced**. The tender
+> split is enforced by `assertHandheldTenderAllowed` (allows handheld cash, refuses handheld card) in
+> `apps/server/src/device-session.ts`, with `assertNotHandheld` still fencing the remaining routes.
+> See `docs/backlog.md`'s "→ NEXT BUILD: handheld cash-at-table" row and the fail-closed allowlist in
+> `2026-08-30-device-auth-enrolment-fail-closed-design.md` §3. The section below is preserved as the
+> original order-only design.
+
 Order-only (decision 0.1) is enforced **on the server**, not merely by hiding a button (D4). The
 table-order screen embeds `till-tender-pay` and re-emits `pay-tab` → `recordSale`
 (`till-app.ts:1316+`, the fiscal settle in `apps/server/src/till-sale.ts`). On a handheld that path
