@@ -97,11 +97,22 @@ demo or behind-the-scenes".
    planned (`2026-08-17-table-service-ts5-*`).
 4. **Tableside / handheld ordering + per-device layouts.** **The waiter's tableside experience — a
    centrepiece of a restaurant demo** (owner, 2026-08-29: "this is what waiters will use tableside").
-   One venue-wide layout today (only CSS stacking on narrow screens); no phone/handheld/till device
-   kinds (`device_kind` enum = `kds_station` only). Needs new device kinds + a device→layout
-   association + a layout-editor dimension, rendering the existing table-order flow on a handheld.
-   **Pairs with modifiers (#7)** — a waiter taking "burger, no onions" at the table needs them. The
-   biggest Tier-A item; sequence it after the quick wins. MISSING.
+   **Order-only handheld slice in flight on `feat/handheld-tableside-ordering`** (spec
+   `docs/superpowers/specs/2026-08-30-handheld-tableside-ordering-design.md`, plan alongside): a
+   `handheld` `device_kind` (enrolled via a pairing code, station-less, location-bound) whose browser
+   boots a **phone shell** (lock → floor → table-order) via a kind-aware `GET /api/device/me` probe; a
+   waiter still PIN-logs-in on top (the first device+session combination). **Order-only is
+   server-enforced** — a handheld device cookie is refused on `/api/sales`, `/api/pay`,
+   `/api/sales/:id/reprint`, `/api/drawer/open` (`device.forbidden_action`, proven by deletion), so a
+   handheld never touches the hash-chain; the table-order screen also hides its pay widget
+   (`canSettle=false`). The dashboard Devices screen mints the handheld kind (no station). Owner
+   decisions (2026-08-30): order-only (payment settled at the fixed till), fixed phone shell **with a
+   configurable seam** (`HANDHELD_FACES` constant keyed by device kind), connectivity/cert-trust
+   assumed-solved (parked onboarding slices 5–7 own it). The backlog's earlier "device→layout
+   association + layout-editor dimension" framing was aimed at the wrong screen — the tableside screen
+   is not layout-driven — so that became a deferred follow-up, not a prerequisite. **Deferred
+   follow-ups (below):** handheld live updates; the configurable per-device layout editor.
+   **Pairs with modifiers (#7)** — a waiter taking "burger, no onions" at the table needs them.
 
 **Tier B — an owner will ask; product-defining:**
 
@@ -735,6 +746,23 @@ here is the cross-cutting or genuinely-decision-bearing work.
 
 **Cross-cutting engineering:**
 
+- **Handheld live updates (SSE/WebSocket).** Deferred from the order-only handheld slice
+  (`feat/handheld-tableside-ordering`, owner decision 2026-08-30). The app is pull-only today —
+  it refetches the affected read-model after each round/serve/fire, plus a manual refresh. Two
+  waiters on the same table therefore see stale data until a refetch (the server still guards
+  append-only rounds + price-locks, so concurrent rounds append safely). A live push channel —
+  the first real-time in the app — would give live multi-waiter + KDS-status-to-handheld updates.
+  Sizable new subsystem (server push + client subscribe); out of step with the current pull-only
+  architecture, so specced separately when it matters.
+- **Configurable per-device layout / face-set editor.** Deferred from the same slice. The handheld
+  ships a fixed phone face-set as a declarative constant (`HANDHELD_FACES`) keyed by device kind;
+  the owner wants this **configurable long-term** (2026-08-30). Additive, no destructive migration
+  (pre-production): persist a face-set per device (or per device kind) with a fallback to the
+  built-in constant (the `getLayout`-returns-defaults precedent), add a dashboard editor mirroring
+  the existing layout editor, and — the heavier, separable half — make the **table-order screen
+  itself** layout-driven the way the counter screen already is. The persisted shape is the
+  constant's shape, so the constant is the editor's default (exactly how the counter layout system
+  was built: constant first, editor as a plug-in slice).
 - **Unify string resolution behind one language-negotiation resolver (#167).** There are several
   divergent name/label resolvers (`localizedName`, `lineName`, `product-list`/`recipe-screen`'s
   hardcoded `descriptions["es"]`, `t()`/`pickLocale`) with different, in one case dead, fallbacks. The
