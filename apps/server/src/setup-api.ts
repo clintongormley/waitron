@@ -184,7 +184,9 @@ function asStringArray(value: unknown, field: string): string[] {
  * never enter the plan or any action (venue-plan.ts's admin note). A missing/mistyped field throws
  * `setup.request_invalid` naming the field, before any hashing or provisioning. Domain rules the plan
  * owns (locale cardinality, series-code equality, territory) are left to `planVenue` inside
- * `provisionVenue`; this screen is structural only.
+ * `provisionVenue`. This screen is structural (presence/shape) for every field EXCEPT one: the admin
+ * email is additionally FORMAT-validated — `parseAdminEmail` normalizes it and runs `isValidEmail`,
+ * throwing `person.email_invalid` on a present-but-malformed address (see the `email:` field below).
  */
 function parseVenue(venueRaw: unknown): VenueRequest {
   const v = asObject(venueRaw, "venue");
