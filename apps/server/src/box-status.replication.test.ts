@@ -20,6 +20,9 @@ import { mountManagementApi } from "./management-api.js";
 // packages/sync's own `retention.gate.test.ts`, not here.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
+// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
+// (per-tenant unique — persons_tenant_email_uq).
+const MANAGER_EMAIL = "manager@x.com";
 
 // One producing origin, and two subscribers: s1 has applied 3 of the origin's 10 captured rows
 // (lag 7), s2 is caught up (lag 0). `lagFor` returns worst-first, so the summary's `worstLagSeq` is
@@ -77,8 +80,8 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
   const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
@@ -143,12 +146,12 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
   return app;
 }
 
-/** Log in over HTTP as `personId`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, personId: string): Promise<string> {
+/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
+async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -159,10 +162,10 @@ describe("GET /api/box/status replication summary (real postgres)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId, managerId } = await setupTenant();
+    const { tenantId, nodeId } = await setupTenant();
     await seedReplication(tenantId);
     app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"));
-    managerCookie = await login(app, managerId);
+    managerCookie = await login(app, MANAGER_EMAIL);
   });
 
   it("summarises replication worst-first when sync is configured", async () => {

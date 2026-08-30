@@ -16,6 +16,9 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
+// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
+// (per-tenant unique — persons_tenant_email_uq).
+const MANAGER_EMAIL = "manager@x.com";
 const BUNDLE_PASS = "recovery pass phrase"; // ≥ MIN_PASSPHRASE_LENGTH
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -60,8 +63,8 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const m = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return m.rows[0]!.id;
   });
@@ -101,11 +104,11 @@ function buildApp(tenantId: string, stateDir: string): Hono {
   return app;
 }
 
-async function login(app: Hono, personId: string): Promise<string> {
+async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -115,12 +118,11 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
   let app: Hono;
   let cookie: string;
   let tenantId: string;
-  let managerId: string;
 
   beforeAll(async () => {
-    ({ tenantId, managerId } = await setupTenant());
+    ({ tenantId } = await setupTenant());
     app = buildApp(tenantId, await seedStateDir());
-    cookie = await login(app, managerId);
+    cookie = await login(app, MANAGER_EMAIL);
   });
 
   it("401s without a management session", async () => {
@@ -169,7 +171,7 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
     // the boundary classifies it a STRUCTURED 500 that names the absent file — not a 400 and not an
     // opaque 500. Same authorized manager, a state dir seeded all-but-one.
     const incompleteApp = buildApp(tenantId, await seedStateDir("trading.env"));
-    const incompleteCookie = await login(incompleteApp, managerId);
+    const incompleteCookie = await login(incompleteApp, MANAGER_EMAIL);
     const res = await incompleteApp.request("/api/box/recovery-bundle", {
       method: "POST",
       headers: { cookie: incompleteCookie, "content-type": "application/json" },

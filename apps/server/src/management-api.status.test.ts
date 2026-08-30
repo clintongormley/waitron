@@ -16,6 +16,10 @@ import { mountManagementApi } from "./management-api.js";
 // whose harness (`applyVenue`/`planVenue` + password `login`) this file reuses.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
+// Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
+// (per-tenant unique — persons_tenant_email_uq).
+const MANAGER_EMAIL = "manager@x.com";
+const STAFF_EMAIL = "clerk@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -77,12 +81,12 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
+      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -105,12 +109,12 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
-/** Log in over HTTP as `personId`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, personId: string): Promise<string> {
+/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
+async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ personId, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
@@ -125,10 +129,10 @@ let staffCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  const { tenantId, managerId, staffId } = await setupTenant();
+  const { tenantId } = await setupTenant();
   app = mountApp(tenantId);
-  managerCookie = await login(app, managerId);
-  staffCookie = await login(app, staffId);
+  managerCookie = await login(app, MANAGER_EMAIL);
+  staffCookie = await login(app, STAFF_EMAIL);
 });
 
 /** POST/GET/PATCH/DELETE a `/management-api/service-statuses[...]` path with the given cookie. */

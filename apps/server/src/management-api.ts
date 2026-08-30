@@ -157,23 +157,24 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
   "passkey.already_registered": 409,
-  // Login-enumeration trade-off, ACCEPTED and recorded here (not changed). This map is SHARED with the
-  // authenticated staff routes, where 404/403 are the CORRECT semantics: the write routes
+  // Login-enumeration posture, recorded here. This map is SHARED with the authenticated staff routes,
+  // where 404/403 are the CORRECT semantics: the write routes
   // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a
   // malformed one as `person.not_found` (404), and `resolveManagementSession` re-reads `persons.status`
   // on every gated request and throws `person.suspended` (403) when the logged-in manager was
-  // suspended mid-session (`packages/identity/src/management-session.ts`). A global remap to 401 to
-  // hide enumeration would mislabel both. The cost falls on the LOGIN route
-  // (`POST /management-api/session`): an unknown `personId` surfaces 404 and a suspended one 403, so a
-  // caller can distinguish either from a wrong password (`password.invalid`, 401) — where the till
-  // login deliberately maps `person.not_found → 401` instead (till-api.ts's `STATUS`). The enumeration
-  // value is negligible: active person ids are ALREADY public via the unauthenticated
-  // `GET /management-api/staff-roster` (`listActiveStaff` returns `{personId, displayName}` for every
-  // active person), so a 404-vs-401 split reveals nothing new about them; a suspended person is
-  // excluded from that roster, so a 403 can only be provoked by already holding their id — a 122-bit
-  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess. The passkey auth-verify
-  // route surfaces the same 403 (a suspended credential owner), and provoking it there is HARDER still:
-  // it needs the owner's random `credential_id`, not merely their person id.
+  // suspended mid-session (`packages/identity/src/management-session.ts`). The LOGIN route
+  // (`POST /management-api/session`) resolves the person by EMAIL and `loginManager` hardens it against
+  // enumeration itself: an unknown email is INDISTINGUISHABLE from a wrong password — both
+  // `password.invalid` (401) — so `person.not_found` is NOT reachable on login, and its only sources on
+  // this surface are the write routes' malformed-`:id` screens above. `person.suspended` (403) IS still
+  // surfaced by login: `loginManager` throws it pre-password, so a suspended account is revealed to an
+  // unauthenticated caller BY DESIGN — the accepted trade-off (see `loginManager`'s own note on the
+  // suspension-before-password ordering). The residual enumeration value is negligible: a suspended
+  // person is excluded from the unauthenticated `GET /management-api/staff-roster`
+  // (`listActiveStaff` returns only ACTIVE persons), so provoking the 403 needs the account's email,
+  // which is published nowhere. The passkey auth-verify route surfaces the same 403 (a suspended
+  // credential owner), and provoking it there is HARDER still: it needs the owner's random
+  // `credential_id`, not merely their email.
   "person.suspended": 403,
   "person.not_found": 404,
   "authorization.not_permitted": 403,
@@ -443,18 +444,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Login: password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as the app
-  // role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person lookup and
-  // a wrong password, missing/wrong TOTP, unknown or suspended person surfaces as the identity
-  // credential codes `STATUS` maps to 401/403/404. The body is read via `readJsonBody`
+  // Login: EMAIL + password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as
+  // the app role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person
+  // lookup. `loginManager` resolves the person by EMAIL (not a client-supplied id) and hardens against
+  // enumeration: an unknown email and a wrong password BOTH surface as `password.invalid` (401), so the
+  // response never reveals which addresses have accounts; a suspended person surfaces as
+  // `person.suspended` (403), a missing/wrong TOTP as `totp.invalid` (401) — the identity credential
+  // codes `STATUS` maps. The body is read via `readJsonBody`
   // (`read-json-body.ts`), which coerces an empty/malformed/`null` body to `{}` so it never reaches
   // `run` as an opaque 500 — see its doc for the two degenerate-body cases it handles. This is the
   // representative site the other body-parsing routes point at: a degenerate body falls through to the
   // screen as the route's OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on
-  // it is `undefined`, not a throw.) The body is then screened: a non-string or
-  // non-UUID `personId`, a non-string `password`, or a `totp` present but not a string, is refused as
-  // `password.invalid` — the SAME code a wrong password gets, so nothing in the response tells an
-  // unauthenticated caller which field failed. (Screening `totp` does NOT avert a 500: `verifyTotp`
+  // it is `undefined`, not a throw.) The body is then screened: a missing/empty `email` (not a string,
+  // or a string that trims to empty), a non-string `password`, or a `totp` present but not a string, is
+  // refused as `password.invalid` — the SAME code a wrong password or unknown email gets, so nothing in
+  // the response tells an unauthenticated caller which field failed. Email FORMAT is validated at
+  // WRITE-time (`createPerson`/`setEmail`'s `screenEmail`), NOT here: login screens only that a
+  // non-empty string was supplied and leaves a well-formed-but-unknown address to `loginManager`, which
+  // answers `password.invalid` uniformly. (Screening `totp` does NOT avert a 500: `verifyTotp`
   // fails closed — probed against otplib@13.4.1, `verifyTotp` returns `false` for a non-string `totp`
   // (number/null/undefined/object/boolean/non-six-digit string all tested): v13's `verifySync` throws
   // on such input and `verifyTotp`'s catch swallows the throw, so the wrapper never surfaces it — a
@@ -464,24 +471,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // the review's "totp → 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
-      const body = await readJsonBody<{ personId?: string; password?: string; totp?: string }>(c);
+      const body = await readJsonBody<{ email?: string; password?: string; totp?: string }>(c);
       if (
-        typeof body.personId !== "string" ||
-        !isUuid(body.personId) ||
+        typeof body.email !== "string" ||
+        body.email.trim() === "" ||
         typeof body.password !== "string" ||
         (body.totp !== undefined && typeof body.totp !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
-      // Bind the validated fields to locals: the guard narrows `body.personId`/`body.password` to
+      // Bind the validated fields to locals: the guard narrows `body.email`/`body.password` to
       // `string` HERE, but that narrowing does not survive into the `withTenant` closure below (TS
       // resets a captured property to its declared `string | undefined`), so the closure reads these.
-      const { personId, password, totp } = body;
+      const { email, password, totp } = body;
       const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return loginManager(tx, {
           tenantId: deps.cfg.tenantId,
-          personId,
+          email,
           password,
           totp,
         });
