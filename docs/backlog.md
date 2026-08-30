@@ -121,7 +121,7 @@ demo or behind-the-scenes".
    follow-ups (below):** handheld live updates; the configurable per-device layout editor.
    **Pairs with modifiers (#7)** — a waiter taking "burger, no onions" at the table needs them.
 
-   **→ NEXT BUILD: handheld cash-at-table** (owner reversed order-only, 2026-08-30). Order-only was a
+   **Handheld cash-at-table — LANDED (#176)** (owner reversed order-only, 2026-08-30). Order-only was a
    **risk-scoping choice, not a fiscal necessity.** The SIF is the **submitting node** (`nodeId`,
    `packages/core/src/record-sale.ts:79-82` — "Which node processes and chains the sale — the
    SIF/chain/series key"), **not** the till; `tillId` is separate metadata. So a handheld files a sale
