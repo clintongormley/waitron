@@ -3,9 +3,9 @@ import { setLocale } from "./t.js";
 import { codeMessage } from "./codes.js";
 
 afterEach(() => {
-  // codeMessage's default locale reads t.ts's module-level locale; reset to the shipped default so a
-  // setLocale in one test cannot leak into another (order-independence, §4).
-  setLocale("es-ES");
+  // codeMessage's default locale reads t.ts's module-level locale; reset to the shipped default (en-GB)
+  // so a setLocale in one test cannot leak into another (order-independence, §4).
+  setLocale("en-GB");
 });
 
 it("resolves a known code to friendly copy in English and Spanish", () => {
@@ -34,10 +34,10 @@ it("degrades a code colliding with an Object.prototype member to the generic sen
   expect(codeMessage("constructor", "es")).toBe("Algo salió mal, inténtalo de nuevo");
 });
 
-it("defaults to the module locale when none is passed (shipped default es-ES)", () => {
-  expect(codeMessage("swap.not_found")).toBe("No se ha encontrado ese cambio de turno");
-  setLocale("en");
+it("defaults to the module locale when none is passed (shipped default en-GB)", () => {
   expect(codeMessage("swap.not_found")).toBe("That swap could not be found");
+  setLocale("es-ES");
+  expect(codeMessage("swap.not_found")).toBe("No se ha encontrado ese cambio de turno");
 });
 
 it("resolves the device pairing-code errors to specific, actionable copy (device-identity-1 §5a)", () => {

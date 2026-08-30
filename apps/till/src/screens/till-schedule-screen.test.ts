@@ -231,7 +231,7 @@ describe("till-schedule-screen", () => {
     await el.updateComplete;
     root(el).querySelector<HTMLElement>("wt-button.abs-submit")!.click();
     await flush(el);
-    expect(root(el).textContent).toContain(codeMessage("absence.overlaps", "es"));
+    expect(root(el).textContent).toContain(codeMessage("absence.overlaps"));
     expect(root(el).textContent).not.toContain("absence.overlaps");
   });
 

@@ -338,6 +338,9 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
   return mountWidget<TillApp>("till-app", { api: currentApi });
 }
 
+// Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
+// so the boot/login switches to en-GB below are observable against a Spanish starting point rather than
+// a no-op against an already-English default (§1: a switch you cannot observe proves nothing).
 beforeEach(() => setLocale("es-ES"));
 afterEach(cleanupWidgets);
 
@@ -355,7 +358,7 @@ describe("till-app", () => {
   });
 
   it("boots: getTill sets the active locale", async () => {
-    // getTill returns a locale that differs from the es-ES default, so the change is observable.
+    // getTill returns a locale that differs from the es-ES baseline (beforeEach), so the change is observable.
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, locale: "en" }),
     });

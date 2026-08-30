@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { PropertyValues } from "lit";
 import { baseStyles } from "@waitron/ui";
+import { FALLBACK_LOCALE } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { productName } from "../widgets/product-name.js";
@@ -195,8 +196,10 @@ export class TillAllergenScreen extends LitElement {
 
   /** The products to lay out, straight from `GET /api/products` (each carrying its `allergens`). */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The OPERATOR-UI locale the matrix renders in on-screen. Defaults to the deli's es-ES. */
-  @property() locale = "es-ES";
+  /** The OPERATOR-UI locale the matrix renders in on-screen. The parent (`till-counter-screen`) feeds
+   * the active `currentLocale()`; this default (FALLBACK_LOCALE, the neutral English floor) is only the
+   * standalone/pre-wire fallback. NOT the invoice locale below — that is the fiscal receipt language. */
+  @property() locale: string = FALLBACK_LOCALE;
   /** The INVOICE (customer) locale a Print re-renders in — the printed sheet's language, independent of
    * the operator UI, exactly like `till-ticket-view.invoiceLocale`. Defaults to the deli's es-ES. */
   @property() invoiceLocale = "es-ES";

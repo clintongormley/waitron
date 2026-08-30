@@ -46,10 +46,10 @@ const mount = (over: Partial<TillSaleResult> = {}, receipt?: ReceiptConfig) =>
 
 const text = (el: TillTicketView): string => norm(el.shadowRoot!.textContent ?? "");
 
-// setLocale mutates module-level state; put the shipped default back for the other suites.
+// setLocale mutates module-level state; put the shipped default (en-GB) back for the other suites.
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
+  setLocale("en-GB");
 });
 
 describe("till-ticket-view", () => {
@@ -175,10 +175,12 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("labels the reprint + open-drawer buttons in the operator-UI locale (es by default, en when switched)", async () => {
+  it("labels the reprint + open-drawer buttons in the operator-UI locale, flipping with the UI language", async () => {
     // UNLIKE the fiscal ticket body (invoice-locale Spanish constants), these two OPERATOR actions read
     // the operator-UI `t()`, so they flip with the UI language — the i18n keys are English identifiers
-    // (`action.reprint`/`action.open_drawer`), the values are localised copy.
+    // (`action.reprint`/`action.open_drawer`), the values are localised copy. Set es-ES explicitly (the
+    // shipped default is en-GB) to observe the Spanish side, then switch to English.
+    setLocale("es-ES");
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
       "Reimprimir",

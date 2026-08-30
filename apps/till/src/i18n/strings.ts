@@ -2,9 +2,10 @@
 //
 // English is the SOURCE of truth: `en` below is the base map, `StringKey` is
 // derived from its keys, and every other locale is a translation that may only
-// re-say what `en` already names. Spanish (`es`) is what the deli actually
-// renders (the shipped default locale is es-ES; see t.ts), but it is a
-// translation, not the origin — a key must exist in `en` first.
+// re-say what `en` already names. Spanish (`es`) is what a Spanish venue
+// renders (the shipped default is en-GB; a venue is driven to es-ES at boot;
+// see t.ts), but it is a translation, not the origin — a key must exist in
+// `en` first.
 //
 // `apps/*` is exempt from the english-only guard (packages/db/src/english-only.ts),
 // so the English UI copy here is deliberate and allowed; the Spanish below is
@@ -460,7 +461,7 @@ export const es: Record<StringKey, string> = {
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
 // English request resolves directly rather than only through t()'s fallback.
 // Both the language tag `es` and the region tag `es-ES` map to the same Spanish
-// catalogue — the till's default locale is es-ES. Catalogues are typed
+// catalogue — the language a Spanish venue is driven to. Catalogues are typed
 // Partial<Record<StringKey, string>> so a future locale may be introduced with
 // only some keys translated; t() fills the gaps from the English base.
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

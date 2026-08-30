@@ -18,25 +18,26 @@ class LocaleProbe extends LitElement {
 
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
+  setLocale("en-GB");
 });
 
 describe("LocaleChangeController", () => {
   it("repaints the host when the locale changes", async () => {
+    // Start at the en-GB default, switch to es-ES; the probe must repaint from English to Spanish.
     const { el } = await mountWidget<LocaleProbe>("locale-probe", {});
-    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
-    setLocale("en-GB");
-    await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
   });
 
   it("unsubscribes on disconnect so a later switch does not repaint it", async () => {
     const { el, host } = await mountWidget<LocaleProbe>("locale-probe", {});
-    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
+    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
     host.remove(); // disconnectedCallback → hostDisconnected → dispose
-    setLocale("en-GB");
+    setLocale("es-ES");
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
+    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
   });
 
   it("invokes a custom handler instead of the default requestUpdate", async () => {
@@ -49,7 +50,7 @@ describe("LocaleChangeController", () => {
     new LocaleChangeController(el, () => {
       calls += 1;
     });
-    setLocale("en-GB");
+    setLocale("es-ES");
     expect(calls).toBe(1);
   });
 });

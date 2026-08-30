@@ -1,5 +1,12 @@
-import { expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { formatMoney } from "./format.js";
+import { setLocale } from "./t.js";
+
+afterEach(() => {
+  // formatMoney's default reads t.ts's module-level locale; reset to the shipped default (en-GB) so a
+  // setLocale in one test cannot leak into another (order-independence, §4).
+  setLocale("en-GB");
+});
 
 // es-ES currency formatting puts a NON-BREAKING SPACE (U+00A0) — and on some ICU
 // builds a NARROW NO-BREAK SPACE (U+202F) — between the amount and the €. The
@@ -19,6 +26,11 @@ it("formats the English base as €12.27", () => {
   expect(formatMoney("12.27", "en")).toBe("€12.27");
 });
 
-it("defaults to es-ES when no locale is passed", () => {
+it("follows the active UI locale when no locale is passed", () => {
+  // The operator-UI call sites (basket, totals, table-order screen) pass no locale, so money must
+  // track the active UI language: English amounts in English mode, es-ES amounts in Spanish mode.
+  setLocale("en-GB");
+  expect(formatMoney("12.27")).toBe("€12.27");
+  setLocale("es-ES");
   expect(norm(formatMoney("12.27"))).toBe("12,27 €");
 });
