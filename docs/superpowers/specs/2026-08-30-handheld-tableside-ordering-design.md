@@ -22,6 +22,15 @@ verbatim before the design that follows from them.
    no chain, no installation number, no series. (The rejected alternative — pay-at-table — would make
    each handheld its own fiscal SIF, per the per-till-chain model, a large commitment touching
    unrecoverable invariants.)
+
+   > **Correction (2026-08-30):** the parenthetical above is **wrong** on the fiscal model, and the
+   > owner reversed this decision the same day. The SIF is the **submitting node** (`nodeId`), **not**
+   > the till or the device — `packages/core/src/record-sale.ts:79-82` takes `tillId` and `nodeId` as
+   > separate inputs and names `nodeId` "the SIF/chain/series key". A handheld is a client of a node, so
+   > it files under **that node's SIF exactly like a till** — there is **no per-device SIF**. Order-only
+   > was therefore a **risk-scoping choice, not a fiscal necessity**. Handhelds taking payment (cash
+   > first) is the **NEXT build** — see `docs/backlog.md` item 4 "→ NEXT BUILD: handheld cash-at-table"
+   > and the allowlist in `2026-08-30-device-auth-enrolment-fail-closed-design.md` §3.
 2. **Build a `handheld` device kind now** (enrolled via a pairing code), rather than deferring to a
    plain PWA + PIN. The staff PIN is still the action gate; the device layer adds trust, location
    binding, shell selection, and management/revocation.

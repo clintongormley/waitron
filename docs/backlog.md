@@ -114,6 +114,22 @@ demo or behind-the-scenes".
    follow-ups (below):** handheld live updates; the configurable per-device layout editor.
    **Pairs with modifiers (#7)** — a waiter taking "burger, no onions" at the table needs them.
 
+   **→ NEXT BUILD: handheld cash-at-table** (owner reversed order-only, 2026-08-30). Order-only was a
+   **risk-scoping choice, not a fiscal necessity.** The SIF is the **submitting node** (`nodeId`,
+   `packages/core/src/record-sale.ts:79-82` — "Which node processes and chains the sale — the
+   SIF/chain/series key"), **not** the till; `tillId` is separate metadata. So a handheld files a sale
+   under **its node's SIF exactly like a till** — no per-device SIF, no separate chain. This slice lets
+   a waiter settle a **CASH** sale on the handheld: **reverse PR #173's firewall for the cash tender
+   only** (allow `handheld` on `POST /api/sales` with a cash tender), **un-hide the cash tender** on the
+   handheld pay UI (flip `canSettle` for cash), and prove **fiscal parity** (a handheld cash sale files
+   a correct chained registro under the box's node/SIF — same assertions as a counter cash sale).
+   **Tender-aware:** a handheld's **card** tender (manual on `/api/sales` and integrated `/api/pay`)
+   stays fenced, `/api/drawer/open` stays fenced (a table waiter has a pocket float, not a register),
+   and `place`/`collect` stay fenced. **Deferred siblings:** *handheld card via mobile reader* (Stripe
+   Terminal / Tap to Pay — its own slice) and *device auth: enrol-all + fail-closed allowlist* (infra,
+   post-demo — spec `docs/superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md`,
+   whose §3 allowlist already encodes "sell-cash = till + handheld").
+
 **Tier B — an owner will ask; product-defining:**
 
 6. **Reservations (Bookings-1).** Staff-entered, day-list; specced + planned
