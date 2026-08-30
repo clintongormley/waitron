@@ -1602,6 +1602,30 @@ export async function transferLines(
     await lockOpenTab(tx, tabId);
   }
 
+  // The origin and destination row locks are held; carry the items over (whole lines + partial splits).
+  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
+}
+
+/**
+ * Carry `transfers` (whole lines and/or partial-quantity splits) from `fromTabId` onto `toTabId`, keeping
+ * each unit's LOCKED price columns (no catalogue re-read) and CONSERVING quantity — the shared move/split
+ * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It performs NO locking of its
+ * own: the CALLER must already hold the `FOR UPDATE` row locks on both orders (`transferLines` via its
+ * `lockOpenTab` loop, requiring both ends to be TABS; `splitOffCheck` via its own origin lock, its
+ * destination being a freshly-minted, uncontended check). Every transfer is VALIDATED before any move or
+ * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
+ * quantity outside `0 < q ≤ line.quantity` or a malformed literal), so one bad entry leaves both orders
+ * untouched. The whole-line path delegates to {@link moveTabLines} (which accepts any OPEN destination,
+ * so a table-less check is a valid target — unlike `lockOpenTab`); the split path appends new destination
+ * lines after the moves. `cfg` supplies the `tenant_id` stamped on each split-inserted line.
+ */
+async function carveOffLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<void> {
   // Read every named source line ONCE, under the lock, into a map. The per-unit locked values a split
   // INHERITS come from here — never a catalogue re-read.
   const named = transfers.map((t) => t.lineNo);
@@ -1719,6 +1743,56 @@ export async function transferLines(
       });
     }
   }
+}
+
+/**
+ * Spin selected items off an OPEN tab into a NEW, separately-filing CHECK (split-bill, TS-5). A check
+ * is an ordinary `open` working order — created lineless via `createOpenOrder` (inheriting the origin's
+ * node/till and, at pay, `cfg.seriesId`) — that NO table points at: it is a payment unit, not a seat
+ * (design §2), so unlike a tab there is no `dining_tables.tab_id` back-pointer to set. Because the check
+ * is table-less, the items are carried over by {@link carveOffLines} directly (TS-4's whole/partial
+ * move/split core, which delegates whole lines to `moveTabLines`) rather than by `transferLines` — whose
+ * `lockOpenTab` loop requires BOTH ends to be tabs and would reject a detached check. The move keeps each
+ * unit's LOCKED `unit_price_gross` (no catalogue re-look-up) and CONSERVES quantity, so the check and the
+ * origin remainder each stay internally consistent and each files its OWN correct desglose on its own pay
+ * (design §4), and it raises TS-4's inherited `tab.transfer_quantity_invalid` / `tab.line_not_found`.
+ *
+ * Pay the check with the EXISTING `payWorkingOrder` (till-sale.ts) — there is NO new pay verb, and the
+ * `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes it file AT MOST ONE sale.
+ * Called once per check; the origin holds the remainder (emptied ⇒ abandon it with the existing
+ * `abandonHeldOrder`, or pay it as the last check — design §3). Runs on the CALLER's tx/tenant scope.
+ */
+export async function splitOffCheck(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<{ checkId: string }> {
+  // Lock + validate the origin is an OPEN tab before minting anything (a fresh order number for a
+  // check that would roll back is wasteful; and this is the `tab.not_open` guard design §3 names). The
+  // FOR UPDATE also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
+  const [origin] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, fromTabId))
+    .for("update");
+  if (origin?.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: fromTabId });
+  }
+
+  // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
+  // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
+  const checkId = randomUUID();
+  await createOpenOrder(tx, cfg, checkId, [], null);
+
+  // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
+  // core, which keeps the locked gross, conserves quantity, and raises the inherited
+  // `tab.transfer_quantity_invalid` / `tab.line_not_found` guards. The origin row is already locked
+  // above and the check is a fresh, uncontended row, so no further lock is needed here. A failure rolls
+  // back the whole tx, check included — no orphan.
+  await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
+
+  return { checkId };
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
