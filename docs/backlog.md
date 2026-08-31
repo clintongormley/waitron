@@ -73,13 +73,18 @@ live updates and the per-device layout editor (both under *Debt → cross-cuttin
 **Tier B — an owner will ask; product-defining:**
 
 - **#7 Ordering modifiers / variants** — LANDED (#184). **Open follow-ons, each its own slice:**
-  - **Modifier ↔ allergen association** (owner, 2026-08-30) — a modifier changes a dish's as-served
-    allergen profile in BOTH directions: *adds* ("extra cheese"→milk) and, safety-critically, *removes*
-    ("gluten-free bun"→gluten; "oat milk"→milk). Allergen overlay on `option_group_items` (adds/removes,
-    EU-14) + per-line derivation (dish − removed + added) on the existing product allergen subsystem.
-    **Non-fiscal** (never in the huella), separately reviewable — but **legally load-bearing** (EU
-    1169/2011 Annex II, food-safety advisor) and must ship add+remove together (an add-only half would
-    show a "gluten-free" modifier as still containing gluten — worse than nothing). Own spec.
+  - **Modifier ↔ allergen association** — LANDED (#187). Per-option add/remove EU-14 overlay on
+    `option_group_items` (nullable `add_allergens`/`remove_allergens`, migration 0085) folded by one
+    shared pure `deriveAsServedAllergens` (**Cautious** policy: an unreviewed base stays pending &
+    removes are ignored, a remove clears may_contain, an add wins a conflict); surfaced on the till
+    order line (client-side deep import) + the KDS/expo tickets (server) + dashboard authoring.
+    **Non-fiscal**, pinned by a huella-invariance test (legally load-bearing, EU 1169/2011). Rebased
+    onto #186 (both touch `option_group_items`). **Open follow-ons:** (a) **owner UX call** — a plain
+    modifier-less *unreviewed* dish shows "not fully reviewed" on the KDS but is suppressed on the till
+    (the KDS errs safe, spec says pending shows "on every surface"; pinned by a test — align the two if
+    the owner prefers); (b) extract the shared `#allergens` render + CSS across
+    basket/station-queue/expo (~90 lines duplicated); (c) fold the base-allergen `products` join into
+    the main KDS queue select (one fewer read).
   - **Per-option quantity** ("extra shot ×2", author-capped by `option_group_items.max_quantity`,
     priced per dish) **+ dish-line quantity** (a −/N/+ stepper on each basket line, no auto-merge of
     identical lines) — LANDED (#186). Deferred follow-ons: on-screen **expo / station-queue / tab**
@@ -180,7 +185,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186) | menu draft/publish + schedule (#8); modifier↔allergen (#7); nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187) | menu draft/publish + schedule (#8); nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
