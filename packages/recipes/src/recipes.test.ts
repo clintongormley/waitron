@@ -174,6 +174,26 @@ describe("recipe composition and allergen derivation", () => {
     expect(diet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
   });
 
+  // THE gate test (Task 8a): an ORIGIN-ONLY ingredient edit — no allergen change — must fan out and
+  // re-derive the product's diet. Proves the widened fan-out guard: with the guard still gated on
+  // `patch.allergens !== undefined` alone this fails (the product stays vegan); widened to fire on
+  // `patch.dietaryOrigin !== undefined` too it passes.
+  it("propagates an ORIGIN-ONLY ingredient edit and re-derives the product diet", async () => {
+    const diet = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const tofu = await createIngredient(tx, { name: "tofu", dietaryOrigin: "plant" });
+      await setProductRecipe(tx, productId, [tofu.id]);
+      // Origin-only edit: no `allergens` key in the patch at all.
+      await updateIngredient(tx, tofu.id, { dietaryOrigin: "meat" });
+      const [r] = await tx
+        .select({ diet: products.diet })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!.diet;
+    });
+    expect(diet).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
+  });
+
   it("getProductRecipe returns the ingredient list", async () => {
     const recipe = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);

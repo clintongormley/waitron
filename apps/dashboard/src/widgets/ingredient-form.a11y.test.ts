@@ -21,6 +21,7 @@ const INGREDIENT: Ingredient = {
   id: "ing-1",
   name: "Leche entera",
   allergens: { milk: { presence: "contains", source: "vaca" } },
+  dietaryOrigin: "dairy",
   active: false,
 };
 

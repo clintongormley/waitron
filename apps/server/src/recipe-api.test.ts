@@ -202,6 +202,61 @@ describe("mountRecipeApi", () => {
     expect(row?.allergens).toEqual({ milk: { presence: "contains" } });
   });
 
+  it("creates an ingredient with a dietary origin and reads it back", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/ingredients", {
+      body: { name: "beef", dietaryOrigin: "meat" },
+      cookie: managerCookie,
+    });
+    expect(created.status).toBe(201);
+    expect((await created.json()) as { dietaryOrigin: string }).toMatchObject({
+      dietaryOrigin: "meat",
+    });
+  });
+
+  it("patches an ingredient's dietary origin and reflects it in the list", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "tofu");
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { dietaryOrigin: "plant" },
+      cookie: managerCookie,
+    });
+    expect(patched.status).toBe(204);
+    const list = (await (
+      await send(app, "GET", "/management-api/ingredients", { cookie: managerCookie })
+    ).json()) as { id: string; dietaryOrigin: unknown }[];
+    expect(list.find((i) => i.id === id)?.dietaryOrigin).toBe("plant");
+  });
+
+  it("clears (uncategorises) an ingredient's dietary origin with null on PATCH", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "mystery");
+    await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { dietaryOrigin: "plant" },
+      cookie: managerCookie,
+    });
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { dietaryOrigin: null },
+      cookie: managerCookie,
+    });
+    expect(patched.status).toBe(204);
+    const list = (await (
+      await send(app, "GET", "/management-api/ingredients", { cookie: managerCookie })
+    ).json()) as { id: string; dietaryOrigin: unknown }[];
+    expect(list.find((i) => i.id === id)?.dietaryOrigin).toBeNull();
+  });
+
+  it("rejects an invalid dietary origin → diet.invalid_origin 400", async () => {
+    const res = await send(mountApp(), "POST", "/management-api/ingredients", {
+      body: { name: "x", dietaryOrigin: "wombat" },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "diet.invalid_origin" },
+    });
+  });
+
   it("rejects a non-uuid ingredient id on PATCH → shared.invalid_id 400", async () => {
     const res = await send(mountApp(), "PATCH", "/management-api/ingredients/not-a-uuid", {
       body: { name: "x" },

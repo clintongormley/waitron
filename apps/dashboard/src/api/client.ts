@@ -104,6 +104,16 @@ export interface AllergenEntry {
  */
 export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
+/**
+ * An ingredient's dietary-origin category (design §diet) — the taxonomy the recipes/catalogue folds
+ * roll up into a product's `diet`. A LOCAL copy of `@waitron/catalogue`'s `DIETARY_ORIGINS` token
+ * union (no runtime import — the #70 bundle rule, as the allergen shapes above are). `null` on an
+ * ingredient means UNCATEGORISED, which makes every product using it publish diet-PENDING rather than
+ * a false "vegan"; the server's `validateOrigin` is the `diet.invalid_origin` authority.
+ */
+export type DietaryOrigin =
+  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
+
 /** One `GET/POST /management-api/catalogues` row — mirrors catalogue's `Catalogue`. */
 export interface CatalogueSummary {
   id: string;
@@ -314,21 +324,27 @@ export interface Ingredient {
   id: string;
   name: string;
   allergens: AllergenDeclaration;
+  /** The dietary-origin category, or null when uncategorised (dependent products go diet-PENDING). */
+  dietaryOrigin: DietaryOrigin | null;
   active: boolean;
 }
 
 /** The `POST /management-api/ingredients` body — mirrors recipes' `CreateIngredientInput`. `allergens`
- * omitted leaves the ingredient unreviewed (null); a supplied map is validated server-side. */
+ * omitted leaves the ingredient unreviewed (null); `dietaryOrigin` omitted leaves it uncategorised
+ * (null); a supplied map/value is validated server-side. */
 export interface IngredientInput {
   name: string;
   allergens?: Record<string, AllergenEntry>;
+  dietaryOrigin?: DietaryOrigin | null;
 }
 
 /** The `PATCH /management-api/ingredients/:id` body — mirrors recipes' `UpdateIngredientInput`. Every
- * key is optional; `allergens: null` clears the declaration back to unreviewed, `active` toggles it. */
+ * key is optional; `allergens: null` clears the declaration back to unreviewed, `dietaryOrigin: null`
+ * uncategorises the ingredient, `active` toggles it. */
 export interface IngredientPatch {
   name?: string;
   allergens?: AllergenDeclaration;
+  dietaryOrigin?: DietaryOrigin | null;
   active?: boolean;
 }
 

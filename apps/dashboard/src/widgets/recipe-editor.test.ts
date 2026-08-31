@@ -13,10 +13,17 @@ const INGREDIENTS: Ingredient[] = [
     id: "i1",
     name: "Harina de trigo",
     allergens: { gluten: { presence: "contains" } },
+    dietaryOrigin: null,
     active: true,
   },
-  { id: "i2", name: "Sal", allergens: {}, active: true },
-  { id: "i3", name: "Leche entera", allergens: { milk: { presence: "contains" } }, active: true },
+  { id: "i2", name: "Sal", allergens: {}, dietaryOrigin: null, active: true },
+  {
+    id: "i3",
+    name: "Leche entera",
+    allergens: { milk: { presence: "contains" } },
+    dietaryOrigin: "dairy",
+    active: true,
+  },
 ];
 
 /** A minimal but complete product; the editor only reads its `id`. */

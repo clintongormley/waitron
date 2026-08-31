@@ -4,7 +4,7 @@ import { codeMessage } from "../i18n/codes.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-ingredient-form` so `mountWidget` can create it.
 import { IngredientForm } from "./ingredient-form.js";
-import type { AllergenDeclaration, Ingredient } from "../api/client.js";
+import type { AllergenDeclaration, DietaryOrigin, Ingredient } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
@@ -39,6 +39,15 @@ async function emitAllergens(el: IngredientForm, value: AllergenDeclaration): Pr
   const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
   picker.dispatchEvent(
     new CustomEvent("allergens-changed", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+/** Announce a dietary origin from the child origin picker, as the real picker's event would. */
+async function emitOrigin(el: IngredientForm, origin: DietaryOrigin | null): Promise<void> {
+  const picker = el.shadowRoot!.querySelector("dashboard-dietary-origin-picker")!;
+  picker.dispatchEvent(
+    new CustomEvent("origin-changed", { detail: { origin }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
@@ -107,6 +116,28 @@ describe("ingredient-form", () => {
     expect(body.allergens).toEqual({});
   });
 
+  // A selected dietary origin is threaded into the create body under `dietaryOrigin`.
+  it("includes the selected dietary origin in the create body", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Ternera");
+    await emitOrigin(el, "meat");
+    const created = nextEvent<{ [k: string]: unknown }>(el, "create-ingredient");
+    confirm(el);
+    const body = (await created).detail;
+    expect(body).toEqual({ name: "Ternera", dietaryOrigin: "meat" });
+  });
+
+  // The default (not-categorised) origin is the server default, so a create with no origin picked
+  // OMITS the key — the same minimal-body posture the PENDING allergen case takes.
+  it("omits dietaryOrigin from the create body when left uncategorised", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Sal");
+    const created = nextEvent<{ [k: string]: unknown }>(el, "create-ingredient");
+    confirm(el);
+    const body = (await created).detail;
+    expect("dietaryOrigin" in body).toBe(false);
+  });
+
   // A non-empty name is required client-side (the column is NOT NULL; a nameless ingredient is a UI
   // error). An empty name blocks confirm — no event — and shows a `role="alert"` banner.
   it("blocks confirm and shows an error when the name is empty", async () => {
@@ -166,10 +197,11 @@ describe("ingredient-form", () => {
     id: "ing-1",
     name: "Leche entera",
     allergens: { milk: { presence: "contains" } },
+    dietaryOrigin: "dairy",
     active: false,
   };
 
-  it("pre-fills the name, active switch and allergen picker from a passed ingredient", async () => {
+  it("pre-fills the name, active switch, allergen picker and origin picker from a passed ingredient", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
       ingredient: EDIT_INGREDIENT,
@@ -188,9 +220,14 @@ describe("ingredient-form", () => {
       "[data-test=reviewed]",
     )!;
     expect(reviewed.checked).toBe(true);
+    // The origin picker is seeded via its `value` — its select reflects the ingredient's origin.
+    const origin = el.shadowRoot!.querySelector("dashboard-dietary-origin-picker")!;
+    await (origin as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const sel = origin.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=origin]")!;
+    expect(sel.value).toBe("dairy");
   });
 
-  it("emits update-ingredient with the id and a patch of name+active+allergens in edit mode", async () => {
+  it("emits update-ingredient with the id and a patch of name+active+allergens+dietaryOrigin in edit mode", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
       ingredient: EDIT_INGREDIENT,
@@ -207,7 +244,38 @@ describe("ingredient-form", () => {
       name: "Leche entera",
       active: false,
       allergens: { milk: { presence: "contains" } },
+      dietaryOrigin: "dairy",
     });
+  });
+
+  // An origin-only edit (operator picks a new origin, touches nothing else) carries the new origin in
+  // the patch — the field the server threads into `updateIngredient` to fan out the product diet.
+  it("reflects an origin change in the edit patch", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
+      open: true,
+      ingredient: EDIT_INGREDIENT,
+    });
+    await el.updateComplete;
+    await emitOrigin(el, "meat");
+    const updated = nextEvent<{ patch: { dietaryOrigin: unknown } }>(el, "update-ingredient");
+    confirm(el);
+    expect((await updated).detail.patch.dietaryOrigin).toBe("meat");
+  });
+
+  // Clearing the origin (the picker's not-categorised option → null) sends `dietaryOrigin: null` in
+  // the patch — LEGAL on a patch (it uncategorises the ingredient).
+  it("sends dietaryOrigin: null in an edit patch to uncategorise", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
+      open: true,
+      ingredient: EDIT_INGREDIENT,
+    });
+    await el.updateComplete;
+    await emitOrigin(el, null);
+    const updated = nextEvent<{ patch: { dietaryOrigin: unknown } }>(el, "update-ingredient");
+    confirm(el);
+    const patch = (await updated).detail.patch;
+    expect("dietaryOrigin" in patch).toBe(true);
+    expect(patch.dietaryOrigin).toBeNull();
   });
 
   // The active toggle is edit-only (IngredientInput has no `active`); flipping it in edit mode is
@@ -252,7 +320,13 @@ describe("ingredient-form", () => {
   it("carries allergens: null in the patch when editing a PENDING ingredient untouched", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
-      ingredient: { id: "ing-2", name: "Azúcar", allergens: null, active: true },
+      ingredient: {
+        id: "ing-2",
+        name: "Azúcar",
+        allergens: null,
+        dietaryOrigin: null,
+        active: true,
+      },
     });
     await el.updateComplete;
     const updated = nextEvent<{ patch: { allergens: unknown } }>(el, "update-ingredient");

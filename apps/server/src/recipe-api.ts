@@ -18,7 +18,7 @@ import {
   getProductRecipe,
   setProductRecipe,
 } from "@waitron/recipes";
-import type { ProductAllergens } from "@waitron/catalogue";
+import type { DietaryOrigin, ProductAllergens } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
@@ -117,16 +117,24 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       // Read via `readJsonBody` so an empty/malformed/`null`/non-object body reaches the `name` screen
       // as a 400 rather than becoming an opaque 500 — the catalogue null-body convention.
-      const body = await readJsonBody<{ name?: unknown; allergens?: unknown }>(c);
+      const body = await readJsonBody<{
+        name?: unknown;
+        allergens?: unknown;
+        dietaryOrigin?: unknown;
+      }>(c);
       if (typeof body.name !== "string") {
         throw new AppError("management.request_invalid", { field: "name" });
       }
-      // `allergens` is left to `createIngredient`'s `validateAllergens`, which throws the authoritative
-      // `allergen.*` codes for a wrong shape or unknown code — the same posture `catalogue-api.ts`'s
-      // product create takes (it never screens `allergens` in the route either).
+      // `allergens` / `dietaryOrigin` are left to `createIngredient`'s `validateAllergens` /
+      // `validateOrigin`, which throw the authoritative `allergen.*` / `diet.invalid_origin` codes for a
+      // wrong shape or unknown value — the same posture `catalogue-api.ts`'s product create takes (it
+      // never screens these in the route either).
       const input = {
         name: body.name,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
+        ...(body.dietaryOrigin === undefined
+          ? {}
+          : { dietaryOrigin: body.dietaryOrigin as DietaryOrigin | null }),
       };
       const created = await gated(sessionId, (tx) => createIngredient(tx, input));
       return c.json(created, 201);
@@ -138,8 +146,18 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "IngredientId");
-      const body = await readJsonBody<{ name?: unknown; allergens?: unknown; active?: unknown }>(c);
-      const patch: { name?: string; allergens?: ProductAllergens | null; active?: boolean } = {};
+      const body = await readJsonBody<{
+        name?: unknown;
+        allergens?: unknown;
+        dietaryOrigin?: unknown;
+        active?: unknown;
+      }>(c);
+      const patch: {
+        name?: string;
+        allergens?: ProductAllergens | null;
+        dietaryOrigin?: DietaryOrigin | null;
+        active?: boolean;
+      } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string") {
           throw new AppError("management.request_invalid", { field: "name" });
@@ -158,6 +176,12 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       // `allergens` in the route either).
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;
+      }
+      // `dietaryOrigin` present (a value, or a literal `null` → uncategorise) is passed straight to
+      // `updateIngredient`, which validates a non-null value via `validateOrigin` (the
+      // `diet.invalid_origin` authority) — the same route posture used for `allergens`.
+      if (body.dietaryOrigin !== undefined) {
+        patch.dietaryOrigin = body.dietaryOrigin as DietaryOrigin | null;
       }
       await gated(sessionId, (tx) => updateIngredient(tx, id, patch));
       return c.body(null, 204);
