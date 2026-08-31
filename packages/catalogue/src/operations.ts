@@ -19,6 +19,13 @@ import {
   type ProductAllergens,
 } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
+import {
+  assertDietOverrideDisjoint,
+  deriveDietProfile,
+  overlayDietProfile,
+  type DietDerivation,
+  type DietOverride,
+} from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
 /**
@@ -79,6 +86,10 @@ export interface CreateProductInput {
   vatClass: VatClass;
   /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
   allergens?: ProductAllergens;
+  /** The staff diet override (forced vegan/vegetarian/halal/kosher + hand contains-tags). Omitted or
+   * `null` leaves it null (no override); checked disjoint before the write (CLAUDE.md §3). At create
+   * there is no recipe, so published `diet` = the override overlaid on the empty derived profile. */
+  dietOverride?: DietOverride | null;
   /** A stored photo reference (`<sha256>.<ext>`); omitted leaves it null (no picture). */
   image?: string;
   /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
@@ -96,6 +107,9 @@ export interface UpdateProductInput {
   categoryId?: string | null;
   /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
   allergens?: ProductAllergens | null;
+  /** Patch the staff diet override. `null` clears it (published `diet` reverts to the recipe-derived
+   * profile); omitted leaves it unchanged. Checked disjoint before the write, then republished. */
+  dietOverride?: DietOverride | null;
   /** `null` clears the photo reference; omitted leaves it unchanged. */
   image?: string | null;
   /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
@@ -331,6 +345,45 @@ export async function applyRecipeDerivation(
   await republishProduct(tx, productId);
 }
 
+/**
+ * Republish `products.diet` from the two diet overlays on the row — the diet twin of
+ * {@link republishProduct}. `diet` is COMPUTED: the recipe module writes `diet_derivation` (the
+ * folded ingredient origins + a `pending` flag), staff author `diet_override`, and the published
+ * profile is `overlayDietProfile(deriveDietProfile(derivation), override)` (dietary.ts). Called after
+ * any change to either overlay — createProduct/updateProduct (override) or applyDietDerivation
+ * (derivation). A missing/absent derivation folds as "no recipe" (empty origins, not pending); a
+ * well-formed id that names no row is a silent no-op (the SELECT returns nothing, the UPDATE matches
+ * nothing), matching {@link republishProduct}.
+ */
+async function republishProductDiet(tx: Transaction, id: string): Promise<void> {
+  const [row] = await tx
+    .select({ deriv: products.dietDerivation, override: products.dietOverride })
+    .from(products)
+    .where(eq(products.id, id));
+  const derivation = (row?.deriv ?? { origins: [], pending: false }) as DietDerivation;
+  const derived = deriveDietProfile(derivation);
+  const published = overlayDietProfile(derived, (row?.override ?? null) as DietOverride | null);
+  await tx.update(products).set({ diet: published }).where(eq(products.id, id));
+}
+
+/**
+ * Set a product's recipe-derived diet overlay and republish its diet profile — the diet twin of
+ * {@link applyRecipeDerivation}. `@waitron/recipes` calls it when a recipe or its ingredients change;
+ * `null` clears the derivation (no recipe), after which the published profile reverts to the override
+ * overlaid on the empty (non-pending) derived profile.
+ */
+export async function applyDietDerivation(
+  tx: Transaction,
+  productId: string,
+  derivation: DietDerivation | null,
+): Promise<void> {
+  await tx
+    .update(products)
+    .set({ dietDerivation: derivation, updatedAt: sql`now()` })
+    .where(eq(products.id, productId));
+  await republishProductDiet(tx, productId);
+}
+
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
@@ -338,6 +391,13 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // published `allergens` is `republish(manual, null)` — which is exactly `manual` (or null when
   // unreviewed), preserving today's round-trip behaviour.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
+  // The diet override is the staff overlay; at create there is no recipe (no derivation), so the
+  // published `diet` is the override overlaid on the EMPTY, non-pending derived profile — which is
+  // exactly the override alone (or all-"yes"/empty when unreviewed). Checked disjoint before the
+  // write (defence-in-depth, never trust the caller — CLAUDE.md §3). The recipe fold overwrites `diet`
+  // once a recipe is set (applyDietDerivation → republishProductDiet), matching the allergen twin.
+  const dietOverride = input.dietOverride ?? null;
+  assertDietOverrideDisjoint(dietOverride);
   const [row] = await tx
     .insert(products)
     .values({
@@ -351,6 +411,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       active: input.active ?? true,
       manualAllergens: allergens,
       allergens: republish(allergens, null),
+      dietOverride,
+      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: false }), dietOverride),
       image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
@@ -377,17 +439,24 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, ...rest } = patch;
+  const { allergens, dietOverride, ...rest } = patch;
   if (allergens != null) validateAllergens(allergens);
+  // The diet override is split out like `allergens`: a supplied override is checked disjoint before
+  // the write (`null`/`undefined` skip it), only a non-`undefined` value reaches the `diet_override`
+  // column, and `diet` is republished only when the override was in the patch — an unrelated edit
+  // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
+  if (dietOverride !== undefined) assertDietOverrideDisjoint(dietOverride);
   await tx
     .update(products)
     .set({
       ...rest,
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
+      ...(dietOverride !== undefined ? { dietOverride } : {}),
       updatedAt: sql`now()`,
     })
     .where(eq(products.id, id));
   if (allergens !== undefined) await republishProduct(tx, id);
+  if (dietOverride !== undefined) await republishProductDiet(tx, id);
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {

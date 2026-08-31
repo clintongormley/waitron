@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, products, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, ingredients, products, withTenant } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
+import type { DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
 import { seedProduct, seedVenue } from "../test/fixtures.js";
@@ -89,6 +90,88 @@ describe("recipe composition and allergen derivation", () => {
     });
     // seedProduct created the product with no manual allergens → PENDING again.
     expect(await publishedAllergens(tenantId, productId)).toBeNull();
+  });
+
+  // The diet roll-up mirrors the allergen roll-up: PGlite is enough here — the fold only reads
+  // `ingredients.dietary_origin` rows and writes `products.diet_derivation`/`diet`, no privilege or
+  // concurrency behaviour, which is proven on real Postgres for RLS in the .rls suites.
+  it("recomputeProductDiet: an uncategorised ingredient makes the product diet-pending", async () => {
+    const row = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      // one plant ingredient (categorised) + one NULL-origin ingredient (uncategorised)
+      const spinach = await createIngredient(tx, { name: "spinach" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, spinach.id));
+      const mystery = await createIngredient(tx, { name: "mystery" }); // dietary_origin null
+      await setProductRecipe(tx, productId, [spinach.id, mystery.id]);
+      const [r] = await tx
+        .select({ diet: products.diet, deriv: products.dietDerivation })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!;
+    });
+    expect(row.deriv).toEqual({ origins: ["plant"], pending: true });
+    expect(row.diet).toMatchObject({ vegan: "unknown", vegetarian: "unknown" });
+  });
+
+  it("recomputeProductDiet: all-plant reviewed → vegan", async () => {
+    const row = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const spinach = await createIngredient(tx, { name: "spinach" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, spinach.id));
+      await setProductRecipe(tx, productId, [spinach.id]);
+      const [r] = await tx
+        .select({ diet: products.diet })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!;
+    });
+    expect(row.diet).toMatchObject({ vegan: "yes", vegetarian: "yes", contains: [] });
+  });
+
+  it("recomputeProductDiet: clearing the recipe resets the derivation to null", async () => {
+    const cleared = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const beef = await createIngredient(tx, { name: "beef" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "meat" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, beef.id));
+      await setProductRecipe(tx, productId, [beef.id]);
+      await setProductRecipe(tx, productId, []); // clear
+      const [r] = await tx
+        .select({ deriv: products.dietDerivation })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!.deriv;
+    });
+    expect(cleared).toBeNull();
+  });
+
+  it("propagates an ingredient allergen change and re-derives the product diet", async () => {
+    const diet = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const spinach = await createIngredient(tx, { name: "spinach" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, spinach.id));
+      await setProductRecipe(tx, productId, [spinach.id]);
+      // An allergen edit fans out over the products using this ingredient; the diet twin recomputes
+      // alongside the allergen roll-up in the same loop (idempotent here — the origin is unchanged).
+      await updateIngredient(tx, spinach.id, { allergens: {} });
+      const [r] = await tx
+        .select({ diet: products.diet })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!.diet;
+    });
+    expect(diet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
   });
 
   it("getProductRecipe returns the ingredient list", async () => {

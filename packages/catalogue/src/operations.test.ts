@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
   productOptionGroups,
+  products,
   withTenant,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -15,6 +16,7 @@ import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
 import {
   addCatalogueToLocation,
+  applyDietDerivation,
   applyRecipeDerivation,
   assignCatalogueToLocation,
   catalogueExists,
@@ -625,6 +627,208 @@ describe("catalogue operations", () => {
       const missing = "00000000-0000-0000-0000-0000000000fe";
       await expect(
         applyRecipeDerivation(tx, missing, { allergens: {}, pending: false }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  // ── Diet derivation + override republish (Task 3) ────────────────────────────────────────────────
+  const readDiet = (tx: Transaction, id: string) =>
+    tx
+      .select({
+        diet: products.diet,
+        deriv: products.dietDerivation,
+        override: products.dietOverride,
+      })
+      .from(products)
+      .where(eq(products.id, id));
+
+  // At create there is no recipe, so published `diet` is the override overlaid on the EMPTY (all-"yes")
+  // derived profile: a bare product with no override reads vegan/vegetarian "yes", empty contains.
+  it("createProduct with no override publishes the empty derived diet profile", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "plain" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      return readDiet(tx, p.id);
+    });
+    expect(row!.diet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+    expect(row!.override).toBeNull();
+  });
+
+  // The override is stored AND folded into the published profile at create — halal/kosher live only in
+  // the override, so they surface on `diet` straight away.
+  it("createProduct persists dietOverride and folds it into published diet", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "falafel" },
+        pricingUnit: "each",
+        unitPrice: "4.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
+      });
+      return readDiet(tx, p.id);
+    });
+    expect(row!.override).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
+    expect(row!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
+  });
+
+  it("createProduct rejects a diet override that both adds and removes a contains-tag", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      await expect(
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "x" },
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          dietOverride: { addContains: ["fish"], removeContains: ["fish"] },
+        }),
+      ).rejects.toMatchObject({ code: "diet.add_remove_conflict" });
+    });
+  });
+
+  // Step 7 of the brief: a forced vegan override WINS over an uncategorised (pending) recipe — the
+  // pending derivation alone would read vegan "unknown", the override forces "yes".
+  it("a forced vegan override wins over an uncategorised (pending) recipe", async () => {
+    const [before, after] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "mystery bowl" },
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+      });
+      // Simulate the recipe module setting a pending derivation (an uncategorised ingredient).
+      await applyDietDerivation(tx, p.id, { origins: [], pending: true });
+      const [b] = await readDiet(tx, p.id);
+      await updateProduct(tx, p.id, { dietOverride: { vegan: "yes" } });
+      const [a] = await readDiet(tx, p.id);
+      return [b!, a!];
+    });
+    expect(before.diet).toMatchObject({ vegan: "unknown" }); // pending, no override yet
+    expect(after.diet).toMatchObject({ vegan: "yes" }); // override wins over pending
+  });
+
+  // Clearing the override with `null` reverts the published diet to the pure derived profile.
+  it("updateProduct with dietOverride null reverts diet to the derived profile", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "salad" },
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no" },
+      });
+      // reviewed all-plant recipe derivation → derived is vegan
+      await applyDietDerivation(tx, p.id, { origins: ["plant"], pending: false });
+      await updateProduct(tx, p.id, { dietOverride: null });
+      return readDiet(tx, p.id);
+    });
+    expect(row!.override).toBeNull();
+    expect(row!.diet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
+  });
+
+  it("updateProduct rejects a conflicting diet override", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      await expect(
+        updateProduct(tx, p.id, {
+          dietOverride: { addContains: ["meat"], removeContains: ["meat"] },
+        }),
+      ).rejects.toMatchObject({ code: "diet.add_remove_conflict" });
+    });
+  });
+
+  // An unrelated edit (no dietOverride key) must NOT disturb the published diet profile.
+  it("updateProduct without a dietOverride key leaves diet untouched", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no" },
+      });
+      await updateProduct(tx, p.id, { unitPrice: "2.00" });
+      return readDiet(tx, p.id);
+    });
+    expect(row!.diet).toMatchObject({ vegan: "no" });
+  });
+
+  // applyDietDerivation folds an all-plant reviewed derivation into a vegan published profile.
+  it("applyDietDerivation republishes diet from the origin set", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "veg" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      await applyDietDerivation(tx, p.id, { origins: ["plant", "meat"], pending: false });
+      return readDiet(tx, p.id);
+    });
+    expect(row!.deriv).toEqual({ origins: ["plant", "meat"], pending: false });
+    expect(row!.diet).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
+  });
+
+  // A null derivation folds as "no recipe" (empty, non-pending) — republishProductDiet's default branch.
+  it("applyDietDerivation with null clears the derivation and republishes", async () => {
+    const [row] = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "veg" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      await applyDietDerivation(tx, p.id, { origins: ["meat"], pending: false });
+      await applyDietDerivation(tx, p.id, null); // clear
+      return readDiet(tx, p.id);
+    });
+    expect(row!.deriv).toBeNull();
+    expect(row!.diet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+  });
+
+  // A caller-supplied id that names no product is a SILENT no-op — republishProductDiet's SELECT
+  // returns no row (its `row === undefined` branch), so both defaults apply and the UPDATE matches
+  // nothing. Mirrors applyRecipeDerivation's nonexistent-id test.
+  it("applyDietDerivation on a nonexistent id does not throw", async () => {
+    await asTenant(async (tx) => {
+      const missing = "00000000-0000-0000-0000-0000000000fd";
+      await expect(
+        applyDietDerivation(tx, missing, { origins: ["plant"], pending: false }),
       ).resolves.toBeUndefined();
     });
   });

@@ -2,8 +2,10 @@ import { eq } from "drizzle-orm";
 import { ingredients, recipeLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  applyDietDerivation,
   applyRecipeDerivation,
   mergeAllergenMaps,
+  type DietaryOrigin,
   type ProductAllergens,
   type RecipeDerivation,
 } from "@waitron/catalogue";
@@ -61,7 +63,33 @@ export async function recomputeProductAllergens(tx: Transaction, productId: stri
   await applyRecipeDerivation(tx, productId, derivation);
 }
 
-/** Replace a product's recipe with exactly `ingredientIds`, then recompute its allergens. */
+/** Recompute a product's derived DIET floor from its recipe and republish its profile — the diet
+ * twin of {@link recomputeProductAllergens}. Folds the ingredients' `dietary_origin` into a
+ * deduped+sorted origin set; any uncategorised (dietary_origin = null) ingredient sets `pending`, so
+ * the product publishes diet-PENDING (vegan/vegetarian read "unknown") rather than a false "vegan".
+ * No recipe lines → clears the derivation (null → the published profile reverts to the override
+ * overlaid on the empty derived profile). */
+export async function recomputeProductDiet(tx: Transaction, productId: string): Promise<void> {
+  const rows = await tx
+    .select({ origin: ingredients.dietaryOrigin })
+    .from(recipeLines)
+    .innerJoin(ingredients, eq(ingredients.id, recipeLines.ingredientId))
+    .where(eq(recipeLines.productId, productId));
+
+  if (rows.length === 0) {
+    await applyDietDerivation(tx, productId, null);
+    return;
+  }
+  let pending = false;
+  const set = new Set<DietaryOrigin>();
+  for (const row of rows) {
+    if (row.origin === null) pending = true;
+    else set.add(row.origin as DietaryOrigin);
+  }
+  await applyDietDerivation(tx, productId, { origins: [...set].sort(), pending });
+}
+
+/** Replace a product's recipe with exactly `ingredientIds`, then recompute its allergens + diet. */
 export async function setProductRecipe(
   tx: Transaction,
   productId: string,
@@ -78,6 +106,7 @@ export async function setProductRecipe(
     );
   }
   await recomputeProductAllergens(tx, productId);
+  await recomputeProductDiet(tx, productId);
 }
 
 /** Every product whose recipe includes the given ingredient — used to propagate an ingredient's

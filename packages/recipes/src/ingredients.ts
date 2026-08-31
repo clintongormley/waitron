@@ -3,7 +3,11 @@ import { ingredients } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { validateAllergens, type ProductAllergens } from "@waitron/catalogue";
 import { CURRENT_TENANT, INGREDIENT_COLUMNS } from "./columns.js";
-import { productsUsingIngredient, recomputeProductAllergens } from "./recipes.js";
+import {
+  productsUsingIngredient,
+  recomputeProductAllergens,
+  recomputeProductDiet,
+} from "./recipes.js";
 
 /**
  * Ingredient operations — CRUD over the `ingredients` table (raw materials / prep items).
@@ -85,13 +89,19 @@ export async function updateIngredient(
   // leaves the ingredient's allergens unchanged, so re-deriving dependent products would recompute
   // the identical floor (the fold reads `allergens`, never `name`/`active`) — idempotent, and pure
   // wasted queries. Mirrors updateProduct's "republish only when `allergens` was in the patch" guard.
-  // Fans out O(N) over the products sharing this ingredient — each recomputeProductAllergens is its
-  // own SELECT-join plus a republish round-trip. A set-based batched rewrite (one join query → a JS
-  // fold → one batched `UPDATE … FROM (VALUES …)`) is a deferred, scale-gated optimization, matching
-  // the repo's #76/#87 scale-gated-deferral precedent; not worth the complexity at deli scale today.
+  // The diet twin is recomputed in the SAME loop: this `UpdateIngredientInput` cannot yet touch
+  // `dietary_origin`, so on an allergen-only change the origin set is unchanged and the diet recompute
+  // is idempotent — kept beside its allergen twin so the two roll-ups never drift apart. When origin
+  // authoring lands (a later task adds `dietaryOrigin` to the patch) it MUST widen this guard so an
+  // origin-only edit fans out the diet recompute too — else a product's diet would go stale.
+  // Fans out O(N) over the products sharing this ingredient — each recompute is its own SELECT-join
+  // plus a republish round-trip. A set-based batched rewrite (one join query → a JS fold → one batched
+  // `UPDATE … FROM (VALUES …)`) is a deferred, scale-gated optimization, matching the repo's #76/#87
+  // scale-gated-deferral precedent; not worth the complexity at deli scale today.
   if (patch.allergens !== undefined) {
     for (const productId of await productsUsingIngredient(tx, id)) {
       await recomputeProductAllergens(tx, productId);
+      await recomputeProductDiet(tx, productId);
     }
   }
 }
