@@ -21,7 +21,7 @@ import { requireManagementSession } from "./management-session.js";
 import { requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import { requireBodyUuid, requireEnum } from "./request-screens.js";
+import { requireBodyUuid, requireEnum, requireString } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -104,13 +104,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // The one error boundary every device route wraps its handler in — the shared `createErrorBoundary`
 // closed over this surface's `STATUS` map and its `device.failed` log tag.
 const run = createErrorBoundary(STATUS, "device.failed");
-
-/** Screen a REQUIRED body field as a string, refusing an absent/wrong-typed one as
- * `management.request_invalid` naming the field (never a downstream `text`/500). */
-function requireString(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
-  return v;
-}
 
 /**
  * Mounts the three device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`

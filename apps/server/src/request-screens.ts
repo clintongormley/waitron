@@ -71,12 +71,18 @@ export function requireNullableBodyUuid(v: unknown, field: string): string | nul
   return requireBodyUuid(v, field);
 }
 
+/** Screen a REQUIRED body field as a string, refusing an absent/wrong-typed one as
+ * `management.request_invalid` naming the field (never a downstream `text`/`numeric` 500). */
+export function requireString(v: unknown, field: string): string {
+  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
+  return v;
+}
+
 /** Screen a nullable body string (a `note`/`role`): `null` passes, any other non-string is refused as
  * `management.request_invalid` naming the field. */
 export function requireNullableString(v: unknown, field: string): string | null {
   if (v === null) return null;
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
-  return v;
+  return requireString(v, field);
 }
 
 /**

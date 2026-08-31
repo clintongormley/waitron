@@ -55,7 +55,12 @@ import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { requireAgent } from "./print-agent-session.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import { requireBodyUuid, requireEnum, requireUuidParam } from "./request-screens.js";
+import {
+  requireBodyUuid,
+  requireEnum,
+  requireString,
+  requireUuidParam,
+} from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -144,13 +149,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // The one error boundary every print route wraps its handler in — the shared `createErrorBoundary`
 // closed over this surface's `STATUS` map and its `print.failed` log tag.
 const run = createErrorBoundary(STATUS, "print.failed");
-
-/** Screen a REQUIRED body field as a string, refusing an absent/wrong-typed one as
- * `management.request_invalid` naming the field (never a downstream `text`/500). */
-function requireString(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
-  return v;
-}
 
 /** Screen an OPTIONAL body string: `undefined` (absent) passes through untouched; any present value
  * must be a string, else `management.request_invalid` naming the field. */
