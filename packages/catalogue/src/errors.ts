@@ -12,6 +12,12 @@ declare module "@waitron/shared" {
     "allergen.invalid_source": { code: string };
     /** An option's allergen overlay adds and removes the same EU-14 code — a contradiction. */
     "allergen.add_remove_conflict": { code: string };
+    /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+    "diet.invalid_origin": { origin: string };
+    /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
+    "diet.invalid_label": { field: string; value: string };
+    /** A diet override both adds and removes the same contains-tag — a contradiction. */
+    "diet.add_remove_conflict": { tag: string };
     /** An image upload carried no file part in the multipart body. Thrown by the server route. */
     "media.missing": Record<string, never>;
     /**
