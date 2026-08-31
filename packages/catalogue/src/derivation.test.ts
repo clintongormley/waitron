@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeAllergenMaps, republish } from "./derivation.js";
+import { deriveAsServedAllergens, mergeAllergenMaps, republish } from "./derivation.js";
 
 describe("mergeAllergenMaps", () => {
   it("unions keys; contains dominates may_contain", () => {
@@ -68,5 +68,53 @@ describe("republish", () => {
     ).toEqual({
       eggs: { presence: "contains" },
     });
+  });
+});
+
+describe("deriveAsServedAllergens (Cautious policy)", () => {
+  it("unreviewed base → pending, adds shown, removes IGNORED", () => {
+    const r = deriveAsServedAllergens(null, [
+      { add: { milk: { presence: "contains" } }, remove: ["gluten"] },
+    ]);
+    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: true });
+  });
+
+  it("reviewed base → base minus removes, plus adds", () => {
+    const r = deriveAsServedAllergens(
+      { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      [{ add: null, remove: ["gluten"] }],
+    );
+    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: false });
+  });
+
+  it("a remove clears may_contain too, not only contains", () => {
+    const r = deriveAsServedAllergens({ nuts: { presence: "may_contain" } }, [
+      { add: null, remove: ["nuts"] },
+    ]);
+    expect(r).toEqual({ allergens: {}, pending: false });
+  });
+
+  it("cross-option conflict: remove + add of same code → ADD WINS", () => {
+    const r = deriveAsServedAllergens({ gluten: { presence: "contains" } }, [
+      { add: null, remove: ["gluten"] },
+      { add: { gluten: { presence: "contains" } }, remove: null },
+    ]);
+    expect(r).toEqual({ allergens: { gluten: { presence: "contains" } }, pending: false });
+  });
+
+  it("empty options echo a reviewed base unchanged", () => {
+    const base = { eggs: { presence: "contains" } } as const;
+    expect(deriveAsServedAllergens(base, [])).toEqual({ allergens: base, pending: false });
+  });
+
+  it("reviewed-none base (`{}`) with an add → the add, not pending", () => {
+    const r = deriveAsServedAllergens({}, [
+      { add: { milk: { presence: "contains" } }, remove: null },
+    ]);
+    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: false });
+  });
+
+  it("null base with no options → empty + pending", () => {
+    expect(deriveAsServedAllergens(null, [])).toEqual({ allergens: {}, pending: true });
   });
 });

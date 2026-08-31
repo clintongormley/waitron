@@ -41,3 +41,40 @@ export function republish(
   if (manual === null && derivation === null) return null; // nothing reviewed at all
   return mergeAllergenMaps(derivation?.allergens ?? {}, manual ?? {});
 }
+
+/** A selected option's allergen overlay: the codes it ADDS and the codes it REMOVES. */
+export interface OptionAllergenOverlay {
+  add: ProductAllergens | null;
+  remove: readonly string[] | null;
+}
+
+/** The as-served allergen profile of one dish line: the declared set plus a `pending` flag when the
+ * dish's own allergens are unreviewed. Structurally the RecipeDerivation shape, so every surface that
+ * renders product allergens already knows it. */
+export interface AsServedAllergens {
+  allergens: ProductAllergens;
+  pending: boolean;
+}
+
+/** Fold a dish's published allergens with its selected options' overlays (design §4, "Cautious").
+ * `base === null` (unreviewed) → the plate stays pending: removes cannot subtract from an unknown
+ * base, so only the (always-safe) adds show. A reviewed base has its removed codes deleted entirely
+ * (both `contains` and `may_contain`) and the adds merged in — adds applied last, so an add WINS a
+ * cross-option conflict (over-declaring is the safe direction). Pure and total. */
+export function deriveAsServedAllergens(
+  base: ProductAllergens | null,
+  options: readonly OptionAllergenOverlay[],
+): AsServedAllergens {
+  let adds: ProductAllergens = {};
+  const removes = new Set<string>();
+  for (const opt of options) {
+    if (opt.add) adds = mergeAllergenMaps(adds, opt.add);
+    if (opt.remove) for (const code of opt.remove) removes.add(code);
+  }
+  if (base === null) return { allergens: adds, pending: true };
+  const stripped: ProductAllergens = {};
+  for (const [code, decl] of Object.entries(base)) {
+    if (!removes.has(code)) stripped[code] = decl;
+  }
+  return { allergens: mergeAllergenMaps(stripped, adds), pending: false };
+}
