@@ -95,14 +95,14 @@ forwarding (Slices 2–3).
  @waitron/diagnostics                      request-id middleware
    ├ ring buffer (trail)   x-request-id →    ├ reuse/generate + sanitise
    ├ error boundary        ← x-request-id    ├ stash in context
-   ├ api-client hook                         ├ echo header
-   └ verbosity toggle                        └ log request start/end ──┐
-        ▲                                                              │
-        │ (Slice 2 reads snapshot)          logger                     │
+   └ instrumented fetch                      ├ echo header
+        ▲                                    └ log request start/end ──┐
+        │ (Slice 2 reads snapshot)                                     │
+                                            logger                     │
                                               ├ level filter (debug…)   │
- dashboard live-viewer  ── SSE ──────────────┤ tee sink ───────────────┼─→ waitron.log
-   screen (Lit)         verbosity POST        └ pub/sub → SSE           │   (rotating)
-                                              reader ← tail / by-id ────┘
+ dashboard live-viewer  ── poll ─────────────┤ tee sink ───────────────┼─→ waitron.log
+   screen (Lit)         verbosity POST        └ (stdout too)           │   (rotating)
+                        recent GET             reader ← tail / by-id ───┘
 ```
 
 Four components, described in §5–§8. Nothing here writes to the database.
