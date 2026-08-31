@@ -811,6 +811,12 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // Just fired — nowhere near the default station's 5-minute warm threshold.
             queuedAt: expect.any(String),
             band: "fresh",
+            // Modifier↔allergen: this dish carries no options and its allergens are unreviewed, so the
+            // as-served fold is an empty set flagged pending — the KDS surfaces "not reviewed" for it
+            // (the Cautious policy: a modifier-less unreviewed dish still warns the kitchen). `removed`
+            // is empty (nothing was stripped from an unknown base).
+            asServed: { allergens: {}, pending: true },
+            removed: [],
           },
         ],
       },
