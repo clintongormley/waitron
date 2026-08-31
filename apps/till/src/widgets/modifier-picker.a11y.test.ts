@@ -28,7 +28,8 @@ const burger: TillProduct = {
           vatClass: null,
           maxQuantity: 1,
           addAllergens: null,
-          removeAllergens: null,        },
+          removeAllergens: null,
+        },
         {
           id: "i-medium",
           name: { en: "Medium", es: "Al punto" },
@@ -36,7 +37,8 @@ const burger: TillProduct = {
           vatClass: null,
           maxQuantity: 1,
           addAllergens: null,
-          removeAllergens: null,        },
+          removeAllergens: null,
+        },
       ],
     },
     {
@@ -53,7 +55,8 @@ const burger: TillProduct = {
           vatClass: null,
           maxQuantity: 1,
           addAllergens: null,
-          removeAllergens: null,        },
+          removeAllergens: null,
+        },
         {
           id: "i-bacon",
           name: { en: "Bacon", es: "Bacon" },
@@ -61,7 +64,8 @@ const burger: TillProduct = {
           vatClass: null,
           maxQuantity: 1,
           addAllergens: null,
-          removeAllergens: null,        },
+          removeAllergens: null,
+        },
         // A per-option-quantity item (maxQuantity 2) so the sweep also covers the stepper controls.
         {
           id: "i-shot",
@@ -70,7 +74,8 @@ const burger: TillProduct = {
           vatClass: null,
           maxQuantity: 2,
           addAllergens: null,
-          removeAllergens: null,        },
+          removeAllergens: null,
+        },
       ],
     },
   ],
