@@ -177,15 +177,72 @@ export class TillBasket extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** The index of the line whose note/doneness editor (order-line customisation) is expanded, or `null`
-   * when none is — only one line's editor is open at a time. Toggled by each line's Note button; a line
-   * removal that leaves the index dangling simply shows no editor (the guarded lookup below). */
+   * when none is — only one line's editor is open at a time. Toggled by each line's Note button. It is a
+   * POSITIONAL index into `store.lines`, so it must be kept in step with any structural change that
+   * shifts positions: {@link #removeLine} adjusts it atomically with an in-basket removal, and a
+   * whole-basket swap (clear / loadFrom) closes it via {@link #onStoreChanged} — otherwise a note (which
+   * can carry allergy info) would reattach to whatever line slid into the edited line's old slot. */
   @state() private editingIndex: number | null = null;
+
+  /** The `store.id` last seen by {@link #onStoreChanged}, used to detect a whole-basket swap. `clear`
+   * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
+   * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
+   * first change fires (the initial render already starts with no editor open). */
+  #lastStoreId?: string;
 
   constructor() {
     super();
     // Re-render on any basket change (add / remove / clear); the controller owns the subscription
-    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned.
-    new StoreChangeController(this, () => this.store);
+    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned. The
+    // custom handler also closes a dangling editor when the whole basket is swapped out.
+    new StoreChangeController(
+      this,
+      () => this.store,
+      "changed",
+      () => this.#onStoreChanged(),
+    );
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Seed the swap detector with the store's CURRENT id (the `store` property is assigned before
+    // connect). Without this the first `"changed"` would see `#lastStoreId` still `undefined`, read the
+    // unchanged id as a swap, and wrongly close an editor on the first in-basket add / remove.
+    this.#lastStoreId = this.store.id;
+  }
+
+  /**
+   * Handle a store `"changed"` notification. Besides re-rendering, it closes any open note/doneness
+   * editor when the basket was SWAPPED WHOLESALE — `clear` (fresh id) or `loadFrom` (a retrieved order's
+   * id) — because the line the editor pointed at no longer exists and a positional index into the new
+   * basket would open the editor on an unrelated line. An in-basket add / remove / edit keeps the id and
+   * is handled positionally ({@link #removeLine}), so it does not close the editor here.
+   */
+  #onStoreChanged(): void {
+    if (this.store.id !== this.#lastStoreId) {
+      this.#lastStoreId = this.store.id;
+      this.editingIndex = null;
+    }
+    this.requestUpdate();
+  }
+
+  /**
+   * Remove the line at `index`, keeping the open editor's {@link editingIndex} in step with the splice so
+   * a note never reattaches to the wrong dish. Removing the EDITED line closes the editor; removing an
+   * EARLIER line slides every later line (the edited one included) down by one, so the tracked index must
+   * follow it down. A later line's removal leaves the edited line's index unchanged. This adjustment is
+   * done BEFORE `store.removeLine` so the re-render that its `"changed"` fires already sees the corrected
+   * index.
+   */
+  #removeLine(index: number): void {
+    if (this.editingIndex !== null) {
+      if (index === this.editingIndex) {
+        this.editingIndex = null;
+      } else if (index < this.editingIndex) {
+        this.editingIndex -= 1;
+      }
+    }
+    this.store.removeLine(index);
   }
 
   override render() {
@@ -216,7 +273,7 @@ export class TillBasket extends LitElement {
               variant="ghost"
               size="md"
               aria-label=${`${t("action.remove")} ${productName(line.product)}`}
-              @click=${() => this.store.removeLine(index)}
+              @click=${() => this.#removeLine(index)}
             >
               <span aria-hidden="true">×</span>
             </wt-button>

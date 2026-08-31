@@ -669,6 +669,72 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`)).toBeNull();
   });
 
+  it("follows the open editor to its line when an EARLIER line is removed (note lands on the right dish)", async () => {
+    // Basket [cafe, steak, seabass]. Open the MIDDLE line's (steak) editor, then remove the FIRST line
+    // (cafe). Every later line slides down one slot, so the editor must follow steak to its new index —
+    // otherwise a typed note (which can carry allergy info, per the placeholder) lands on seabass, the
+    // line that slid into steak's old slot. This reproduces the positional-index reattach bug.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // A — index 0
+    store.addProduct(steak, "1"); // B — index 1, the one we edit
+    store.addProduct(seabass, "1"); // C — index 2
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    // Open B's (steak's) editor.
+    noteButton(el, 1)!.click();
+    await el.updateComplete;
+    expect(noteBox(el)).not.toBeNull();
+
+    // Remove A (cafe) via its remove control → lines become [steak, seabass].
+    el.shadowRoot!.querySelectorAll<HTMLElement>(".remove")[0]!.click();
+    await el.updateComplete;
+    expect(store.lines.map((l) => l.product)).toEqual([steak, seabass]);
+
+    // The editor is still open and now sits on steak (index 0). Type a note.
+    const note = noteBox(el)!;
+    expect(note).not.toBeNull();
+    note.value = "allergy — nut";
+    note.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+
+    // The note lands on steak, NOT on seabass.
+    expect(store.lines[0]!.note).toBe("allergy — nut"); // steak
+    expect(store.lines[1]!.note).toBeUndefined(); // seabass untouched
+  });
+
+  it("closes the open editor when the edited line ITSELF is removed", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // index 0
+    store.addProduct(steak, "1"); // index 1 — edited then removed
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 1)!.click();
+    await el.updateComplete;
+    expect(noteBox(el)).not.toBeNull();
+    // Remove the edited line (steak, index 1).
+    el.shadowRoot!.querySelectorAll<HTMLElement>(".remove")[1]!.click();
+    await el.updateComplete;
+    // The editor is gone — no dangling editor on the surviving line.
+    expect(noteBox(el)).toBeNull();
+  });
+
+  it("closes the open editor when the whole basket is swapped (clear then re-fill)", async () => {
+    // clear() mints a fresh working-order id and loadFrom() adopts a retrieved order's id, so either is a
+    // whole-basket swap: the lines under an open editor are gone and its index is meaningless. The basket
+    // watches store.id and closes the editor, so a re-filled basket never opens an editor uninvited.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    expect(noteBox(el)).not.toBeNull();
+    // Empty the basket (fresh id) then ring up a new line at the same index 0.
+    store.clear();
+    store.addProduct(seabass, "1");
+    await el.updateComplete;
+    // No editor opens for the new line — the swap closed it.
+    expect(noteBox(el)).toBeNull();
+  });
+
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store });
