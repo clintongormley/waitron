@@ -180,7 +180,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring (#174), TS-5 split-bill (#178, #181) | core COMPLETE (TS-1..TS-5); owner-added extensions parked (*Open threads → Table-service*) |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |
 | 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts (#185); device identity-1 (enrol/revoke); handheld + till device kinds (#173, #176) | routing audit view; expo device kind; device-scoped fire/collect routes (*Open threads → KDS / Table-service*) |
-| 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build) |
+| 13 | Tips | attribution stored (`tenders.tip_amount`) — but UI collection ONLY on the integrated-card idle screen | tip-collection UI for cash / manual card / handheld (none today, *Debt*); payroll export (integrate-not-build) |
 | 14 | Bookings | Bookings-1 (#180, #182) — staff-entered reservations + seat-opens-a-tab + floor badge + dashboard day-list | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits (Future) |
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
@@ -465,6 +465,16 @@ genuinely-decision-bearing.
   with a fallback to the constant (the `getLayout`-returns-defaults precedent), add a dashboard editor
   mirroring the layout editor, and — the heavier, separable half — make the **table-order screen itself**
   layout-driven the way the counter screen already is.
+- **Tip-collection UI + empty-tab pay-error clarity (till/handheld).** Two payment-UX gaps surfaced
+  landing #189. (1) **No tip field for cash, manual card, or the handheld** (row 13): a tip can be stored
+  per tender (`tenders.tip_amount`) but the only surface that COLLECTS one is the integrated-Stripe-reader
+  idle screen (`till-tender-pay` `#renderCardExtras`, gated on `cardProvider !== "none"` + `tipsEnabled`).
+  Building it is a design decision — where the tip is entered per tender type, cash-rounding vs
+  card-add-on, and how it reaches `tenders.tip_amount` on the `pay-tab`/`confirm-payment` path. (2)
+  **Empty-tab pay shows a generic banner** — `#onPayTab` (`apps/till/src/till-app.ts`) maps every server
+  code to one `sale.error` key, so a genuinely empty tab's actionable `sale.empty_basket` reads as "Could
+  not complete the sale, try again" (this flattening is what hid the #189 root cause while debugging).
+  Surface the specific code with a clearer message.
 - **Unify string resolution behind one language-negotiation resolver (#167).** Several divergent
   name/label resolvers (`localizedName`, `lineName`, `product-list`/`recipe-screen`'s hardcoded
   `descriptions["es"]`, `t()`/`pickLocale`) with different fallbacks. Write-side LANDED (#171: venues
