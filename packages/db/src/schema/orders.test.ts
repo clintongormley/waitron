@@ -7,7 +7,7 @@ import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, optionGroupItems, optionGroups, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
@@ -19,8 +19,9 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// working_order_lines.product_id is NOT NULL with a tenant-consistent composite FK to products
-// (park & retrieve, Task 1), so every line needs a real product in its own tenant. seed() creates
+// working_order_lines.product_id carries a tenant-consistent composite FK to products (park &
+// retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
+// product — but every PARENT dish line still needs a real product in its own tenant. seed() creates
 // one priced product per tenant and stores its id here; the LINE fixture defaults to tenant A's.
 let productA = "";
 let productB = "";
@@ -490,15 +491,16 @@ describeEachTarget("working_order_lines", (target) => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries a product_id pricing reference on the draft line, and no other catalogue link", async () => {
+  it("carries only product_id and option_group_item_id as catalogue links on the draft line", async () => {
     // Park & retrieve (Task 1) inverts the old "no catalogue reference at all" rule — but only for
     // the MUTABLE draft. A working_order_line keeps a product_id so a retrieved order can be
-    // repriced (orders.ts); it is a pricing INPUT, not a snapshot. descriptions/unit_price/category
-    // stay frozen onto the line, and when the order is FILED the resulting sale_lines carry those
-    // snapshots and NO product reference (asserted in sales.test.ts's "carries no reference to a
-    // catalogue on sale_lines"). So exactly ONE catalogue-shaped column is expected here —
-    // product_id — with category_id/menu_id/sku_id/variant_id all still absent, the guard that a
-    // stale catalogue can never reach back into a completed record.
+    // repriced (orders.ts); it is a pricing INPUT, not a snapshot. Ordering modifiers (Task 2) add
+    // option_group_item_id — authoring TRACEABILITY only (the option's price/name/VAT are snapshotted
+    // onto the line by value), and working-order-ONLY: it is never copied to the filed sale_lines,
+    // which stay decoupled from the mutable catalogue (asserted in sales.test.ts's "carries no
+    // reference to a catalogue on sale_lines"). So exactly these TWO catalogue-shaped columns are
+    // expected here — product_id and option_group_item_id — with category_id/menu_id/sku_id/variant_id
+    // all still absent, the guard that a stale catalogue can never reach back into a completed record.
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns
@@ -506,8 +508,9 @@ describeEachTarget("working_order_lines", (target) => {
     );
     const references = cols
       .map((c) => c.column_name)
-      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n));
-    expect(references).toEqual(["product_id"]);
+      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
+      .sort();
+    expect(references).toEqual(["option_group_item_id", "product_id"]);
   });
 
   it("stores every monetary column as numeric(12, 2)", async () => {
@@ -564,5 +567,164 @@ describeEachTarget("working_order_lines", (target) => {
       return tx.select({ id: workingOrderLines.id }).from(workingOrderLines);
     });
     expect(visible).toHaveLength(1);
+  });
+});
+
+/**
+ * The modifier links on the MUTABLE draft line (ordering modifiers, Task 2):
+ *
+ * - `parent_line_id` — a self-link so a modifier is its own child line pointing at the dish line it
+ *   belongs to. Composite (tenant_id, parent_line_id) → working_order_lines(tenant_id, id), MATCH
+ *   SIMPLE so a top-level line (NULL) passes. A child modifier line has no product, which is why
+ *   `product_id` is now NULLABLE (was NOT NULL): the FK to products is null-permissive, so parent
+ *   rows are unaffected.
+ * - `option_group_item_id` — authoring TRACEABILITY only. Composite (tenant_id, option_group_item_id)
+ *   → option_group_items(tenant_id, id) with onDelete SET NULL: the option's price/name/VAT are
+ *   snapshotted onto the line by value, so a catalogue DELETE of an option item must NOT be blocked
+ *   and must NOT strip the draft's snapshot columns — it only clears this back-reference. It lives on
+ *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable
+ *   catalogue).
+ */
+describeEachTarget("working_order_lines — modifier links", (target) => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await target.create();
+    await seed(db);
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  // Raw insert so the RED phase fails on the missing column, not a TypeScript compile error against
+  // the drizzle `workingOrderLines` type. product_id is passed explicitly (NULL for a child line).
+  async function insertLine(opts: {
+    workingOrderId: string;
+    lineNo: number;
+    productId: string | null;
+    parentLineId?: string | null;
+    optionGroupItemId?: string | null;
+    tenantId?: string;
+    descriptions?: string;
+  }): Promise<{ id: string }[]> {
+    const tenantId = opts.tenantId ?? TENANT_A;
+    const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
+    return rows<{ id: string }>(
+      db,
+      sql`insert into working_order_lines (
+             tenant_id, working_order_id, line_no, product_id, descriptions, quantity, unit_price,
+             unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id
+           ) values (
+             ${tenantId}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId},
+             ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
+             ${opts.parentLineId ?? null}, ${opts.optionGroupItemId ?? null}
+           ) returning id`,
+    );
+  }
+
+  // A group + one item in `tenantId`. Names are the known-safe café strings — option names are jsonb
+  // VALUES, but this package's english-only guard scans string literals in test files too.
+  async function seedOptionItem(tenantId: string): Promise<string> {
+    const [group] = await db
+      .insert(optionGroups)
+      .values({ tenantId, name: { es: "Café solo" } })
+      .returning({ id: optionGroups.id });
+    const [item] = await db
+      .insert(optionGroupItems)
+      .values({ tenantId, groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
+      .returning({ id: optionGroupItems.id });
+    return item.id;
+  }
+
+  it("links a child modifier line to its parent dish line within the tenant", async () => {
+    const orderId = await openOrder(db);
+    const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
+    // A child modifier line: no product of its own, linked to the parent dish line.
+    const [child] = await insertLine({
+      workingOrderId: orderId,
+      lineNo: 2,
+      productId: null,
+      parentLineId: parent.id,
+    });
+    const [row] = await rows<{ parent_line_id: string; product_id: string | null }>(
+      db,
+      sql`select parent_line_id, product_id from working_order_lines where id = ${child.id}::uuid`,
+    );
+    expect(row.parent_line_id).toBe(parent.id);
+    expect(row.product_id).toBeNull();
+  });
+
+  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
+    const orderA = await openOrder(db);
+    const orderB = await openOrder(db, TENANT_B, TILL_B1);
+    const [foreignParent] = await insertLine({
+      workingOrderId: orderB,
+      lineNo: 1,
+      productId: productB,
+      tenantId: TENANT_B,
+      descriptions: '{"es":"Café solo"}',
+    });
+    const error = await captureError(() =>
+      insertLine({
+        workingOrderId: orderA,
+        lineNo: 2,
+        productId: null,
+        parentLineId: foreignParent.id,
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
+  });
+
+  it("links a line to an option_group_item for authoring traceability", async () => {
+    const orderId = await openOrder(db);
+    const itemId = await seedOptionItem(TENANT_A);
+    const [line] = await insertLine({
+      workingOrderId: orderId,
+      lineNo: 1,
+      productId: productA,
+      optionGroupItemId: itemId,
+    });
+    const [row] = await rows<{ option_group_item_id: string }>(
+      db,
+      sql`select option_group_item_id from working_order_lines where id = ${line.id}::uuid`,
+    );
+    expect(row.option_group_item_id).toBe(itemId);
+  });
+
+  it("rejects an option_group_item belonging to another tenant via the composite FK", async () => {
+    const orderId = await openOrder(db);
+    const foreignItem = await seedOptionItem(TENANT_B);
+    const error = await captureError(() =>
+      insertLine({
+        workingOrderId: orderId,
+        lineNo: 1,
+        productId: productA,
+        optionGroupItemId: foreignItem,
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
+  });
+
+  it("nulls option_group_item_id when the catalogue item is deleted, rather than blocking", async () => {
+    // Traceability only — the option's price/name/VAT are snapshotted onto the line by value, so a
+    // catalogue DELETE must NOT be blocked (not RESTRICT) and must leave the line's own columns
+    // intact; onDelete SET NULL clears just this back-reference. The order stays open so the
+    // require_open_parent trigger admits the cascade UPDATE.
+    const orderId = await openOrder(db);
+    const itemId = await seedOptionItem(TENANT_A);
+    const [line] = await insertLine({
+      workingOrderId: orderId,
+      lineNo: 1,
+      productId: productA,
+      optionGroupItemId: itemId,
+    });
+    await db.delete(optionGroupItems).where(eq(optionGroupItems.id, itemId));
+    const [row] = await rows<{ option_group_item_id: string | null; line_total: string }>(
+      db,
+      sql`select option_group_item_id, line_total from working_order_lines where id = ${line.id}::uuid`,
+    );
+    expect(row.option_group_item_id).toBeNull();
+    expect(row.line_total).toBe("1.30");
   });
 });

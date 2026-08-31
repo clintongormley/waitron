@@ -3,6 +3,7 @@
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
 // (index.ts).
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
@@ -57,6 +58,9 @@ export interface RecordSaleLine {
   /** Snapshotted analytics label, copied onto `sale_lines.category` at insert; never a catalogue
    * reference. Optional: when absent the line inserts `null`, exactly as before this field existed. */
   category?: string | null;
+  /** The `lineNo` of this line's parent dish; `null` for a top-level line. Resolved to the parent's
+   * generated id at the `sale_lines` insert (Task 5); presentation metadata only, NEVER hashed. */
+  parentLineNo?: number | null;
 }
 
 export interface RecordSaleTender {
@@ -334,11 +338,24 @@ export async function recordSale(
     });
   }
 
+  // One id per line, generated HERE rather than left to the column default, so a child modifier
+  // line's `parent_line_id` can be resolved to the parent's own id in this same insert (Task 5).
+  // `byLineNo` maps each caller-facing `lineNo` to the id this insert will give that line; a child's
+  // `parentLineNo` (a lineNo) then resolves to the parent's generated id. `?? null` guards a
+  // `parentLineNo` that names no line in this basket — it inserts NULL rather than a dangling
+  // pointer, and the tenant-consistent self-FK would reject a fabricated id anyway. NONE of this
+  // reaches `backend.recordSale`, which is handed only `total` + `vatBreakdown` below: `parent_line_id`
+  // is presentation/reporting metadata and is NEVER hashed (design §4; guarded by the huella-invariance
+  // test in packages/fiscal-verifactu's write-path e2e).
+  const lineIds = input.lines.map(() => randomUUID());
+  const byLineNo = new Map(input.lines.map((line, i) => [line.lineNo, lineIds[i]!]));
   await tx.insert(saleLines).values(
-    input.lines.map((line) => ({
+    input.lines.map((line, i) => ({
+      id: lineIds[i]!,
       tenantId: input.tenantId,
       saleId,
       lineNo: line.lineNo,
+      parentLineId: line.parentLineNo == null ? null : (byLineNo.get(line.parentLineNo) ?? null),
       descriptions: line.descriptions,
       quantity: line.quantity,
       unitPrice: line.unitPrice,

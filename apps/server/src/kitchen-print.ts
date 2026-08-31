@@ -157,6 +157,36 @@ export async function enqueueKitchenTickets(
     );
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
 
+  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed by
+  // `parent_line_id` over the fired parents' ids (`lineIds`), NOT an N+1 per parent. A child is never
+  // itself a `ticket_item` (only parents fire — the `fireLines` filter), so it is fetched here from
+  // `working_order_lines` to print as indented `+ <name>` sub-text beneath its dish. Its printed name is
+  // the SNAPSHOTTED `descriptions` map through the SAME `ticketName` picker the dish uses, ordered by
+  // `line_no` so the options print in selection order. Tenant-scoped (belt-and-braces beside RLS),
+  // matching the other detail reads. No modifiers ⇒ an empty result ⇒ every item prints exactly as before.
+  const childRows = await tx
+    .select({
+      parentLineId: workingOrderLines.parentLineId,
+      lineNo: workingOrderLines.lineNo,
+      descriptions: workingOrderLines.descriptions,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, cfg.tenantId),
+        inArray(workingOrderLines.parentLineId, lineIds),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+  // parent line id → its option names in line_no order (the `.orderBy` above fixes the order, and a Map
+  // append preserves it). `parentLineId` is non-null on every row here (the `inArray` matched it).
+  const modifiersByParent = new Map<string, string[]>();
+  for (const child of childRows) {
+    const names = modifiersByParent.get(child.parentLineId!) ?? [];
+    names.push(ticketName(child.descriptions, cfg.locale));
+    modifiersByParent.set(child.parentLineId!, names);
+  }
+
   // The involved stations' names (the station ticket's header + the group ticket's sub-headers).
   const stationRows = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
@@ -199,6 +229,8 @@ export async function enqueueKitchenTickets(
     const item: KitchenTicketItem = {
       qty: Number(line.quantity),
       name: ticketName(line.descriptions, cfg.locale),
+      // The parent dish's selected options, printed as `+ <name>` sub-text (empty for a plain dish).
+      modifiers: modifiersByParent.get(fired.workingOrderLineId) ?? [],
     };
     const bucket = itemsByStation.get(fired.stationId) ?? [];
     bucket.push({ lineNo: line.lineNo, item });

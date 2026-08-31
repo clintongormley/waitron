@@ -30,10 +30,15 @@ const ORDER_HEADER = "PASE";
  */
 const FEED_BEFORE_CUT = 3;
 
-/** One fired line: a quantity and the product name, snapshotted at fire time by the caller. */
+/** One fired line: a quantity and the product name, snapshotted at fire time by the caller.
+ *  `modifiers` are the parent dish's selected options (ordering modifiers) — each a snapshotted option
+ *  name, printed as indented `+ <name>` sub-text BENEATH the dish so a dish + its modifiers read as ONE
+ *  kitchen item (a modifier is never its own ticket item and never routes to its own station). Absent or
+ *  empty on a plain dish, so a no-modifier caller is byte-for-byte unchanged. */
 export interface KitchenTicketItem {
   qty: number;
   name: string;
+  modifiers?: string[];
 }
 
 /** One station's slice of an `order`-scope ticket: the station's name and the items fired to it. */
@@ -68,6 +73,14 @@ function itemLine(item: KitchenTicketItem): string {
   return `${item.qty} x ${item.name}`;
 }
 
+/** Emit one item — its `qty x name` line, then each selected modifier as an indented `+ <name>` line
+ *  beneath it. The leading two spaces + ASCII "+" keep the sub-text legible on any single-byte code
+ *  page. A plain dish (no `modifiers`) emits exactly the one line it always did. */
+function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem): void {
+  b.line(itemLine(item));
+  for (const modifier of item.modifiers ?? []) b.line(`  + ${modifier}`);
+}
+
 /** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
@@ -87,11 +100,11 @@ export function formatKitchenTicket(ticket: KitchenTicket): Uint8Array {
   b.line(ticket.tableLabel).line(ticket.orderNumber).line(hhmm(ticket.firedAt));
 
   if (ticket.scope === "station") {
-    for (const item of ticket.items) b.line(itemLine(item));
+    for (const item of ticket.items) emitItem(b, item);
   } else {
     for (const station of ticket.stations) {
       b.line(station.stationName);
-      for (const item of station.items) b.line(itemLine(item));
+      for (const item of station.items) emitItem(b, item);
     }
   }
 

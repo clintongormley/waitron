@@ -35,7 +35,7 @@ import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { resolveVatRate, toInvoiceLineDescriptions } from "@waitron/catalogue";
-import type { VatClass } from "@waitron/catalogue";
+import type { ResolvedOptionGroup, ResolvedOptionItem, VatClass } from "@waitron/catalogue";
 import {
   addDecimal,
   decimal,
@@ -74,6 +74,12 @@ export interface SeedSalesProduct {
   /** GROSS (VAT-inclusive) unit price — the same figure `products.unit_price` stores. */
   unitPrice: string;
   vatClass: VatClass;
+  /** The product's attached ACTIVE option groups (ordering modifiers, Phase 4), exactly as
+   *  `listAvailableProducts` resolves them — `[]`/absent for the common case of a product with none.
+   *  When present, the generator resolves a selection (see {@link selectOptions}) and emits each
+   *  selected item as a CHILD `RecordSaleLine` (`parentLineNo` naming the dish), so the demo's reports
+   *  and receipt screens carry real modifier sub-lines drawn through this same `recordSale` path. */
+  optionGroups?: ResolvedOptionGroup[];
 }
 
 /** A settable, back-dating clock. `clock` is what `recordSale` and `VerifactuBackend` read; `set`
@@ -146,6 +152,41 @@ function makeLcg(seed: number): () => number {
 /** Inclusive integer in `[min, max]`. */
 function randInt(rng: () => number, min: number, max: number): number {
   return min + Math.floor(rng() * (max - min + 1));
+}
+
+/**
+ * Resolve which option-group items a dish selects on one draw: every REQUIRED group always
+ * contributes exactly one item — a real order can never leave one unsatisfied, so a demo sale ringing
+ * a product that carries one must resolve it the same way the till would force — while each OPTIONAL
+ * group only occasionally contributes anything (a coin-flip to skip it entirely, then 1..`maxSelect`
+ * distinct items), so the demo's modifier sub-lines vary sale to sale rather than firing every time.
+ * Driven by the same seeded LCG as the rest of the generator, so a given `days` always reproduces the
+ * same demo. `[]` for a product with no attached groups — the common case, and the whole function is a
+ * no-op then, matching this generator's line-for-line-identical-when-empty style elsewhere in the file.
+ */
+function selectOptions(
+  rng: () => number,
+  groups: readonly ResolvedOptionGroup[] | undefined,
+): ResolvedOptionItem[] {
+  if (groups === undefined || groups.length === 0) return [];
+  const selected: ResolvedOptionItem[] = [];
+  for (const group of groups) {
+    const items = group.items;
+    if (items.length === 0) continue;
+    if (group.required) {
+      selected.push(items[randInt(rng, 0, items.length - 1)]!);
+      continue;
+    }
+    if (rng() < 0.5) continue; // optional group: skip it half the time
+    const pickCount = Math.min(items.length, randInt(rng, 1, Math.max(1, group.maxSelect)));
+    const pool = [...items];
+    for (let i = 0; i < pickCount; i += 1) {
+      const idx = randInt(rng, 0, pool.length - 1);
+      selected.push(pool[idx]!);
+      pool.splice(idx, 1);
+    }
+  }
+  return selected;
 }
 
 /**
@@ -259,6 +300,9 @@ export async function seedSales(
         continue;
       }
 
+      // `lineCount` is the number of DISHES (1-4 per sale); a dish carrying selected modifiers expands
+      // to a parent line plus one child line per selected option, so `lineNo` tracks `lines.length`
+      // (the actual row count) rather than the dish loop index `l`.
       const lineCount = randInt(rng, 1, 4);
       const lines: RecordSaleLine[] = [];
       for (let l = 0; l < lineCount; l += 1) {
@@ -266,14 +310,33 @@ export async function seedSales(
         const gross = toScale(decimal(product.unitPrice), MONEY_SCALE);
         const rate = resolveVatRate(product.vatClass);
         const base = baseFromGross(gross, rate);
+        const parentLineNo = lines.length + 1;
         lines.push({
-          lineNo: l + 1,
+          lineNo: parentLineNo,
           descriptions: toInvoiceLineDescriptions(product.descriptions, [invoiceLocale]),
           quantity: "1",
           unitPrice: base,
           vatRate: rate,
           lineTotal: base,
         });
+
+        // Modifier sub-lines (Phase 4): each selected option becomes its own child row, priced by the
+        // SAME `baseFromGross` this file already uses for the parent — quantity always "1" here, so
+        // the option's gross delta reverses to its net base exactly like a top-level line does.
+        for (const option of selectOptions(rng, product.optionGroups)) {
+          const optionGross = toScale(decimal(option.priceDelta), MONEY_SCALE);
+          const optionRate = option.vatClass === null ? rate : resolveVatRate(option.vatClass);
+          const optionBase = baseFromGross(optionGross, optionRate);
+          lines.push({
+            lineNo: lines.length + 1,
+            descriptions: toInvoiceLineDescriptions(option.name, [invoiceLocale]),
+            quantity: "1",
+            unitPrice: optionBase,
+            vatRate: optionRate,
+            lineTotal: optionBase,
+            parentLineNo,
+          });
+        }
       }
 
       const vatBreakdown = breakdownOf(lines);

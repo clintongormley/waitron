@@ -1059,3 +1059,156 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
     expect(row!.category).toBeNull();
   });
 });
+
+describe("recordSale — modifier child lines (parent_line_id)", () => {
+  it("links a child modifier line to its parent by the parent's GENERATED id", async () => {
+    // Task 5. A filed MODIFIER child line carries `parent_line_id` pointing at the dish line it
+    // belongs to. `recordSale` pre-generates one id per line, builds a `lineNo -> generated id` map,
+    // and resolves `line.parentLineNo` (a caller-facing line number) to the parent's generated id at
+    // insert. lineNo 2 names lineNo 1 as its parent; the top-level line 1 leaves it NULL.
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "6.71",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          unitPrice: "5.00",
+          vatRate: "10.00",
+          lineTotal: "5.00",
+        },
+        {
+          lineNo: 2,
+          descriptions: { "es-ES": "Extra de queso" },
+          quantity: "1",
+          unitPrice: "1.00",
+          vatRate: "21.00",
+          lineTotal: "1.00",
+          parentLineNo: 1,
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const lines = await suite.db
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    expect(lines).toHaveLength(2);
+    const parent = lines.find((l) => l.lineNo === 1)!;
+    const child = lines.find((l) => l.lineNo === 2)!;
+    // A top-level line has no parent; the child points at the parent's actual generated id — not its
+    // lineNo, and not some other row's id.
+    expect(parent.parentLineId).toBeNull();
+    expect(child.parentLineId).toBe(parent.id);
+  });
+
+  it("leaves parent_line_id NULL when a line omits parentLineNo (additive, no behaviour change)", async () => {
+    // The `line.parentLineNo == null ? null : ...` branch for an existing caller that never sets it —
+    // every line inserts a NULL parent, exactly as before this field existed.
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "6.05",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          unitPrice: "5.00",
+          vatRate: "10.00",
+          lineTotal: "5.00",
+        },
+        {
+          lineNo: 2,
+          descriptions: { "es-ES": "Agua" },
+          quantity: "1",
+          unitPrice: "1.05",
+          vatRate: "21.00",
+          lineTotal: "1.05",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const lines = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+    expect(lines).toHaveLength(2);
+    expect(lines.every((l) => l.parentLineId === null)).toBe(true);
+  });
+
+  it("inserts NULL for a parentLineNo that names no line in the basket (the `?? null` guard)", async () => {
+    // Defensive branch of `byLineNo.get(line.parentLineNo) ?? null`: a `parentLineNo` pointing at a
+    // lineNo not present in this basket resolves to NO generated id, so the row inserts NULL rather
+    // than a dangling pointer — and the tenant-consistent self-FK would reject a fabricated id
+    // anyway. Line 2 names lineNo 9, which does not exist here.
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "6.05",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          unitPrice: "5.00",
+          vatRate: "10.00",
+          lineTotal: "5.00",
+        },
+        {
+          lineNo: 2,
+          descriptions: { "es-ES": "Extra de queso" },
+          quantity: "1",
+          unitPrice: "1.05",
+          vatRate: "21.00",
+          lineTotal: "1.05",
+          parentLineNo: 9,
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const lines = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+    expect(lines.every((l) => l.parentLineId === null)).toBe(true);
+  });
+
+  it("files a VAT breakdown carrying BOTH the reduced dish's rate and the general option's rate", async () => {
+    // Task 5, requirement 3, pinned at the RECORD level. A `reduced`-rated (10%) dish with a
+    // `general`-rated (21%) modifier option must file a VAT breakdown carrying BOTH rates — the
+    // child's base is a taxable amount like any other line's, grouped by its own rate. Already true
+    // via Task 4's `buildVatBreakdown`, which groups `input.lines` (parent AND child alike) by
+    // `vatRate`; this pins it so a future change that dropped child lines from the breakdown would
+    // fail here. Read off the STORED `sales.vat_breakdown`, the queryable copy of the filed desglose
+    // (spec 8a's single source).
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "6.71",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          unitPrice: "5.00",
+          vatRate: "10.00",
+          lineTotal: "5.00",
+        },
+        {
+          lineNo: 2,
+          descriptions: { "es-ES": "Extra de queso" },
+          quantity: "1",
+          unitPrice: "1.00",
+          vatRate: "21.00",
+          lineTotal: "1.00",
+          parentLineNo: 1,
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const [saleRow] = await suite.db
+      .select({ vb: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    const byRate = new Map(saleRow!.vb.map((g) => [g.rate, g]));
+    expect([...byRate.keys()].sort()).toEqual(["10.00", "21.00"]);
+    // The dish's own base and the child option's own base, each under its own rate — the child is
+    // not folded into the parent's rate.
+    expect(byRate.get("10.00")!.base).toBe("5.00");
+    expect(byRate.get("21.00")!.base).toBe("1.00");
+  });
+});

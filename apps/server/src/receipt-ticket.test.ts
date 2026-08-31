@@ -1,4 +1,5 @@
 import { esc } from "@waitron/printing";
+import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
@@ -194,6 +195,57 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // not throw (a catalogue defect must never block the paper — spec §4).
     expect(s).toContain("Fallback only");
     expect(s).toContain("VERI*FACTU");
+  });
+
+  it("groups modifier lines under their dish — dish at its price, options indented at their delta, and the lines reconcile with the filed desglose", () => {
+    // A filed sale carrying ordering modifiers (Task 8): the dish is a PARENT line
+    // (`parentLineNo == null`) and each selected option is a CHILD line (`parentLineNo` = the dish's
+    // lineNo), a real filed `sale_line` contributing to the desglose. The figures are exact and
+    // self-consistent: Σ(line.gross) === total and Σ(base + tax) === total, so the printed line list
+    // (dish + its options) still adds up to the printed total — the receipt never recomputes fiscal
+    // figures, it groups the already-filed lines.
+    const withOptions: TillSaleResult = {
+      invoiceNumber: "A/7",
+      issuedAt: "2026-08-17T12:34:00.000Z",
+      total: "10.50",
+      vatBreakdown: [{ rate: "21", base: "8.67", tax: "1.83" }],
+      lines: [
+        {
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          gross: "10.00",
+          parentLineNo: null,
+        },
+        // A PAID option (+0.50) and a FREE option (0.00), both children of the dish above (lineNo 1).
+        { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 1 },
+        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "1", gross: "0.00", parentLineNo: 1 },
+      ],
+      change: "0.00",
+      qr: FILED_SALE.qr,
+    };
+    const s = decodeTicket(
+      formatReceipt({ result: withOptions, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+    );
+
+    // The dish renders as a normal goods row: quantity, name, its OWN gross (never the dish+options
+    // running total) — all on one LF-separated line.
+    expect(s).toMatch(/1\s+Hamburguesa[^\n]*10,00/u);
+
+    // Each option renders INDENTED beneath the dish (leading spaces, no quantity prefix) at its delta;
+    // the free option shows 0,00. The `\n {2,}<name>` anchor proves the indent — a flat `1  <name>`
+    // render (the pre-grouping behaviour) would put a digit, not spaces, right after the newline.
+    expect(s).toMatch(/\n {2,}Extra queso[^\n]*0,50/u);
+    expect(s).toMatch(/\n {2,}Sin cebolla[^\n]*0,00/u);
+
+    // The printed total, and the reconciliation the receipt must preserve: the filed lines (dish + both
+    // options) sum to the total, and the filed desglose (base + cuota) sums to the same total.
+    expect(s).toContain("10,50");
+    const lineSum = sumDecimals(withOptions.lines.map((l) => decimal(l.gross)));
+    expect(compareDecimal(lineSum, decimal(withOptions.total))).toBe(0);
+    const desgloseSum = sumDecimals(
+      withOptions.vatBreakdown.flatMap((v) => [decimal(v.base), decimal(v.tax)]),
+    );
+    expect(compareDecimal(desgloseSum, decimal(withOptions.total))).toBe(0);
   });
 
   it("ends in the full-cut command", () => {

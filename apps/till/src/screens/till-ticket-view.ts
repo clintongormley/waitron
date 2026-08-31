@@ -6,7 +6,7 @@ import { addDecimal, decimal } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
-import type { TillSaleResult } from "../api/client.js";
+import type { TillSaleLine, TillSaleResult } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -45,6 +45,44 @@ const LABEL = {
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
+
+/** A dish and the option lines filed beneath it — the shape {@link groupByParent} produces. */
+interface LineGroup {
+  dish: TillSaleLine;
+  options: TillSaleLine[];
+}
+
+/**
+ * Group the filed line list into dishes each carrying their child option lines (ordering modifiers,
+ * Task 14). A parent dish has `parentLineNo == null`; a child option points at its dish's `lineNo`. The
+ * filed lines arrive in emission order — dish immediately followed by its options — so a single forward
+ * scan attaching each child to the most recent dish groups them without a lookup. This does NOT
+ * recompute any figure: it re-orders the SAME already-filed lines, so the printed list still reconciles
+ * with `result.total` exactly as before.
+ *
+ * Mirrors `apps/server/src/receipt-ticket.ts`'s `groupByParent` (the printed receipt's identical
+ * grouping over the same `TillSaleLine` shape) — kept as its own LOCAL copy rather than imported, the
+ * same bundle-decoupling rationale as every type in `../api/client.js` (an `apps/till` → `apps/server`
+ * dependency would drag server/Node code into the browser bundle). The till's own on-screen basket
+ * (`apps/till/src/widgets/basket.ts`) needs no such helper: its lines already carry a nested `options`
+ * array from client state, never a flat filed list to re-group.
+ *
+ * A leading child with no dish yet (structurally impossible for filed data — a dish is always emitted
+ * before its options) is treated as its own dish rather than dropped, so no filed line ever vanishes
+ * from the on-screen ticket.
+ */
+function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
+  const groups: LineGroup[] = [];
+  for (const line of lines) {
+    const current = groups[groups.length - 1];
+    if (line.parentLineNo == null || current === undefined) {
+      groups.push({ dish: line, options: [] });
+    } else {
+      current.options.push(line);
+    }
+  }
+  return groups;
+}
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
 function issueDate(iso: string, locale: string): string {
@@ -162,6 +200,14 @@ export class TillTicketView extends LitElement {
 
       .line-name {
         flex: 1;
+      }
+
+      /* A selected option (ordering modifiers, Task 14) — indented beneath its dish, name left and its
+         own delta right (0,00 for a free option), never its own quantity column (an option is priced per
+         dish, so repeating the count reads as noise) — matching the printed receipt's identical indent. */
+      .line.option {
+        padding-left: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
       }
 
       .total-row {
@@ -288,19 +334,31 @@ export class TillTicketView extends LitElement {
         </div>
 
         <ul class="lines">
-          ${r.lines.map(
+          ${groupByParent(r.lines).map(
             // LINE-LIST SOURCE. Each line is the FILED composition returned by the server
             // (`TillSaleResult.lines`) — name (invoice locale), display quantity and the GROSS the line
             // was filed at — NOT the mutable client basket. So the printed goods list can never diverge
             // from the invoice, even after a local edit between place and collect, or a retrieved-order
             // edit before pay (Finding 2 — this replaced the earlier client-side `lineGross` render that
             // assumed a fixed, uneditable catalogue). Σ(line.gross) == r.total by construction.
-            (line) => html`
+            //
+            // GROUPING (ordering modifiers, Task 14): each dish's selected options render INDENTED
+            // beneath it, at their own delta (0,00 for a free option) — the same grouping the printed
+            // receipt (`formatReceipt`) already applies to this identical line list, via {@link groupByParent}.
+            (group) => html`
               <li class="line">
-                <span class="line-name">${lineName(line.descriptions, locale)}</span>
-                <span class="line-qty">${line.quantity}</span>
-                <span class="line-gross">${formatMoney(line.gross, locale)}</span>
+                <span class="line-name">${lineName(group.dish.descriptions, locale)}</span>
+                <span class="line-qty">${group.dish.quantity}</span>
+                <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
+              ${group.options.map(
+                (option) => html`
+                  <li class="line option">
+                    <span class="line-name">${lineName(option.descriptions, locale)}</span>
+                    <span class="line-gross">${formatMoney(option.gross, locale)}</span>
+                  </li>
+                `,
+              )}
             `,
           )}
         </ul>

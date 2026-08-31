@@ -130,6 +130,38 @@ export interface VatBreakdownEntry {
   tax: string;
 }
 
+/**
+ * One selectable choice inside a {@link TillOptionGroup} (ordering modifiers, Task 3). A LOCAL mirror
+ * of catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
+ * bundle-decoupling rationale as every other type in this file. `priceDelta` is the GROSS
+ * (VAT-inclusive) numeric column carried as a string, like {@link TillProduct.unitPrice}; the modifier
+ * picker adds the selected deltas to its display-only running price. `vatClass` is null when the item
+ * INHERITS the parent dish's rate (a non-null value overrides it) — carried for shape-fidelity; the
+ * client never prices from it (the server re-prices authoritatively from the id).
+ */
+export interface TillOptionItem {
+  id: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
+}
+
+/**
+ * One active option group attached to a product (ordering modifiers, Task 3) — its active `items` in
+ * sort order (`[]` when every item is inactive), plus the selection bounds the modifier picker enforces
+ * CLIENT-side as UX (the server re-validates authoritatively): `minSelect`/`maxSelect` bound how many
+ * items a diner may pick and `required` forces at least one. A LOCAL mirror of catalogue's
+ * `ResolvedOptionGroup`, NOT imported — same bundle-decoupling rationale as every other type in this file.
+ */
+export interface TillOptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  items: TillOptionItem[];
+}
+
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */
 export interface TillProduct {
   id: string;
@@ -167,6 +199,16 @@ export interface TillProduct {
    * carried for completeness — the switcher renders `TillMenu.name`, not this. OPTIONAL for the same
    * fixture reason as {@link catalogueId}. */
   catalogueName?: string;
+  /**
+   * The product's attached ACTIVE option groups (ordering modifiers, Task 3), each with its active items
+   * in sort order — `[]`/absent when the product has none. Mirrors catalogue's
+   * `AvailableProduct.optionGroups`, which `GET /api/products` always sends. OPTIONAL here (like
+   * {@link courseId}/{@link catalogueId}) purely so the many pre-modifier `TillProduct` fixtures need no
+   * update — an absent value reads as "no groups", the same as `[]`. Tapping a product that HAS a
+   * non-empty group opens the modifier picker (Task 10); one with none rings up straight away. NOT
+   * imported (the bundle rule).
+   */
+  optionGroups?: TillOptionGroup[];
 }
 
 /**
@@ -188,10 +230,18 @@ export interface ProductCatalogue {
   products: TillProduct[];
 }
 
-/** One basket line the till sends to `POST /api/sales`: never a price — the server re-prices. */
+/**
+ * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
+ * `options` (ordering modifiers) are the selected modifiers on the line, each naming an
+ * `optionGroupItemId` the server resolves AUTHORITATIVELY (price, VAT, name) and files as a child line
+ * under this dish. ABSENT for a plain line — never `[]` — so a no-modifier sale is byte-identical to
+ * before. The server (`POST /api/sales`, `addTabRound`) reads `options ?? []`; a `weight` line carrying
+ * options is refused server-side. The client sends only the ids: the running line price is DISPLAY-ONLY.
+ */
 export interface SaleLine {
   productId: string;
   quantity: string;
+  options?: { optionGroupItemId: string }[];
 }
 
 /**
@@ -235,6 +285,13 @@ export interface TillSaleLine {
   descriptions: Record<string, string>;
   quantity: string;
   gross: string;
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line (ordering modifiers), else
+   *  `null`/absent for a top-level dish — mirrors the server's `TillSaleLine.parentLineNo`
+   *  (`apps/server/src/till-sale.ts`), carried through unchanged from the filed composition. PRESENTATION
+   *  metadata only (never hashed, never a fiscal figure): the settled-ticket view (Task 14) groups each
+   *  option under its dish by this field, the same grouping the printed receipt (`formatReceipt`) and
+   *  the on-screen basket already render. */
+  parentLineNo?: number | null;
 }
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
@@ -339,6 +396,17 @@ export interface Station {
 }
 
 /**
+ * One selected option (ordering modifier) on a queue item — mirrors the server's `QueueModifier`
+ * (`apps/server/src/working-order.ts`): the child modifier line's SNAPSHOTTED `descriptions` map, so
+ * the KDS display localises it client-side exactly as it does the dish name, never a pre-flattened
+ * string (the never-store-formatted rule). A dish is never its own ticket item; it rides here as
+ * sub-text beneath its parent.
+ */
+export interface QueueModifier {
+  descriptions: Record<string, string>;
+}
+
+/**
  * One ticket item on a station's queue (KDS-1 §3c) — its id (the per-line bump target for
  * {@link TillApi.advanceTicketItem}), the working-order line it was fired from, and its current kitchen
  * `state`. A LOCAL mirror of the server's `StationQueueItem` (`apps/server/src/working-order.ts`), NOT
@@ -356,6 +424,11 @@ export interface StationQueueItem {
   descriptions: Record<string, string>;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
   quantity: string;
+  /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
+   *  <name>` sub-text beneath this item (KDS widgets, Task 14). Optional/absent on an older payload or a
+   *  plain-dish fixture, treated identically to an empty array — a modifier-free item renders exactly
+   *  as before. */
+  modifiers?: QueueModifier[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
    *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
    *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
@@ -463,6 +536,11 @@ export interface ExpoItem {
   firedAt: string | null;
   /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
   awayAt: string | null;
+  /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
+   *  <name>` sub-text beneath this item (Task 14), the same {@link QueueModifier} shape the per-station
+   *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically
+   *  to an empty array — a modifier-free item renders exactly as before. */
+  modifiers?: QueueModifier[];
 }
 
 /**

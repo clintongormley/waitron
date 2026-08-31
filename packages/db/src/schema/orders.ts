@@ -146,11 +146,13 @@ export const workingOrderLines = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     lineNo: integer("line_no").notNull(),
-    // The priced product this draft line was built from — the pricing input described above. NOT
-    // NULL: every counter line comes from a product (there is no free-text line on this path). The
-    // FK is the tenant-consistent COMPOSITE in extraConfig below, so this column carries no plain
-    // single-column `.references()` of its own.
-    productId: uuid("product_id").notNull(),
+    // The priced product this draft line was built from — the pricing input described above.
+    // NULLABLE (ordering modifiers, Task 2): a top-level dish line always carries a product, but a
+    // CHILD MODIFIER line (parent_line_id set) has none — its price/name are snapshotted onto the
+    // line by value, not resolved from a product. The FK is the tenant-consistent COMPOSITE in
+    // extraConfig below (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent
+    // rows are unaffected), so this column carries no plain single-column `.references()` of its own.
+    productId: uuid("product_id"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
@@ -191,6 +193,24 @@ export const workingOrderLines = pgTable(
     // nullable column; working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it.
     // NON-FISCAL: never read into a filed record — kitchen coordination only.
     courseId: uuid("course_id"),
+    // The parent DISH line this line modifies (ordering modifiers, Task 2). Set ⇒ this line is a
+    // child MODIFIER (an option chosen against the dish above); NULL ⇒ a top-level line. Bare
+    // NULLABLE uuid: the tenant-consistent self-FK (tenant_id, parent_line_id) →
+    // working_order_lines(tenant_id, id) is hand-written in the --custom migration (drizzle does not
+    // emit a self-referential composite FK — the same split sales_corrects_fk uses). MATCH SIMPLE
+    // means a NULL parent satisfies it, so a top-level line is unaffected. Additive nullable column;
+    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it.
+    parentLineId: uuid("parent_line_id"),
+    // The catalogue option item this line was authored from — authoring TRACEABILITY only (ordering
+    // modifiers, Task 2). The option's price/name/VAT are snapshotted onto the line by value
+    // (descriptions/unit_price/vat_rate above), so this is a back-reference for editing/reporting,
+    // NOT a pricing input. Bare NULLABLE uuid: the tenant-consistent (tenant_id, option_group_item_id)
+    // → option_group_items(tenant_id, id) FK is in the --custom migration, with onDelete SET NULL —
+    // a catalogue DELETE of an option item must NOT be blocked (not RESTRICT) and must NOT strip the
+    // line's own snapshot columns; it only clears this back-reference. Working-order table ONLY: it is
+    // never copied to the filed sale_lines (design §4), which stay decoupled from the mutable
+    // catalogue. Additive nullable column; the existing FORCE-RLS policy + grants cover it.
+    optionGroupItemId: uuid("option_group_item_id"),
   },
   (t) => [
     // Composite FK: a line cannot point at an order belonging to another

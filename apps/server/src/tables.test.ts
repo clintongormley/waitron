@@ -570,6 +570,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
           id: workingOrderLines.id,
           productId: workingOrderLines.productId,
           courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -629,6 +630,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
           id: workingOrderLines.id,
           productId: workingOrderLines.productId,
           courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))

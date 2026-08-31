@@ -11,6 +11,7 @@ import type {
   CategorySummary,
   Course,
   DashboardApi,
+  OptionGroup,
   Product,
   Station,
 } from "../api/client.js";
@@ -176,6 +177,7 @@ describe("product-form", () => {
       vatClass: "reduced",
       pricingUnit: "each",
       active: true,
+      optionGroupIds: [],
     });
     // The create-vs-patch asymmetry: an explicit `allergens: null` makes the server throw
     // `allergen.invalid_code`, so a PENDING picker must OMIT the key entirely, not send null.
@@ -342,6 +344,7 @@ describe("product-form", () => {
       allergens: { gluten: { presence: "contains" } },
       image: "img123.png",
       active: false,
+      optionGroupIds: [],
     });
   });
 
@@ -552,5 +555,280 @@ describe("product-form", () => {
     );
     await setSelect(el, "product-course", "");
     expect((await routed).detail).toEqual({ productId: "prod-1", courseId: null });
+  });
+
+  // ── Product → option-group attach (Task 12) ─────────────────────────────────────────────────────
+  // Pick + ORDER which reusable option groups apply. Unlike the station/course overrides above this
+  // renders in BOTH create and edit mode (the server accepts `optionGroupIds` on POST too — there is no
+  // existing product id to wait for), and the ordered set is carried on the SAME create/update body sent
+  // on confirm, not a separate live-write route.
+
+  const OPTION_GROUPS: OptionGroup[] = [
+    {
+      id: "og1",
+      name: { es: "Tamaño" },
+      minSelect: 1,
+      maxSelect: 1,
+      required: true,
+      sort: 0,
+      active: true,
+    },
+    {
+      id: "og2",
+      name: { es: "Extras" },
+      minSelect: 0,
+      maxSelect: 3,
+      required: false,
+      sort: 1,
+      active: true,
+    },
+    {
+      id: "og3",
+      name: { es: "Salsas" },
+      minSelect: 0,
+      maxSelect: 2,
+      required: false,
+      sort: 2,
+      active: true,
+    },
+  ];
+
+  /** Pick `groupId` in the attach picker and click Add. */
+  async function attachGroup(el: ProductForm, groupId: string): Promise<void> {
+    await setSelect(el, "option-group-pick", groupId);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=option-group-add]")!.click();
+    await el.updateComplete;
+  }
+
+  it("renders no attached groups and offers every group in create mode", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(0);
+    const values = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=option-group-pick] option"),
+    ].map((o) => o.value);
+    expect(values).toEqual(["og1", "og2", "og3"]);
+  });
+
+  // A picker option's label falls back to another locale's name, then to the bare id — the same
+  // `primaryName` rule `option-group-manager.ts` uses for its own rows, duplicated here for the
+  // picker's inline label (the picker offers groups, not items/groups this widget owns state for).
+  it("labels a picker option by another locale's name, then by the bare id", async () => {
+    const oddGroups: OptionGroup[] = [
+      {
+        id: "og4",
+        name: { en: "Sauce" },
+        minSelect: 0,
+        maxSelect: 1,
+        required: false,
+        sort: 0,
+        active: true,
+      },
+      { id: "og5", name: {}, minSelect: 0, maxSelect: 1, required: false, sort: 0, active: true },
+    ];
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: oddGroups }),
+    );
+    const labels = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=option-group-pick] option"),
+    ].map((o) => o.textContent!.trim());
+    expect(labels).toEqual(["Sauce", "og5"]);
+  });
+
+  it("labels an attached row by another locale's name, then by the bare id", async () => {
+    const oddGroups: OptionGroup[] = [
+      {
+        id: "og4",
+        name: { en: "Sauce" },
+        minSelect: 0,
+        maxSelect: 1,
+        required: false,
+        sort: 0,
+        active: true,
+      },
+      { id: "og5", name: {}, minSelect: 0, maxSelect: 1, required: false, sort: 0, active: true },
+    ];
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      optionGroups: oddGroups,
+      attachedGroupIds: ["og4", "og5"],
+    });
+    await el.updateComplete;
+    const rows = el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]");
+    expect(rows[0]!.textContent).toContain("Sauce");
+    expect(rows[1]!.textContent).toContain("og5");
+  });
+
+  it("attaches groups in picked order and sends them on create", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    await attachGroup(el, "og2");
+    await attachGroup(el, "og1");
+    const rows = el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]");
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.textContent).toContain("Extras");
+    expect(rows[1]!.textContent).toContain("Tamaño");
+
+    await setInput(el, "description-es", "Bocadillo");
+    const created = nextEvent<{ optionGroupIds: string[] }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.optionGroupIds).toEqual(["og2", "og1"]);
+  });
+
+  it("excludes an already-attached group from the picker", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    await attachGroup(el, "og1");
+    const values = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=option-group-pick] option"),
+    ].map((o) => o.value);
+    expect(values).toEqual(["og2", "og3"]);
+  });
+
+  it("reorders attached groups with move up/down", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    await attachGroup(el, "og1");
+    await attachGroup(el, "og2");
+    await attachGroup(el, "og3");
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=option-group-down-og1]")!.click();
+    await el.updateComplete;
+
+    await setInput(el, "description-es", "Bocadillo");
+    const created = nextEvent<{ optionGroupIds: string[] }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.optionGroupIds).toEqual(["og2", "og1", "og3"]);
+  });
+
+  it("does not move the first row up or the last row down (disabled at the ends)", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    await attachGroup(el, "og1");
+    await attachGroup(el, "og2");
+    const up = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=option-group-up-og1]")!;
+    const down = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      "[data-test=option-group-down-og2]",
+    )!;
+    expect(up.disabled).toBe(true);
+    expect(down.disabled).toBe(true);
+  });
+
+  it("removes an attached group", async () => {
+    const { el } = await mountWidget<ProductForm>(
+      "dashboard-product-form",
+      baseProps({ optionGroups: OPTION_GROUPS }),
+    );
+    await attachGroup(el, "og1");
+    await attachGroup(el, "og2");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=option-group-remove-og1]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(1);
+
+    await setInput(el, "description-es", "Bocadillo");
+    const created = nextEvent<{ optionGroupIds: string[] }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.optionGroupIds).toEqual(["og2"]);
+  });
+
+  it("always sends optionGroupIds — [] when nothing is attached", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    await setInput(el, "description-es", "Café");
+    const created = nextEvent<{ optionGroupIds: string[] }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.optionGroupIds).toEqual([]);
+  });
+
+  // ── Read-back seeding: shows currently-attached groups on load, in ORDER ────────────────────────
+
+  it("seeds the attach list from attachedGroupIds (the read-back), in order, in edit mode", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      optionGroups: OPTION_GROUPS,
+      attachedGroupIds: ["og3", "og1"],
+    });
+    await el.updateComplete;
+    const rows = el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]");
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.textContent).toContain("Salsas");
+    expect(rows[1]!.textContent).toContain("Tamaño");
+
+    const updated = nextEvent<{ patch: { optionGroupIds: string[] } }>(el, "update-product");
+    confirm(el);
+    expect((await updated).detail.patch.optionGroupIds).toEqual(["og3", "og1"]);
+  });
+
+  // The read-back can name an id `optionGroups` has not (yet) loaded — e.g. the group list's own GET
+  // is still in flight — so a row for it falls back to the bare id rather than throwing on a lookup miss.
+  it("shows the bare id for an attached group not (yet) present in optionGroups", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      optionGroups: [],
+      attachedGroupIds: ["og9"],
+    });
+    await el.updateComplete;
+    const row = el.shadowRoot!.querySelector("[data-test=option-group-attached-og9]")!;
+    expect(row.textContent).toContain("og9");
+  });
+
+  it("reseeds the attach list when attachedGroupIds arrives AFTER the form is already open", async () => {
+    // Mirrors the async read-back the screen kicks off on edit-product: the form opens first (product
+    // set, attachedGroupIds still its default []), then the screen's GET resolves and updates the prop.
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      optionGroups: OPTION_GROUPS,
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(0);
+
+    el.attachedGroupIds = ["og2"];
+    await el.updateComplete;
+    const rows = el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]");
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.textContent).toContain("Extras");
+  });
+
+  it("resets the attach list to empty when the form reopens for a create after an edit", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: EDIT_PRODUCT,
+      optionGroups: OPTION_GROUPS,
+      attachedGroupIds: ["og1"],
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(1);
+
+    // The screen closes, then reopens for a fresh create: product → null, attachedGroupIds → [].
+    el.product = null;
+    el.attachedGroupIds = [];
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(0);
   });
 });

@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
-import { catalogues } from "./catalogue.js";
+import { catalogues, optionGroups } from "./catalogue.js";
 import { tenants } from "./tenants.js";
 
 // Real Postgres, not PGlite, and not describeEachTarget: this suite proves the RLS-needs-nothing
@@ -76,5 +76,86 @@ describe("products.image under real row-level security", () => {
       );
     });
     expect(seenByB.rows).toEqual([]);
+  });
+});
+
+// The three modifier-authoring tables (option_groups, option_group_items, product_option_groups) are
+// tenant-scoped and carry FORCE ROW LEVEL SECURITY + a `<t>_tenant_isolation` policy + app_user grants
+// exactly like catalogues/categories/products (0027). option_group_items is the representative table
+// here: it inserts + reads back as the NON-OWNER app role under withTenant + asAppUser, so the INSERT
+// exercises the table-level grant and the WITH CHECK half of the policy, and the SELECT exercises the
+// USING half. PGlite runs as a superuser that bypasses FORCE, so this must be real Postgres.
+const OG_TENANT_A = "33333333-3333-4333-8333-333333333333";
+const OG_TENANT_B = "44444444-4444-4444-8444-444444444444";
+const optionSuite = useTemplateDb({ template: "core" });
+
+describe("option_group_items under real row-level security", () => {
+  // group_id of a group owned by tenant A, seeded as the owner (RLS bypassed — pure scaffolding). The
+  // ITEM below is written as the app role, so it — not this — exercises the grant + policy.
+  let groupA = "";
+
+  beforeAll(async () => {
+    const admin = optionSuite.admin;
+    await admin.insert(tenants).values([
+      { id: OG_TENANT_A, country: "ES", taxId: "B22222222", legalName: "Fixture Tenant OG-A" },
+      { id: OG_TENANT_B, country: "ES", taxId: "B33333333", legalName: "Fixture Tenant OG-B" },
+    ]);
+    const [group] = await admin
+      .insert(optionGroups)
+      .values({ tenantId: OG_TENANT_A, name: { en: "Size" } })
+      .returning({ id: optionGroups.id });
+    groupA = group!.id;
+  });
+
+  it("lets the app role write and read back its own tenant's option_group_item (grant + WITH CHECK + USING)", async () => {
+    // Insert an item under A's GUC as app_user (the table-level grant + the policy's WITH CHECK), then
+    // read every visible item back (the grant + the policy's USING). Raw SQL so the RED phase fails on
+    // `relation "option_group_items" does not exist` rather than a drizzle-schema mismatch.
+    const rows = await withTenant(optionSuite.admin, OG_TENANT_A, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        insert into option_group_items (tenant_id, group_id, name, price_delta)
+        values (${OG_TENANT_A}, ${groupA}, '{"en":"Large"}'::jsonb, '1.50')`);
+      const result = await tx.execute<{ tenant_id: string }>(
+        sql`select tenant_id from option_group_items`,
+      );
+      return result.rows;
+    });
+    expect(rows.length).toBe(1);
+    expect(rows.every((r) => r.tenant_id === OG_TENANT_A)).toBe(true);
+  });
+
+  it("hides another tenant's option_group_items under the isolation policy", async () => {
+    // The differential half: the SAME app role scoped to tenant B, holding the SAME SELECT grant, sees
+    // NONE of tenant A's items. The positive read above makes this load-bearing — without it B's empty
+    // result could equally mean no access at all. A superuser (asAppUser removed) would see A's row.
+    const seenByB = await withTenant(optionSuite.admin, OG_TENANT_B, async (tx) => {
+      await asAppUser(tx);
+      return tx.execute(sql`select tenant_id from option_group_items`);
+    });
+    expect(seenByB.rows).toEqual([]);
+  });
+});
+
+describe("row-level security is enabled AND forced on the option tables", () => {
+  it("has relrowsecurity and relforcerowsecurity on all three option tables", async () => {
+    // ENABLE alone (drizzle's .enableRLS()) leaves the owner and every superuser exempt; FORCE (the
+    // hand-written --custom migration) is what binds the deployment role. Deleting any FORCE line drops
+    // relforcerowsecurity to false and fails this — the guard the fiscal `inmutabilidad` suite also
+    // enforces tree-wide.
+    const result = await optionSuite.admin.execute<{
+      relname: string;
+      relrowsecurity: boolean;
+      relforcerowsecurity: boolean;
+    }>(sql`
+      select relname, relrowsecurity, relforcerowsecurity
+      from pg_class
+      where relname in ('option_groups', 'option_group_items', 'product_option_groups')
+      order by relname`);
+    expect(result.rows).toEqual([
+      { relname: "option_group_items", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "option_groups", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "product_option_groups", relrowsecurity: true, relforcerowsecurity: true },
+    ]);
   });
 });

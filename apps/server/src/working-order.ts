@@ -39,10 +39,11 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   listAvailableProducts,
   priceBasket,
+  priceBasketWithOptions,
   priceLockedLines,
   toInvoiceLineDescriptions,
 } from "@waitron/catalogue";
-import type { LockedLine, PricedLines } from "@waitron/catalogue";
+import type { BasketItemWithOptions, LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
@@ -72,11 +73,12 @@ export interface TillSaleDeps {
 /** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
 
-/** `priceBasket`'s authoritative result (`{ lines, total, vatBreakdown }`) — threaded out of
+/** `priceBasketWithOptions`'s authoritative result (`{ lines, total, vatBreakdown }`) — threaded out of
  * `priceOrderLines`/`createOpenOrder` so a caller that both persists the order AND files its sale in
  * the same transaction (a walk-up, `payWorkingOrder`) reuses this price rather than re-reading the
- * catalogue and re-pricing the identical basket a second time. */
-type PricedBasket = ReturnType<typeof priceBasket>;
+ * catalogue and re-pricing the identical basket a second time. Same shape as plain `priceBasket`'s
+ * result (both return `PricedLines`); this alias just names the one `priceOrderLines` actually calls. */
+type PricedBasket = PricedLines;
 
 /**
  * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
@@ -106,7 +108,17 @@ async function priceOrderLines(
   // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the product's
   // default course; present (incl. `null`) = the line-level override. Only the tab round-send threads a
   // value today (a future course picker); park/update pass none, so their lines take the product default.
-  lines: { productId: string; quantity: string; courseId?: string | null }[],
+  // Ordering modifiers (Task 6): a line MAY carry selected `options`, each naming an
+  // `optionGroupItemId` chosen from one of the product's attached ACTIVE option groups. The server
+  // resolves + validates every selection against the product's own `optionGroups` (the SAME read below
+  // returns — no extra query), then expands the line into a PARENT dish row plus one CHILD row per
+  // option. Absent/empty `options` = a plain single line, unchanged from before.
+  lines: {
+    productId: string;
+    quantity: string;
+    courseId?: string | null;
+    options?: { optionGroupItemId: string }[];
+  }[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   if (lines.length === 0) {
     // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
@@ -117,13 +129,146 @@ async function priceOrderLines(
   }
   const { products: available, invoiceLocales } = await listAvailableProducts(tx, cfg.locationId);
   const byId = new Map(available.map((p) => [p.id, p]));
-  const items = lines.map((line) => {
+
+  // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
+  // does not itself carry: which productId/courseId a PARENT row takes and which source
+  // `option_group_item_id` a CHILD row traces back to. `priceBasketWithOptions` expands each item to a
+  // parent row then its option rows IN THIS SAME ORDER (see its doc), so `lineMeta[i]` lines up with
+  // `priced.lines[i]` one-for-one below.
+  type LineMeta =
+    | { kind: "parent"; productId: string; courseId: string | null }
+    | { kind: "child"; optionGroupItemId: string };
+  const items: BasketItemWithOptions[] = [];
+  const lineMeta: LineMeta[] = [];
+  // Per-PRODUCT cache of `optionGroupItemId → { item, groupId }`, built once per distinct product rather
+  // than once per LINE: ordering N lines of the same product (e.g. 3× the same burger with different
+  // modifiers) resolved this map N times before. Same resolved values either way — pure de-duplication
+  // of in-memory work, keyed on `product.id` so two different products never share a cache entry.
+  type OptionItemRow = (typeof available)[number]["optionGroups"][number]["items"][number];
+  const itemByIdByProduct = new Map<
+    string,
+    Map<string, { item: OptionItemRow; groupId: string }>
+  >();
+  for (const line of lines) {
     const product = byId.get(line.productId);
     if (product === undefined) {
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
-    return { product, quantity: line.quantity };
-  });
+    const selected = line.options ?? [];
+    // Modifiers attach to `each` products only this slice (design): a `weight` product (loose deli by
+    // the kilo) carrying options is a crafted request the till never produces — refuse it loud, the
+    // client is never the gate. A `weight` line with NO options is untouched.
+    if (selected.length > 0 && product.pricingUnit !== "each") {
+      throw new AppError("options.unsupported_product", {
+        productId: line.productId,
+        pricingUnit: product.pricingUnit,
+      });
+    }
+
+    // Resolve every selected option against THIS product's active groups/items (already in hand), and
+    // tally per group for the required/min/max checks. Skip the whole block for a non-`each` product
+    // (it has no options — either none were sent, or the guard above already threw).
+    const selectedOptions: {
+      id: string;
+      name: Record<string, string>;
+      priceDelta: string;
+      vatClass: (typeof product.optionGroups)[number]["items"][number]["vatClass"];
+    }[] = [];
+    if (product.pricingUnit === "each") {
+      let itemById = itemByIdByProduct.get(product.id);
+      if (itemById === undefined) {
+        itemById = new Map(
+          product.optionGroups.flatMap((group) =>
+            group.items.map((item) => [item.id, { item, groupId: group.id }] as const),
+          ),
+        );
+        itemByIdByProduct.set(product.id, itemById);
+      }
+      // FIX 3 (overcharge): dedupe the SAME `optionGroupItemId` within this one line before resolving —
+      // a repeat is meaningless (there is no per-option quantity this slice), and without this a crafted
+      // request naming an id twice on a multi-select group would resolve, price and FILE two identical
+      // child lines, doubling the option's price and duplicating its kitchen line. The client is never
+      // the gate. Silently collapse to one, matching the attach path's `Set`-dedupe
+      // (`parseOptionGroupIds`, catalogue-api.ts). Deduped BEFORE the per-group tally, so the min/max/
+      // required checks below count DISTINCT selections — a doubled pick can no longer trip `above_max`.
+      const seenOptionIds = new Set<string>();
+      const dedupedOptions = selected.filter((sel) => {
+        if (seenOptionIds.has(sel.optionGroupItemId)) {
+          return false;
+        }
+        seenOptionIds.add(sel.optionGroupItemId);
+        return true;
+      });
+      const countByGroup = new Map<string, number>();
+      for (const sel of dedupedOptions) {
+        const found = itemById.get(sel.optionGroupItemId);
+        if (found === undefined) {
+          throw new AppError("option.not_found", {
+            optionGroupItemId: sel.optionGroupItemId,
+            productId: line.productId,
+          });
+        }
+        countByGroup.set(found.groupId, (countByGroup.get(found.groupId) ?? 0) + 1);
+        selectedOptions.push({
+          id: found.item.id,
+          name: found.item.name,
+          priceDelta: found.item.priceDelta,
+          vatClass: found.item.vatClass,
+        });
+      }
+      // Validate the selection per group. An EMPTY group (`items: []`, an authoring bug) carries no
+      // satisfiable constraint, so it is SKIPPED rather than deadlocking a legitimate sale — nothing may
+      // block a sale on a mis-authored group (CLAUDE.md §5). `required` (⟹ `min_select ≥ 1` by the
+      // DB `option_groups_required_ck`) is reported distinctly from a bare `min_select`.
+      for (const group of product.optionGroups) {
+        if (group.items.length === 0) {
+          continue;
+        }
+        const count = countByGroup.get(group.id) ?? 0;
+        if (group.required && count === 0) {
+          throw new AppError("options.selection_invalid", {
+            productId: line.productId,
+            groupId: group.id,
+            reason: "required",
+          });
+        }
+        if (count < group.minSelect) {
+          throw new AppError("options.selection_invalid", {
+            productId: line.productId,
+            groupId: group.id,
+            reason: "below_min",
+          });
+        }
+        if (count > group.maxSelect) {
+          throw new AppError("options.selection_invalid", {
+            productId: line.productId,
+            groupId: group.id,
+            reason: "above_max",
+          });
+        }
+      }
+    }
+
+    items.push({
+      product,
+      quantity: line.quantity,
+      options: selectedOptions.map((option) => ({
+        name: option.name,
+        priceDelta: option.priceDelta,
+        vatClass: option.vatClass,
+      })),
+    });
+    // The parent row's course is the ring-time resolver `<override> ?? product.course_id` (§2b); a
+    // CHILD row inherits none (no ticket_item, KDS coursing is per dish).
+    lineMeta.push({
+      kind: "parent",
+      productId: line.productId,
+      courseId: line.courseId ?? product.courseId ?? null,
+    });
+    for (const option of selectedOptions) {
+      lineMeta.push({ kind: "child", optionGroupItemId: option.id });
+    }
+  }
 
   // KDS-2 (A1): screen each non-null course OVERRIDE against the SAME live-course definition the config
   // verbs use, so this — the ONE course-write path that skipped it — no longer accepts a crafted id. A
@@ -148,7 +293,12 @@ async function priceOrderLines(
     await requireLiveCourse(tx, cfg, courseId);
   }
 
-  const priced = priceBasket(items);
+  // Price the basket authoritatively, expanding each dish into a PARENT row + one CHILD row per
+  // selected option (`priceBasketWithOptions`). With every line's `options` empty this is line-for-line
+  // identical to `priceBasket`, so the no-modifier callers (park/update/walk-up without options) are
+  // unchanged. Each child's `parentLineNo` names its dish, carried through to `RecordSaleLine` for the
+  // filed `sale_lines` (Task 4/5) — and through the working_order_lines self-FK built below.
+  const priced = priceBasketWithOptions(items);
 
   // Feature B — re-key catalogue content to the fiscal line. Catalogue descriptions are authored under
   // the BARE language tag (`es` = "our Spanish"); the `working_order_lines_check_locales` trigger (and
@@ -176,51 +326,70 @@ async function priceOrderLines(
     line.descriptions = toInvoiceLineDescriptions(line.descriptions, invoiceLocales);
   }
 
-  const lineRows = priced.lines.map((line, i) => ({
-    tenantId: cfg.tenantId,
-    workingOrderId,
-    lineNo: line.lineNo,
-    productId: lines[i]!.productId,
-    descriptions: line.descriptions,
-    quantity: line.quantity,
-    unitPrice: line.unitPrice,
-    // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
-    // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
-    // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
-    // NET unit, informational only; this is the gross the line was priced from, so a later catalogue
-    // price change never moves the filed total. Stored from `priceBasket`'s `grossUnitPrices` — the
-    // per-UNIT gross at MONEY_SCALE, the exact figure `priceLockedLines` recomputes from — never
-    // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. This is a
-    // durable lock, not a display cache.
-    unitPriceGross: priced.grossUnitPrices[i]!,
-    vatRate: line.vatRate,
-    // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
-    // `working_order_lines` is the counter's mutable display, and every other total the operator/
-    // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
-    // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
-    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record. The
-    // FILED line of a retrieved order now derives from the locked `unit_price_gross` unit above via
-    // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
-    // `priced.lines`. See `working_order_lines.line_total`'s schema comment and `priceBasket`'s
-    // `grossLineTotals`/`grossUnitPrices`.
-    lineTotal: priced.grossLineTotals[i]!,
-    category: line.category ?? null,
-    // KDS-2 ring-time course (§2b): the resolver is `<override> ?? product.course_id`. The line-level
-    // override wins (a non-null `courseId` on the input line — only the tab round-send threads one, from
-    // its course picker), else the product's DEFAULT course, else null (fires earliest). Both the
-    // override and the default are read from data already in hand — `lines[i]` and the resolved
-    // `items[i].product.courseId` (the `AvailableProduct.course_id` `listAvailableProducts` now returns)
-    // — so no separate product read is needed. `priced.lines`/`items`/`lines` share one order, so row `i`
-    // lines up across all three; `items[i].product` is defined for every line (the `sale.unknown_product`
-    // gate above threw otherwise).
-    courseId: lines[i]!.courseId ?? items[i]!.product.courseId ?? null,
-  }));
+  // Pre-generate the line ids so a CHILD row's `parent_line_id` can name its PARENT's id in the SAME
+  // insert (the self-referential FK is checked at statement end, so one `.values([...])` inserts parent
+  // and children together). `randomUUID` from `node:crypto`, the house pattern — not bare global
+  // `crypto`. Mirrors Task 5's id-resolution shape for the filed `sale_lines`.
+  const ids = priced.lines.map(() => randomUUID());
+  const byLineNo = new Map(priced.lines.map((line, i) => [line.lineNo, ids[i]!]));
+  const lineRows = priced.lines.map((line, i) => {
+    // `lineMeta[i]` lines up with `priced.lines[i]` (both in `priceBasketWithOptions`'s
+    // parent-then-children expansion order): a PARENT row carries the dish's product + resolved course
+    // and no option/parent link; a CHILD row carries its source `option_group_item_id` and its parent's
+    // id, and NO product/course (a modifier has no product row and no independent kitchen course).
+    const meta = lineMeta[i]!;
+    return {
+      id: ids[i]!,
+      tenantId: cfg.tenantId,
+      workingOrderId,
+      lineNo: line.lineNo,
+      // NULL for a top-level line; the parent dish's own pre-generated id for a child option line —
+      // resolved from `line.parentLineNo` (the parent's `lineNo`) via `byLineNo`.
+      parentLineId: line.parentLineNo == null ? null : byLineNo.get(line.parentLineNo)!,
+      // Authoring traceability back to the catalogue option (child only); NULL for a parent.
+      optionGroupItemId: meta.kind === "child" ? meta.optionGroupItemId : null,
+      // The priced product this draft line was built from — a PARENT dish only; a CHILD modifier has no
+      // product (its price/name are snapshotted onto the line by value), so NULL.
+      productId: meta.kind === "parent" ? meta.productId : null,
+      descriptions: line.descriptions,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
+      // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
+      // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
+      // NET unit, informational only; this is the gross the line was priced from, so a later catalogue
+      // price change never moves the filed total. Stored from the pricer's `grossUnitPrices` — the
+      // per-UNIT gross at MONEY_SCALE, the exact figure `priceLockedLines` recomputes from — never
+      // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. A child
+      // option's gross unit is its `price_delta`, re-priced from THIS locked column on retrieve exactly
+      // as the dish is. This is a durable lock, not a display cache.
+      unitPriceGross: priced.grossUnitPrices[i]!,
+      vatRate: line.vatRate,
+      // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
+      // `working_order_lines` is the counter's mutable display, and every other total the operator/
+      // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
+      // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
+      // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record. The
+      // FILED line of a retrieved order now derives from the locked `unit_price_gross` unit above via
+      // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
+      // `priced.lines`. See `working_order_lines.line_total`'s schema comment and the pricer's
+      // `grossLineTotals`/`grossUnitPrices`.
+      lineTotal: priced.grossLineTotals[i]!,
+      category: line.category ?? null,
+      // KDS-2 ring-time course (§2b): the resolver `<override> ?? product.course_id` was computed into
+      // `lineMeta` when the basket was built (data already in hand — the input line's override and the
+      // resolved `product.courseId`); a CHILD row inherits no course.
+      courseId: meta.kind === "parent" ? meta.courseId : null,
+    };
+  });
   return { lineRows, priced };
 }
 
 /**
- * Read a persisted order's STORED lines in `line_no` order — exactly the columns `priceLockedLines`
- * needs (gross unit, quantity, rate, descriptions, category), each snapshotted at add-time. THE ONE
+ * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` needs
+ * (gross unit, quantity, rate, descriptions, category), each snapshotted at add-time, PLUS `id`,
+ * `line_no` and `parent_line_id`, from which the returned `parentLineNo` is reconstructed so the
+ * parent→child modifier linkage survives the lock round-trip (see below). THE ONE
  * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
  * placing) and `collectOrder` (Mode-T's immediate file at collect), so all three file a persisted
  * order from the SAME locked composition and a catalogue price change after add never moves the filed
@@ -243,6 +412,9 @@ export async function readLockedLines(
 ): Promise<LockedLine[]> {
   const stored = await tx
     .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
       grossUnitPrice: workingOrderLines.unitPriceGross,
       quantity: workingOrderLines.quantity,
       vatRate: workingOrderLines.vatRate,
@@ -255,7 +427,31 @@ export async function readLockedLines(
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  return stored;
+  // Reconstruct each child modifier line's `parentLineNo` from its stored `parent_line_id` (an id), so
+  // the file path preserves parent→child linkage exactly as the live walk-up does — a child `sale_line`
+  // must not be orphaned (`parent_line_id` NULL) just because the order was locked and re-priced.
+  // Ordering modifiers (Task 6): the WALK-UP files the live `priced` (linkage intact), but EVERY
+  // persisted-order file (a retrieved counter order, a settled tab — the PRIMARY modifier path) reaches
+  // the fiscal record through this reader, so the link must survive the lock round-trip here.
+  //
+  // CRITICAL (FIX 1): reconstruct `parentLineNo` in the COMPACTED array-position space `priceRows` will
+  // renumber into — `lineNo = i + 1` by array position — NOT the stored `line_no` space. `stored` is
+  // `line_no`-ordered and `priceRows`/`priceLockedLines` preserve that array order, so position `i + 1`
+  // here equals the `lineNo` the emitted line (and `recordSale`'s `byLineNo` map, keyed on the EMITTED
+  // `lineNo`) will carry. The two spaces COINCIDE only when the stored `line_no`s are exactly `1..n`
+  // contiguous; a void (`voidTabLine`) or a subset transfer/move leaves them non-contiguous, and keying
+  // on the stored `line_no` would then resolve a child to the WRONG emitted line — self, null, or a
+  // sibling — filing a wrong `parent_line_id` into the immutable record. `id` is unique within the
+  // order and this batch is the whole order, so the map is total.
+  const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
+  return stored.map((line) => ({
+    grossUnitPrice: line.grossUnitPrice,
+    quantity: line.quantity,
+    vatRate: line.vatRate,
+    descriptions: line.descriptions,
+    category: line.category,
+    parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
+  }));
 }
 
 /**
@@ -354,7 +550,10 @@ export async function createOpenOrder(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  lines: { productId: string; quantity: string }[],
+  // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
+  // which validates them and expands the line into a parent dish row + child option rows. A walk-up
+  // counter sale threads them here; park/openTab pass a plain `{productId, quantity}` line (no options).
+  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
   // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
@@ -619,11 +818,29 @@ export async function fireLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  lines: { id: string; productId: string; courseId: string | null }[],
+  // A CHILD modifier line (ordering modifiers, Task 2/7) carries `parent_line_id` set and NO product —
+  // it is part of its parent dish, not its own kitchen ticket, so it must get NEITHER a `ticket_items`
+  // row NOR an independent station resolution (a modifier never routes to its own station, and a
+  // productless child would otherwise fall to the default station or fail `station.no_default`). This is
+  // the SHARED fire chokepoint (placeOrder / sendToPrep / addTabRound all pass through here), so the
+  // parent-only filter lives HERE — keyed on `parent_line_id IS NULL`, the semantic "is a top-level
+  // line" — covering every caller by construction rather than being repeated at each. `productId` stays
+  // nullable in the row shape only so a caller can hand the whole line set through; after the filter it
+  // is non-null on every surviving parent.
+  lines: {
+    id: string;
+    productId: string | null;
+    courseId: string | null;
+    parentLineId: string | null;
+  }[],
 ): Promise<void> {
-  if (lines.length === 0) {
+  // Keep only PARENT lines (`parent_line_id IS NULL`); child modifier lines fire nothing. Done first, so
+  // an all-children (impossible today) or empty set short-circuits before any catalogue read or insert.
+  const parentLines = lines.filter((line) => line.parentLineId === null);
+  if (parentLines.length === 0) {
     return;
   }
+  lines = parentLines;
   // The venue's single fallback station (its `is_default` row, if any) — read ONCE; each line falls to
   // it when neither the product nor its category names a route. The `active` filter is load-bearing:
   // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead station
@@ -645,7 +862,12 @@ export async function fireLines(
   // Every fired product's own override AND its category's default, in ONE batched read (no per-line
   // round trip). Both `station_id`s are nullable; the LEFT JOIN yields a null category route for a
   // product with no category. RLS confines both tables to the caller's tenant.
-  const productIds = [...new Set(lines.map((line) => line.productId))];
+  // The parent-only filter above already removed every child modifier line, so every surviving `lines`
+  // row is a parent dish with a non-null `product_id`; the `!== null` filter here is a defensive no-op
+  // kept because the row shape still types `productId` as nullable.
+  const productIds = [
+    ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
+  ];
   const routes = await tx
     .select({
       productId: products.id,
@@ -731,7 +953,7 @@ export async function fireLines(
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
   // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
   const values = lines.map((line) => {
-    const route = routeByProduct.get(line.productId);
+    const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
     const stationId = route?.productStationId ?? route?.categoryStationId ?? defaultStationId;
     if (stationId === null || stationId === undefined) {
       throw new AppError("station.no_default", { locationId: cfg.locationId });
@@ -949,9 +1171,15 @@ export async function addTabRound(
   cfg: TillConfig,
   tabId: string,
   // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
-  // where the line's course resolves to `override ?? product.course_id` (§2b). Optional, so existing
-  // callers (and the till's current `{productId, quantity}` send-round) are unchanged.
-  lines: { productId: string; quantity: string; courseId?: string | null }[],
+  // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
+  // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Both optional,
+  // so existing callers (and the till's current `{productId, quantity}` send-round) are unchanged.
+  lines: {
+    productId: string;
+    quantity: string;
+    courseId?: string | null;
+    options?: { optionGroupItemId: string }[];
+  }[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
   if (lines.length === 0) {
@@ -969,15 +1197,21 @@ export async function addTabRound(
   const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
-  // lines and send each to the kitchen as a ticket item. `returning` gives the minted line ids
-  // (`defaultRandom`) that `fireLines` snapshots the resolved station onto, plus each line's resolved
-  // `course_id` that `fireLines` needs for the hold-and-fire decision (§3c) — read back here instead of
+  // lines and send each to the kitchen as a ticket item. `returning` gives the line ids (pre-generated
+  // by `priceOrderLines` so a child's `parent_line_id` resolves in the insert) that `fireLines`
+  // snapshots the resolved station onto, plus each line's `product_id` and resolved `course_id` that
+  // `fireLines` needs for routing + the hold-and-fire decision (§3c) — read back here instead of
   // `fireLines` re-selecting it.
   const appendedLines = await tx.insert(workingOrderLines).values(appended).returning({
     id: workingOrderLines.id,
     productId: workingOrderLines.productId,
     courseId: workingOrderLines.courseId,
+    parentLineId: workingOrderLines.parentLineId,
   });
+  // Fire the round: `fireLines` fires only the PARENT dish lines and NEVER a child modifier line
+  // (`parent_line_id` set) — a modifier is part of its dish, not its own kitchen ticket. The parent-only
+  // filter lives in `fireLines` (the shared chokepoint), so this passes the whole set (parents AND
+  // children) straight through, exactly as placeOrder/sendToPrep do.
   await fireLines(tx, cfg, tabId, appendedLines);
 }
 
@@ -998,13 +1232,28 @@ export async function voidTabLine(
   lineNo: number,
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
-  const deleted = await tx
-    .delete(workingOrderLines)
-    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
-    .returning({ lineNo: workingOrderLines.lineNo });
-  if (deleted.length === 0) {
+  // FIX 2: a parent dish takes its modifiers with it (design §6). Resolve the named line's id first so
+  // its child modifier lines (`parent_line_id = <that id>`) can be removed in the SAME delete — the
+  // self-referential `working_order_lines_parent_fk` is NO ACTION (0080), checked at statement END, so
+  // deleting the parent alone would orphan its children and raise 23503 (an opaque `server.internal`
+  // 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
+  // Voiding a CHILD line directly matches only itself (a modifier has no children), so this is a plain
+  // one-row delete in that case — unchanged behaviour.
+  const [target] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
+  if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  await tx
+    .delete(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, tabId),
+        or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
+      ),
+    );
 }
 
 /**
@@ -1136,9 +1385,16 @@ export async function moveTabLines(
           inArray(workingOrderLines.lineNo, lineNos),
         );
 
-  // Read the lines to move (locked price columns kept verbatim), in line_no order.
+  // Read the lines to move (locked price columns kept verbatim), in line_no order. `id`/`parentLineId`/
+  // `optionGroupItemId` come too so a moved CHILD modifier line's parent→child linkage is rebuilt onto
+  // the destination rather than dropped — without them the re-INSERT below lands every child with a NULL
+  // `parent_line_id` and renders it ungrouped (Task 6 modifiers).
   const source = await tx
     .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      optionGroupItemId: workingOrderLines.optionGroupItemId,
       tenantId: workingOrderLines.tenantId,
       productId: workingOrderLines.productId,
       descriptions: workingOrderLines.descriptions,
@@ -1160,14 +1416,28 @@ export async function moveTabLines(
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
 
+  // Pre-generate the destination ids so a moved CHILD's `parent_line_id` can name its moved PARENT's NEW
+  // id in the SAME insert (the self-referential FK is checked at statement end — parent and children go
+  // in together), mirroring `priceOrderLines`/`recordSale`'s `byLineNo` remap. `newIdByOldId` maps each
+  // source line's OLD id to its new one; a child's remapped parent is another moved line. `?? null`
+  // covers a PARTIAL move (`transferLines` passing a `lineNos` subset) that carries a child WITHOUT its
+  // parent — the child lands top-level rather than pointing at a deleted source row; `mergeTabs` moves
+  // ALL of a tab's lines, so there every parent moves with its children and the map is total.
+  const newIds = source.map(() => randomUUID());
+  const newIdByOldId = new Map(source.map((line, i) => [line.id, newIds[i]!]));
+
   // Append onto the destination, then delete from the source. Guarded: an EMPTY source (or empty subset)
   // has nothing to insert and `tx.insert(...).values([])` errors — the same guard createOpenOrder uses.
   if (source.length > 0) {
     await tx.insert(workingOrderLines).values(
       source.map((line, i) => ({
+        id: newIds[i]!,
         tenantId: line.tenantId,
         workingOrderId: toTabId,
         lineNo: base + i + 1,
+        parentLineId:
+          line.parentLineId == null ? null : (newIdByOldId.get(line.parentLineId) ?? null),
+        optionGroupItemId: line.optionGroupItemId,
         productId: line.productId,
         descriptions: line.descriptions,
         quantity: line.quantity,
@@ -1205,7 +1475,9 @@ async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
  *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
 export interface TabLine {
   lineNo: number;
-  productId: string;
+  // Nullable since ordering modifiers (Task 2): a child modifier line has no product. Child-line
+  // rendering on the tab lands in Task 6; today every tab line still carries a product.
+  productId: string | null;
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
@@ -1650,10 +1922,12 @@ export async function transferLines(
  * `lockOpenTab` loop, requiring both ends to be TABS; `splitOffCheck` via its own origin lock, its
  * destination being a freshly-minted, uncontended check). Every transfer is VALIDATED before any move or
  * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
- * quantity outside `0 < q ≤ line.quantity` or a malformed literal), so one bad entry leaves both orders
- * untouched. The whole-line path delegates to {@link moveTabLines} (which accepts any OPEN destination,
- * so a table-less check is a valid target — unlike `lockOpenTab`); the split path appends new destination
- * lines after the moves. `cfg` supplies the `tenant_id` stamped on each split-inserted line.
+ * quantity outside `0 < q ≤ line.quantity` or a malformed literal, `tab.transfer_modifier_line` for a
+ * modifier child named alone or a partial split of a dish carrying modifiers — ordering modifiers FIX
+ * 2/4), so one bad entry leaves both orders untouched. The whole-line path delegates to
+ * {@link moveTabLines} (which accepts any OPEN destination, so a table-less check is a valid target —
+ * unlike `lockOpenTab`) and cascades a dish's modifier children along with it; the split path appends new
+ * destination lines after the moves. `cfg` supplies the `tenant_id` stamped on each split-inserted line.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -1662,12 +1936,16 @@ async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
-  // Read every named source line ONCE, under the lock, into a map. The per-unit locked values a split
-  // INHERITS come from here — never a catalogue re-read.
-  const named = transfers.map((t) => t.lineNo);
+  // Read ALL of fromTab's lines ONCE, under the lock, into a map — not just the named ones: the
+  // parent↔child structure (FIX 2/4) needs the WHOLE tab to know which named lines are dishes carrying
+  // modifiers and which are modifier children. `id`/`parentLineId`/`optionGroupItemId` come too. The
+  // per-unit locked values a split INHERITS also come from here — never a catalogue re-read.
   const sourceLines = await tx
     .select({
+      id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      optionGroupItemId: workingOrderLines.optionGroupItemId,
       productId: workingOrderLines.productId,
       descriptions: workingOrderLines.descriptions,
       quantity: workingOrderLines.quantity,
@@ -1677,13 +1955,26 @@ async function carveOffLines(
       category: workingOrderLines.category,
     })
     .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.workingOrderId, fromTabId),
-        inArray(workingOrderLines.lineNo, named),
-      ),
-    );
+    .where(eq(workingOrderLines.workingOrderId, fromTabId))
+    .orderBy(workingOrderLines.lineNo);
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
+  // The `line_no`s of each dish's child modifier lines, keyed by the PARENT's `line_no` — so a
+  // whole-line move of a dish can cascade its modifiers along (FIX 2), and a partial split can refuse a
+  // dish that has any (FIX 4). Built from `parent_line_id → parent's line_no` over the same tab.
+  const lineNoById = new Map(sourceLines.map((l) => [l.id, l.lineNo]));
+  const childLineNosByParent = new Map<number, number[]>();
+  for (const l of sourceLines) {
+    if (l.parentLineId == null) {
+      continue;
+    }
+    const parentLineNo = lineNoById.get(l.parentLineId);
+    if (parentLineNo === undefined) {
+      continue;
+    }
+    const siblings = childLineNosByParent.get(parentLineNo) ?? [];
+    siblings.push(l.lineNo);
+    childLineNosByParent.set(parentLineNo, siblings);
+  }
 
   // Validate EVERY transfer before moving/splitting anything (Task 5), then partition: a WHOLE-line
   // move (`quantity` omitted, OR equal to the line's full quantity) vs a PARTIAL split (`quantity`
@@ -1698,8 +1989,17 @@ async function carveOffLines(
     if (line === undefined) {
       throw new AppError("tab.line_not_found", { tabId: fromTabId, lineNo: t.lineNo });
     }
+    // FIX 2: a modifier CHILD line may not be named directly — it transfers only WITH its dish (a
+    // parent whole-line move cascades its children below). Naming it alone would orphan it: the source
+    // child would reference a deleted parent (23503) or land ungrouped on the destination. Refuse.
+    if (line.parentLineId != null) {
+      throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
+    }
+    const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
-      wholeLineNos.push(t.lineNo);
+      // Whole-line move of a dish (or a plain line): cascade its modifier children so a parent takes
+      // them with it and `moveTabLines` remaps the child→parent link onto the destination (FIX 2).
+      wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
     }
     // Validate the requested quantity: a well-formed decimal in `0 < quantity ≤ line.quantity`. A
@@ -1721,11 +2021,17 @@ async function carveOffLines(
         quantity: t.quantity,
       });
     }
-    // Full quantity → a whole-line move (no zero remnant, Task 4); otherwise a split. The quantity is
-    // now known valid, so this re-compare's `decimal()` cannot throw.
+    // Full quantity → a whole-line move (no zero remnant, Task 4), cascading any modifier children;
+    // otherwise a split. The quantity is now known valid, so this re-compare's `decimal()` cannot throw.
     if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
-      wholeLineNos.push(t.lineNo);
+      wholeLineNos.push(t.lineNo, ...childLineNos);
     } else {
+      // FIX 4: a PARTIAL split of a dish that carries modifiers has no coherent meaning this slice
+      // (there is no per-option quantity, so the children's quantity would desync from the split dish).
+      // Refuse rather than file an inconsistent draft; a plain line (no children) splits as before.
+      if (childLineNos.length > 0) {
+        throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
+      }
       partials.push({ line, quantity: t.quantity });
     }
   }
@@ -1769,6 +2075,11 @@ async function carveOffLines(
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
         productId: line.productId,
+        // FIX 4: carry the catalogue traceability across, as `moveTabLines` does — a split must not
+        // drop `option_group_item_id`. `parent_line_id` is deliberately NOT carried: the refusal above
+        // guarantees a splittable line is top-level (no parent, no children), so it is always NULL here;
+        // carrying the source's raw id would (were the refusal relaxed) point at a line on the SOURCE.
+        optionGroupItemId: line.optionGroupItemId,
         descriptions: line.descriptions,
         quantity,
         unitPrice: line.unitPrice,
@@ -1968,8 +2279,13 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
-  /** `product_id` + `quantity` per line, in `line_no` order — the till re-adds each to the basket. */
-  lines: { productId: string; quantity: string }[];
+  /**
+   * `product_id` + `quantity` per line, in `line_no` order — the till re-adds each to the basket.
+   * `productId` is nullable since ordering modifiers (Task 2) made `working_order_lines.product_id`
+   * nullable for child modifier lines; the till re-pricing that reads it (child-line handling) lands
+   * in Tasks 4/6, so today every parked line still carries a product.
+   */
+  lines: { productId: string | null; quantity: string }[];
 }
 
 /**
@@ -2349,16 +2665,19 @@ export async function placeOrder(
         eventOffsetMinutes: now.offsetMinutes,
       });
 
-      // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per line, each routed to a
-      // station (product ?? category ?? default) SNAPSHOTTED at fire time, replacing #63's single
-      // `order_prep` row per order. Read the order's lines (id + product, in line order) and fire them;
-      // ticket items advance queued → preparing → ready freely even after the order is fiscally frozen,
-      // so they live in their own MUTABLE table, as `order_prep` did.
+      // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per PARENT dish line, each
+      // routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time, replacing #63's
+      // single `order_prep` row per order. Read ALL the order's lines (id + product + parent link, in
+      // line order) and hand them to `fireLines`, which fires the parents and skips child modifier lines
+      // (a modifier is part of its dish, not its own ticket item). Ticket items advance queued →
+      // preparing → ready freely even after the order is fiscally frozen, so they live in their own
+      // MUTABLE table, as `order_prep` did.
       const firedLines = await tx
         .select({
           id: workingOrderLines.id,
           productId: workingOrderLines.productId,
           courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
@@ -2489,14 +2808,15 @@ export async function sendToPrep(
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
 
-    // Fire the settled order's lines to the kitchen: read them (id + product, in line order) and insert
-    // one ticket item per line, station resolved + snapshotted — the same fire `placeOrder` runs at
-    // placing.
+    // Fire the settled order's lines to the kitchen: read them ALL (id + product + parent link, in line
+    // order) and hand them to `fireLines`, which inserts one ticket item per PARENT dish line (station
+    // resolved + snapshotted) and skips child modifier lines — the same fire `placeOrder` runs at placing.
     const firedLines = await tx
       .select({
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         courseId: workingOrderLines.courseId,
+        parentLineId: workingOrderLines.parentLineId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
@@ -2757,12 +3077,23 @@ export interface StationQueueCourse {
   displayOrder: number;
 }
 
+/** One selected option (ordering modifier) on a queue item — the child modifier line's SNAPSHOTTED
+ *  `descriptions` map (locale → text), so the KDS UI localises it client-side exactly as it does the
+ *  dish name (never a pre-flattened string, the repo's never-store-formatted rule). A modifier is never
+ *  its own ticket item; it rides here as sub-text beneath its parent dish. */
+export interface QueueModifier {
+  descriptions: Record<string, string>;
+}
+
 export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
   descriptions: Record<string, string>;
   quantity: string;
+  /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the KDS UI
+   *  renders them as indented sub-text under this item. Empty for a plain dish. */
+  modifiers: QueueModifier[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the client groups the
    *  queue by this and renders a per-course header in `displayOrder`. */
   course: StationQueueCourse | null;
@@ -2810,6 +3141,44 @@ export interface StationQueueGroup {
  * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
  * used (CLAUDE.md §4).
  */
+/**
+ * Read the CHILD modifier lines of a set of PARENT dish lines in ONE grouped query, keyed by
+ * `parent_line_id` — the shared sub-item read `listStationQueue`/`listExpoQueue` attach beneath each
+ * queue item. Returns `parent_line_id → its options' snapshotted descriptions, in line_no (selection)
+ * order`. A single `inArray` over the parents' ids, NOT an N+1 per item; a parent with no options
+ * simply has no key (the caller defaults to `[]`). Tenant-scoped (belt-and-braces beside RLS). An empty
+ * `parentLineIds` skips the query — an `inArray([])` would be a `false` predicate, but avoiding the
+ * round trip is cheaper and clearer.
+ */
+async function readModifiersByParent(
+  tx: Transaction,
+  tenantId: string,
+  parentLineIds: string[],
+): Promise<Map<string, QueueModifier[]>> {
+  const byParent = new Map<string, QueueModifier[]>();
+  if (parentLineIds.length === 0) return byParent;
+  const childRows = await tx
+    .select({
+      parentLineId: workingOrderLines.parentLineId,
+      descriptions: workingOrderLines.descriptions,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, tenantId),
+        inArray(workingOrderLines.parentLineId, parentLineIds),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+  for (const child of childRows) {
+    // `parentLineId` is non-null on every row (the `inArray` matched it).
+    const list = byParent.get(child.parentLineId!) ?? [];
+    list.push({ descriptions: child.descriptions });
+    byParent.set(child.parentLineId!, list);
+  }
+  return byParent;
+}
+
 export async function listStationQueue(
   tx: Transaction,
   cfg: TillConfig,
@@ -2884,6 +3253,14 @@ export async function listStationQueue(
     // fired together with an identical `queued_at` — render in a stable line order within the group.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  // The selected options of every queued dish, in ONE grouped read keyed by the parent line ids just
+  // returned — attached below as each item's `modifiers` sub-text (no N+1, no new routing).
+  const modifiersByParent = await readModifiersByParent(
+    tx,
+    cfg.tenantId,
+    rows.map((row) => row.workingOrderLineId),
+  );
+
   // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
   // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
   const groups = new Map<string, StationQueueGroup>();
@@ -2906,6 +3283,7 @@ export async function listStationQueue(
       state: row.state,
       descriptions: row.descriptions,
       quantity: row.quantity,
+      modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
       // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
       // `courseId` is present its name/order are too; a null course serialises `course: null`.
       course:
@@ -2933,6 +3311,10 @@ export interface ExpoItem {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
+  /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the pass renders
+   *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
+   *  (localised client-side, as `name` is). Empty for a plain dish. */
+  modifiers: QueueModifier[];
 }
 
 /** One course section of an expo order (KDS-3 §3a) — the order's items for one course, grouped under the
@@ -3003,6 +3385,9 @@ export async function listExpoQueue(
   const rows = await tx
     .select({
       itemId: ticketItems.id,
+      // The fired PARENT line — the key its child modifier lines point at (`parent_line_id`), for the
+      // modifier sub-item read below.
+      lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       awayAt: ticketItems.awayAt,
@@ -3110,6 +3495,14 @@ export async function listExpoQueue(
   // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
   // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
   // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
+  // The selected options of every item, in ONE grouped read keyed by the parent line ids — attached
+  // below as each item's `modifiers` sub-text (no N+1, no new routing).
+  const modifiersByParent = await readModifiersByParent(
+    tx,
+    cfg.tenantId,
+    rows.map((row) => row.lineId),
+  );
+
   const orders = new Map<string, ExpoOrder>();
   const courseMaps = new Map<string, Map<string, ExpoCourse>>();
   for (const row of rows) {
@@ -3151,6 +3544,7 @@ export async function listExpoQueue(
       state: row.state,
       firedAt: row.firedAt,
       awayAt: row.awayAt,
+      modifiers: modifiersByParent.get(row.lineId) ?? [],
     });
     if (row.firedAt === null) course.fired = false;
     if (row.awayAt === null) course.away = false;

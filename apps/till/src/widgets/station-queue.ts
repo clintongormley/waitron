@@ -167,12 +167,14 @@ export class TillStationQueue extends LitElement {
       }
 
       /* A line cell — the tappable bump target (a plain button so it themes like the floor cards). A
-         ready-tail cell renders the same box as a non-interactive span (.line.terminal). */
+         ready-tail cell renders the same box as a non-interactive span (.line.terminal). Column layout so
+         the dish row (.line-main) can carry an indented modifiers list beneath it (ordering modifiers,
+         Task 14); a modifier-free item has none, so it renders exactly as the single-row box did before. */
       .line {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--wt-space-1);
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -186,6 +188,28 @@ export class TillStationQueue extends LitElement {
 
       button.line {
         cursor: pointer;
+      }
+
+      /* The dish row: qty× name (left) and the lens-specific secondary element (right) — the SAME row
+         .line rendered as its whole content before Task 14 added the modifiers list beneath it. */
+      .line-main {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+        width: 100%;
+      }
+
+      /* The dish's selected options (ordering modifiers, Task 14), indented beneath it — matching the
+         kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). Muted
+         text, never a tap target of its own (removing an option removes the whole dish). */
+      .line-modifiers {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding-left: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .line.state-queued {
@@ -545,21 +569,26 @@ export class TillStationQueue extends LitElement {
   }
 
   /** The shared line box both lenses render: the dish label followed by a `secondary` element (the
-   *  rail's state text or the kanban's order tag). A line is a NON-INTERACTIVE span — never a bump button
-   *  — when it is HELD (its course unfired, KDS-2 §5a: greyed + non-advanceable, carrying `.held`) or
-   *  TERMINAL (`ready`, no successor). Any other line is the tappable bump button, with the SAME
-   *  class/aria-label/@click wiring across both views, so the two lenses stay a single source of truth. */
+   *  rail's state text or the kanban's order tag), plus the dish's selected options as indented `+ name`
+   *  sub-text beneath (ordering modifiers, Task 14) — empty for a plain dish, so nothing renders there. A
+   *  line is a NON-INTERACTIVE span — never a bump button — when it is HELD (its course unfired, KDS-2
+   *  §5a: greyed + non-advanceable, carrying `.held`) or TERMINAL (`ready`, no successor). Any other line
+   *  is the tappable bump button, with the SAME class/aria-label/@click wiring across both views, so the
+   *  two lenses stay a single source of truth. */
   #renderLine(
     group: StationQueueGroup,
     item: StationQueueItem,
     secondary: TemplateResult,
   ): TemplateResult {
-    const dish = html`<span class="line-name">${this.#dish(item)}</span>`;
+    const main = html`<span class="line-main">
+      <span class="line-name">${this.#dish(item)}</span>${secondary}
+    </span>`;
+    const modifiers = this.#modifiers(item);
     const held = item.firedAt === null;
     if (held || NEXT[item.state] === undefined) {
-      const modifier = held ? "held" : "terminal";
-      return html`<span class="line state-${item.state} ${modifier}" data-item=${item.id}
-        >${dish}${secondary}</span
+      const stateModifier = held ? "held" : "terminal";
+      return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
+        >${main}${modifiers}</span
       >`;
     }
     return html`<button
@@ -568,8 +597,24 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${dish}${secondary}
+      ${main}${modifiers}
     </button>`;
+  }
+
+  /** The dish's selected options (ordering modifiers, Task 14) as indented `+ <name>` sub-text beneath
+   *  the dish row — matching the kitchen-print ticket's own sub-text style
+   *  (`apps/server/src/kitchen-ticket.ts`'s `formatKitchenTicket`). Each name resolves in the operator
+   *  locale with the same first-available fallback the dish name uses. `nothing` for a plain dish (no
+   *  `modifiers`, or an empty array), so a modifier-free item renders identically to before this task. */
+  #modifiers(item: StationQueueItem): TemplateResult | typeof nothing {
+    const modifiers = item.modifiers ?? [];
+    if (modifiers.length === 0) return nothing;
+    return html`<span class="line-modifiers">
+      ${modifiers.map(
+        (modifier) =>
+          html`<span class="modifier">+ ${descriptionFor(modifier.descriptions, "")}</span>`,
+      )}
+    </span>`;
   }
 
   /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name resolves in

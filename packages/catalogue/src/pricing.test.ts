@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
-import { priceBasket, priceLockedLines, resolveVatRate } from "./pricing.js";
-import type { LockedLine, PriceableProduct } from "./pricing.js";
+import {
+  priceBasket,
+  priceBasketWithOptions,
+  priceLockedLines,
+  resolveVatRate,
+} from "./pricing.js";
+import type {
+  BasketItemWithOptions,
+  LockedLine,
+  PriceableProduct,
+  SelectedOption,
+} from "./pricing.js";
 
 const each = (
   unitPrice: string,
@@ -108,6 +118,114 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
     ]);
     expect(r.grossLineTotals).toHaveLength(r.lines.length);
     expect(sumDecimals(r.grossLineTotals)).toBe(r.total);
+  });
+});
+
+// A dish + its selected options price as a PARENT line followed by its CHILD lines, all flowing
+// through the SAME `priceRows` arithmetic core — a child is just another priced row (grossUnit = the
+// option's price delta, rate = its vatClass override or the dish's rate, quantity = the DISH's
+// quantity, descriptions = the option's name, category = the parent's).
+describe("priceBasketWithOptions — parent + child priced lines", () => {
+  const opt = (
+    priceDelta: string,
+    vatClass: SelectedOption["vatClass"],
+    name: Record<string, string> = { es: "opción" },
+  ): SelectedOption => ({ name, priceDelta, vatClass });
+
+  it("prices a dish with options as parent + child lines (brief verbatim example)", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: {
+          descriptions: { es: "Café" },
+          pricingUnit: "each",
+          unitPrice: "2.50",
+          vatClass: "reduced",
+          category: "Drinks",
+        },
+        quantity: "1",
+        options: [
+          { name: { es: "Grande" }, priceDelta: "0.50", vatClass: null },
+          { name: { es: "Leche avena" }, priceDelta: "0.40", vatClass: null },
+        ],
+      },
+    ]);
+    expect(priced.lines).toHaveLength(3);
+    expect(priced.lines[1]!.parentLineNo).toBe(1);
+    expect(priced.total.toString()).toBe("3.40");
+  });
+
+  it("emits THREE lines; both children carry the dish's lineNo as parentLineNo, and a free option bases to 0", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: each("2.50", "reduced", "Drinks"),
+        quantity: "1",
+        options: [opt("0.00", null, { es: "Sin azúcar" }), opt("0.50", null, { es: "Grande" })],
+      },
+    ]);
+    expect(priced.lines).toHaveLength(3);
+    // The parent dish is line 1; both children point back to it.
+    expect(priced.lines[0]!.lineNo).toBe(1);
+    expect(priced.lines[0]!.parentLineNo).toBe(null);
+    expect(priced.lines[1]!.parentLineNo).toBe(priced.lines[0]!.lineNo);
+    expect(priced.lines[2]!.parentLineNo).toBe(priced.lines[0]!.lineNo);
+    // The free option contributes nothing: its net base (and its gross line total) are 0.
+    expect(priced.lines[1]!.lineTotal).toBe(decimal("0.00"));
+    expect(priced.grossLineTotals[1]).toBe(decimal("0.00"));
+    // A child inherits the parent's snapshotted analytics category.
+    expect(priced.lines[1]!.category).toBe("Drinks");
+    expect(priced.total).toBe(decimal("3.00"));
+  });
+
+  it("propagates the dish quantity onto every child (2× dish, one +1.00 option → child qty 2, gross 2.00)", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: each("5.00", "general"),
+        quantity: "2",
+        options: [opt("1.00", null)],
+      },
+    ]);
+    expect(priced.lines[1]!.quantity).toBe("2");
+    expect(priced.grossLineTotals[1]).toBe(decimal("2.00")); // 1.00 × 2
+    expect(priced.total).toBe(decimal("12.00")); // 5.00×2 + 1.00×2
+  });
+
+  it("mixes VAT rates: a general-rated option on a reduced-rated dish yields a two-rate breakdown", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: each("10.00", "reduced"),
+        quantity: "1",
+        options: [opt("2.00", "general")],
+      },
+    ]);
+    // Parent (10%) is inserted before child (21%), so the breakdown lists 10.00 then 21.00.
+    expect(priced.vatBreakdown).toEqual([
+      { rate: decimal("10.00"), base: decimal("9.09"), tax: decimal("0.91") },
+      { rate: decimal("21.00"), base: decimal("1.65"), tax: decimal("0.35") },
+    ]);
+    expect(priced.total).toBe(decimal("12.00"));
+  });
+
+  it("inherits the dish's rate when the option's vatClass is null", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: each("5.00", "general"),
+        quantity: "1",
+        options: [opt("1.00", null)],
+      },
+    ]);
+    expect(priced.lines[1]!.vatRate).toBe(decimal("21.00"));
+    expect(priced.vatBreakdown).toHaveLength(1); // dish + option share the 21% group
+  });
+
+  it("with EMPTY options is line-for-line identical to priceBasket", () => {
+    const items: BasketItemWithOptions[] = [
+      { product: each("8.50", "general"), quantity: "2", options: [] },
+      { product: weight("24.90", "reduced"), quantity: "0.320", options: [] },
+      { product: each("1.30", "super_reduced"), quantity: "5", options: [] },
+    ];
+    expect(priceBasketWithOptions(items)).toEqual(
+      priceBasket(items.map(({ product, quantity }) => ({ product, quantity }))),
+    );
   });
 });
 

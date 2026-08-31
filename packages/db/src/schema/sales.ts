@@ -230,6 +230,17 @@ export const saleLines = pgTable(
     // value is frozen onto the line at sale time so a roll-up sums one canonical bucket and a later
     // taxonomy edit can never reach back into a completed record.
     category: text("category"),
+    // The parent line this line modifies (ordering modifiers, Task 2) — a filed MODIFIER child line
+    // points at the dish line it belongs to; a top-level line leaves it NULL. Presentation/reporting
+    // metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from
+    // `sale_lines`, so this never reaches the huella (design §4). Bare NULLABLE uuid: the
+    // tenant-consistent self-FK (tenant_id, parent_line_id) → sale_lines(tenant_id, id) is
+    // hand-written in the --custom migration (drizzle does not emit a self-referential composite FK —
+    // the same split sales_corrects_fk uses), targeting sale_lines_tenant_id_key below. MATCH SIMPLE
+    // means a NULL parent satisfies it. NO option/catalogue reference is added here: filed records
+    // stay decoupled from the mutable catalogue (option_group_item_id lives on working_order_lines
+    // only). Write-once at sale time and immutable table-wide like every other column here.
+    parentLineId: uuid("parent_line_id"),
   },
   (t) => [
     // Composite FK: a line cannot point at a sale belonging to another tenant,
@@ -239,6 +250,10 @@ export const saleLines = pgTable(
       foreignColumns: [sales.tenantId, sales.id],
       name: "sale_lines_sale_fk",
     }).onDelete("restrict"),
+    // Composite (tenant_id, id) UNIQUE — the target for the tenant-consistent self-FK
+    // (tenant_id, parent_line_id) added in the --custom migration, the same role
+    // sales_tenant_id_key plays for sales' children. Neither existed before Task 2.
+    unique("sale_lines_tenant_id_key").on(t.tenantId, t.id),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
     index("sale_lines_sale_idx").on(t.saleId),
     check("sale_lines_quantity_ck", sql`${t.quantity} <> 0`),

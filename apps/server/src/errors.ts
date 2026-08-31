@@ -249,6 +249,60 @@ declare module "@waitron/shared" {
      */
     "sale.unsupported_tender": { method: string };
     /**
+     * A ring-time modifier selection named an `option_group_item_id` that does not belong to any
+     * ACTIVE option group attached to the product being ordered (ordering modifiers, Task 6). The
+     * server resolves every selected option against the product's own resolved `optionGroups` (the
+     * SAME read `listAvailableProducts` returns) and refuses one that resolves to nothing — the client
+     * is never the gate, so a crafted or stale id is caught here before any line is priced or filed.
+     * An id belonging to an INACTIVE group/item, to ANOTHER product's group, or to nothing at all all
+     * report THIS one code — to a till pricing a basket they are the same fact ("that option is not
+     * offered on this dish"), the fail-closed shape `sale.unknown_product` uses.
+     *
+     * `optionGroupItemId` and `productId` are caller-supplied uuids the till already holds, not
+     * secrets — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
+     * note above gives). `option.*` names the DOMAIN CONCEPT (a menu option), never the throwing
+     * package; SINGULAR because it names ONE option that was not found — the same singular/plural split
+     * `options.selection_invalid` (about the whole selection) sits beside. `@waitron/catalogue` owns
+     * the options domain, so this belongs there once a package other than this host throws it — the
+     * same note `sale.unknown_product` carries about its own placement. Mapped to 404. Never renamed
+     * once shipped.
+     */
+    "option.not_found": { optionGroupItemId: string; productId: string };
+    /**
+     * A ring-time modifier SELECTION violated one of its product's option-group constraints (ordering
+     * modifiers, Task 6): a `required` group with nothing picked, fewer than `minSelect`, or more than
+     * `maxSelect`. The server validates the whole selection per group against the product's resolved
+     * `optionGroups` and refuses a basket the client should have caught — the client is never the gate.
+     * `reason` is a stable CODE, never prose: `"required"` (a required group, nothing selected),
+     * `"below_min"` (fewer than `minSelect`), or `"above_max"` (more than `maxSelect`); a translator
+     * renders it. An EMPTY group (`items: []`, an authoring bug) carries no constraint and is skipped,
+     * never a source of this — nothing may block a sale on a mis-authored group (CLAUDE.md §5).
+     *
+     * `productId` and `groupId` are caller-/catalogue-supplied uuids the till already holds, not
+     * secrets; the offending count is NOT carried (the no-leak discipline this file keeps — echo names
+     * and stable codes, never raw values). `options.*` names the DOMAIN CONCEPT (a menu-option
+     * selection), never the throwing package; PLURAL because it is a fact about the whole SELECTION,
+     * beside the singular `option.not_found` (one option). Destined for `@waitron/catalogue` once a
+     * package other than this host throws it — the note `option.not_found` carries. A CLIENT
+     * request-shape fault → mapped to 400. Never renamed once shipped.
+     */
+    "options.selection_invalid": { productId: string; groupId: string; reason: string };
+    /**
+     * A ring-time request attached modifier options to a product that cannot carry them (ordering
+     * modifiers, Task 6): modifiers attach to `each` products only this slice, so options on a
+     * `weight`-priced product (loose deli sold by the kilo) are refused before pricing. A crafted
+     * request is the only way to reach it — the till never offers option groups on a weighed product —
+     * and the server is the gate, so it fails loud here rather than pricing a nonsensical basket.
+     *
+     * `productId` is the caller-supplied uuid the till already holds, not a secret; `pricingUnit` is
+     * the product's own `each`/`weight` classification (this file's config, never a secret), echoed so
+     * the message can name why the attachment was refused. `options.*` names the DOMAIN CONCEPT (a
+     * menu-option selection), never the throwing package, beside `options.selection_invalid`; destined
+     * for `@waitron/catalogue` once a package other than this host throws it — the note
+     * `option.not_found` carries. A CLIENT request-shape fault → mapped to 400. Never renamed once shipped.
+     */
+    "options.unsupported_product": { productId: string; pricingUnit: string };
+    /**
      * An operation needed an open shift session and none was supplied — the till's session cookie was
      * absent or named no open session. A fact about the REQUEST, so the operator-scoped routes
      * Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) refuse with this before doing any work. No
@@ -568,6 +622,27 @@ declare module "@waitron/shared" {
      * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
      */
     "tab.transfer_duplicate_line": { tabId: string; lineNo: number };
+    /**
+     * A transfer would separate a modifier from its dish (ordering modifiers). Two shapes reach it,
+     * both refused before any line is moved or split:
+     *  - a transfer entry names a CHILD modifier line directly (its `line_no` carries a
+     *    `parent_line_id`) — a modifier is part of its dish, so it moves only WITH the dish: naming the
+     *    parent whole-line move cascades its children automatically, and naming the child on its own is
+     *    refused here rather than orphaning it (the source child would reference a deleted parent →
+     *    23503, an opaque 500; the destination child would land ungrouped);
+     *  - a PARTIAL split (`quantity` < the line's quantity) names a PARENT dish that carries modifier
+     *    children — there is no per-option quantity this slice, so splitting the dish would desync its
+     *    modifiers' quantity from the dish; refused rather than filing an inconsistent draft.
+     * The client is never the gate: the till's transfer picker offers whole dishes, but a crafted
+     * request could name a child or split a modified dish, so the server refuses both here.
+     *
+     * `lineNo` is the offending source line (a child, or the parent asked to split); `tabId` the source
+     * tab. Both caller-supplied and echoed (neither a secret). A CLIENT request-shape fault (400) — the
+     * batch is malformed regardless of any tab's STATE — the same shape `tab.transfer_self`/
+     * `tab.transfer_duplicate_line` carry, distinct from the state conflict `tab.not_open` (409). `tab.*`
+     * names the DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule

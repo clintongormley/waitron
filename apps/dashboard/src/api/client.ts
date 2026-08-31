@@ -153,6 +153,9 @@ export interface Product {
  * typed `string` and omitted when there is no picture — only `ProductPatch.image` is nullable (a PATCH
  * clears the photo with `null`). `active` omitted leaves the product active (the column default);
  * `false` creates it inactive in the SAME request — the create is atomic, with no follow-up patch.
+ * `optionGroupIds` (Task 11/12) is the ORDERED set of reusable option groups to attach in the SAME
+ * request; omitted leaves the product with no attached groups (the create route treats an absent key
+ * the same as `undefined` on `setProductOptionGroups` — never called, so nothing attaches).
  */
 export interface ProductInput {
   catalogueId: string;
@@ -164,13 +167,16 @@ export interface ProductInput {
   allergens?: Record<string, AllergenEntry>;
   image?: string;
   active?: boolean;
+  optionGroupIds?: string[];
 }
 
 /**
  * The `PATCH /management-api/products/:id` body — the mutable slice, mirrors catalogue's
  * `UpdateProductInput`. Every key is optional; an absent key is left unchanged. `allergens: null`
  * clears the declaration back to unreviewed, `image: null` clears the photo, and `active` toggles the
- * product active/inactive through this one route.
+ * product active/inactive through this one route. `optionGroupIds` (Task 11/12) is a FULL REPLACE of
+ * the attached option groups, in the given order; omitted leaves the current attachment untouched, and
+ * `[]` detaches every group.
  */
 export interface ProductPatch {
   descriptions?: Record<string, string>;
@@ -180,6 +186,88 @@ export interface ProductPatch {
   categoryId?: string | null;
   allergens?: AllergenDeclaration;
   image?: string | null;
+  active?: boolean;
+  optionGroupIds?: string[];
+}
+
+// ── Option groups (reusable modifiers) + product attach (Task 11/12) ─────────────────────────────
+// LOCAL copies of the server's option-group authoring JSON shapes (the `catalogue-api.ts` routes
+// wrapping `@waitron/catalogue`'s option-group ops), deliberately NOT imported from
+// `@waitron/catalogue`/`@waitron/db` — a runtime import would drag their barrels + Node builtins into
+// the browser bundle (the #70 rule the shapes above follow). These are the CONTRACT the option-group
+// manager + the product form's attach section build on; if the server shapes change these follow, and
+// a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+
+/** A reusable `option_groups` row for the authoring editor — mirrors catalogue's `OptionGroup`. The
+ * whole row (active AND inactive), unlike the sale-time resolved shape the till reads. */
+export interface OptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  sort: number;
+  active: boolean;
+}
+
+/** One `option_group_items` row for the authoring editor — mirrors catalogue's `OptionGroupItem`.
+ * `priceDelta` is the GROSS numeric column carried as a string (like `unitPrice`); `vatClass` is null
+ * when the item INHERITS the parent dish's rate. */
+export interface OptionGroupItem {
+  id: string;
+  groupId: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  vatClass: VatClass | null;
+  sort: number;
+  active: boolean;
+}
+
+/** The `POST /management-api/option-groups` body — mirrors catalogue's `CreateOptionGroupInput`.
+ * Every field but `name` is optional; the server defaults mirror the column defaults (min 0, max 1,
+ * required false, sort 0, active true). An invalid combination (`max < min`, or `required` with
+ * `minSelect < 1`) rejects `options.group_invalid`. */
+export interface OptionGroupInput {
+  name: Record<string, string>;
+  minSelect?: number;
+  maxSelect?: number;
+  required?: boolean;
+  sort?: number;
+  active?: boolean;
+}
+
+/** The `PATCH /management-api/option-groups/:id` body — mirrors catalogue's `UpdateOptionGroupInput`.
+ * Every key is optional (absent = unchanged); the select-bound invariant is checked against the MERGE
+ * of this patch onto the stored row, so a partial patch that would violate it still rejects
+ * `options.group_invalid`. */
+export interface OptionGroupPatch {
+  name?: Record<string, string>;
+  minSelect?: number;
+  maxSelect?: number;
+  required?: boolean;
+  sort?: number;
+  active?: boolean;
+}
+
+/** The `POST /management-api/option-groups/:id/items` body — mirrors catalogue's
+ * `CreateOptionGroupItemInput`. `vatClass` omitted (or `null`) inherits the parent dish's rate; the
+ * other fields default to the column defaults (priceDelta "0", sort 0, active true). */
+export interface OptionGroupItemInput {
+  name: Record<string, string>;
+  priceDelta?: string;
+  vatClass?: VatClass | null;
+  sort?: number;
+  active?: boolean;
+}
+
+/** The `PATCH /management-api/option-groups/:groupId/items/:itemId` body — mirrors catalogue's
+ * `UpdateOptionGroupItemInput`. Every key is optional (absent = unchanged); `vatClass: null` reverts
+ * the item to inheriting the parent dish's rate. */
+export interface OptionGroupItemPatch {
+  name?: Record<string, string>;
+  priceDelta?: string;
+  vatClass?: VatClass | null;
+  sort?: number;
   active?: boolean;
 }
 
@@ -1143,6 +1231,71 @@ export class DashboardApi {
    */
   updateProduct(id: string, patch: ProductPatch): Promise<void> {
     return this.#request<void>(`/management-api/products/${id}`, "PATCH", patch);
+  }
+
+  /** `GET /management-api/products/:id/option-groups` — the option groups attached to a product, as
+   * ordered ids (per-attachment `sort` order) — the read-back the product form uses to seed its attach
+   * section's picked-and-ordered list on open. */
+  listProductOptionGroupIds(productId: string): Promise<string[]> {
+    return this.#request<string[]>(`/management-api/products/${productId}/option-groups`, "GET");
+  }
+
+  // ── Option groups (reusable modifiers) + their items (Task 11/12) ────────────────────────────────
+  // The CRUD the option-group manager drives (the catalogue-api.ts routes wrapping
+  // `@waitron/catalogue`'s option-group ops, `person.manage`-gated like the rest of this section).
+  // Groups/items are per-item POST/PATCH (a reload after each, the station/course idiom); create
+  // returns the created row at 201, patch answers an empty 204.
+
+  /** `GET /management-api/option-groups` — every option group (active AND inactive), by `sort` then
+   * id — the authoring editor's list and the product form's attach picker. */
+  listOptionGroups(): Promise<OptionGroup[]> {
+    return this.#request<OptionGroup[]>("/management-api/option-groups", "GET");
+  }
+
+  /** `POST /management-api/option-groups` — create an option group; returns the created row (201). An
+   * invalid select-bound configuration rejects `{ code: "options.group_invalid" }`. */
+  createOptionGroup(input: OptionGroupInput): Promise<OptionGroup> {
+    return this.#request<OptionGroup>("/management-api/option-groups", "POST", input);
+  }
+
+  /** `PATCH /management-api/option-groups/:id` — patch a group's mutable slice (name, min/max select,
+   * required, sort, active). Answers an empty 204; an invalid select-bound configuration rejects
+   * `{ code: "options.group_invalid" }`. */
+  updateOptionGroup(id: string, patch: OptionGroupPatch): Promise<void> {
+    return this.#request<void>(`/management-api/option-groups/${id}`, "PATCH", patch);
+  }
+
+  /** `GET /management-api/option-groups/:id/items` — a group's choices (active AND inactive), by
+   * `sort` then id. */
+  listOptionGroupItems(groupId: string): Promise<OptionGroupItem[]> {
+    return this.#request<OptionGroupItem[]>(
+      `/management-api/option-groups/${groupId}/items`,
+      "GET",
+    );
+  }
+
+  /** `POST /management-api/option-groups/:id/items` — create a choice within a group; returns the
+   * created row (201). */
+  createOptionGroupItem(groupId: string, input: OptionGroupItemInput): Promise<OptionGroupItem> {
+    return this.#request<OptionGroupItem>(
+      `/management-api/option-groups/${groupId}/items`,
+      "POST",
+      input,
+    );
+  }
+
+  /** `PATCH /management-api/option-groups/:groupId/items/:itemId` — patch an item's mutable slice
+   * (name, price delta, VAT override, sort, active). Answers an empty 204. */
+  updateOptionGroupItem(
+    groupId: string,
+    itemId: string,
+    patch: OptionGroupItemPatch,
+  ): Promise<void> {
+    return this.#request<void>(
+      `/management-api/option-groups/${groupId}/items/${itemId}`,
+      "PATCH",
+      patch,
+    );
   }
 
   /**

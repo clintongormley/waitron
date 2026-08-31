@@ -49,6 +49,12 @@ export interface LockedLine {
   descriptions: Record<string, string>;
   /** Snapshotted analytics label, copied onto the sale line; `null` when absent. */
   category: string | null;
+  /** The `lineNo` of this row's PARENT dish line when this is a child MODIFIER line (ordering
+   * modifiers), else `null`/absent for a top-level line. Reconstructed by the caller from the stored
+   * `working_order_lines.parent_line_id` (an id) against the same batch's `line_no`s, so a
+   * locked-line file preserves parent→child linkage exactly as a live walk-up does. Copied onto the
+   * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
+  parentLineNo?: number | null;
 }
 
 // The standing Spanish VAT set. RECEIPT (Step 6): the four rates below were confirmed on 2026-08-05
@@ -109,6 +115,9 @@ interface PricingRow {
   rate: Decimal;
   descriptions: Record<string, string>;
   category: string | null;
+  /** The `lineNo` of this row's parent dish; `null`/absent for a top-level line. Copied onto the
+   * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
+  parentLineNo?: number | null;
 }
 
 // THE ONE arithmetic core. `priceBasket` (live catalogue) and `priceLockedLines` (stored lock) both
@@ -138,6 +147,11 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       vatRate: row.rate,
       lineTotal: base,
       category: row.category,
+      // Presentation metadata carried through the core untouched: `null` for a top-level line, the
+      // parent dish's `lineNo` for a child option line. `?? null` keeps the no-options callers
+      // (`priceBasket`/`priceLockedLines`, which never set it) emitting exactly `null` here, so a
+      // basket priced with empty options stays line-for-line identical to `priceBasket`.
+      parentLineNo: row.parentLineNo ?? null,
     });
     grossLineTotals.push(gross); // parallel to `lines`; the customer-facing gross of this same line
     grossUnitPrices.push(grossUnit); // parallel to `lines`; the per-UNIT gross stored as unit_price_gross
@@ -190,6 +204,74 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       rate: decimal(line.vatRate),
       descriptions: line.descriptions,
       category: line.category,
+      // Carry the child→parent link through the lock round-trip so a persisted-order file (a retrieved
+      // counter order, a settled tab) emits child sale_lines with the same `parent_line_id` a live
+      // walk-up does. `?? null` keeps a no-modifier locked line (which never sets it) emitting `null`,
+      // so a plain basket stays line-for-line identical.
+      parentLineNo: line.parentLineNo ?? null,
     })),
   );
+}
+
+/** A modifier chosen on a dish — one selected option from an option group. */
+export interface SelectedOption {
+  /** locale -> text, snapshotted at selection time; becomes the child line's `descriptions`. */
+  name: Record<string, string>;
+  /** GROSS (VAT-inclusive) price change this option adds to the dish, as a `numeric(12,2)` literal.
+   * `"0.00"` for a free option (which then contributes a zero-base child line). */
+  priceDelta: string;
+  /** The option's own VAT class when it OVERRIDES the dish's, or `null` to INHERIT the dish's rate. */
+  vatClass: VatClass | null;
+}
+
+/** A basket line that carries the dish plus the modifiers selected on it. */
+export interface BasketItemWithOptions {
+  product: PriceableProduct;
+  /** A count for `each`, a measured kg weight for `weight` — the DISH quantity, which every child
+   * option line follows (a modifier is priced per dish, never counted independently). */
+  quantity: string;
+  options: SelectedOption[];
+}
+
+/**
+ * Prices a live basket where each dish may carry selected modifier options: each item expands to a
+ * PARENT dish row followed by its CHILD option rows, IN ORDER, so `priceRows` numbers the parent
+ * before its children and each child's `parentLineNo` names the dish above it. A child is just
+ * another priced row through the ONE arithmetic core — its gross unit is the option's `priceDelta`,
+ * its quantity the DISH's quantity, its rate the option's `vatClass` override or (when `null`) the
+ * dish's own rate, its descriptions the option's `name`, and its category the parent's snapshot — so
+ * the difference-method desglose and `total` include the option amounts with no separate arithmetic.
+ * With every item's `options` empty this is line-for-line identical to `priceBasket`.
+ */
+export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]): PricedLines {
+  const rows: PricingRow[] = [];
+  for (const item of items) {
+    // The parent's eventual `lineNo` is its 1-based position, which is `rows.length + 1` BEFORE the
+    // parent row is pushed (`priceRows` assigns `lineNo = i + 1` in this same order).
+    const parentLineNo = rows.length + 1;
+    rows.push({
+      // `unitPrice` is a plain `string` on `PriceableProduct`; `decimal()` validates it here.
+      grossUnit: decimal(item.product.unitPrice),
+      quantity: item.quantity,
+      rate: resolveVatRate(item.product.vatClass),
+      descriptions: item.product.descriptions,
+      category: item.product.category,
+      parentLineNo: null,
+    });
+    for (const opt of item.options) {
+      rows.push({
+        // `priceDelta` is a plain `string` on `SelectedOption`; `decimal()` validates it here.
+        grossUnit: decimal(opt.priceDelta),
+        quantity: item.quantity, // qty follows the dish
+        rate:
+          opt.vatClass === null
+            ? resolveVatRate(item.product.vatClass)
+            : resolveVatRate(opt.vatClass),
+        descriptions: opt.name,
+        category: item.product.category, // snapshot the parent's category
+        parentLineNo,
+      });
+    }
+  }
+  return priceRows(rows);
 }

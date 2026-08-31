@@ -33,6 +33,9 @@ const queue: ExpoOrder[] = [
             state: "ready",
             firedAt: FIRED,
             awayAt: null,
+            // A dish with selected options (ordering modifiers, Task 14) — the indented "+ name" sub-text
+            // is non-interactive plain text under the same item box, swept here for both themes.
+            modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
           },
         ],
       },

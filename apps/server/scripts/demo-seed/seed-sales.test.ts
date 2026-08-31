@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, saleLines, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -207,5 +207,104 @@ describe("seedSales", () => {
       return tx.select({ id: sales.id }).from(sales);
     });
     expect(saleRows.length).toBe(0);
+  });
+
+  // One REQUIRED group (always fires — a real order can never leave it unsatisfied) plus one OPTIONAL
+  // group (fires roughly half the time, per `selectOptions`'s coin-flip) — proves both the "always
+  // resolve required" and the "occasionally select optional" halves of the modifier generator, and the
+  // VAT-override path (`vatClass: "reduced"` on one option vs `null`-inherit on the rest).
+  const COFFEE_WITH_OPTIONS: SeedSalesProduct = {
+    id: "p-coffee",
+    descriptions: { [LOCALE]: "Café" },
+    unitPrice: "1.60",
+    vatClass: "general",
+    optionGroups: [
+      {
+        id: "g-size",
+        name: { [LOCALE]: "Size" },
+        minSelect: 1,
+        maxSelect: 1,
+        required: true,
+        items: [
+          { id: "i-small", name: { [LOCALE]: "Small" }, priceDelta: "0.00", vatClass: null },
+          { id: "i-large", name: { [LOCALE]: "Large" }, priceDelta: "0.50", vatClass: null },
+        ],
+      },
+      {
+        id: "g-extras",
+        name: { [LOCALE]: "Extras" },
+        minSelect: 0,
+        maxSelect: 2,
+        required: false,
+        items: [
+          {
+            id: "i-shot",
+            name: { [LOCALE]: "Extra shot" },
+            priceDelta: "0.60",
+            vatClass: "reduced",
+          },
+          { id: "i-syrup", name: { [LOCALE]: "Syrup" }, priceDelta: "0.40", vatClass: null },
+        ],
+      },
+    ],
+  };
+
+  const OPTION_NAMES = new Set(["Small", "Large", "Extra shot", "Syrup"]);
+
+  it("emits modifier sub-lines linked by parent_line_id when a product carries option groups", async () => {
+    const venue = await provisionVenue();
+
+    const { count } = await seedSales(suite.admin, {
+      venue: venueFor(venue),
+      locale: LOCALE,
+      days: 2,
+      products: [COFFEE_WITH_OPTIONS],
+    });
+    expect(count).toBeGreaterThan(0);
+
+    const rows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .select({
+          id: saleLines.id,
+          saleId: saleLines.saleId,
+          parentLineId: saleLines.parentLineId,
+          descriptions: saleLines.descriptions,
+          vatRate: saleLines.vatRate,
+        })
+        .from(saleLines);
+    });
+
+    const parents = rows.filter((r) => r.parentLineId === null);
+    const children = rows.filter((r) => r.parentLineId !== null);
+
+    // Every sale rings the SAME product, whose Size group is REQUIRED, so every dish line has at
+    // least one child (Size) — and at least one child overall.
+    expect(children.length).toBeGreaterThan(0);
+    expect(children.length).toBeGreaterThanOrEqual(parents.length);
+
+    // Every child's description is one of the authored option item names, and its filed VAT rate
+    // matches that item's override (Extra shot → reduced 10%) or the dish's own rate (general 21%)
+    // when the item inherits (`vatClass: null`). Filed sale-line descriptions are re-keyed to the
+    // FULL invoice tag (`toInvoiceLineDescriptions`), not the bare content locale — `es` here files
+    // under `es-ES`.
+    const invoiceLocale = SEED_INVOICE_LOCALE[LOCALE];
+    for (const child of children) {
+      const desc = child.descriptions[invoiceLocale];
+      expect(OPTION_NAMES.has(desc as string)).toBe(true);
+      expect(child.vatRate).toBe(desc === "Extra shot" ? "10.00" : "21.00");
+    }
+
+    // Every child's parent id resolves to a real top-level line in the SAME sale (proper linkage, not
+    // a dangling reference into another sale).
+    const idsBySale = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const ids = idsBySale.get(row.saleId) ?? new Set<string>();
+      ids.add(row.id);
+      idsBySale.set(row.saleId, ids);
+    }
+    for (const child of children) {
+      expect(idsBySale.get(child.saleId)!.has(child.parentLineId!)).toBe(true);
+    }
   });
 });

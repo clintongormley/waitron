@@ -50,7 +50,7 @@
 import { esc } from "@waitron/printing";
 import { addDecimal, decimal } from "@waitron/shared";
 
-import type { TillSaleResult } from "./till-sale.js";
+import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface ReceiptIssuer {
@@ -157,6 +157,39 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
+/** A dish and the option lines filed beneath it — the shape {@link groupByParent} produces. */
+interface LineGroup {
+  dish: TillSaleLine;
+  options: TillSaleLine[];
+}
+
+/**
+ * Group the filed line list into dishes each carrying their child option lines (ordering modifiers,
+ * Task 8). A parent dish has `parentLineNo == null`; a child option points at its dish's `lineNo`.
+ * The filed lines arrive in emission order — dish immediately followed by its options
+ * (`priceBasketWithOptions`) — so a single forward scan attaching each child to the most recent dish
+ * groups them without a lookup. This does NOT recompute any figure: it re-orders the SAME already-filed
+ * lines, so Σ(dish.gross + options.gross) is unchanged and still equals the filed `total`. Kept tiny and
+ * in lock-step with the till's own `groupByParent` (`apps/till/src/screens/till-ticket-view.ts`), NOT
+ * imported across the app boundary (an `apps/server` → `apps/till` dependency would be backwards).
+ *
+ * A leading child with no dish yet (structurally impossible for filed data — a dish is always emitted
+ * before its options) is treated as its own dish rather than dropped, so no filed line ever vanishes
+ * from a legal receipt and the printed lines always reconcile with the total (§4).
+ */
+function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
+  const groups: LineGroup[] = [];
+  for (const line of lines) {
+    const current = groups[groups.length - 1];
+    if (line.parentLineNo == null || current === undefined) {
+      groups.push({ dish: line, options: [] });
+    } else {
+      current.options.push(line);
+    }
+  }
+  return groups;
+}
+
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
 function issueDate(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
@@ -205,14 +238,24 @@ export function formatReceipt({
 
   // Goods identification (7.1.e) — the FILED composition: quantity, name (invoice locale), per-line
   // gross. This is `result.lines`, never a client basket, so the printed list cannot diverge from the
-  // invoice.
-  for (const line of result.lines) {
+  // invoice. Ordering modifiers (Task 8): the lines are GROUPED so each selected option prints INDENTED
+  // beneath its dish at its own delta (0,00 for a free option), rather than flat as a peer line. The
+  // grouping only re-orders the already-filed lines — every line still prints at its filed gross, so the
+  // list reconciles with `result.total` exactly as before.
+  for (const { dish, options } of groupByParent(result.lines)) {
     b.line(
       twoColumn(
-        `${line.quantity}  ${lineName(line.descriptions, locale)}`,
-        formatMoney(line.gross, locale),
+        `${dish.quantity}  ${lineName(dish.descriptions, locale)}`,
+        formatMoney(dish.gross, locale),
       ),
     );
+    for (const option of options) {
+      // Indented, and WITHOUT the quantity prefix — an option is priced per dish, so its own count is
+      // the dish's and repeating it reads as noise. The gross is the delta this option added.
+      b.line(
+        twoColumn(`  ${lineName(option.descriptions, locale)}`, formatMoney(option.gross, locale)),
+      );
+    }
   }
   b.line();
 

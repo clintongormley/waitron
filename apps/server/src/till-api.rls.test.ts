@@ -796,6 +796,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
             course: null,
             firedAt: expect.any(String),
+            // No options selected on this line → an empty modifier sub-item list (ordering modifiers).
+            modifiers: [],
           },
         ],
       },

@@ -337,6 +337,22 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
+  it("send-round threads a line's selected modifier options as bare optionGroupItemIds (ordering modifiers)", async () => {
+    const { el } = await mount();
+    // Seed the round store with a modifier-carrying line (the picker, Task 10, is what will produce these
+    // through the UI); only the `optionGroupItemId`s reach the wire — never the display name/priceDelta.
+    grid(el).store.addProduct(cafe, "1", [
+      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
+    ]);
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      { productId: "cafe", quantity: "1", options: [{ optionGroupItemId: "opt-oat" }] },
+    ]);
+  });
+
   it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);

@@ -1079,3 +1079,94 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     expect(visibleToB).toHaveLength(0);
   });
 });
+
+/**
+ * The sale_line → parent sale_line self-link (ordering modifiers, Task 2). `parent_line_id` is
+ * presentation/reporting metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`,
+ * never from `sale_lines`, so this column never reaches the huella (design §4). A modifier files as
+ * its own child line pointing at the dish line it belongs to; a top-level line leaves it NULL.
+ *
+ * The composite (tenant_id, parent_line_id) → sale_lines(tenant_id, id) FK keeps the link
+ * tenant-consistent (mirrors sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
+ * ordinary lines are untouched. sale_lines carries NO reference to any option/catalogue table — the
+ * "carries no reference to a catalogue on sale_lines" test above guards that, and `option_group_item_id`
+ * lives on the MUTABLE working_order_lines draft only, never here.
+ */
+describeEachTarget("sale_lines — parent line self-link", (target) => {
+  let db: Database;
+  let saleId = "";
+
+  beforeEach(async () => {
+    db = await target.create();
+    await seed(db);
+    // A sale with one (top-level) line, line_no 1 — the parent candidate.
+    saleId = await recordCompleteSale(db);
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  // Raw insert so the RED phase fails on the missing column/constraint, not a TypeScript compile
+  // error against the drizzle `saleLines` type (the corrects-link block above does the same).
+  async function insertLine(opts: {
+    saleId: string;
+    lineNo: number;
+    parentLineId: string | null;
+    tenantId?: string;
+    descriptions?: string;
+  }): Promise<{ id: string }[]> {
+    const tenantId = opts.tenantId ?? TENANT_A;
+    const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
+    return rows<{ id: string }>(
+      db,
+      sql`insert into sale_lines (
+             tenant_id, sale_id, line_no, descriptions, quantity, unit_price, vat_rate, line_total,
+             parent_line_id
+           ) values (
+             ${tenantId}, ${opts.saleId}, ${opts.lineNo}, ${descriptions}::jsonb, '1.000', '1.00',
+             '10.00', '1.00', ${opts.parentLineId}
+           ) returning id`,
+    );
+  }
+
+  it("links a child line to its parent line within the tenant", async () => {
+    const [parent] = await db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+    const [child] = await insertLine({ saleId, lineNo: 2, parentLineId: parent.id });
+    const [row] = await rows<{ parent_line_id: string }>(
+      db,
+      sql`select parent_line_id from sale_lines where id = ${child.id}::uuid`,
+    );
+    expect(row.parent_line_id).toBe(parent.id);
+  });
+
+  it("leaves parent_line_id null on a top-level line", async () => {
+    const [row] = await rows<{ parent_line_id: string | null }>(
+      db,
+      sql`select parent_line_id from sale_lines where sale_id = ${saleId}::uuid and line_no = 1`,
+    );
+    expect(row.parent_line_id).toBeNull();
+  });
+
+  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
+    // Tenant B's sale + its line, then a tenant-A child pointing at it: the composite
+    // (tenant_id, parent_line_id) FK has no (TENANT_A, tenantB-line) parent row, so 23503 fires —
+    // the tenant-consistency a plain single-column self-FK could not enforce.
+    const foreignSaleId = await recordCompleteSale(db, {
+      tenantId: TENANT_B,
+      tillId: TILL_B1,
+      nodeId: nodeB,
+      seriesId: seriesB,
+      invoiceLocales: ["es"],
+      locale: "es",
+    });
+    const [foreignParent] = await db
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, foreignSaleId));
+    const error = await captureError(() =>
+      insertLine({ saleId, lineNo: 2, parentLineId: foreignParent.id }),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
+  });
+});

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { assignCatalogueToLocation, listAvailableProducts } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -49,7 +50,10 @@ function nextNif(): string {
 
 interface Venue {
   tenantId: string;
-  /** This venue's single location id — the `:locationId` the location-menu routes act on. */
+  /**
+   * This venue's single location id — the `:locationId` the location-menu routes act on, and the
+   * location-scoped read the till uses (`listAvailableProducts`).
+   */
   locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */
   managerCookie: string;
@@ -511,5 +515,175 @@ describe("Catalogue API over real Postgres (RLS end-to-end)", () => {
     );
     expect(crossTenant.status).toBe(200);
     expect((await crossTenant.json()) as unknown[]).toEqual([]);
+  });
+
+  it("authors a group + items, attaches it to a product, and the till read reflects it (design §3)", async () => {
+    // Pinned test 1 (till-read half): the modifier-authoring routes create a group with two items and
+    // attach it to a product, then the OPERATOR till read (`listAvailableProducts`, location-scoped)
+    // surfaces the same group + active items — the authoring surface and the sale surface agree. Runs
+    // on real Postgres because `listAvailableProducts` reads the location's accessible catalogue, which
+    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTenant+asAppUser.
+    const v = await setupVenue();
+    const app = mountApp(v.tenantId);
+
+    const catId = await createCatalogue(app, v.managerCookie, "Menú de la casa");
+    const groupRes = await send(app, "POST", "/management-api/option-groups", v.managerCookie, {
+      name: { [LOCALE]: "Punto" },
+      minSelect: 1,
+      maxSelect: 1,
+      required: true,
+    });
+    expect(groupRes.status).toBe(201);
+    const groupId = ((await groupRes.json()) as { id: string }).id;
+    const itemIds: string[] = [];
+    // Explicit ascending `sort` so the till read's item order is deterministic (equal sort tiebreaks
+    // on the random uuid).
+    for (const [sort, name] of [
+      [0, "Poco hecho"],
+      [1, "Al punto"],
+    ] as const) {
+      const r = await send(
+        app,
+        "POST",
+        `/management-api/option-groups/${groupId}/items`,
+        v.managerCookie,
+        { name: { [LOCALE]: name }, sort },
+      );
+      expect(r.status).toBe(201);
+      itemIds.push(((await r.json()) as { id: string }).id);
+    }
+
+    const prodRes = await send(app, "POST", "/management-api/products", v.managerCookie, {
+      catalogueId: catId,
+      categoryId: null,
+      descriptions: { [LOCALE]: "Entrecot" },
+      pricingUnit: "each",
+      unitPrice: "18.00",
+      vatClass: "general",
+      optionGroupIds: [groupId],
+    });
+    expect(prodRes.status).toBe(201);
+    const productId = ((await prodRes.json()) as { id: string }).id;
+
+    // Read the attach back through the authoring route.
+    const attached = await send(
+      app,
+      "GET",
+      `/management-api/products/${productId}/option-groups`,
+      v.managerCookie,
+    );
+    expect(attached.status).toBe(200);
+    expect((await attached.json()) as string[]).toEqual([groupId]);
+
+    // Make the catalogue sellable at the location, then the OPERATOR till read reflects the group.
+    const tillView = await withTenant(suite.admin, v.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await assignCatalogueToLocation(tx, v.locationId, catId);
+      return listAvailableProducts(tx, v.locationId);
+    });
+    const sold = tillView.products.find((p) => p.id === productId)!;
+    expect(sold.optionGroups).toHaveLength(1);
+    expect(sold.optionGroups[0]).toMatchObject({
+      id: groupId,
+      name: { [LOCALE]: "Punto" },
+      minSelect: 1,
+      maxSelect: 1,
+      required: true,
+    });
+    expect(sold.optionGroups[0]!.items.map((i) => i.id)).toEqual(itemIds);
+  });
+
+  it("denies a cross-tenant option-group id — attaching B's group to A's product surfaces nothing to the till", async () => {
+    // Pinned test 2: RLS keeps one tenant's option groups invisible to another. Two venues; B authors a
+    // group. A's manager cannot list it (RLS row-hides it), and attaching B's group id to A's product
+    // is a no-op at the tenant-consistent FK level — the till read for A never surfaces B's group. This
+    // is the load-bearing differential: were `asAppUser` dropped from `gated`, A would SEE B's group.
+    const a = await setupVenue();
+    const b = await setupVenue();
+    const appA = mountApp(a.tenantId);
+    const appB = mountApp(b.tenantId);
+
+    const bGroupRes = await send(appB, "POST", "/management-api/option-groups", b.managerCookie, {
+      name: { [LOCALE]: "Grupo de B" },
+    });
+    expect(bGroupRes.status).toBe(201);
+    const bGroupId = ((await bGroupRes.json()) as { id: string }).id;
+
+    // A's manager lists option groups: B's group is not among them (RLS isolation).
+    const aGroups = await send(appA, "GET", "/management-api/option-groups", a.managerCookie);
+    expect(aGroups.status).toBe(200);
+    expect(((await aGroups.json()) as { id: string }[]).map((r) => r.id)).not.toContain(bGroupId);
+
+    // A authors its own catalogue + product, then tries to attach B's foreign group id. The
+    // tenant-consistent (tenant_id, group_id) FK finds no such group under A's tenant, so the insert
+    // raises 23503 → an opaque 500 (the deliberately-opaque foreign-id posture the catalogue STATUS map
+    // documents); the attach never lands.
+    const catA = await createCatalogue(appA, a.managerCookie, "Carta A");
+    const prodRes = await send(appA, "POST", "/management-api/products", a.managerCookie, {
+      catalogueId: catA,
+      categoryId: null,
+      descriptions: { [LOCALE]: "Producto A" },
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    const productId = ((await prodRes.json()) as { id: string }).id;
+    const attachRes = await send(
+      appA,
+      "PATCH",
+      `/management-api/products/${productId}`,
+      a.managerCookie,
+      { optionGroupIds: [bGroupId] },
+    );
+    // The cross-tenant FK is refused (never a silent success); the attach did not land.
+    expect(attachRes.status).toBeGreaterThanOrEqual(400);
+    const attached = await send(
+      appA,
+      "GET",
+      `/management-api/products/${productId}/option-groups`,
+      a.managerCookie,
+    );
+    expect((await attached.json()) as string[]).toEqual([]);
+  });
+
+  it("refuses every option-group write route to a staff-role session — 403 authorization.not_permitted", async () => {
+    // Pinned test 3: the `person.manage` gate covers the new authoring routes, proved the same way the
+    // catalogue-write test above proves it — by DELETION. A `staff` session holds no `person.manage`,
+    // so `authorizeManager` inside `gated` throws before any option-group op runs. Dropping that
+    // `authorizeManager` from `catalogue-api.ts`'s `gated` helper flips each `toBe(403)` green→red (the
+    // same guard-by-deletion receipt the catalogue-write block records).
+    const { tenantId, staffCookie } = await setupVenue();
+    const app = mountApp(tenantId);
+    const dummy = "00000000-0000-0000-0000-000000000000";
+
+    const expect403 = async (res: Response) => {
+      expect(res.status).toBe(403);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    };
+
+    await expect403(
+      await send(app, "POST", "/management-api/option-groups", staffCookie, {
+        name: { [LOCALE]: "Refused" },
+      }),
+    );
+    await expect403(
+      await send(app, "PATCH", `/management-api/option-groups/${dummy}`, staffCookie, { sort: 1 }),
+    );
+    await expect403(
+      await send(app, "POST", `/management-api/option-groups/${dummy}/items`, staffCookie, {
+        name: { [LOCALE]: "Refused" },
+      }),
+    );
+    await expect403(
+      await send(
+        app,
+        "PATCH",
+        `/management-api/option-groups/${dummy}/items/${dummy}`,
+        staffCookie,
+        { sort: 1 },
+      ),
+    );
   });
 });

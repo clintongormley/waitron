@@ -156,6 +156,69 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-item="ti-x"]')!.textContent).toContain("1× Fish");
   });
 
+  describe("ordering modifiers (Task 14): selected options as indented sub-text under the dish", () => {
+    // A fired dish with TWO selected options — the wire shape `listStationQueue` already returns
+    // (Task 7), the KDS widget just doesn't render it yet.
+    const withModifiers: StationQueueGroup = {
+      orderId: "wo-9",
+      orderNumber: 9,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      status: "placed",
+      items: [
+        {
+          id: "ti-9",
+          workingOrderLineId: "wol-9",
+          state: "queued",
+          descriptions: { "es-ES": "Cortado" },
+          quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
+          modifiers: [
+            { descriptions: { "es-ES": "Grande" } },
+            { descriptions: { "es-ES": "Leche avena" } },
+          ],
+        },
+      ],
+    };
+
+    it("rail: renders the dish then its two options as indented '+ name' sub-text", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withModifiers],
+        view: "rail",
+        stationId: "st-9",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-9"]')!;
+      expect(item.textContent).toContain("1× Cortado");
+      expect(item.textContent).toContain("+ Grande");
+      expect(item.textContent).toContain("+ Leche avena");
+      // The dish precedes its modifiers in DOM order (kitchen-print ticket style: dish, then options).
+      const html = item.innerHTML;
+      expect(html.indexOf("Cortado")).toBeLessThan(html.indexOf("Grande"));
+      expect(html.indexOf("Grande")).toBeLessThan(html.indexOf("Leche avena"));
+    });
+
+    it("kanban: renders the same indented options beneath the cell's dish", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withModifiers],
+        stationId: "st-9",
+      });
+      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-9"]')!;
+      expect(cell.textContent).toContain("1× Cortado");
+      expect(cell.textContent).toContain("+ Grande");
+      expect(cell.textContent).toContain("+ Leche avena");
+    });
+
+    it("a modifier-free item renders flat, with no modifiers sub-text at all (regression-safe)", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups, // the top-level fixture — no item here carries `modifiers`
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
+    });
+  });
+
   it("line mode: tapping a queued line emits advance-ticket-item { itemId, to: 'preparing' }", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,

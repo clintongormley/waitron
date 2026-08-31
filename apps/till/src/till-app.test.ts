@@ -785,6 +785,31 @@ describe("till-app", () => {
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
   });
 
+  it("confirm-payment: forwards a line's selected modifier options as bare optionGroupItemIds (ordering modifiers)", async () => {
+    // A basket line carrying modifiers (Task 9) sends `options: [{ optionGroupItemId }]` — the bare ids,
+    // never the display name/priceDelta (the server re-prices authoritatively). A plain line still omits
+    // `options` entirely, so the mixed basket proves the no-modifier line is byte-identical to before.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1", [
+      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
+    ]);
+    c.store.addProduct(cafe, "2"); // a plain line — must reach the wire with NO options key
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [
+        { productId: "cafe", quantity: "1", options: [{ optionGroupItemId: "opt-oat" }] },
+        { productId: "cafe", quantity: "2" },
+      ],
+      { method: "cash", amount: "5" },
+      c.store.id,
+    );
+  });
+
   it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
     // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
     // server's filed result reports a different composition (agua×3). The rendered ticket must show the

@@ -4,13 +4,16 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
+  optionGroupItems,
+  optionGroups,
+  productOptionGroups,
   withTenant,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -26,7 +29,14 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { joinTable, mergeTabs, moveTab, moveTabLines, openTab } from "./working-order.js";
+import {
+  addTabRound,
+  joinTable,
+  mergeTabs,
+  moveTab,
+  moveTabLines,
+  openTab,
+} from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -138,7 +148,7 @@ async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
 async function linesOf(
   tabId: string,
-): Promise<{ lineNo: number; productId: string; gross: string }[]> {
+): Promise<{ lineNo: number; productId: string | null; gross: string }[]> {
   const rows = await db
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -421,6 +431,84 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(await tabIdOf(tFrom)).toBeNull();
     expect(await statusIdOf(tFrom)).toBeNull();
     expect(await tabIdOf(tInto)).toBe(intoTab); // intoTab's own table unchanged
+  });
+
+  it("preserves a moved modifier line's parent linkage on merge (child points at the moved parent, not NULL)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    // addTabRound fires the round (→ fireLines), which needs a default kitchen station to route to.
+    await seedKitchenStation(db, { tenantId: cfg.tenantId, locationId: cfg.locationId });
+    const tInto = await seedTable(cfg, "MOD-into");
+    const tFrom = await seedTable(cfg, "MOD-from");
+
+    // Attach an "Extras" group with a "Bacon" item to the café so the source tab can carry a parent
+    // dish line + a child modifier line (parent_line_id set) — the same shape tabs.test.ts builds.
+    const baconId = await asApp(cfg, async (tx) => {
+      const [group] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { [LOCALE]: "Extras" },
+          minSelect: 0,
+          maxSelect: 2,
+          required: false,
+          sort: 0,
+        })
+        .returning({ id: optionGroups.id });
+      const [bacon] = await tx
+        .insert(optionGroupItems)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          groupId: group!.id,
+          name: { [LOCALE]: "Bacon" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          sort: 0,
+        })
+        .returning({ id: optionGroupItems.id });
+      await tx.insert(productOptionGroups).values({
+        tenantId: sql`current_tenant_id()`,
+        productId: cafeId,
+        groupId: group!.id,
+        sort: 0,
+      });
+      return bacon!.id;
+    });
+
+    // intoTab: a plain café. fromTab: a café WITH the Bacon modifier (added via a round, the path that
+    // takes `options`) → a parent dish line + a child modifier line pointing at it.
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, []);
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, fromTab, [
+        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+      ]),
+    );
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
+
+    // The moved child modifier line must point at the MOVED parent's NEW id — not NULL. Without the
+    // parent_line_id remap in moveTabLines the child lands orphaned (parent_line_id NULL) and renders
+    // ungrouped.
+    const dest = await db
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        parentLineId: workingOrderLines.parentLineId,
+        optionGroupItemId: workingOrderLines.optionGroupItemId,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, intoTab))
+      .orderBy(workingOrderLines.lineNo);
+    const child = dest.find((l) => l.optionGroupItemId === baconId);
+    expect(child).toBeDefined();
+    expect(child!.parentLineId).not.toBeNull();
+    // Its parent is another MOVED line on the destination: a top-level café dish (product set,
+    // parent_line_id null).
+    const parent = dest.find((l) => l.id === child!.parentLineId);
+    expect(parent).toBeDefined();
+    expect(parent!.productId).toBe(cafeId);
+    expect(parent!.parentLineId).toBeNull();
+    expect(parent!.optionGroupItemId).toBeNull();
   });
 
   it("the join branch (freeSourceTable: false) re-points the source table at intoTab (covered for branch)", async () => {

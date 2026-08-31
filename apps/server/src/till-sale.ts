@@ -70,7 +70,14 @@ export interface TillTender {
  * that order's own id here, so the settle lands on the retrieved order rather than a fresh walk-up one.
  */
 export interface TillSaleRequest {
-  lines: { productId: string; quantity: string }[];
+  /** The walk-up basket. A line MAY carry selected modifier `options` (ordering modifiers, Task 6) —
+   *  each an `optionGroupItemId` chosen from the product's attached option groups; the server validates
+   *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. */
+  lines: {
+    productId: string;
+    quantity: string;
+    options?: { optionGroupItemId: string }[];
+  }[];
   /**
    * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
    *  - `cash` — `amount` is the money tendered; the sale settles at the total and `change` is the
@@ -112,8 +119,15 @@ export interface TillSaleLine {
   quantity: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. Σ over the
    *  lines equals `total` exactly (both sum the same per-line gross), so the receipt's line list adds
-   *  up to the printed total. */
+   *  up to the printed total. For a CHILD modifier line this is the option's delta × quantity ("0.00"
+   *  for a free option). */
   gross: string;
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line (ordering modifiers),
+   *  else `null`/absent for a top-level dish. Carried straight from the filed `PricedLines.lines`
+   *  (whose child rows point at their dish, reconstructed from `sale_lines.parent_line_id`) so the
+   *  receipt can GROUP each option under its dish (Task 8). PRESENTATION metadata only — it groups the
+   *  already-filed lines, never a fiscal figure, and the totals/desglose are read back unchanged. */
+  parentLineNo?: number | null;
 }
 
 export interface TillSaleResult {
@@ -158,6 +172,9 @@ function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
     descriptions: line.descriptions,
     quantity: trimQuantityForDisplay(line.quantity),
     gross: priced.grossLineTotals[i]!,
+    // Carry the child→parent link so the receipt can render each option grouped under its dish
+    // (Task 8). `?? null` keeps a plain (no-modifier) line's field exactly `null`.
+    parentLineNo: line.parentLineNo ?? null,
   }));
 }
 
@@ -180,8 +197,13 @@ function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
 export interface PayWorkingOrderRequest {
   id: string;
   /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
-   *  locked lines (see this interface's doc comment). */
-  lines: { productId: string; quantity: string }[];
+   *  locked lines (see this interface's doc comment). A walk-up line MAY carry selected modifier
+   *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`. */
+  lines: {
+    productId: string;
+    quantity: string;
+    options?: { optionGroupItemId: string }[];
+  }[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
   tender: TillTender;

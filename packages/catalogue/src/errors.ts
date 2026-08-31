@@ -32,5 +32,20 @@ declare module "@waitron/shared" {
      * foreign id is `23503`-rejected there too — this guard turns that opaque 500 into a uniform 404.
      */
     "catalogue.not_found": { catalogueId: string };
+    /**
+     * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task
+     * 11): the select bounds must satisfy `max_select >= min_select >= 0`, and a `required` group must
+     * carry `min_select >= 1`. Thrown by `createOptionGroup` / `updateOptionGroup` BEFORE the write, so
+     * the dashboard editor gets a clean 4xx rather than the opaque 500 the `option_groups_select_ck` /
+     * `option_groups_required_ck` CHECK constraints (catalogue.ts) would raise as a backstop. `reason`
+     * is a stable CODE a translator renders, never prose — `"select_bounds"` (max < min, or min < 0) or
+     * `"required_without_min"` (required with min_select < 1) — matching the `reason`-code shape the
+     * sale-time `options.selection_invalid` (apps/server) uses. No ids: on a create there is no group id
+     * yet, and the offending numbers are request echo, not carried (the no-leak discipline). `options.*`
+     * names the DOMAIN CONCEPT (a menu-option group), never the throwing package, beside the sale-time
+     * `options.selection_invalid` / `options.unsupported_product`. A CLIENT request fault → mapped to
+     * 400 by the server's catalogue STATUS map. Never renamed once shipped.
+     */
+    "options.group_invalid": { reason: string };
   }
 }

@@ -1,8 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { productName } from "./product-name.js";
+import "./modifier-picker.js";
+import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
@@ -13,7 +15,10 @@ import type { WorkingOrderStore } from "../state/working-order.js";
  * or total widgets.
  *
  * Tapping is priced by unit:
- *  - an `each` tile rings up one of that product straight away — `store.addProduct(product, "1")`;
+ *  - an `each` tile with NO modifier groups rings up one of that product straight away —
+ *    `store.addProduct(product, "1")`, byte-identical to before (the common tap);
+ *  - an `each` tile that carries a non-empty option group (ordering modifiers, Task 10) opens the
+ *    modifier picker instead, and rings the dish with the chosen options once the diner confirms;
  *  - a `weight` tile has no quantity yet, so it BROADCASTS the pick (`emit("product-selected", …)`)
  *    for the kg keypad (Task 15) to weigh and add. It does not touch the basket itself.
  */
@@ -63,19 +68,51 @@ export class TillProductGrid extends LitElement {
    */
   @property({ type: Number }) columns?: number;
 
+  /** The product whose modifier picker is currently open, or `undefined` when none is. Set when an
+   * `each` product WITH a non-empty group is tapped; cleared on confirm or cancel. */
+  @state() private pickerProduct?: TillProduct;
+
   /** Price text for a tile: a plain money string, suffixed `/kg` when the product is sold by weight. */
   #priceLabel(product: TillProduct): string {
     const price = formatMoney(product.unitPrice);
     return product.pricingUnit === "weight" ? `${price}/kg` : price;
   }
 
-  /** Ring up an `each` pick; broadcast a `weight` pick for the kg keypad to complete. */
+  /** Whether a product has any group worth picking from — a group with active items. A product with no
+   * groups, or only EMPTY groups (all items inactive, an authoring bug), has nothing to pick, so it
+   * rings up straight away rather than opening a pointless dialog (CLAUDE.md §5 — nothing wedges a sale). */
+  #hasModifiers(product: TillProduct): boolean {
+    return (product.optionGroups ?? []).some((group) => group.items.length > 0);
+  }
+
+  /**
+   * Ring up an `each` pick, or open its modifier picker when it carries options; broadcast a `weight`
+   * pick for the kg keypad to complete. The `weight` path is unchanged — a weight product never opens
+   * the picker (options on a weight line are refused server-side).
+   */
   #pick(product: TillProduct): void {
-    if (product.pricingUnit === "each") {
-      this.store.addProduct(product, "1");
-    } else {
+    if (product.pricingUnit !== "each") {
       this.store.emit("product-selected", product);
+    } else if (this.#hasModifiers(product)) {
+      this.pickerProduct = product;
+    } else {
+      this.store.addProduct(product, "1");
     }
+  }
+
+  /**
+   * Ring the configured dish with its chosen options, then close the picker. An EMPTY selection (every
+   * group was optional and left blank) adds with NO `options` — passing `undefined`, not `[]`, so a
+   * grouped-but-unmodified dish is byte-identical to a plain ring-up (`addProduct` stores an `[]`
+   * verbatim, so the empty case must be collapsed here).
+   */
+  #onModifierConfirm(detail: ModifierConfirmDetail): void {
+    this.store.addProduct(
+      detail.product,
+      "1",
+      detail.options.length > 0 ? detail.options : undefined,
+    );
+    this.pickerProduct = undefined;
   }
 
   override render() {
@@ -94,6 +131,18 @@ export class TillProductGrid extends LitElement {
           `,
         )}
       </div>
+      ${
+        this.pickerProduct
+          ? html`<till-modifier-picker
+              .product=${this.pickerProduct}
+              @modifier-confirm=${(e: CustomEvent<ModifierConfirmDetail>) =>
+                this.#onModifierConfirm(e.detail)}
+              @modifier-cancel=${() => {
+                this.pickerProduct = undefined;
+              }}
+            ></till-modifier-picker>`
+          : nothing
+      }
     `;
   }
 }
