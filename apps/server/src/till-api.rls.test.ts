@@ -817,11 +817,11 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // is empty (nothing was stripped from an unknown base).
             asServed: { allergens: {}, pending: true },
             // Task 5 — the as-served DIET twin. This dish carries no recipe (null `diet_derivation`),
-            // which folds as "no recipe": empty origins, NOT pending (the same default
+            // which folds as "no recipe": empty origins but PENDING (the same default
             // `republishProductDiet` uses at product level), so an option-less unreviewed dish reads
-            // vegan/vegetarian "yes" rather than "unknown" — deliberately UNLIKE the Cautious allergen
-            // default above, matching the product's own published diet.
-            asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
+            // vegan/vegetarian "unknown" — the CAUTIOUS posture, matching the allergen `pending` above
+            // and the product's own published diet. An unreviewed plate asserts no positive diet claim.
+            asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
             removed: [],
           },
         ],

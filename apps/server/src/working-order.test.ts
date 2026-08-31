@@ -1535,6 +1535,29 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
+  // Task 5 — the CAUTIOUS negative control. A dish with NO recipe (null `diet_derivation`) must NOT
+  // read a positive vegan/vegetarian: the fold defaults a null derivation to empty-but-PENDING, so the
+  // as-served vegan/vegetarian read "unknown" on BOTH reads. An unreviewed plate asserts no diet claim.
+  it("reads an as-served diet of unknown for a no-recipe dish (cautious posture)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, {}); // no recipe → null diet_derivation
+      await placeOrderWith(tx, cfg, [line(dish)]);
+
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.asServedDiet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
+
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.asServedDiet).toEqual({
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
+      });
+    });
+  });
+
   // KDS order-timing alerts (design §3/§6/§11) — the group carries the station's thresholds (Controller
   // Ruling A), each item its own age band classified against them on the DB clock.
   it("bands each item by the station's thresholds and carries them on the group", async () => {

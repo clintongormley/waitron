@@ -696,9 +696,10 @@ describe("catalogue operations", () => {
       .from(products)
       .where(eq(products.id, id));
 
-  // At create there is no recipe, so published `diet` is the override overlaid on the EMPTY (all-"yes")
-  // derived profile: a bare product with no override reads vegan/vegetarian "yes", empty contains.
-  it("createProduct with no override publishes the empty derived diet profile", async () => {
+  // CAUTIOUS posture: at create there is no recipe, so the published `diet` is the override overlaid
+  // on the EMPTY, PENDING derived profile — a bare product with no override reads vegan/vegetarian
+  // "unknown" (never a positive claim on an unreviewed plate), mirroring the allergen twin's `pending`.
+  it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
@@ -711,7 +712,7 @@ describe("catalogue operations", () => {
       });
       return readDiet(tx, p.id);
     });
-    expect(row!.diet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+    expect(row!.diet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
     expect(row!.override).toBeNull();
   });
 
@@ -855,7 +856,8 @@ describe("catalogue operations", () => {
     expect(row!.diet).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
   });
 
-  // A null derivation folds as "no recipe" (empty, non-pending) — republishProductDiet's default branch.
+  // A null derivation folds as "no recipe" (empty but PENDING) — republishProductDiet's default branch,
+  // the cautious posture: clearing the recipe drops the diet back to "unknown", not a positive claim.
   it("applyDietDerivation with null clears the derivation and republishes", async () => {
     const [row] = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -872,7 +874,7 @@ describe("catalogue operations", () => {
       return readDiet(tx, p.id);
     });
     expect(row!.deriv).toBeNull();
-    expect(row!.diet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+    expect(row!.diet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
   });
 
   // A caller-supplied id that names no product is a SILENT no-op — republishProductDiet's SELECT

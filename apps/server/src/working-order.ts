@@ -3351,10 +3351,11 @@ async function readQueueSubItems(
     const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
     // The DIET twin (Task 5) — fold the product's recipe-derived origins with its options' origin
     // overlays, then re-apply the staff override. A null derivation folds as "no recipe" (empty
-    // origins, NOT pending), the same default `republishProductDiet` uses when publishing the product's
-    // own diet, so the as-served profile matches the product-level one for an option-less dish.
+    // origins but PENDING), the same default `republishProductDiet` uses when publishing the product's
+    // own diet, so the as-served vegan/vegetarian read "unknown" for an unreviewed dish (the CAUTIOUS
+    // posture — never assert a positive diet claim on a plate whose ingredients were never reviewed).
     const asServedDiet = deriveAsServedDiet(
-      (p.dietDerivation ?? { origins: [], pending: false }) as DietDerivation,
+      (p.dietDerivation ?? { origins: [], pending: true }) as DietDerivation,
       (p.dietOverride ?? null) as DietOverride | null,
       originOverlaysByParent.get(p.lineId) ?? [],
     );
@@ -3509,8 +3510,10 @@ export async function listStationQueue(
         allergens: {},
         pending: true,
       },
-      // The as-served diet profile (Task 5), safe-defaulted to a derived-empty "unknown" profile when
-      // the parent line is absent from the read (belt-and-braces, parity with `asServed`'s default).
+      // The as-served diet profile (Task 5). An UNREVIEWED dish already reads "unknown" from the fold
+      // (a null derivation folds as empty-but-PENDING, the cautious posture), so this "unknown" default
+      // is only the belt-and-braces case where the parent line is absent from the read entirely — and
+      // it agrees with the fold, parity with `asServed`'s `{ allergens: {}, pending: true }` default.
       asServedDiet: asServedByParent.get(row.workingOrderLineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",
@@ -3840,7 +3843,8 @@ export async function listExpoQueue(
         allergens: {},
         pending: true,
       },
-      // Task 5 — the same as-served diet profile the station read attaches, safe-defaulted identically.
+      // Task 5 — the same as-served diet profile the station read attaches (an unreviewed dish reads
+      // "unknown" from the fold's pending default), safe-defaulted identically for the absent-parent case.
       asServedDiet: asServedByParent.get(row.lineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",

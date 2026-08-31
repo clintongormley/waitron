@@ -915,8 +915,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           category: "Bebidas",
           allergens: { sulphites: { presence: "may_contain" } },
           // Dietary classification (Task 4): a product with no override and no recipe publishes the
-          // empty derived profile (vegan/vegetarian "yes", no contains), a null derivation and override.
-          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          // empty but PENDING derived profile (vegan/vegetarian "unknown" — the cautious posture, an
+          // unreviewed plate asserts no positive diet claim), a null derivation and override.
+          diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
@@ -934,7 +935,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: null,
-          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          // No override, no recipe → the cautious "unknown" profile (see Agua mineral above).
+          diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
           dietDerivation: null,
           dietOverride: null,
           courseId: null,

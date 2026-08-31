@@ -371,7 +371,9 @@ export async function applyRecipeDerivation(
  * folded ingredient origins + a `pending` flag), staff author `diet_override`, and the published
  * profile is `overlayDietProfile(deriveDietProfile(derivation), override)` (dietary.ts). Called after
  * any change to either overlay — createProduct/updateProduct (override) or applyDietDerivation
- * (derivation). A missing/absent derivation folds as "no recipe" (empty origins, not pending); a
+ * (derivation). A missing/absent derivation folds as "no recipe": empty origins but PENDING, so the
+ * published vegan/vegetarian read "unknown" (the CAUTIOUS posture — an unreviewed dish must never
+ * assert a positive diet claim), mirroring the allergen `republish`'s null-derivation → pending. A
  * well-formed id that names no row is a silent no-op (the SELECT returns nothing, the UPDATE matches
  * nothing), matching {@link republishProduct}.
  */
@@ -380,7 +382,7 @@ async function republishProductDiet(tx: Transaction, id: string): Promise<void> 
     .select({ deriv: products.dietDerivation, override: products.dietOverride })
     .from(products)
     .where(eq(products.id, id));
-  const derivation = (row?.deriv ?? { origins: [], pending: false }) as DietDerivation;
+  const derivation = (row?.deriv ?? { origins: [], pending: true }) as DietDerivation;
   const derived = deriveDietProfile(derivation);
   const published = overlayDietProfile(derived, (row?.override ?? null) as DietOverride | null);
   await tx.update(products).set({ diet: published }).where(eq(products.id, id));
@@ -390,7 +392,8 @@ async function republishProductDiet(tx: Transaction, id: string): Promise<void> 
  * Set a product's recipe-derived diet overlay and republish its diet profile — the diet twin of
  * {@link applyRecipeDerivation}. `@waitron/recipes` calls it when a recipe or its ingredients change;
  * `null` clears the derivation (no recipe), after which the published profile reverts to the override
- * overlaid on the empty (non-pending) derived profile.
+ * overlaid on the empty, PENDING derived profile — vegan/vegetarian read "unknown" unless the override
+ * forces them (the cautious posture: an unreviewed dish asserts no positive diet claim).
  */
 export async function applyDietDerivation(
   tx: Transaction,
@@ -412,10 +415,12 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // unreviewed), preserving today's round-trip behaviour.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   // The diet override is the staff overlay; at create there is no recipe (no derivation), so the
-  // published `diet` is the override overlaid on the EMPTY, non-pending derived profile — which is
-  // exactly the override alone (or all-"yes"/empty when unreviewed). Checked disjoint before the
-  // write (defence-in-depth, never trust the caller — CLAUDE.md §3). The recipe fold overwrites `diet`
-  // once a recipe is set (applyDietDerivation → republishProductDiet), matching the allergen twin.
+  // published `diet` is the override overlaid on the EMPTY, PENDING derived profile — the override's
+  // own labels win, and any label it does not set reads "unknown" (the CAUTIOUS posture: an
+  // unreviewed dish never asserts a positive vegan/vegetarian claim, mirroring the allergen twin's
+  // pending). Checked disjoint before the write (defence-in-depth, never trust the caller —
+  // CLAUDE.md §3). The recipe fold overwrites `diet` once a recipe is set (applyDietDerivation →
+  // republishProductDiet).
   // Validate the untrusted override (labels ∈ {yes,no}, contains-tags ∈ {meat,fish}, disjoint) before
   // the write — the diet twin of `validateAllergens`, defence-in-depth at the core (CLAUDE.md §3).
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
@@ -433,7 +438,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       manualAllergens: allergens,
       allergens: republish(allergens, null),
       dietOverride,
-      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: false }), dietOverride),
+      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
       image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
