@@ -82,6 +82,26 @@ describe("formatKitchenTicket", () => {
       expect(text).toMatch(/\n {2}\* sin sal/);
     });
 
+    it("sanitizes a free-text note with a newline so it prints on ONE ticket line", () => {
+      // A free-text note is operator-typed and may carry newlines / control bytes; printed raw they
+      // would split the note across ticket lines (or emit stray control commands) and garble the
+      // thermal ticket. The control chars collapse to a space so the note stays a single `* ` sub-line.
+      const text = decodeTicket(
+        formatKitchenTicket({
+          scope: "station",
+          stationName: "Cocina",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          items: [{ qty: 1, name: "Steak", note: "sin sal\nmuy hecho" }],
+        }),
+      );
+      const lines = text.split("\n");
+      // Exactly one sub-line, with the newline collapsed to a space — never a second "muy hecho" line.
+      expect(lines).toContain("  * sin sal muy hecho");
+      expect(lines.filter((l) => l.includes("* "))).toHaveLength(1);
+    });
+
     it("prints a plain dish (no doneness, no note) byte-for-byte as before", () => {
       const withExtras = formatKitchenTicket({
         scope: "station",

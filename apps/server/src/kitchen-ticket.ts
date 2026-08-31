@@ -82,6 +82,19 @@ function itemLine(item: KitchenTicketItem): string {
   return `${item.qty} x ${item.name}`;
 }
 
+/**
+ * Sanitise a FREE-TEXT note before it reaches the ESC/POS byte stream. The note is operator-typed, so
+ * it can carry newlines (CR/LF) and other C0 control bytes that would split it across ticket lines or
+ * emit stray printer commands and garble the thermal ticket. Collapse every run of C0 control chars
+ * (`\x00`–`\x1F`, which includes CR and LF) plus DEL to a single space and trim, so the note always
+ * prints as ONE `* ` sub-line. Applied ONLY to the free-text note — menu-authored modifier and dish
+ * names are trusted catalogue text and are left byte-for-byte unchanged.
+ */
+function sanitizeNote(note: string): string {
+  // eslint-disable-next-line no-control-regex -- deliberately matching C0 controls + DEL to strip them
+  return note.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
+}
+
 /** Emit one item — its `qty x name` line, then (order-line customisation, spec §2/§3) the DONENESS as a
  *  prominent indented sub-line, each selected modifier as an indented `+ <name>` line, and the free-text
  *  NOTE as an indented `* <note>` line, in that order. Doneness prints FIRST and PROMINENT — upper-cased
@@ -95,7 +108,12 @@ function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem): void {
     b.line(`  ** ${item.doneness.replace(/_/g, " ").toUpperCase()} **`);
   }
   for (const modifier of item.modifiers ?? []) b.line(`  + ${modifier}`);
-  if (item.note !== undefined && item.note !== "") b.line(`  * ${item.note}`);
+  if (item.note !== undefined && item.note !== "") {
+    // Sanitise the operator-typed note (strip CR/LF and other control bytes) so it prints as one
+    // sub-line and cannot garble the ticket. A note that is ALL control chars sanitises to "" — skip it.
+    const note = sanitizeNote(item.note);
+    if (note !== "") b.line(`  * ${note}`);
+  }
 }
 
 /** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */

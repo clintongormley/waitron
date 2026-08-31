@@ -31,7 +31,7 @@ export const DONENESS: readonly Doneness[] = [
 /** Whether the doneness picker applies to a product: only when its published diet asserts it contains
  * meat. Fish, unreviewed and diet-less products never show it — the SAME gate the picker used inline. */
 export function isMeatProduct(product: TillProduct): boolean {
-  return product.diet?.contains?.includes("meat") ?? false;
+  return product.diet?.contains.includes("meat") ?? false;
 }
 
 /** What a host passes to render the editor: the product (for the meat gate), the current values, and a

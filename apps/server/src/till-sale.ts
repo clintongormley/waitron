@@ -21,7 +21,7 @@ import {
   withTenant,
   workingOrders,
 } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, Doneness, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, TenantId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
@@ -74,10 +74,16 @@ export interface TillSaleRequest {
    *  each an `optionGroupItemId` chosen from the product's attached option groups; the server validates
    *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. An
    *  option MAY carry `quantity` (a small positive integer, absent = 1) — the per-option count, capped
-   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate. */
+   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate.
+   *
+   *  A line MAY also carry a free-text kitchen `note` and, for a meat product, a `doneness` — both
+   *  NON-FISCAL line customisation (spec §2/§3), validated and persisted server-side and never threaded
+   *  into any sale/fiscal projection. Declared here because the till already sends them on this wire. */
   lines: {
     productId: string;
     quantity: string;
+    note?: string;
+    doneness?: Doneness;
     options?: { optionGroupItemId: string; quantity?: number }[];
   }[];
   /**
@@ -201,10 +207,15 @@ export interface PayWorkingOrderRequest {
   /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
    *  locked lines (see this interface's doc comment). A walk-up line MAY carry selected modifier
    *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`; each
-   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. */
+   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. A line MAY
+   *  also carry a free-text kitchen `note` and, for a meat product, a `doneness` — both NON-FISCAL line
+   *  customisation (spec §2/§3), validated + persisted server-side and never threaded into a fiscal
+   *  projection. Declared here because the till already sends them on this wire. */
   lines: {
     productId: string;
     quantity: string;
+    note?: string;
+    doneness?: Doneness;
     options?: { optionGroupItemId: string; quantity?: number }[];
   }[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
@@ -227,8 +238,11 @@ export interface PayWorkingOrderRequest {
  */
 export interface IntegratedPayRequest {
   id: string;
-  /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock). */
-  lines: { productId: string; quantity: string }[];
+  /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock).
+   *  A line MAY carry a free-text kitchen `note` and, for a meat product, a `doneness` — both NON-FISCAL
+   *  line customisation (spec §2/§3), validated + persisted server-side and never threaded into a fiscal
+   *  projection. Declared here because the till already sends them on this wire. */
+  lines: { productId: string; quantity: string; note?: string; doneness?: Doneness }[];
   /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
    *  (`TillConfig.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
   tip?: string;
