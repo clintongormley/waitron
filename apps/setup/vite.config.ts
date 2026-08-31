@@ -6,6 +6,10 @@ export default defineConfig({
   base: "/",
   server: {
     port: 5192,
+    // Fail loudly if 5192 is taken rather than bumping to a surprise port whose proxy no longer
+    // matches the browser — see the till config for the full rationale (a bump most often means a
+    // duplicate `pnpm dev`, which also collides 8080).
+    strictPort: true,
     proxy: {
       // The setup box serves its `/setup-api` routes over HTTPS with a SELF-SIGNED certificate
       // (apps/server/scripts/dev-onboard.ts), so the dev proxy target is `https://` and needs

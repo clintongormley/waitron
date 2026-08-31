@@ -435,6 +435,14 @@ async function main(): Promise<void> {
   console.log("  till       http://localhost:5190");
   console.log("  dashboard  http://localhost:5191");
   console.log("  server     http://localhost:8080");
+  // `pnpm dev` starts the setup wizard (apps/setup, Vite 5192) too, but a venue was just
+  // provisioned so the box boots in TRADING mode — where `/setup-api` is unrouted: boot.ts registers
+  // every `/setup-api` route (via `mountDiscovery` and `mountSetup`) exclusively inside the
+  // setup-mode branch gated on `config.till === undefined`, and a provisioned box has `config.till`
+  // set, so it takes the trading `else` and mounts none of them. The wizard's proxied calls
+  // therefore 404 and it does nothing. Listed as inactive rather than omitted, so its absence from
+  // the "open these" set is explained rather than looking like a missing process.
+  console.log("  setup      http://localhost:5192   (setup wizard — inactive in trading mode)");
   console.log("");
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
@@ -448,7 +456,7 @@ async function main(): Promise<void> {
     );
   }
   console.log("");
-  console.log("Next: `pnpm dev` (or `wa-wt <worktree>`) to start all three processes.");
+  console.log("Next: `pnpm dev` (or `wa-wt <worktree>`) to start all four app processes.");
 }
 
 // Run only when invoked directly (`tsx scripts/dev-setup.ts`), never when imported by a test —
