@@ -231,6 +231,9 @@ export const en = {
   // and `doneness.rare`…`doneness.well_done` are the five enum values (matching the server's `DONENESS`).
   "line.note.label": "Kitchen note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
+  // The per-basket-line affordance (Task 4b) that opens the note/doneness editor on ANY line, incl. a
+  // plain fast-added dish that never opened the modifier picker.
+  "line.note.button": "Note",
   "doneness.label": "Doneness",
   "doneness.none": "No preference",
   "doneness.rare": "Rare",
@@ -503,6 +506,7 @@ export const es: Record<StringKey, string> = {
   "diet.filter.no_fish": "Sin pescado",
   "line.note.label": "Nota para cocina",
   "line.note.placeholder": "p. ej. sin cebolla, alergia — frutos secos",
+  "line.note.button": "Nota",
   "doneness.label": "Punto de la carne",
   "doneness.none": "Sin preferencia",
   "doneness.rare": "Poco hecha",

@@ -565,6 +565,110 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
   });
 
+  // ── Per-line note + meat-gated doneness (order-line customisation, Task 4b) ───────────────────
+  // EVERY basket line — including a plain no-modifier product fast-added with one tap — carries a
+  // "Note" affordance that opens the shared editor (note textarea + meat-gated doneness select) for
+  // THAT line. On change the store's `setLineExtras` records it; the line's current note/doneness show
+  // as an indented sub-row so staff see it at a glance. Fast-add stays one tap — the editor is opened
+  // from the basket, never on the ring-up path.
+
+  /** The per-line note toggle button for the line at `index`. */
+  function noteButton(el: TillBasket, index: number): HTMLElement | null {
+    return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="line-note-button-${index}"]`);
+  }
+  /** The open editor's note textarea for the line at `index`, or null when the editor is closed. */
+  function noteBox(el: TillBasket): HTMLTextAreaElement | null {
+    return el.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+  }
+  /** The open editor's doneness select, or null when it is not shown (closed, or a non-meat line). */
+  function donenessBox(el: TillBasket): HTMLSelectElement | null {
+    return el.shadowRoot!.querySelector<HTMLSelectElement>('[data-test="line-doneness"]');
+  }
+
+  const steak: TillProduct = {
+    ...cafe,
+    id: "steak",
+    descriptions: { es: "Filete" },
+    unitPrice: "18.00",
+    diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+  };
+  const seabass: TillProduct = {
+    ...cafe,
+    id: "seabass",
+    descriptions: { es: "Lubina" },
+    unitPrice: "16.00",
+    diet: { vegan: "no", vegetarian: "no", contains: ["fish"] },
+  };
+
+  it("shows a Note affordance on EVERY line, including a plain no-modifier fast-added product", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // fast-added, no options, no diet
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(noteButton(el, 0)).not.toBeNull();
+  });
+
+  it("opens the shared editor for that line and records a typed note via setLineExtras", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    // Closed until the Note button is tapped.
+    expect(noteBox(el)).toBeNull();
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    const note = noteBox(el)!;
+    expect(note).not.toBeNull();
+    expect(note.maxLength).toBe(200);
+    note.value = "extra hot";
+    note.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+    expect(store.lines[0]!.note).toBe("extra hot");
+  });
+
+  it("shows the doneness picker in the editor for a plain MEAT product and records the choice", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(steak, "1"); // plain meat product, no option groups
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    const done = donenessBox(el)!;
+    expect(done).not.toBeNull();
+    // Five doneness values plus the blank "no preference" default.
+    expect(done.querySelectorAll("option")).toHaveLength(6);
+    done.value = "medium_rare";
+    done.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(store.lines[0]!.doneness).toBe("medium_rare");
+  });
+
+  it("HIDES the doneness picker for a non-meat line (a fish product)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(seabass, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    // The note box is there for every line…
+    expect(noteBox(el)).not.toBeNull();
+    // …but a fish line shows no doneness select.
+    expect(donenessBox(el)).toBeNull();
+  });
+
+  it("renders the line's set note and doneness as an indented sub-row (at a glance)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(steak, "1", undefined, { note: "no butter", doneness: "medium" });
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const sub = el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`);
+    expect(sub).not.toBeNull();
+    expect(sub!.textContent).toContain("no butter");
+    expect(sub!.textContent).toContain(t("doneness.medium"));
+  });
+
+  it("renders NO extras sub-row for a line with neither note nor doneness (avoids noise)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`)).toBeNull();
+  });
+
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store });

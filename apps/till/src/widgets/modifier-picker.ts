@@ -7,13 +7,9 @@ import { selectStyles } from "../select-styles.js";
 import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
-import type { StringKey } from "../i18n/strings.js";
+import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
 import type { Doneness, TillOptionGroup, TillOptionItem, TillProduct } from "../api/client.js";
-
-/** The meat-doneness values, in cooking order, as the gated `<select>` offers them. Mirrors the
- * server's `DONENESS` tuple; each maps to a `doneness.<value>` i18n key. */
-const DONENESS: readonly Doneness[] = ["rare", "medium_rare", "medium", "medium_well", "well_done"];
 
 /**
  * The `modifier-confirm` payload: the parent product the diner was configuring plus the modifiers they
@@ -75,31 +71,10 @@ export class TillModifierPicker extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
+    lineExtrasEditorStyles,
     css`
       .group {
         margin: 0 0 var(--wt-space-4);
-      }
-
-      .line-field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        margin: 0 0 var(--wt-space-4);
-      }
-
-      .line-field-label {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .line-note {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        resize: vertical;
       }
 
       .group-name {
@@ -189,12 +164,6 @@ export class TillModifierPicker extends LitElement {
   /** The chosen meat doneness, or `""` for the blank "no preference" default (the select shows only on a
    * meat product). Optional even on a meat dish, so `""` confirms with no `doneness`. */
   @state() private doneness: Doneness | "" = "";
-
-  /** Whether the doneness picker is shown: only when the product's published diet asserts it contains
-   * meat (order-line customisation). Fish, unreviewed and diet-less products never show it. */
-  get #isMeat(): boolean {
-    return this.product.diet?.contains?.includes("meat") ?? false;
-  }
 
   /** The product's groups that actually have something to pick — the empty-group carry drops `items: []`
    * groups here, so they are neither rendered nor counted as a constraint. */
@@ -341,8 +310,18 @@ export class TillModifierPicker extends LitElement {
       .heading=${productName(this.product)}
       @wt-close=${() => this.#cancel()}
     >
-      ${this.#renderableGroups.map((group) => this.#renderGroup(group))} ${this.#renderNote()}
-      ${this.#isMeat ? this.#renderDoneness() : nothing}
+      ${this.#renderableGroups.map((group) => this.#renderGroup(group))}
+      ${renderLineExtrasEditor({
+        product: this.product,
+        note: this.note,
+        doneness: this.doneness,
+        onNoteChange: (note) => {
+          this.note = note;
+        },
+        onDonenessChange: (doneness) => {
+          this.doneness = doneness;
+        },
+      })}
       <div class="running">
         <span class="running-label">${t("label.total")}</span>
         <span class="running-amount">${this.#runningPrice}</span>
@@ -360,48 +339,6 @@ export class TillModifierPicker extends LitElement {
         ${t("action.add")}
       </wt-button>
     </wt-dialog>`;
-  }
-
-  /** The always-shown free-text note field (order-line customisation), capped at 200 chars to match the
-   * server's limit. A visible `<label>` wraps the textarea so it carries an accessible name. */
-  #renderNote() {
-    return html`
-      <label class="line-field">
-        <span class="line-field-label">${t("line.note.label")}</span>
-        <textarea
-          class="line-note"
-          data-test="line-note"
-          maxlength="200"
-          placeholder=${t("line.note.placeholder")}
-          .value=${this.note}
-          @input=${(e: Event) => {
-            this.note = (e.target as HTMLTextAreaElement).value;
-          }}
-        ></textarea>
-      </label>
-    `;
-  }
-
-  /** The meat-gated doneness picker (order-line customisation) — shown only when {@link #isMeat}. A blank
-   * "no preference" default keeps doneness OPTIONAL; picking one sets `this.doneness`. */
-  #renderDoneness() {
-    return html`
-      <label class="line-field">
-        <span class="line-field-label">${t("doneness.label")}</span>
-        <select
-          data-test="line-doneness"
-          .value=${this.doneness}
-          @change=${(e: Event) => {
-            this.doneness = (e.target as HTMLSelectElement).value as Doneness | "";
-          }}
-        >
-          <option value="">${t("doneness.none")}</option>
-          ${DONENESS.map(
-            (d) => html`<option value=${d}>${t(`doneness.${d}` as StringKey)}</option>`,
-          )}
-        </select>
-      </label>
-    `;
   }
 
   #renderGroup(group: TillOptionGroup) {

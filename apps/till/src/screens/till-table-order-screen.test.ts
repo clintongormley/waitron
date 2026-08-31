@@ -417,6 +417,34 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
+  // Per-line note + meat-gated doneness (order-line customisation, Task 4b): the round bar reuses
+  // `till-basket`, so its per-line Note affordance is available on the table-order screen too (parity
+  // with the counter). A note set on a round line via that affordance reaches the round store and is
+  // forwarded by `send-round` (via `toWireLineExtras`), the same wire path as the counter's sale lines.
+  it("forwards a per-line note set through the round basket's Note affordance on send-round (parity)", async () => {
+    const { el } = await mount();
+    // Ring a café into the current round through the grid (a plain fast-add, no picker).
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+
+    // Open THAT round line's editor via the basket's Note button and type a note.
+    const basket = el.shadowRoot!.querySelector("till-basket")!;
+    await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    basket.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();
+    await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const note = basket.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    note.value = "table 4 — no ice";
+    note.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      { productId: "cafe", quantity: "1", note: "table 4 — no ice" },
+    ]);
+  });
+
   it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);

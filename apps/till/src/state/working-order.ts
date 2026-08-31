@@ -295,6 +295,47 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
+  /**
+   * Set the per-line note and/or doneness (order-line customisation) on the line at `index` and notify.
+   * The basket-line editor (Task 4b) is the caller — it reaches EVERY line, including a plain product
+   * fast-added with one tap that never passed through the modifier picker. A PARTIAL update: only the
+   * keys PRESENT in `extras` are touched (a doneness-only change leaves an existing note alone), so the
+   * editor can drive note and doneness independently. Out-of-range indices are a no-op, like
+   * {@link removeLine}.
+   *
+   * Applies the SAME omission discipline as the picker: a `note` is trimmed and an empty result CLEARS
+   * the key (a whitespace-only note is "not chosen"); a blank/undefined `doneness` clears its key too —
+   * so a line stays byte-identical to a note-free add once its extras are cleared, never carrying `""`.
+   * Marks the basket {@link #dirty} — the note/doneness ride the wire (`SaleLine.note`/`doneness`), so a
+   * retrieved order must re-sync before pay, the same as {@link addProduct}/{@link setLineQuantity}. Note
+   * and doneness do NOT affect price, but {@link #invalidatePricing} is called for consistency with every
+   * other mutation (the recompute is cheap and can never disagree with the unchanged prices).
+   */
+  setLineExtras(index: number, extras: { note?: string; doneness?: Doneness | "" }): void {
+    if (index < 0 || index >= this.#lines.length) {
+      return;
+    }
+    const line = this.#lines[index]!;
+    if ("note" in extras) {
+      const note = (extras.note ?? "").trim();
+      if (note === "") {
+        delete line.note;
+      } else {
+        line.note = note;
+      }
+    }
+    if ("doneness" in extras) {
+      if (extras.doneness === "" || extras.doneness === undefined) {
+        delete line.doneness;
+      } else {
+        line.doneness = extras.doneness;
+      }
+    }
+    this.#invalidatePricing();
+    this.#dirty = true;
+    this.emit("changed");
+  }
+
   /** Drop the line at `index` (out-of-range indices are a no-op) and notify. */
   removeLine(index: number): void {
     if (index < 0 || index >= this.#lines.length) {
