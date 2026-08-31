@@ -117,6 +117,16 @@ export class DiagnosticsScreen extends LitElement {
   @state() private errorKey: string | null = null;
   #timer?: ReturnType<typeof setInterval>;
 
+  /** Single-flight guard for the poll (fix round 1, Important-1): true while a `#refresh()` is still in
+   * flight. `#refresh` is driven by BOTH the ~1500ms interval and `#raise()`, and it awaits two round
+   * trips, so without this a tick (or a raise) can fire before the previous request has resolved —
+   * requests pile up and a slower OLDER response can land after a newer one and overwrite `lines`/
+   * `verbosity` with stale data (a flicker/rollback in the live tail). A call that finds this true
+   * returns early; the next tick tries again once the in-flight request has cleared it. `#refresh`
+   * itself owns the guard, so every caller (interval + raise) goes through it. Mirrors
+   * `dashboard-overview-screen.ts`'s `#overdueInFlight`. */
+  #inFlight = false;
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#refresh();
@@ -136,6 +146,10 @@ export class DiagnosticsScreen extends LitElement {
   /** Pull the recent log ring + current verbosity in one round trip pair. A rejection becomes the
    * `errorKey` banner rather than an unhandled rejection (called via `void`). */
   async #refresh(): Promise<void> {
+    // Single-flight (see #inFlight): skip if a refresh is already running so an older, slower response
+    // can never land after a newer one and overwrite the tail with stale data.
+    if (this.#inFlight) return;
+    this.#inFlight = true;
     try {
       const [recent, verbosity] = await Promise.all([
         this.api.getRecentLogs(200),
@@ -146,6 +160,8 @@ export class DiagnosticsScreen extends LitElement {
       this.errorKey = null;
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.#inFlight = false;
     }
   }
 

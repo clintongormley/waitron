@@ -150,6 +150,45 @@ describe("diagnostics-screen", () => {
     }
   });
 
+  it("single-flights the poll: a tick while a refresh is in flight is skipped", async () => {
+    vi.useFakeTimers();
+    try {
+      // The first getRecentLogs is DEFERRED (a promise we resolve by hand); later calls resolve at
+      // once. So the connect refresh stays in flight until we release it.
+      let releaseFirst!: (v: { lines: DiagnosticsLine[] }) => void;
+      const firstPending = new Promise<{ lines: DiagnosticsLine[] }>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const getRecentLogs = vi
+        .fn()
+        .mockReturnValueOnce(firstPending)
+        .mockResolvedValue({ lines: [] });
+      const api = stubApi({ getRecentLogs });
+      await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      const calls = () => getRecentLogs.mock.calls.length;
+      // connectedCallback fired one refresh, now awaiting the deferred first response.
+      expect(calls()).toBe(1);
+
+      // Two ticks fire WHILE the first refresh is still in flight → both guarded, no new fetch
+      // (proof-by-deletion: dropping the `if (this.#inFlight) return` early-return lets these through,
+      // so the count climbs and this assertion goes red).
+      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(calls()).toBe(1);
+
+      // Release the first response; the guard clears in its `finally`.
+      releaseFirst({ lines: [] });
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The next tick is now free to poll again.
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(calls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a rejected poll as a localised role=alert (never the raw code)", async () => {
     const api = stubApi({
       getRecentLogs: vi.fn().mockRejectedValue({ code: "management_session.required" }),
