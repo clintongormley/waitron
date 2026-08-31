@@ -762,6 +762,11 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       label: string | null;
       queuedAt: string;
       status: string;
+      thresholds: {
+        warmAfterMinutes: number;
+        overdueAfterMinutes: number;
+        forgottenAfterMinutes: number;
+      };
       items: {
         id: string;
         workingOrderLineId: string;
@@ -770,6 +775,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         quantity: string;
         course: { id: string; name: string; displayOrder: number } | null;
         firedAt: string | null;
+        queuedAt: string;
+        band: string;
       }[];
     }[];
     expect(groups1).toEqual([
@@ -781,6 +788,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         // A fired-at-PLACING order (Modes I/T) is on the queue as `placed` — not collectable via the
         // Mode-P handover route; its collect is the fiscal `POST /api/working-orders/:id/collect` below.
         status: "placed",
+        // KDS order-timing alerts (design §3/§6/§11): the venue's DEFAULT station carries the schema's
+        // default thresholds — provisioning never overrides them.
+        thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         items: [
           {
             id: expect.any(String),
@@ -798,6 +808,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             firedAt: expect.any(String),
             // No options selected on this line → an empty modifier sub-item list (ordering modifiers).
             modifiers: [],
+            // Just fired — nowhere near the default station's 5-minute warm threshold.
+            queuedAt: expect.any(String),
+            band: "fresh",
           },
         ],
       },

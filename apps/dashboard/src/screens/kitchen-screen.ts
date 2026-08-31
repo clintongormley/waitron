@@ -10,12 +10,40 @@ import type { BumpMode, Course, DashboardApi, FireControl, Station } from "../ap
 
 /** A kitchen station the editor holds in local, editable state (a defensive copy of the loaded
  * {@link Station}). `isDefault` is read-only in a row — it is flipped by the make-default action
- * (`setDefaultStation`), never by a plain row save (which never touches `is_default`). */
+ * (`setDefaultStation`), never by a plain row save (which never touches `is_default`). The three
+ * `*AfterMinutes` fields (KDS order-timing alerts, design §8) are plain editable fields like
+ * `name`/`displayOrder` — validated client-side ({@link thresholdsValid}) before the row's save calls
+ * `updateStation`, mirroring the route's own `warm < overdue < forgotten` CHECK. */
 interface EditableStation {
   id: string;
   name: string;
   displayOrder: number;
   isDefault: boolean;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
+}
+
+/**
+ * A friendly, client-side mirror of the station PATCH route's `warm < overdue < forgotten` ordering
+ * CHECK (design §8) — positive minutes, strictly increasing. This is a PRE-CHECK only: the route
+ * validates the exact same rule authoritatively (`management.request_invalid` on a bad set), so a
+ * bypass here (or a stale client) is still rejected server-side. Deliberately does not also require
+ * each field to be an integer — the server's `parseThresholdMinutes` does, but a client-side non-integer
+ * reaching the route still gets rejected there, and re-checking it here would only add branches this
+ * "friendly" precheck does not need.
+ */
+function thresholdsValid(row: {
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
+}): boolean {
+  const {
+    warmAfterMinutes: warm,
+    overdueAfterMinutes: overdue,
+    forgottenAfterMinutes: forgotten,
+  } = row;
+  return warm >= 1 && warm < overdue && overdue < forgotten;
 }
 
 /** A kitchen course the editor holds in local, editable state (a defensive copy of the loaded
@@ -31,12 +59,14 @@ interface EditableCourse {
  * venue's kitchen stations, kitchen COURSES, the whole-ticket bump mode and the KDS fire-control mode,
  * mirroring `floor-screen.ts`'s Zonas panel (its own CRUD/reload idiom, `@waitron/ui` primitives, `--wt-*`
  * tokens). On connect it loads `api.listStations()` + `api.listCourses()` into editable rows and
- * `api.getFireControl()` into the toggle. A station row edits its name + display order and Guardar-s it;
- * "Hacer predeterminada" adopts it as the venue's single default (the counter/pass fallback); a Cursos
- * row edits its name + display order (courses have no default — a null course fires earliest); the
- * "new" forms author a fresh station/course from just a name. Segmented controls set the per-venue
- * `bump_mode` (`line` / `ticket`) and `fire_control` (`waiter` = the tab fires courses / `kitchen` = the
- * station display fires them).
+ * `api.getFireControl()` into the toggle. A station row edits its name + display order + its three
+ * KDS order-timing thresholds (`warmAfterMinutes`/`overdueAfterMinutes`/`forgottenAfterMinutes`, KDS
+ * order-timing alerts design §8 — client-validated `warm < overdue < forgotten` before Guardar, mirroring
+ * the route's own CHECK) and Guardar-s it; "Hacer predeterminada" adopts it as the venue's single default
+ * (the counter/pass fallback); a Cursos row edits its name + display order (courses have no default — a
+ * null course fires earliest); the "new" forms author a fresh station/course from just a name. Segmented
+ * controls set the per-venue `bump_mode` (`line` / `ticket`) and `fire_control` (`waiter` = the tab fires
+ * courses / `kitchen` = the station display fires them).
  *
  * Each mutation drives the PER-ITEM CRUD on the injected `api` and RELOADS the list afterwards (the
  * `floor-screen`/`service-status-screen` idiom): the config routes are per-item POST/PATCH/DELETE (plus
@@ -159,6 +189,13 @@ export class KitchenScreen extends LitElement {
         name: s.name,
         displayOrder: s.displayOrder,
         isDefault: s.isDefault,
+        // The `??` fallbacks are defensive, not the normal path — the server's `listStations` always
+        // selects these columns (they carry NOT NULL defaults 5/10/15), but a runtime payload crossing
+        // the wire is never actually type-checked, so a stale/partial response still seeds a sane form
+        // rather than `undefined` inputs.
+        warmAfterMinutes: s.warmAfterMinutes ?? 5,
+        overdueAfterMinutes: s.overdueAfterMinutes ?? 10,
+        forgottenAfterMinutes: s.forgottenAfterMinutes ?? 15,
       }));
       this.courses = courses.map((c: Course) => ({
         id: c.id,
@@ -198,14 +235,28 @@ export class KitchenScreen extends LitElement {
     this.stations = this.stations.map((s) => (s.id === id ? { ...s, ...patch } : s));
   }
 
-  /** Persist the CURRENT name + display order of the station `id` holds, then reload. Reads the row from
-   * state at click time (not a captured render closure). A vanished row is a no-op. */
+  /** Persist the CURRENT name + display order + timing thresholds of the station `id` holds, then
+   * reload. Reads the row from state at click time (not a captured render closure). A vanished row is
+   * a no-op. The three thresholds are validated client-side ({@link thresholdsValid}) BEFORE the API
+   * call — a bad set (out of order or non-positive) sets the same `management.request_invalid` banner
+   * the route itself would raise (design §8) and never reaches `api.updateStation`, a friendly
+   * pre-check the route still enforces authoritatively either way. */
   async #saveStation(id: string): Promise<void> {
     this.errorKey = null;
     const row = this.stations.find((s) => s.id === id);
     if (row === undefined) return;
+    if (!thresholdsValid(row)) {
+      this.errorKey = "management.request_invalid";
+      return;
+    }
     try {
-      await this.api.updateStation(row.id, { name: row.name, displayOrder: row.displayOrder });
+      await this.api.updateStation(row.id, {
+        name: row.name,
+        displayOrder: row.displayOrder,
+        warmAfterMinutes: row.warmAfterMinutes,
+        overdueAfterMinutes: row.overdueAfterMinutes,
+        forgottenAfterMinutes: row.forgottenAfterMinutes,
+      });
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -333,6 +384,36 @@ export class KitchenScreen extends LitElement {
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
               e.stopPropagation();
               this.#editStation(s.id, { displayOrder: Number(e.detail.value) || 0 });
+            }}
+          ></wt-input>
+          <wt-input
+            type="number"
+            label=${t("kitchen.station_warm")}
+            data-test="station-warm-${s.id}"
+            .value=${String(s.warmAfterMinutes)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.#editStation(s.id, { warmAfterMinutes: Number(e.detail.value) || 0 });
+            }}
+          ></wt-input>
+          <wt-input
+            type="number"
+            label=${t("kitchen.station_overdue")}
+            data-test="station-overdue-${s.id}"
+            .value=${String(s.overdueAfterMinutes)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.#editStation(s.id, { overdueAfterMinutes: Number(e.detail.value) || 0 });
+            }}
+          ></wt-input>
+          <wt-input
+            type="number"
+            label=${t("kitchen.station_forgotten")}
+            data-test="station-forgotten-${s.id}"
+            .value=${String(s.forgottenAfterMinutes)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.#editStation(s.id, { forgottenAfterMinutes: Number(e.detail.value) || 0 });
             }}
           ></wt-input>
           ${

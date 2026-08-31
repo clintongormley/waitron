@@ -6,14 +6,18 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
+  classifyBand,
   compareDecimal,
   decimal,
   MONEY_SCALE,
   multiplyDecimal,
   type SaleId,
+  type StationThresholds,
   subtractDecimal,
+  type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
+  worstBand,
 } from "@waitron/shared";
 import {
   allocateOrderNumber,
@@ -3101,6 +3105,13 @@ export interface StationQueueItem {
    *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (auto-fired earliest
    *  course, or released via `fireCourse`). */
   firedAt: string | null;
+  /** `ticket_items.queued_at` — the moment this line reached its station (KDS order-timing alerts, design
+   *  §3), so the client's `TickingClock` can re-derive {@link band} between refreshes from this plus the
+   *  group's {@link StationQueueGroup.thresholds}. */
+  queuedAt: string;
+  /** The line's age band against its station's thresholds, computed on the DB clock at fetch time (§3, §6)
+   *  — authoritative for the first render; the client re-ticks it locally afterward. */
+  band: TimingBand;
 }
 
 /** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
@@ -3117,6 +3128,11 @@ export interface StationQueueGroup {
    *  (a tab) and `placed` (awaiting the fiscal collect) are not collectable via this path. */
   status: WorkingOrderStatus;
   items: StationQueueItem[];
+  /** This station's order-timing thresholds (KDS order-timing alerts, design §3/§6/§11) — every group
+   *  from one `listStationQueue` call shares the same station, hence the same thresholds, but they ride
+   *  per-group (not as a separate fetch) so the client's `TickingClock` can re-derive each item's
+   *  {@link StationQueueItem.band} locally without a second round trip. */
+  thresholds: StationThresholds;
 }
 
 /**
@@ -3209,6 +3225,14 @@ export async function listStationQueue(
       // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
       // guaranteed by the WHERE, so this is the only remaining collectability signal.
       status: workingOrders.status,
+      // KDS order-timing alerts (design §3/§6): this line's age on the DB clock, in whole minutes since
+      // `queued_at` — the same `now()`-based idiom `listExpoQueue`'s `openedMinutes` uses, so the band
+      // classification below is immune to any app-server/DB clock skew (reconstructed as an offset from
+      // `Date.now()`, never by parsing `queued_at` with the app clock).
+      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(ticketItems)
     // Composite join predicate (tenant_id too) — the tenant-consistency `listPrepQueue`'s own join
@@ -3227,6 +3251,17 @@ export async function listStationQueue(
       and(
         eq(ticketItems.workingOrderLineId, workingOrderLines.id),
         eq(ticketItems.tenantId, workingOrderLines.tenantId),
+      ),
+    )
+    // The item's OWN station, for its order-timing thresholds (KDS order-timing alerts, design §3/§6).
+    // A plain INNER JOIN — never a correlated subquery (CLAUDE.md §3's caution) — keyed on the
+    // tenant-consistent (tenant_id, station_id) FK `ticket_items.station_id` carries; every row here is
+    // already filtered to `stationId` below, so this always resolves.
+    .innerJoin(
+      kitchenStations,
+      and(
+        eq(ticketItems.stationId, kitchenStations.id),
+        eq(ticketItems.tenantId, kitchenStations.tenantId),
       ),
     )
     // The item's course, for the display header + coursing order (KDS-2 §5a). LEFT join — `course_id`
@@ -3265,6 +3300,13 @@ export async function listStationQueue(
   // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
   const groups = new Map<string, StationQueueGroup>();
   for (const row of rows) {
+    // This station's thresholds — identical on every row (the query is filtered to one `stationId`),
+    // reconstructed once per row rather than hoisted so the shape stays a plain per-row projection.
+    const thresholds: StationThresholds = {
+      warmAfterMinutes: row.warmAfterMinutes,
+      overdueAfterMinutes: row.overdueAfterMinutes,
+      forgottenAfterMinutes: row.forgottenAfterMinutes,
+    };
     let group = groups.get(row.orderId);
     if (group === undefined) {
       group = {
@@ -3274,6 +3316,7 @@ export async function listStationQueue(
         queuedAt: row.queuedAt,
         status: row.status,
         items: [],
+        thresholds,
       };
       groups.set(row.orderId, group);
     }
@@ -3291,6 +3334,11 @@ export async function listStationQueue(
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       firedAt: row.firedAt,
+      queuedAt: row.queuedAt,
+      // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
+      // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
+      // this keeps the classification anchored to the DB clock exactly as `ageMinutes` was computed.
+      band: classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds),
     });
   }
   return [...groups.values()];
@@ -3315,6 +3363,16 @@ export interface ExpoItem {
    *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
    *  (localised client-side, as `name` is). Empty for a plain dish. */
   modifiers: QueueModifier[];
+  /** `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11) — the expo spans stations, so
+   *  UNLIKE `StationQueueGroup.thresholds` this rides PER ITEM (Controller Ruling A): the client's
+   *  `TickingClock` re-derives {@link band} from this plus {@link thresholds} between refreshes. */
+  queuedAt: string;
+  /** This item's OWN station's order-timing thresholds — per item, not per order, because one order's
+   *  items can span several stations each with different thresholds. */
+  thresholds: StationThresholds;
+  /** This item's age band against its own station's thresholds, computed on the DB clock at fetch time.
+   *  Authoritative for the first render; the client re-ticks it locally afterward. */
+  band: TimingBand;
 }
 
 /** One course section of an expo order (KDS-3 §3a) — the order's items for one course, grouped under the
@@ -3343,6 +3401,11 @@ export interface ExpoOrder {
   orderNumber: number;
   openedMinutes: number;
   courses: ExpoCourse[];
+  /** The worst age band across the order's UNSERVED lines (design §3 — a served line, `working_order_
+   *  lines.served_at` set, has reached the guest and drops off the clock; the reduction skips it). The
+   *  card head's escalation signal, `worstBand` over every {@link ExpoItem.band} whose line is unserved;
+   *  `"fresh"` when none are, or when every remaining unserved item is itself fresh. */
+  worstBand: TimingBand;
 }
 
 /**
@@ -3396,9 +3459,20 @@ export async function listExpoQueue(
       descriptions: workingOrderLines.descriptions,
       quantity: workingOrderLines.quantity,
       lineNo: workingOrderLines.lineNo,
+      // The line's own delivery marker (design §3 — a line ages until it reaches the guest). NOT
+      // exposed on `ExpoItem` itself; consulted only to exclude a served line from `ExpoOrder.worstBand`.
+      servedAt: workingOrderLines.servedAt,
       // The item's STATION name — the cross-station label listStationQueue omits (it filters by one
       // station, so it never needs it). `station_id` is notNull, so this inner join drops nothing.
       stationName: kitchenStations.name,
+      // KDS order-timing alerts (design §3/§6/§11, Controller Ruling A): this item's own queued-at plus
+      // its OWN station's thresholds — an order's items can span several stations, so unlike
+      // `listStationQueue` (one station per call) these ride per item, not per order.
+      queuedAt: ticketItems.queuedAt,
+      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       // The item's snapshotted course (or null) + its live header/order from the LEFT-joined
       // kitchen_courses row — a courseless line serialises `course* : null` and sorts earliest.
       courseId: ticketItems.courseId,
@@ -3515,6 +3589,9 @@ export async function listExpoQueue(
         courses: [],
         // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
+        // Folded in below, per row, over UNSERVED lines only (design §3) — starts `fresh` (worstBand's
+        // own empty-set default) and only ever climbs as rows are processed.
+        worstBand: "fresh",
       };
       orders.set(row.orderId, order);
       courseMaps.set(row.orderId, new Map());
@@ -3536,6 +3613,14 @@ export async function listExpoQueue(
       byCourse.set(courseKey, course);
       order.courses.push(course);
     }
+    const thresholds: StationThresholds = {
+      warmAfterMinutes: row.warmAfterMinutes,
+      overdueAfterMinutes: row.overdueAfterMinutes,
+      forgottenAfterMinutes: row.forgottenAfterMinutes,
+    };
+    // Reconstructed from the DB-computed age (not `Date.parse(row.queuedAt)`) so the classification is
+    // immune to app-server/DB clock skew — the same idiom `listStationQueue` uses.
+    const band = classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds);
     course.items.push({
       id: row.itemId,
       name: row.descriptions,
@@ -3545,9 +3630,16 @@ export async function listExpoQueue(
       firedAt: row.firedAt,
       awayAt: row.awayAt,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
+      queuedAt: row.queuedAt,
+      thresholds,
+      band,
     });
     if (row.firedAt === null) course.fired = false;
     if (row.awayAt === null) course.away = false;
+    // The order's worst band is a reduction over UNSERVED lines only (design §3 — a served line has
+    // reached the guest and drops off the clock). `workingOrderLines.servedAt` is written only while the
+    // parent order is `open` (ruling R4), so a settled/placed order's lines always fold in here.
+    if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
   }
   return [...orders.values()];
 }
@@ -3588,6 +3680,14 @@ export interface TableState {
    *  renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`) over
    *  por servir (`pendingToServe`). `0` for a free table (no open tab — the LEFT-join branch). */
   enRoute: number;
+  /** The worst age band across the OPEN TAB's unserved lines (KDS order-timing alerts, design §3/§6) —
+   *  `"fresh"` for a free table (no open tab) or one whose unserved lines are all still fresh. A served
+   *  line (`served_at` set) has reached the guest and never contributes: this is the floor's flash-red
+   *  signal, driving a table tile from steady amber/red through to a flashing-red "forgotten" tile. Scoped
+   *  to the open TAB only, the same scope `pendingToServe`/`readyToServe`/`enRoute` already use — a
+   *  counter delivery to this table (`pendingDeliveries`) is not a per-line detail this read carries, so
+   *  it does not feed this band (see the read-model's own doc comment). */
+  timingBand: TimingBand;
   /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
    *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
   status: { id: string; label: string; color: string } | null;
@@ -3719,6 +3819,15 @@ export async function listTablesWithState(
     pending_to_serve: number;
     ready_to_serve: number;
     en_route: number;
+    // KDS order-timing alerts (design §3/§6): one entry per unserved, fired line on the open tab, each
+    // carrying its DB-clock age plus its OWN station's thresholds — the raw material `classifyBand`/
+    // `worstBand` reduce in JS below (never classified in SQL, so server and client share one classifier).
+    tab_unserved_lines: {
+      ageMinutes: number;
+      warmAfterMinutes: number;
+      overdueAfterMinutes: number;
+      forgottenAfterMinutes: number;
+    }[];
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -3739,6 +3848,7 @@ export async function listTablesWithState(
       coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
       coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
       coalesce(tab.en_route, 0)::int as en_route,
+      coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
       coalesce(del.pending, 0)::int as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
@@ -3758,12 +3868,30 @@ export async function listTablesWithState(
              -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
              -- en-camino > listos precedence off the two counts.
              (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
-             coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
+             coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total,
+             -- KDS order-timing alerts (design §3/§6): the raw age + thresholds of each unserved, FIRED
+             -- (ti.id is not null) line, one JSON object per line -- the age is computed here on the DB
+             -- clock (never a band label; §3's "authoritative on the DB clock, classified in JS" split),
+             -- reduced with classifyBand/worstBand in JS below. An unfired line (no ticket_items row) has
+             -- not reached a station yet, so it carries no age and is excluded, same as a served one.
+             json_agg(
+               json_build_object(
+                 'ageMinutes', floor(extract(epoch from (now() - ti.queued_at)) / 60)::int,
+                 'warmAfterMinutes', ks.warm_after_minutes,
+                 'overdueAfterMinutes', ks.overdue_after_minutes,
+                 'forgottenAfterMinutes', ks.forgotten_after_minutes
+               )
+             ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
       from working_orders wo
       left join working_order_lines wol
         on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
       left join ticket_items ti
         on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
+      -- The unserved line's OWN station thresholds, for the json_agg above. LEFT (not INNER): a row
+      -- with no ticket item (ti null) must survive so line_count/tab_total/the other aggregates above
+      -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
+      left join kitchen_stations ks
+        on ks.tenant_id = ti.tenant_id and ks.id = ti.station_id
       where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
       group by wo.id
     ) tab on true
@@ -3808,6 +3936,18 @@ export async function listTablesWithState(
       : pendingDeliveries > 0
         ? "delivery-pending"
         : "free";
+    // KDS order-timing alerts (design §3/§6): classify each unserved line in JS (never in SQL, so this
+    // read-model and the client's `TickingClock` share one classifier), then worst-wins across the open
+    // tab. `worstBand([])` is `"fresh"`, covering a free table or one whose lines are all still fresh.
+    const timingBand = worstBand(
+      r.tab_unserved_lines.map((line) =>
+        classifyBand(Date.now() - Number(line.ageMinutes) * 60_000, Date.now(), {
+          warmAfterMinutes: line.warmAfterMinutes,
+          overdueAfterMinutes: line.overdueAfterMinutes,
+          forgottenAfterMinutes: line.forgottenAfterMinutes,
+        }),
+      ),
+    );
     return {
       id: r.id,
       label: r.label,
@@ -3818,6 +3958,7 @@ export async function listTablesWithState(
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
       enRoute: Number(r.en_route),
+      timingBand,
       pendingDeliveries,
       status:
         r.status_id !== null

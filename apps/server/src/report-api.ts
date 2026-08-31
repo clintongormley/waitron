@@ -16,6 +16,7 @@ import {
 import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   computeDailyClose,
+  computeOverdueOrders,
   computeTopSellers,
   computeVatReturn,
   computeVatSummaryForPeriod,
@@ -156,7 +157,7 @@ async function countOpenTables(
 
 /**
  * Mounts the gated reporting routes on an existing Hono app — `mountPurchasingApi`'s sibling, attached
- * to the SAME app. Four `GET /management-api/reports/*` routes, each funnelling every DB touch through
+ * to the SAME app. Five `GET /management-api/reports/*` routes, each funnelling every DB touch through
  * `gated` (withTenant + asAppUser + authorizeManager) so RLS scopes the read to this server's one
  * tenant and the gate runs in one place:
  *
@@ -170,6 +171,11 @@ async function countOpenTables(
  *   cash-up, counts) plus top sellers for ONE explicit business day, THIS node.
  * - `/reports/period?from&to` — gated on `report.view`. A VAT summary + top sellers over a closed
  *   business-day RANGE (inclusive), THIS node.
+ * - `/reports/overdue-orders` — gated on `report.view`. The manager overview's "orders taking too
+ *   long" list (KDS order-timing alerts, design §7.4): THIS node's currently-open kitchen orders
+ *   whose worst unserved line has crossed into `overdue`/`forgotten`, worst-first. A LIVE snapshot
+ *   (no business-day range, unlike the other three `report.view` routes) — the dashboard screen
+ *   polls it on an interval rather than fetching once.
  *
  * The `report.export` seam is DISTINCT from `report.view`: viewing the takings dashboard is not
  * exporting the fiscal file (a supervisor holds view but not export).
@@ -371,6 +377,22 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         return { from, to, vat, topSellers };
       });
       return c.json(result);
+    }),
+  );
+
+  // The manager overview's "orders taking too long" list (KDS order-timing alerts, design §7.4): THIS
+  // node's currently-open kitchen orders whose worst unserved line is overdue/forgotten, worst-first.
+  // A live snapshot, not a business-day query — `buildReportContext` is reused for the (tenantId,
+  // nodeId) pair only; its `clock` is irrelevant here (no business day involved) and left unused.
+  // Gated on `report.view`, the same seam the dashboard's other three live/period reads use.
+  app.get("/management-api/reports/overdue-orders", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { tenantId, nodeId } = await buildReportContext(tx);
+        return computeOverdueOrders(tx, { tenantId, nodeId });
+      });
+      return c.json({ orders });
     }),
   );
 }

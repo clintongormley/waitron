@@ -66,6 +66,8 @@ describe("till-counter-screen", () => {
         label: "Mesa 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "settled" as const,
+        // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds.
+        thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         items: [
           {
             id: "ti-1",

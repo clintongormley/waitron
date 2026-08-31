@@ -2236,6 +2236,38 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       { method: "GET", credentials: "include" },
     );
   });
+
+  it("getOverdueOrders GETs the overdue-orders route and returns the parsed shape", async () => {
+    // Canned JSON mirroring `apps/server/src/report-api.ts`'s overdue-orders handler (Task 6):
+    // `{ orders: OverdueOrder[] }`, worst-first — a bare walk-up's `tableLabel` is null.
+    const body = {
+      orders: [
+        {
+          orderId: "order-1",
+          orderNumber: 101,
+          tableLabel: "T4",
+          stationName: "Grill",
+          ageMinutes: 22,
+          band: "forgotten",
+        },
+        {
+          orderId: "order-2",
+          orderNumber: 102,
+          tableLabel: null,
+          stationName: "Bar",
+          ageMinutes: 11,
+          band: "overdue",
+        },
+      ],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getOverdueOrders()).toEqual(body);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overdue-orders", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
 });
 
 describe("DashboardApi — option groups + product attach (Task 11/12)", () => {

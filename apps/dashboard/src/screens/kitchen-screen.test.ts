@@ -19,14 +19,43 @@ import { KitchenScreen } from "./kitchen-screen.js";
 afterEach(cleanupWidgets);
 
 const STATIONS: Station[] = [
-  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  {
+    id: "s1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
 ];
 
 /** Two stations — a default + a non-default — so a per-row edit exercises the "leave the other row
- * alone" branch, and "make default" targets the non-default one while the default shows its badge. */
+ * alone" branch, and "make default" targets the non-default one while the default shows its badge.
+ * s2's thresholds are deliberately NOT the column defaults (4/9/14 rather than 5/10/15), so a seeding
+ * assertion actually proves the form reads the row's OWN values rather than a hardcoded default. */
 const TWO_STATIONS: Station[] = [
-  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
-  { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
+  {
+    id: "s1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
+  {
+    id: "s2",
+    name: "Plancha",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    warmAfterMinutes: 4,
+    overdueAfterMinutes: 9,
+    forgottenAfterMinutes: 14,
+  },
 ];
 
 const COURSES: Course[] = [{ id: "c1", name: "Entrantes", displayOrder: 0, active: true }];
@@ -112,8 +141,10 @@ describe("kitchen-screen", () => {
     expect(api.createStation).not.toHaveBeenCalled();
   });
 
-  it("saves an edited station row (updateStation with the row's current name + order), then reloads", async () => {
-    // Two rows, so editing s2 also exercises the "leave the other row untouched" map branch.
+  it("saves an edited station row (updateStation with the row's current name + order + thresholds), then reloads", async () => {
+    // Two rows, so editing s2 also exercises the "leave the other row untouched" map branch. The
+    // threshold fields ride the SAME patch even though this test doesn't touch them — the config
+    // editor always saves the trio together (design §8), mirroring the route's all-or-nothing shape.
     const api = stubApi({}, TWO_STATIONS);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
@@ -124,8 +155,81 @@ describe("kitchen-screen", () => {
     q(el, "[data-test=station-save-s2]")!.click();
     await flush(el);
     expect(api.updateStation).toHaveBeenCalledTimes(1);
-    expect(api.updateStation).toHaveBeenCalledWith("s2", { name: "Pase", displayOrder: 3 });
+    expect(api.updateStation).toHaveBeenCalledWith("s2", {
+      name: "Pase",
+      displayOrder: 3,
+      warmAfterMinutes: 4,
+      overdueAfterMinutes: 9,
+      forgottenAfterMinutes: 14,
+    });
     expect(api.listStations).toHaveBeenCalledTimes(2);
+  });
+
+  it("seeds the three threshold fields from the station's current values", async () => {
+    const api = stubApi({}, TWO_STATIONS);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    const warm = q(el, "[data-test=station-warm-s2]") as HTMLElement & { value: string };
+    const overdue = q(el, "[data-test=station-overdue-s2]") as HTMLElement & { value: string };
+    const forgotten = q(el, "[data-test=station-forgotten-s2]") as HTMLElement & { value: string };
+    expect(warm.value).toBe("4");
+    expect(overdue.value).toBe("9");
+    expect(forgotten.value).toBe("14");
+  });
+
+  it("saves edited threshold values (updateStation with the three *AfterMinutes fields), then reloads", async () => {
+    const api = stubApi({}, TWO_STATIONS);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    type(el, "[data-test=station-warm-s2]", "3");
+    type(el, "[data-test=station-overdue-s2]", "8");
+    type(el, "[data-test=station-forgotten-s2]", "12");
+    q(el, "[data-test=station-save-s2]")!.click();
+    await flush(el);
+    expect(api.updateStation).toHaveBeenCalledWith("s2", {
+      name: "Plancha",
+      displayOrder: 1,
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 8,
+      forgottenAfterMinutes: 12,
+    });
+    expect(api.listStations).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a client-side invalid threshold set (out of order or non-positive) without calling the API", async () => {
+    // Mirrors the server's `warm < overdue < forgotten` CHECK (design §8) as a friendly pre-check —
+    // the route still enforces it authoritatively, this only saves a round trip on an obvious mistake.
+    const api = stubApi({}, TWO_STATIONS);
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+
+    // warm >= overdue
+    type(el, "[data-test=station-warm-s2]", "10");
+    type(el, "[data-test=station-overdue-s2]", "8");
+    type(el, "[data-test=station-forgotten-s2]", "14");
+    q(el, "[data-test=station-save-s2]")!.click();
+    await flush(el);
+    expect(api.updateStation).not.toHaveBeenCalled();
+    const alert = q(el, "[role=alert]");
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain(codeMessage("management.request_invalid", "es-ES"));
+
+    // overdue >= forgotten
+    type(el, "[data-test=station-warm-s2]", "4");
+    type(el, "[data-test=station-overdue-s2]", "14");
+    type(el, "[data-test=station-forgotten-s2]", "14");
+    q(el, "[data-test=station-save-s2]")!.click();
+    await flush(el);
+    expect(api.updateStation).not.toHaveBeenCalled();
+
+    // non-positive
+    type(el, "[data-test=station-warm-s2]", "0");
+    type(el, "[data-test=station-overdue-s2]", "9");
+    type(el, "[data-test=station-forgotten-s2]", "14");
+    q(el, "[data-test=station-save-s2]")!.click();
+    await flush(el);
+    expect(api.updateStation).not.toHaveBeenCalled();
+    expect(api.listStations).toHaveBeenCalledTimes(1); // never reloaded — no mutation ever succeeded
   });
 
   it("deactivates a station row", async () => {

@@ -200,13 +200,24 @@ demo or behind-the-scenes".
    sees a one-option select); (c) the composite `(tenant_id, catalogue_id)` FK replaced the single-column
    one. **Remaining Tier B #8: draft/publish + time-of-day/seasonal scheduling** (both greenfield, no owner
    decision pending).
-9. **Order timings — overdue / forgotten-order alerting** (owner-elevated 2026-08-29). The KDS
-   station queue **already ages every order** (colour buckets fresh <5 / warm <10 / hot ≥10 min +
-   minute label, `station-queue.ts:405-434`), so the base already demos. This adds the *feature*:
-   **owner-configurable thresholds** (5/10 are hardcoded), **active overdue/forgotten alerting +
-   escalation** (today it's passive colour — no alert when an order crosses a line or sits unbumped),
-   and a **manager/expo overview** of overdue orders across stations. PARTIAL → complete. Detail:
-   *Open threads → KDS operations*.
+9. **Order timings — overdue / forgotten-order alerting — LANDED.** Turned the passive KDS age-colour
+   into configurable, escalating (**warm → overdue → forgotten**) alerts across every surface:
+   **per-station thresholds** owner-editable on the kitchen screen (3 `NOT NULL DEFAULT 5/10/15` columns
+   on `kitchen_stations` + ordering CHECK, `till.configure`); one shared `classifyBand` (`@waitron/shared`)
+   + a `TickingClock` (`@waitron/ui`) so bands advance live **client-side, no server push** (the deferred
+   *handheld live updates* subsystem stays the home for real push); server read-models
+   (`listStationQueue`/`listExpoQueue`/`listTablesWithState`) classify on the DB clock; the **KDS station
+   queue** (3-band accent + overdue count badge), **expo pass** (bands + count), and **floor** (a
+   **forgotten table flashes red** in both the list AND the map/canvas view, reduced-motion → steady + a
+   non-colour tell) all escalate in one visual language; and a **manager overview** — an
+   `report.view`-gated `GET /management-api/reports/overdue-orders` feeding a count tile + worst-first
+   list on the dashboard home, polled ~30s (the one polling screen). Age = `queued_at` until
+   served/collected, worst-unserved-line wins. **Fiscal write path byte-unchanged.** Spec/plan:
+   `docs/superpowers/{specs,plans}/2026-08-30-kds-order-timing-alerts*`. **Deferred follow-ups** (spec §13):
+   delivery-order floor flash (`timingBand` is tab-scoped — a counter order on `delivery_table_id` doesn't
+   flash the floor, but IS banded on station/expo); idle-floor escalation (the floor ships only the worst
+   band, so a table advances a band on the floor's next refetch, not while idle); real-time push;
+   station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared flash helper.
 
 **Tier C — valuable, but defer past a first demo or behind-the-scenes:**
 
@@ -251,7 +262,7 @@ accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (
 (SP15) · the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both
 reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish**
 (routing read-back/audit view + station kind; definable kitchen statuses — the order-timing *feature*
-is demo Tier B #9, the aging colour-code already ships; see *Open threads → KDS operations*).
+LANDED as Tier B #9; see *Open threads → KDS operations*).
 
 **Cloud services — parked for later review (north star, not yet ranked).** The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
@@ -283,7 +294,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 9 | Deployment | distribution & client-topology design (#86) | onboarding 4b/4c (Phase 0); cloud trial + agent/appliance/reroute parked |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, **till action-flow wiring (#174)**, **TS-5 split-bill (#178)**, **TS-5 followups (#181)** | table-service core COMPLETE (TS-1..TS-5) + followups done; nothing outstanding |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor — complete | — |
-| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; order timings → demo Tier B #9; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets (item→station→printer routing + station-queue order-aging fresh/warm/hot), KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, **order-timing alerts (warm/overdue/forgotten per-station thresholds + floor flash + manager overview, Tier B #9)**; device identity-1 (enrol/revoke, `kds_station` kind only) | **handheld/till device kinds → demo Tier A #4**; routing audit view (*Open threads → KDS operations*); expo device kind; device-scoped fire/collect routes (Debt) |
 | 13 | Tips | attribution done (tip on `tenders`) | payroll export (integrate-not-build); card-tips-as-income is a payroll duty |
 | 14 | Bookings | **Bookings-1 BUILT (#PR pending)** — staff-entered reservations: `bookings` table (FORCE RLS) + CRUD/lifecycle verbs + seat-opens-a-tab (TS-1) + `booking.manage` management routes + "Reserved HH:MM" on the floor + dashboard day-list screen | FUTURE: public/online/QR booking, availability/double-booking prevention, reminders (SMS/email), a customer/CRM entity, recurring bookings, a calendar grid, deposits |
 | 15 | Online ordering | — | not started (Later phase) |
@@ -529,15 +540,13 @@ low-priority unless noted.
   (bar/kitchen/grill/pass is name-only convention, not data); **single-target only** (no fan-out to
   kitchen AND expo, no per-modifier/per-time rules — post-demo).
 
-**Order timings — PARTIAL** (owner wants "spot orders taking too long / forgotten", 2026-08-29). The
-till KDS **station queue already ages every order** — coloured by how long its oldest line has waited,
-buckets **fresh <5 min / warm <10 / hot ≥10** with an "N min" label (`station-queue.ts:405-434`,
-injectable clock), so the demo already SHOWS slow orders. **Missing to make it a feature:**
-owner-**configurable thresholds** (5/10 are hardcoded), **active overdue/forgotten alerting +
-escalation** (today it's passive colour — no alert when an order crosses a line or sits unbumped), and
-a **manager/expo overview** of overdue orders across stations (the dashboard has no "orders taking too
-long" view). Base aging demos today; the enhancement is **elevated to demo Tier B #9** (owner,
-2026-08-29).
+**Order timings — LANDED** (demo Tier B #9, 2026-08-31). The passive fresh/warm/hot colour became
+configurable escalating **warm → overdue → forgotten** alerts: **per-station thresholds** (owner-editable),
+one shared `classifyBand` + a client `TickingClock` (no server push), 3-band accents + an overdue count
+on the station queue, bands + count on expo, a **forgotten table flashing red** on both floor views, and
+a `report.view` manager overview (count tile + worst-first list, polled ~30s). Deferred: delivery-order
+floor flash; idle-floor escalation; real-time push; station-kind defaults; unbumped-since-fire metric
+(spec §13, `docs/superpowers/specs/2026-08-30-kds-order-timing-alerts-design.md`).
 
 **Status config.** **Table/service statuses — BUILT** (TS-2 `service-status-screen`: full CRUD of
 label / colour / order / active). **Kitchen statuses — PARTIAL:** `bump_mode` (line/ticket) +

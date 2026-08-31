@@ -2,6 +2,7 @@ export { currentBusinessDay, validateBusinessDay } from "./business-day.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";
+export { computeOverdueOrders } from "./overdue-orders.js";
 export { computeVatReturn } from "./vat-return.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
@@ -34,6 +35,8 @@ export type {
   InputVatRateLine,
   InputVatReturn,
   InputVatSummary,
+  OverdueOrder,
+  OverdueOrdersInput,
   PeriodVatInput,
   PurchaseVatKind,
   TenderMethod,

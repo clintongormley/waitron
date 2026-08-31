@@ -23,6 +23,7 @@ function table(over: Partial<TableState> = {}): TableState {
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
+    timingBand: "fresh",
     status: null,
     nextReservation: null,
     posX: null,
@@ -362,6 +363,78 @@ describe("till-floor-screen", () => {
     expect(chip.textContent).toContain("21:00");
   });
 
+  // ── KDS order-timing alerts (design §7.3): the flash-red requirement ──────────────────────────────
+  describe("order-timing accent (timingBand)", () => {
+    it("renders no timing accent for a fresh table (the existing occupancy accent is untouched)", async () => {
+      const { el } = await mount({ tables: [table({ id: "t1", timingBand: "fresh" })] });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("state-free")).toBe(true);
+      expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
+    });
+
+    it("renders the subtler steady accent for a warm table, no flash, no badge", async () => {
+      const { el } = await mount({ tables: [table({ id: "t1", timingBand: "warm" })] });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("age-warm")).toBe(true);
+      expect(card.classList.contains("flash")).toBe(false);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
+    });
+
+    it("renders the steady red accent for an overdue table, no flash, no badge", async () => {
+      const { el } = await mount({ tables: [table({ id: "t1", timingBand: "overdue" })] });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("age-overdue")).toBe(true);
+      expect(card.classList.contains("flash")).toBe(false);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
+    });
+
+    it("forgotten flashes by default (motion allowed) and shows the non-colour forgotten badge", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "forgotten" })],
+        reducedMotion: false,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("age-forgotten")).toBe(true);
+      expect(card.classList.contains("flash")).toBe(true);
+      const badge = el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')!;
+      expect(badge).not.toBeNull();
+      expect(badge.textContent).toContain(t("floor.forgotten"));
+    });
+
+    it("reduced motion: a forgotten table renders steady red with NO flash class, but keeps the badge", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "forgotten" })],
+        reducedMotion: true,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("age-forgotten")).toBe(true);
+      expect(card.classList.contains("flash")).toBe(false);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).not.toBeNull();
+    });
+
+    it("reduced motion never applies flash to a merely-overdue (non-forgotten) table either", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "overdue" })],
+        reducedMotion: false,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("age-overdue")).toBe(true);
+      expect(card.classList.contains("flash")).toBe(false);
+    });
+
+    it("coexists with the occupancy accent — a forgotten OPEN-TAB table carries BOTH classes", async () => {
+      // The house a11y rule (never one property fighting over ownership): the occupancy state-* accent
+      // (this screen's border-left) and the timing age-* accent must never clobber one another.
+      const { el } = await mount({
+        tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, timingBand: "forgotten" })],
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      expect(card.classList.contains("state-open-tab")).toBe(true);
+      expect(card.classList.contains("age-forgotten")).toBe(true);
+    });
+  });
+
   it("renders a table whose capacity is unknown without a pax count", async () => {
     const { el } = await mount({
       tables: [table({ id: "t1", capacity: null })],
@@ -461,6 +534,33 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
     // The list grid is not rendered in map view.
     expect(el.shadowRoot!.querySelector(".grid")).toBeNull();
+  });
+
+  // KDS order-timing alerts (design §7.3, fix round 1): the MAP view must carry the SAME flash-red
+  // accent the LIST card shows — the till threads each placed table's timingBand through
+  // #toFloorTable into the shared canvas/token (packages/ui), never recomputed here.
+  it("threads a placed table's timingBand through to the canvas's wt-table-token (forgotten flashes on the map too)", async () => {
+    const el = await mountFloor({ tables: [placed("t1", { timingBand: "forgotten" })] });
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    const token = canvas.shadowRoot!.querySelector(
+      '[data-table="t1"] wt-table-token',
+    ) as HTMLElement & { table: { timingBand?: string }; shadowRoot: ShadowRoot };
+    // The DATA reaches the token regardless of the token's own render timing…
+    expect(token.table.timingBand).toBe("forgotten");
+    // …and the token renders the SAME age-forgotten flashing-red accent the till's LIST card shows.
+    const card = token.shadowRoot.querySelector(".card")!;
+    expect(card.classList.contains("age-forgotten")).toBe(true);
+  });
+
+  it("threads a warm timingBand through to the canvas token as the subtler steady accent (no flash)", async () => {
+    const el = await mountFloor({ tables: [placed("t1", { timingBand: "warm" })] });
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    const token = canvas.shadowRoot!.querySelector(
+      '[data-table="t1"] wt-table-token',
+    ) as HTMLElement & { shadowRoot: ShadowRoot };
+    const card = token.shadowRoot.querySelector(".card")!;
+    expect(card.classList.contains("age-warm")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(false);
   });
 
   it("defaults to the LIST (FP-1 cards) when the active zone has no placed table", async () => {

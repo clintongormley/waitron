@@ -405,6 +405,24 @@ function parseCapacity(value: unknown): number | undefined {
 }
 
 /**
+ * Parse and validate one of the station PATCH route's three KDS timing-threshold fields
+ * (`warmAfterMinutes`/`overdueAfterMinutes`/`forgottenAfterMinutes`, design §8). An absent field
+ * stays `undefined` (the PATCH route decides what that means for the trio as a group, below); a
+ * PRESENT value must be a POSITIVE integer NUMBER in int4 range — `< 1` rather than `parseCapacity`'s
+ * `< 0`, since a station's fastest band cannot be zero minutes — else it is refused as
+ * `management.request_invalid` naming the FIELD (never the value), the same typeof-first,
+ * int4-range-bounded shape `parseDisplayOrder`/`parseCapacity` use. This screens only the SHAPE of one
+ * field; the cross-field ordering (`warm < overdue < forgotten`, the `kitchen_stations_thresholds_ordered`
+ * CHECK) is the caller's job once all three have been parsed.
+ */
+function parseThresholdMinutes(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
+    throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
+/**
  * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
  * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
  * The body is coerced to `{}` (via `readJsonBody`, see the login route for why a `null`/non-object body must not
@@ -1264,23 +1282,46 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a station (name/displayOrder/active — any subset; NOT is_default, which only the set-default
-  // route flips). Malformed :id → station.not_found (a bad id names no station), not a 500; an unknown id
-  // → station.not_found; a name collision → station.name_taken. A present field with the wrong type →
-  // management.request_invalid; a patch carrying no mutable field is a 204 no-op (the sibling zone PATCH
-  // shape) — returned WITHOUT reaching updateStation's empty `.set()`, which Drizzle rejects.
+  // Edit a station (name/displayOrder/active/timing-thresholds — any subset; NOT is_default, which only
+  // the set-default route flips). Malformed :id → station.not_found (a bad id names no station), not a
+  // 500; an unknown id → station.not_found; a name collision → station.name_taken. A present field with
+  // the wrong type → management.request_invalid; a patch carrying no mutable field is a 204 no-op (the
+  // sibling zone PATCH shape) — returned WITHOUT reaching updateStation's empty `.set()`, which Drizzle
+  // rejects.
+  //
+  // The three KDS timing-threshold fields (design §8) travel as ONE group, the same
+  // `displayName|role|pin` compound-field shape the staff-create route uses for its own required trio:
+  // each is shape-screened individually (`parseThresholdMinutes`, positive int4), then — if ANY of the
+  // three is present — all three must be present and strictly ordered `warm < overdue < forgotten`,
+  // mirroring the `kitchen_stations_thresholds_ordered` CHECK exactly so that CHECK (23514) is never
+  // reached from here. A patch that edits only one or two of the three cannot be ordering-checked
+  // without reading the row's current values, which this route deliberately does not do — the config
+  // editor's form always saves the trio together (design §8), so "all or none" costs nothing a real
+  // caller needs and keeps the validation a pure function of the request body.
   app.patch("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
-        c,
-      );
+      const body = await readJsonBody<{
+        name?: unknown;
+        displayOrder?: unknown;
+        active?: unknown;
+        warmAfterMinutes?: unknown;
+        overdueAfterMinutes?: unknown;
+        forgottenAfterMinutes?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
-      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      const patch: {
+        name?: string;
+        displayOrder?: number;
+        active?: boolean;
+        warmAfterMinutes?: number;
+        overdueAfterMinutes?: number;
+        forgottenAfterMinutes?: number;
+      } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
@@ -1294,10 +1335,42 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("management.request_invalid", { field: "active" });
         patch.active = body.active;
       }
+      const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
+      const overdueAfterMinutes = parseThresholdMinutes(
+        body.overdueAfterMinutes,
+        "overdueAfterMinutes",
+      );
+      const forgottenAfterMinutes = parseThresholdMinutes(
+        body.forgottenAfterMinutes,
+        "forgottenAfterMinutes",
+      );
+      if (
+        warmAfterMinutes !== undefined ||
+        overdueAfterMinutes !== undefined ||
+        forgottenAfterMinutes !== undefined
+      ) {
+        if (
+          warmAfterMinutes === undefined ||
+          overdueAfterMinutes === undefined ||
+          forgottenAfterMinutes === undefined ||
+          warmAfterMinutes >= overdueAfterMinutes ||
+          overdueAfterMinutes >= forgottenAfterMinutes
+        ) {
+          throw new AppError("management.request_invalid", {
+            field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
+          });
+        }
+        patch.warmAfterMinutes = warmAfterMinutes;
+        patch.overdueAfterMinutes = overdueAfterMinutes;
+        patch.forgottenAfterMinutes = forgottenAfterMinutes;
+      }
       if (
         patch.name === undefined &&
         patch.displayOrder === undefined &&
-        patch.active === undefined
+        patch.active === undefined &&
+        // The all-or-nothing validation above never leaves warmAfterMinutes undefined while the other
+        // two thresholds are set, so this alone correctly proxies "no threshold field in this patch".
+        patch.warmAfterMinutes === undefined
       ) {
         return c.body(null, 204);
       }

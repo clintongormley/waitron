@@ -857,3 +857,101 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
     expect(rows.find((t) => t.id === boundaryId)!.nextReservation).toEqual({ time: "11:30" });
   });
 });
+
+// KDS order-timing alerts (design §3/§6) — the floor's flash-red signal: the worst age band across the
+// open tab's UNSERVED lines, classified against each line's OWN station thresholds on the DB clock. PGlite
+// is the right target (the same read-model shape test as readyToServe/enRoute above; no RLS/concurrency
+// dimension — Task 1's real-PG suite covers ticket_items RLS, and the migration's own real-PG suite covers
+// the threshold columns/CHECK).
+describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
+  it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+    const lines = await asApp(cfg, (tx) =>
+      tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+
+    // Backdate line 1's ticket item past the seeded station's default overdue threshold (10) but under
+    // forgotten (15); line 2 stays fresh.
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`update ticket_items set queued_at = now() - interval '12 minutes'
+                     where working_order_line_id = ${lines[0]!.id}`),
+    );
+
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === tableId,
+    )!;
+    expect(row.timingBand).toBe("overdue");
+
+    // Serve the overdue line → it drops off the clock (§3); the remaining unserved line (line 2) is
+    // fresh, so the TABLE clears too.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    expect(row.timingBand).toBe("fresh");
+  });
+
+  it("worst-line-wins: a forgotten line outranks a fresh one on the same table", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+    const lines = await asApp(cfg, (tx) =>
+      tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+
+    // Line 1 past forgotten (15); line 2 left fresh — the table reports the worse of the two.
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`update ticket_items set queued_at = now() - interval '16 minutes'
+                     where working_order_line_id = ${lines[0]!.id}`),
+    );
+
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === tableId,
+    )!;
+    expect(row.timingBand).toBe("forgotten");
+  });
+
+  it("a free table (no open tab) reports fresh", async () => {
+    const { cfg, tableId } = await setupTabVenue();
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
+      (t) => t.id === tableId,
+    )!;
+    expect(row.timingBand).toBe("fresh");
+  });
+});

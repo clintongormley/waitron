@@ -4,6 +4,11 @@
  * so it stays fast to test and impossible to drift from the visual layer.
  */
 
+// `TimingBand` is a plain data shape from the GENERIC `@waitron/shared` package (not a server
+// package), so importing its type here carries none of the bundle-decoupling risk a server-package
+// import would (mirrors the till's own client.ts, which imports the same type for the same reason).
+import type { TimingBand } from "@waitron/shared";
+
 /**
  * The one canvas aspect ratio (width : height = 3 : 2). A SINGLE shared constant: the map's fixed shape
  * lives here, never scattered as a `1.5` (or `3/2`) magic number across the CSS and the tests.
@@ -43,7 +48,11 @@ export interface TableServiceStatus {
  * One table as the floor canvas needs it: its spatial placement (`posX`/`posY` in 0..1000 permille,
  * `shape`, `rotation` degrees, `zoneId`) plus the FP-1 occupancy read-model fields the shared token
  * renders (`state`, `tabTotal`, `pendingToServe`, `status`). Placement fields are nullable because a
- * table need not be placed yet; the canvas falls back to sensible defaults.
+ * table need not be placed yet; the canvas falls back to sensible defaults. `timingBand` (KDS
+ * order-timing alerts, design §7.3) is OPTIONAL and `undefined` reads as `"fresh"` (no timing
+ * accent) — the dashboard's floor editor has no live occupancy read-model and so never supplies it
+ * (`toFloorTable`'s neutral occupancy input, `apps/dashboard/src/screens/floor-screen.ts`); the
+ * till's live floor always supplies the server's per-table worst band.
  */
 export interface FloorTable {
   id: string;
@@ -62,6 +71,9 @@ export interface FloorTable {
    *  or `null`/absent when none. Optional so a consumer with no bookings read (the dashboard Plano
    *  editor) omits it and the token draws no reserved chip. The token renders "<reserved> HH:MM". */
   reservedTime?: string | null;
+  /** The table's worst order-timing band (KDS order-timing alerts, design §7.3), or absent/`"fresh"` for
+   *  no urgency — drives the forgotten flash on the map token. */
+  timingBand?: TimingBand;
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -189,7 +201,9 @@ export interface FloorPlacementInput {
   zoneId?: string | null;
 }
 
-/** A table's occupancy read-model fields — the other input half of {@link toFloorTable}. */
+/** A table's occupancy read-model fields — the other input half of {@link toFloorTable}. `timingBand`
+ *  is optional; omitted (the dashboard's neutral input) reads as `undefined` on the resulting
+ *  {@link FloorTable}, which the token renders as no timing accent (KDS order-timing alerts, §7.3). */
 export interface FloorOccupancyInput {
   state: TableOccupancyState;
   tabTotal?: string | null;
@@ -198,6 +212,8 @@ export interface FloorOccupancyInput {
   /** The next reservation's wall-clock "HH:MM" (Bookings-1 §4), or `null`/absent when none. Optional so
    *  the dashboard's no-occupancy mapper need not supply it. */
   reservedTime?: string | null;
+  /** The table's worst order-timing band (KDS order-timing alerts, design §7.3); absent ⇒ no urgency. */
+  timingBand?: TimingBand;
 }
 
 /**
@@ -219,6 +235,7 @@ export function toFloorTable(
     shape: placement.shape,
     rotation: placement.rotation,
     zoneId: placement.zoneId,
+    timingBand: occupancy.timingBand,
     state: occupancy.state,
     tabTotal: occupancy.tabTotal ?? null,
     pendingToServe: occupancy.pendingToServe,

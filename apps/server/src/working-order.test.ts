@@ -47,6 +47,7 @@ import {
   listHeldOrders,
   listStationQueue,
   markCourseAway,
+  markLineServed,
   openTab,
   parkOrder,
   placeOrder,
@@ -1339,6 +1340,42 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       ]);
     });
   });
+
+  // KDS order-timing alerts (design §3/§6/§11) — the group carries the station's thresholds (Controller
+  // Ruling A), each item its own age band classified against them on the DB clock.
+  it("bands each item by the station's thresholds and carries them on the group", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const agua = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe), line(agua)]);
+      const items = await ticketItemRows(tx, orderId);
+
+      // Backdate item[0] past the station's default overdue threshold (10) but under forgotten (15);
+      // item[1] stays fresh.
+      await tx.execute(
+        sql`update ticket_items set queued_at = now() - interval '12 minutes' where id = ${items[0]!.id}`,
+      );
+
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.thresholds).toEqual({
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      });
+      const backdated = group!.items.find((i) => i.id === items[0]!.id)!;
+      const fresh = group!.items.find((i) => i.id === items[1]!.id)!;
+      expect(backdated.band).toBe("overdue");
+      expect(fresh.band).toBe("fresh");
+      // Each item carries its OWN queued_at (not just the group's oldest-line anchor) — the widget's
+      // TickingClock re-derives the band from this plus the group's thresholds between refreshes.
+      expect(typeof backdated.queuedAt).toBe("string");
+      expect(typeof fresh.queuedAt).toBe("string");
+      expect(backdated.queuedAt).not.toBe(fresh.queuedAt);
+    });
+  });
 });
 
 // KDS-2 Task 4 — hold-and-fire. `fireLines` now snapshots each line's `course_id` and decides
@@ -1769,6 +1806,87 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(tab.openedMinutes).toBeGreaterThanOrEqual(0);
       const walk = expo.find((o) => o.orderId === walkup)!;
       expect(walk.tableLabel).toBeUndefined();
+    });
+  });
+
+  // KDS order-timing alerts (design §3/§6/§11) — the expo spans stations, so PER-ITEM thresholds
+  // (Controller Ruling A) prove the join resolved each item's OWN station, not another's (CLAUDE.md §3's
+  // correlated-subquery caution: a wrong join binds to the wrong row silently).
+  it("carries each item's own station thresholds/band, and rolls the order up to the worst", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      // Distinct thresholds so a per-item mix-up (Barra's item reading Cocina's thresholds, or vice
+      // versa) would fail this test rather than passing by coincidence on identical defaults.
+      await tx.execute(
+        sql`update kitchen_stations set warm_after_minutes = 2, overdue_after_minutes = 4,
+            forgotten_after_minutes = 6 where id = ${barra.id}`,
+      );
+      const soup = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
+      const olives = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
+
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
+      const items = await courseItemsFor(tx, orderId);
+      const soupItem = items.find((i) => i.productId === soup)!;
+      const oliveItem = items.find((i) => i.productId === olives)!;
+
+      // Backdate the Barra item past ITS OWN overdue threshold (4) but nowhere near Cocina's (10).
+      await tx.execute(
+        sql`update ticket_items set queued_at = now() - interval '5 minutes' where id = ${oliveItem.id}`,
+      );
+
+      const order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === orderId)!;
+      const outItems = order.courses.flatMap((c) => c.items);
+      const soupOut = outItems.find((i) => i.id === soupItem.id)!;
+      const oliveOut = outItems.find((i) => i.id === oliveItem.id)!;
+
+      expect(soupOut.thresholds).toEqual({
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      });
+      expect(soupOut.band).toBe("fresh");
+      expect(oliveOut.thresholds).toEqual({
+        warmAfterMinutes: 2,
+        overdueAfterMinutes: 4,
+        forgottenAfterMinutes: 6,
+      });
+      expect(oliveOut.band).toBe("overdue"); // 5 >= 4 (overdue), < 6 (forgotten)
+      expect(typeof oliveOut.queuedAt).toBe("string");
+      // Worst-line-wins: the order rolls up to the worse of its two items.
+      expect(order.worstBand).toBe("overdue");
+    });
+  });
+
+  it("drops a served line off the order's worst band (design §3 — ages until it reaches the guest)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const agua = await makeProduct(tx, cfg, catalogueId, {});
+      const tableId = await makeTable(tx, cfg);
+      // `served_at` is writable only while the parent order is OPEN (design H2, ruling R4), so this
+      // needs a tab rather than `placeOrderWith`'s settled/placed order.
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(cafe), line(agua)]);
+
+      const rows = await ticketItemRows(tx, tabId);
+      // Backdate line 1 past overdue (10); line 2 stays fresh.
+      await tx.execute(
+        sql`update ticket_items set queued_at = now() - interval '12 minutes' where id = ${rows[0]!.id}`,
+      );
+
+      let order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
+      expect(order.worstBand).toBe("overdue");
+
+      // Serve the overdue line — it drops off the clock. Line 2 is still unserved but fresh, so the
+      // order's worst band clears.
+      await markLineServed(tx, cfg, tabId, rows[0]!.lineNo);
+      order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
+      expect(order.worstBand).toBe("fresh");
     });
   });
 });

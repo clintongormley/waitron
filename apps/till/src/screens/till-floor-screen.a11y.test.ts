@@ -31,6 +31,7 @@ const tables: TableState[] = [
     pendingToServe: 2,
     readyToServe: 1,
     enRoute: 1,
+    timingBand: "fresh",
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     // Carries a reservation too, so the list card's "Reservada HH:MM" chip is axe-scanned in both themes.
     nextReservation: { time: "20:30" },
@@ -50,6 +51,9 @@ const tables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
+    // The subtler steady WARM accent (KDS order-timing alerts, design §7.3) alongside the
+    // delivery-pending occupancy accent — proves the two never fight over the same card.
+    timingBand: "warm",
     status: null,
     nextReservation: null,
     posX: null,
@@ -68,6 +72,7 @@ const tables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
+    timingBand: "fresh",
     status: null,
     nextReservation: null,
     posX: null,
@@ -86,6 +91,7 @@ const tables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
+    timingBand: "fresh",
     status: null,
     nextReservation: null,
     posX: null,
@@ -108,6 +114,8 @@ const tables: TableState[] = [
     pendingToServe: 2,
     readyToServe: 2,
     enRoute: 0,
+    // The steady OVERDUE accent, no flash/badge.
+    timingBand: "overdue",
     status: null,
     nextReservation: null,
     posX: null,
@@ -130,6 +138,9 @@ const tables: TableState[] = [
     pendingToServe: 3,
     readyToServe: 0,
     enRoute: 0,
+    // FORGOTTEN — the flashing-red tile plus the non-colour "Forgotten" badge, rendered alongside the
+    // to-serve chip already on this card, so axe scans both badges side by side in one mount.
+    timingBand: "forgotten",
     status: null,
     nextReservation: null,
     posX: null,
@@ -157,6 +168,10 @@ const placedTables: TableState[] = [
     pendingToServe: 2,
     readyToServe: 1,
     enRoute: 0,
+    // The MAP view renders `<wt-table-token>` (a `@waitron/ui` shared component out of THIS task's
+    // scope — it carries no `timingBand`), so `fresh` here is a type-satisfying value only; it has no
+    // rendering effect on the canvas token either way.
+    timingBand: "fresh",
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     // Carries a reservation too, so the map token's "Reservada HH:MM" chip is axe-scanned in both themes.
     nextReservation: { time: "20:30" },
@@ -176,6 +191,7 @@ const placedTables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
+    timingBand: "fresh",
     status: null,
     nextReservation: null,
     posX: null,

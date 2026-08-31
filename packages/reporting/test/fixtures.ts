@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   addDecimal,
   locationId as brandLocationId,
@@ -10,6 +10,9 @@ import {
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import {
+  catalogues,
+  diningTables,
+  products,
   purchaseInvoiceVat,
   purchaseInvoices,
   saleLines,
@@ -17,9 +20,12 @@ import {
   saleVoids,
   sales,
   tenders,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 export interface SeededVenue {
@@ -252,3 +258,164 @@ export async function seedSubstitution(
     substitutedSaleId: ref.substitutedSaleId,
   });
 }
+
+/**
+ * Fires ONE line onto an EXISTING working order — a fresh throwaway catalogue + product (this
+ * package takes no dependency on `@waitron/catalogue`, and `computeOverdueOrders` never reads
+ * either), a `working_order_lines` row, and its `ticket_items` row with `queued_at` backdated by
+ * `opts.ageMinutes` — the same `now() - N minutes` idiom `apps/server/src/working-order.test.ts`/
+ * `tables.test.ts` use to control a band's age precisely. Split out from {@link seedFiredOrder} so a
+ * test can add a SECOND line to one order (proving the worst-line reduction), which minting a whole
+ * new order each time cannot express. Every insert runs as the connection owner (superuser bypasses
+ * RLS) — pure setup, like every other fixture in this file.
+ */
+export async function seedFiredLine(
+  db: Database,
+  seed: { tenantId: TenantId; nodeId: NodeId; stationId: string },
+  opts: {
+    orderId: string;
+    lineNo: number;
+    /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees. Ignored
+     *  when `queuedAt` is given. */
+    ageMinutes: number;
+    /** Marks the LINE served (drops it off the age clock — design §3). Defaults to unserved. */
+    served?: boolean;
+    /** An explicit ISO timestamp for `ticket_items.queued_at`, overriding `ageMinutes`. Lets a test
+     *  give TWO lines the BIT-IDENTICAL `queued_at` a real multi-line fire produces (one INSERT, one
+     *  shared `defaultNow()` — `apps/server/src/working-order.ts`'s `fireLines`) — two SEPARATE calls
+     *  each computing its own `now() - N minutes` do NOT tie exactly, since each runs in its own
+     *  implicit transaction a few milliseconds apart, which is precisely wrong for a tie-break test. */
+    queuedAt?: string;
+  },
+): Promise<void> {
+  const [catalogue] = await db
+    .insert(catalogues)
+    .values({ tenantId: seed.tenantId, name: "Test catalogue" })
+    .returning({ id: catalogues.id });
+  const [product] = await db
+    .insert(products)
+    .values({
+      tenantId: seed.tenantId,
+      catalogueId: catalogue!.id,
+      descriptions: { "es-ES": "Item" },
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  const [line] = await db
+    .insert(workingOrderLines)
+    .values({
+      tenantId: seed.tenantId,
+      workingOrderId: opts.orderId,
+      lineNo: opts.lineNo,
+      productId: product!.id,
+      descriptions: { "es-ES": "Item" },
+      quantity: "1.000",
+      unitPrice: "1.00",
+      unitPriceGross: "1.00",
+      vatRate: "10.00",
+      lineTotal: "1.00",
+      servedAt: opts.served ? sql`now()` : null,
+    })
+    .returning({ id: workingOrderLines.id });
+  await db.insert(ticketItems).values({
+    tenantId: seed.tenantId,
+    nodeId: seed.nodeId,
+    workingOrderId: opts.orderId,
+    workingOrderLineId: line!.id,
+    stationId: seed.stationId,
+    queuedAt: opts.queuedAt ?? sql`now() - (${opts.ageMinutes} * interval '1 minute')`,
+    firedAt: sql`now()`,
+  });
+}
+
+/**
+ * Seeds one KITCHEN order with a single fired line (via {@link seedFiredLine}) — the fixture
+ * `overdue-orders.test.ts` uses for the common one-order-one-line case.
+ */
+export interface FiredOrderSeed {
+  tenantId: TenantId;
+  tillId: TillId;
+  nodeId: NodeId;
+  locationId: string;
+  stationId: string;
+}
+
+/**
+ * Creates a bare OPEN working order with no lines — split out of {@link seedFiredOrder} so a test can
+ * control the ORDER lines are fired in (via separate {@link seedFiredLine} calls) independently of
+ * their `line_no`, which is exactly what a tie-break regression test needs (insertion order must be
+ * able to DIFFER from `line_no` order, to prove the query's tiebreak — not insertion order — decides
+ * which tied line wins).
+ */
+export async function seedOpenOrder(
+  db: Database,
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId },
+  orderNumber: number,
+): Promise<{ orderId: string }> {
+  const [order] = await db
+    .insert(workingOrders)
+    .values({
+      tenantId: seed.tenantId,
+      tillId: seed.tillId,
+      nodeId: seed.nodeId,
+      orderNumber,
+      status: "open",
+    })
+    .returning({ id: workingOrders.id });
+  return { orderId: order!.id };
+}
+
+export async function seedFiredOrder(
+  db: Database,
+  seed: FiredOrderSeed,
+  opts: {
+    orderNumber: number;
+    /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees. */
+    ageMinutes: number;
+    /** Marks the LINE served (drops it off the age clock — design §3). Defaults to unserved. */
+    served?: boolean;
+    /** Marks the ORDER collected (drops the whole order off the clock). Defaults to not collected. */
+    collected?: boolean;
+    status?: "open" | "placed" | "settled" | "abandoned";
+    /** Seeds a dining table whose `tab_id` back-points at this order, for the `tableLabel` projection. */
+    tableLabel?: string;
+  },
+): Promise<{ orderId: string }> {
+  // Always CREATE the order `open` and fire the line before applying a terminal status/collected_at:
+  // `working_order_lines_require_open_parent` (0004_working_orders.sql) rejects writing a line onto
+  // a non-open parent, exactly as the real fire path would (a line is fired onto an open order, and
+  // only THEN does it settle/place/abandon or get collected).
+  const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
+  await seedFiredLine(
+    db,
+    { tenantId: seed.tenantId, nodeId: seed.nodeId, stationId: seed.stationId },
+    { orderId, lineNo: 1, ageMinutes: opts.ageMinutes, served: opts.served },
+  );
+  const status = opts.status ?? "open";
+  if (status !== "open" || opts.collected) {
+    await db
+      .update(workingOrders)
+      .set({
+        status,
+        // The settled_at CHECK (working_orders_settled_at_ck) is biconditional on status='settled'.
+        settledAt: status === "settled" ? sql`now()` : null,
+        collectedAt: opts.collected ? sql`now()` : null,
+      })
+      .where(eq(workingOrders.id, orderId));
+  }
+  if (opts.tableLabel !== undefined) {
+    await db.insert(diningTables).values({
+      tenantId: seed.tenantId,
+      locationId: seed.locationId,
+      label: opts.tableLabel,
+      tabId: orderId,
+    });
+  }
+  return { orderId };
+}
+
+/** Re-exported so `overdue-orders.test.ts` seeds a station without a second import path into
+ * `@waitron/db/testing/seed.js` — the same convenience `seedVenue` gives for tenant/node/location. */
+export { seedKitchenStation };

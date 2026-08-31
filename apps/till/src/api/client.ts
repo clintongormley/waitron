@@ -20,6 +20,11 @@
 // exactly like every interface below. `GET /api/till` carries the authored-or-default arrangement +
 // receipt trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
 import type { LayoutDef, ReceiptConfig } from "../layout.js";
+// `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
+// (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
+// the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
+// primitives.
+import type { StationThresholds, TimingBand } from "@waitron/shared";
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
@@ -470,6 +475,13 @@ export interface StationQueueGroup {
    *  `settled` order is a Mode-P pickup awaiting its counter handover ({@link TillApi.markCollected}). */
   status: WorkingOrderStatus;
   items: StationQueueItem[];
+  /** This station's order-timing thresholds (KDS order-timing alerts, design §3/§6/§11) — every group
+   *  from one `getStationQueue` call shares the same station, hence the same thresholds, but they ride
+   *  per-group (not a separate fetch) so the widget's `TickingClock` can re-derive {@link queuedAt}'s
+   *  band locally between refreshes, via `classifyBand` (`@waitron/shared`). A LOCAL-mirror field like
+   *  every other one in this file — the server's `StationQueueGroup` (`apps/server/src/working-order.ts`)
+   *  is the source of truth. */
+  thresholds: StationThresholds;
 }
 
 /**
@@ -541,6 +553,25 @@ export interface ExpoItem {
    *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically
    *  to an empty array — a modifier-free item renders exactly as before. */
   modifiers?: QueueModifier[];
+  /**
+   * This item's own `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11), ISO —
+   * UNLIKE {@link StationQueueGroup.thresholds} this rides PER ITEM: a single expo order's items can
+   * span several stations, each with its own thresholds, so the pass classifies each item against ITS
+   * OWN station rather than a single order-wide clock. `till-expo-screen`'s `TickingClock` re-derives
+   * the live band from this plus {@link thresholds} between refreshes (`classifyBand`,
+   * `@waitron/shared`), the same re-tick shape `StationQueueGroup.queuedAt` already drives. A LOCAL
+   * mirror field like every other one in this file — the server's `ExpoItem`
+   * (`apps/server/src/working-order.ts`) is the source of truth.
+   */
+  queuedAt: string;
+  /** This item's OWN station's order-timing thresholds — per item, not per order, because one order's
+   *  items can span several stations each with different thresholds (see {@link queuedAt}). */
+  thresholds: StationThresholds;
+  /** This item's age band against its own station's thresholds, computed on the DB clock at fetch
+   *  time. Authoritative for the very first paint; `till-expo-screen` re-derives it locally afterward
+   *  (via {@link queuedAt}/{@link thresholds}) so a lagging item keeps escalating between refreshes
+   *  with no new fetch. */
+  band: TimingBand;
 }
 
 /**
@@ -577,6 +608,17 @@ export interface ExpoOrder {
   orderNumber: number;
   openedMinutes: number;
   courses: ExpoCourse[];
+  /**
+   * The worst age band across the order's UNSERVED lines, computed on the DB clock at fetch time
+   * (design §3 — a served line drops off the clock, so the reduction skips it; `"fresh"` when none
+   * are aging). A LOCAL mirror of the server's `ExpoOrder.worstBand`
+   * (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). Authoritative for the very
+   * first paint only: `till-expo-screen` re-derives a card's LIVE worst band locally, via `worstBand`
+   * (`@waitron/shared`) over each visible item's own re-ticked {@link ExpoItem.band}, so the accent
+   * keeps escalating between refreshes under its `TickingClock` — this field is not read directly by
+   * that recompute, but rides for parity with the server payload.
+   */
+  worstBand: TimingBand;
 }
 
 /**
@@ -686,6 +728,17 @@ export interface TableState {
   pendingToServe: number;
   readyToServe: number;
   enRoute: number;
+  /**
+   * The worst age band across the open tab's UNSERVED lines (KDS order-timing alerts, design §7.3) —
+   * `"fresh"` for a free table or one whose unserved lines are all still fresh. A LOCAL mirror of the
+   * server's `TableState.timingBand` (`apps/server/src/working-order.ts`'s `listTablesWithState`),
+   * NOT imported — same bundle-decoupling rationale as every other field in this file. UNLIKE
+   * {@link StationQueueGroup.thresholds}/{@link ExpoItem.thresholds}, the floor ships only the
+   * REDUCED worst band, not the raw per-line ages/thresholds `classifyBand` would need — so the live
+   * floor screen cannot re-derive a climbing band locally; the value is fixed until the next
+   * `getTablesState` fetch. Drives the floor's flash-red tile (`till-floor-screen`'s `#card`).
+   */
+  timingBand: TimingBand;
   status: { id: string; label: string; color: string } | null;
   /**
    * The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — its earliest

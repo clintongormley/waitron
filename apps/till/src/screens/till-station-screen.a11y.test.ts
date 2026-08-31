@@ -1,4 +1,5 @@
 import { afterEach, describe, it, vi } from "vitest";
+import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-station-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
@@ -8,6 +9,16 @@ const stations: Station[] = [
   { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
   { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
+
+// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults. No fixture below
+// injects `now`, so every ticket ages off the real wall clock against a `queuedAt` far in the past — the
+// queue always sweeps in its `forgotten` (flashing) state, which is exactly the state the a11y sweep
+// exercises for the header's overdue-count badge too.
+const DEFAULT_THRESHOLDS: StationThresholds = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
 
 // One order with a line in each kitchen state + a second order carrying a HELD later course, so axe sees
 // the queued/preparing/ready cells, the active + inactive picker tabs, the toggle and Back, both a
@@ -20,6 +31,7 @@ const groups: StationQueueGroup[] = [
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "settled", // collectable — surfaces the rail card's collect button for the a11y sweep
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-1",
@@ -56,6 +68,7 @@ const groups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-4",

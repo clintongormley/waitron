@@ -431,6 +431,7 @@ describe("till-table-order-screen", () => {
       pendingToServe: 0,
       readyToServe: 0,
       enRoute: 0,
+      timingBand: "fresh",
       status: null,
       nextReservation: null,
       posX: null,
