@@ -18,7 +18,9 @@ import type {
   AllergenDeclaration,
   AllergenEntry,
   CategorySummary,
+  ContainsTag,
   Course,
+  DietOverride,
   OptionGroup,
   PricingUnit,
   Product,
@@ -35,6 +37,28 @@ export type { CategorySummary } from "../api/client.js";
 const VAT_CLASSES: readonly VatClass[] = ["general", "reduced", "super_reduced", "zero"];
 /** The pricing bases the form offers, in the `products.pricing_unit` CHECK-set order. */
 const PRICING_UNITS: readonly PricingUnit[] = ["each", "weight"];
+
+/** The forced-diet labels the override sub-form offers, as tri-state controls (auto/yes/no). A LOCAL
+ * copy of `@waitron/catalogue`'s `DietOverride` label keys (no runtime import — the #70 bundle rule);
+ * halal/kosher have no derivation, so their meaningful states are auto/yes/no exactly like the others. */
+const DIET_LABELS = ["vegan", "vegetarian", "halal", "kosher"] as const;
+/** The contains-tags the override sub-form offers, as tri-state add/remove controls. A LOCAL copy of
+ * `@waitron/catalogue`'s `CONTAINS_TAGS`; the tri-state (auto/add/remove) makes a tag impossible to
+ * both add AND remove, so the disjointness the server enforces holds here by construction. */
+const CONTAINS_TAGS: readonly ContainsTag[] = ["meat", "fish"];
+
+/** A forced-label control's state: `""` = auto (key ABSENT from the override), else the forced value. */
+type DietLabelState = "" | "yes" | "no";
+/** A contains control's state: `""` = auto (in neither list), `"add"`/`"remove"` = the two lists. */
+type DietContainsState = "" | "add" | "remove";
+
+/** The contains-tag control state for `tag` given a stored override: `"add"` if the tag is in
+ * `addContains`, `"remove"` if in `removeContains`, else `""` (auto). */
+function containsStateOf(override: DietOverride | null, tag: ContainsTag): DietContainsState {
+  if (override?.addContains?.includes(tag)) return "add";
+  if (override?.removeContains?.includes(tag)) return "remove";
+  return "";
+}
 
 /**
  * The `create-product` event detail — the whole form assembled. `allergens` is OMITTED (never sent as
@@ -57,6 +81,10 @@ export interface CreateProductDetail {
   vatClass: VatClass;
   pricingUnit: PricingUnit;
   allergens?: Record<string, AllergenEntry>;
+  /** The staff diet override, or `null` for an EMPTY one (all labels auto, no contains edits) — ALWAYS
+   * present, unlike `allergens`, because `dietOverride: null` is legal on create (no create-vs-patch
+   * asymmetry). The screen threads it straight into the `ProductInput`. */
+  dietOverride: DietOverride | null;
   image?: string;
   active: boolean;
   optionGroupIds: string[];
@@ -145,6 +173,21 @@ export class ProductForm extends LitElement {
         align-items: flex-end;
         gap: var(--wt-space-3);
       }
+      .diet-override {
+        margin-bottom: var(--wt-space-4);
+      }
+      .diet-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+        gap: var(--wt-space-3);
+      }
+      .diet-grid label.field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        margin-bottom: 0;
+        color: var(--wt-color-text);
+      }
     `,
   ];
 
@@ -203,6 +246,17 @@ export class ProductForm extends LitElement {
   // the picker and resets its per-code source inputs mid-typing.
   @state() private allergens: AllergenDeclaration = null;
   @state() private seedAllergens: AllergenDeclaration = null;
+  // The diet-override sub-form's live state (Task 8b): a tri-state per forced label and per
+  // contains-tag, seeded from the product's `dietOverride` on reseed. Kept as UI state (`""` = auto)
+  // rather than a partial override so the "auto" option is a real selectable value, not a silent
+  // absence — `#buildDietOverride` folds them back into a `DietOverride | null` on submit.
+  @state() private dietLabels: Record<(typeof DIET_LABELS)[number], DietLabelState> = {
+    vegan: "",
+    vegetarian: "",
+    halal: "",
+    kosher: "",
+  };
+  @state() private dietContains: Record<ContainsTag, DietContainsState> = { meat: "", fish: "" };
   @state() private image: string | null = null;
   @state() private validationError: string | null = null;
   // The attach section's ordered pick list (Task 12) — seeded from `attachedGroupIds`, then mutated by
@@ -243,6 +297,17 @@ export class ProductForm extends LitElement {
       this.active = p?.active ?? true;
       this.allergens = p?.manualAllergens ?? null;
       this.seedAllergens = p?.manualAllergens ?? null;
+      // Seed the diet sub-form from the MANUAL override alone (`dietOverride`), never the published
+      // `diet` union — the same reasoning as seeding allergens from `manualAllergens`: seeding from the
+      // recipe-folded profile would re-save the derived labels as manual on the next save.
+      const ov = p?.dietOverride ?? null;
+      this.dietLabels = {
+        vegan: ov?.vegan ?? "",
+        vegetarian: ov?.vegetarian ?? "",
+        halal: ov?.halal ?? "",
+        kosher: ov?.kosher ?? "",
+      };
+      this.dietContains = { meat: containsStateOf(ov, "meat"), fish: containsStateOf(ov, "fish") };
       this.image = p?.image ?? null;
       this.validationError = null;
     }
@@ -335,6 +400,46 @@ export class ProductForm extends LitElement {
   #onAllergensChanged(event: CustomEvent<{ value: AllergenDeclaration }>): void {
     event.stopPropagation();
     this.allergens = event.detail.value;
+  }
+
+  /** A forced-label tri-state changed (vegan/vegetarian/halal/kosher). Native `change` is
+   * `composed: false`, so `stopPropagation` is defensive consistency with the composed handlers. */
+  #onDietLabelChange(event: Event, field: (typeof DIET_LABELS)[number]): void {
+    event.stopPropagation();
+    const value = (event.target as HTMLSelectElement).value as DietLabelState;
+    this.dietLabels = { ...this.dietLabels, [field]: value };
+  }
+
+  /** A contains-tag tri-state changed (meat/fish → auto/add/remove). */
+  #onDietContainsChange(event: Event, tag: ContainsTag): void {
+    event.stopPropagation();
+    const value = (event.target as HTMLSelectElement).value as DietContainsState;
+    this.dietContains = { ...this.dietContains, [tag]: value };
+  }
+
+  /**
+   * Fold the sub-form's tri-states back into a `DietOverride`, or `null` when it is EMPTY (every label
+   * auto, no contains edits) — never `{}`. A forced label contributes its key only when not auto (the
+   * leaf's key-absent = derivation-decides semantics); a contains-tag contributes to `addContains` /
+   * `removeContains` only when set. The tri-state UI makes a tag impossible to add AND remove, so the
+   * disjointness the server enforces holds by construction — no client-side conflict check needed.
+   */
+  #buildDietOverride(): DietOverride | null {
+    const out: DietOverride = {};
+    for (const field of DIET_LABELS) {
+      const value = this.dietLabels[field];
+      if (value !== "") out[field] = value;
+    }
+    const addContains: ContainsTag[] = [];
+    const removeContains: ContainsTag[] = [];
+    for (const tag of CONTAINS_TAGS) {
+      const state = this.dietContains[tag];
+      if (state === "add") addContains.push(tag);
+      else if (state === "remove") removeContains.push(tag);
+    }
+    if (addContains.length > 0) out.addContains = addContains;
+    if (removeContains.length > 0) out.removeContains = removeContains;
+    return Object.keys(out).length === 0 ? null : out;
   }
 
   /** Capture the uploaded image reference; `stopPropagation` keeps its composed event inside this form. */
@@ -430,6 +535,7 @@ export class ProductForm extends LitElement {
         vatClass: this.vatClass,
         pricingUnit: this.pricingUnit,
         allergens: this.allergens,
+        dietOverride: this.#buildDietOverride(),
         image: this.image,
         active: this.active,
         optionGroupIds: [...this.selectedGroupIds],
@@ -451,6 +557,7 @@ export class ProductForm extends LitElement {
       unitPrice: this.unitPrice,
       vatClass: this.vatClass,
       pricingUnit: this.pricingUnit,
+      dietOverride: this.#buildDietOverride(),
       active: this.active,
       optionGroupIds: [...this.selectedGroupIds],
     };
@@ -563,6 +670,61 @@ export class ProductForm extends LitElement {
     `;
   }
 
+  /** The diet-override sub-form (Task 8b): a tri-state `<select>` per forced label (auto/yes/no) and
+   * per contains-tag (auto/add/remove), the diet twin of the allergen picker beside it. Each control is
+   * labelled (its `t("diet.*")` name) so it is reachable in the accessibility tree. */
+  #renderDietOverride() {
+    return html`
+      <section class="diet-override">
+        <p class="field">${t("diet.section")}</p>
+        <div class="diet-grid">
+          ${DIET_LABELS.map(
+            (field) => html`
+              <label class="field"
+                >${t(`diet.${field}`)}
+                <select
+                  data-test=${`diet-${field}`}
+                  @change=${(e: Event) => this.#onDietLabelChange(e, field)}
+                >
+                  <option value="" .selected=${this.dietLabels[field] === ""}>
+                    ${t("diet.auto")}
+                  </option>
+                  <option value="yes" .selected=${this.dietLabels[field] === "yes"}>
+                    ${t("diet.yes")}
+                  </option>
+                  <option value="no" .selected=${this.dietLabels[field] === "no"}>
+                    ${t("diet.no")}
+                  </option>
+                </select>
+              </label>
+            `,
+          )}
+          ${CONTAINS_TAGS.map(
+            (tag) => html`
+              <label class="field"
+                >${t(`diet.contains_${tag}`)}
+                <select
+                  data-test=${`diet-contains-${tag}`}
+                  @change=${(e: Event) => this.#onDietContainsChange(e, tag)}
+                >
+                  <option value="" .selected=${this.dietContains[tag] === ""}>
+                    ${t("diet.contains_auto")}
+                  </option>
+                  <option value="add" .selected=${this.dietContains[tag] === "add"}>
+                    ${t("diet.contains_add")}
+                  </option>
+                  <option value="remove" .selected=${this.dietContains[tag] === "remove"}>
+                    ${t("diet.contains_remove")}
+                  </option>
+                </select>
+              </label>
+            `,
+          )}
+        </div>
+      </section>
+    `;
+  }
+
   override render() {
     return html`
       <wt-dialog
@@ -671,6 +833,7 @@ export class ProductForm extends LitElement {
           @allergens-changed=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
             this.#onAllergensChanged(e)}
         ></dashboard-allergen-picker>
+        ${this.#renderDietOverride()}
         <dashboard-image-upload
           data-test="image"
           .api=${this.api}

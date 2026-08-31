@@ -39,6 +39,7 @@ const products: Product[] = [
     vatClass: "reduced",
     active: true,
     allergens: null,
+    dietOverride: null,
     manualAllergens: null,
     image: null,
   },

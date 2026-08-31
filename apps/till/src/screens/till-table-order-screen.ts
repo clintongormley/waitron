@@ -5,7 +5,7 @@ import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitr
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
-import { filterProductsByMenu } from "../menu-filter.js";
+import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
@@ -19,6 +19,9 @@ import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
 // The multi-menu switcher shown above the round grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
+// The menu DIET filter above the round grid (dietary-classification, Task 7) — narrows the tiles to a
+// dietary lens via `filterProductsByDiet`. Rendered only when some product carries a published diet.
+import "../widgets/diet-filter.js";
 import type {
   RoundLine,
   TabLine,
@@ -348,6 +351,15 @@ export class TillTableOrderScreen extends LitElement {
   /** Whether the pull-out tab drawer is open (its handle toggles it). */
   @state() private drawerOpen = false;
 
+  /**
+   * The active menu DIET filter (dietary-classification, Task 7), or `null` for none — a view-only lens
+   * that narrows the round grid to vegan / vegetarian / no-meat / no-fish via {@link filterProductsByDiet}.
+   * Owned locally (like {@link drawerOpen}, unlike the app-owned {@link selectedMenuId}): the diet lens
+   * touches ONLY which tiles are visible, never the tab or the round. The diet-filter widget's
+   * `diet-filter-selected` toggles it.
+   */
+  @state() private selectedDiet: DietPredicate | null = null;
+
   /** Which step of the in-drawer table-action flow (TS-3/TS-4) is showing — `closed` is the resting
    * state (only the "Table actions" trigger visible). The trigger opens the `menu`; a verb pick moves to
    * the target `pick` step (free tables for move/join, other open tabs for merge/transfer — the two are
@@ -536,6 +548,24 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
 
+  /** Apply the diet-filter widget's pick (`diet-filter-selected`) — a predicate or `null` (cleared). */
+  #pickDiet(predicate: DietPredicate | null): void {
+    this.selectedDiet = predicate;
+  }
+
+  /** The tiles the round grid shows: the selected menu's products ({@link filterProductsByMenu}), then
+   *  narrowed to the active diet lens ({@link filterProductsByDiet}) when one is set. A tab line's name
+   *  still resolves against the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  #gridProducts(): TillProduct[] {
+    return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
+  }
+
+  /** Whether to show the diet filter at all — only when some product carries a published diet, so a
+   *  venue with no dietary data adds no filter chrome above the round grid. */
+  #hasDietData(): boolean {
+    return hasDietData(this.products);
+  }
+
   /**
    * Re-emit the embedded `tender-pay`'s terminal tender as `pay-tab` so the APP settles the tab through
    * the EXISTING `recordSale` path (design H2). `stopPropagation` keeps the inner `confirm-payment` from
@@ -591,8 +621,18 @@ export class TillTableOrderScreen extends LitElement {
               .menus=${this.menus}
               .selectedId=${this.selectedMenuId}
             ></till-menu-switcher>
+            ${
+              this.#hasDietData()
+                ? html`<till-diet-filter
+                    class="diet-filter"
+                    .selected=${this.selectedDiet}
+                    @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
+                      this.#pickDiet(e.detail.predicate)}
+                  ></till-diet-filter>`
+                : nothing
+            }
             <till-product-grid
-              .products=${filterProductsByMenu(this.products, this.selectedMenuId)}
+              .products=${this.#gridProducts()}
               .store=${this.#roundStore}
             ></till-product-grid>
           </div>

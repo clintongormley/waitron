@@ -543,6 +543,103 @@ describe("mountCatalogueApi — products", () => {
     },
   );
 
+  it("POST /management-api/products with a valid dietOverride → 201", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Diet catalogue");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { es: "Falafel" },
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
+      },
+    });
+    expect(res.status).toBe(201);
+    // The management product read exposes the staff override distinctly (the diet twin of
+    // `manualAllergens`), so the dashboard's diet-override editor (Task 8b) can seed from it.
+    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    const products = (await list.json()) as { dietOverride: unknown }[];
+    expect(products[0]!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
+  });
+
+  it.each([
+    ["a bad label", { vegan: "maybe" }, "diet.invalid_label"],
+    ["a non-contains-tag addContains", { addContains: ["plant"] }, "diet.invalid_origin"],
+    ["an unknown addContains", { addContains: ["wombat"] }, "diet.invalid_origin"],
+    [
+      "a conflicting overlay",
+      { addContains: ["meat"], removeContains: ["meat"] },
+      "diet.add_remove_conflict",
+    ],
+  ])(
+    "POST /management-api/products with %s in dietOverride → %s 400",
+    async (_label, dietOverride, code) => {
+      const app = mountApp();
+      const catalogueId = await createCatalogueVia(app, `Diet catalogue ${code} ${_label}`);
+      const res = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          descriptions: { es: "x" },
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          dietOverride,
+        },
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code } });
+    },
+  );
+
+  it("POST /management-api/products with a non-object dietOverride → management.request_invalid 400", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Diet shape catalogue");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { es: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        dietOverride: "nope",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "dietOverride" } },
+    });
+  });
+
+  it("PATCH /management-api/products/:id with a bad dietOverride label → diet.invalid_label 400", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Patch-diet catalogue");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { es: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { dietOverride: { vegetarian: "perhaps" } },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "diet.invalid_label" },
+    });
+  });
+
   it("PATCH /management-api/products/:id updates unitPrice / active / image (204 each)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Patchable catalogue");
@@ -1363,6 +1460,69 @@ describe("mountCatalogueApi — option group items", () => {
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "allergen.add_remove_conflict" },
+    });
+  });
+
+  // ── Origin overlay (Task 4): the diet twin of the allergen overlay — the routes accept
+  // addOrigins/removeOrigins and defer validation to the ops. ──────────────────────────────────────
+  it("POST /option-groups/:id/items accepts an origin overlay and returns it", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "Extras" } });
+    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { en: "Add bacon" }, addOrigins: ["meat"], removeOrigins: ["dairy"] },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()) as Record<string, unknown>).toMatchObject({
+      addOrigins: ["meat"],
+      removeOrigins: ["dairy"],
+    });
+  });
+
+  it("POST /option-groups/:id/items 400s on a non-origin addOrigins entry", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { en: "x" }, addOrigins: ["wombat"] },
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { origin: string } } },
+    ).toMatchObject({ error: { code: "diet.invalid_origin", params: { origin: "wombat" } } });
+  });
+
+  it("PATCH /option-groups/:id/items/:itemId threads an origin overlay (204) and it lands", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" } },
+    });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
+      body: { addOrigins: ["meat"], removeOrigins: ["fish"] },
+    });
+    expect(res.status).toBe(204);
+    const rows = (await (
+      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
+    ).json()) as Record<string, unknown>[];
+    expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
+      addOrigins: ["meat"],
+      removeOrigins: ["fish"],
+    });
+  });
+
+  it("PATCH /option-groups/:id/items/:itemId 400s on a non-origin removeOrigins entry", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" } },
+    });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
+      body: { removeOrigins: ["wombat"] },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "diet.invalid_origin" },
     });
   });
 });

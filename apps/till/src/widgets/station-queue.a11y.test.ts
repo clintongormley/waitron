@@ -188,6 +188,53 @@ const allergenGroups: StationQueueGroup[] = [
   },
 ];
 
+// A dish carrying an as-served DIET profile (dietary-classification, Task 7): a vegan+vegetarian
+// success-toned badge pair, a contains-meat chip on a second item, and a PENDING item (the neutral
+// "not reviewed" note). The badges/chips carry a data-driven colour plus a text label, so axe sweeps
+// their contrast in both themes here (colour is never the only signal).
+const dietGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-di",
+    orderNumber: 21,
+    label: null,
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    thresholds: DEFAULT_THRESHOLDS,
+    status: "placed",
+    items: [
+      {
+        id: "ti-di-v",
+        workingOrderLineId: "wol-di-v",
+        state: "queued",
+        descriptions: { "es-ES": "Ensalada" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [], halal: "yes" },
+      },
+      {
+        id: "ti-di-m",
+        workingOrderLineId: "wol-di-m",
+        state: "queued",
+        descriptions: { "es-ES": "Chuleta" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+      },
+      {
+        id: "ti-di-p",
+        workingOrderLineId: "wol-di-p",
+        state: "queued",
+        descriptions: { "es-ES": "Especial" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+      },
+    ],
+  },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -249,6 +296,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: allergenGroups, stationId: "st-1", view: "rail" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("the as-served diet rail (vegan/vegetarian/halal badges, contains-meat chip, not-reviewed note) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: dietGroups, stationId: "st-1", view: "rail" },
       theme,
     );
     await expectNoA11yViolations(host);

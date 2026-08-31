@@ -84,6 +84,35 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     expect(col).toMatchObject({ data_type: "jsonb", is_nullable: "YES" });
   });
 
+  it("products carries the three nullable diet jsonb columns", async () => {
+    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
+      db,
+      sql`select column_name, data_type, is_nullable from information_schema.columns
+          where table_name = 'products'
+            and column_name in ('diet_derivation','diet_override','diet')
+          order by column_name`,
+    );
+    expect(cols).toEqual([
+      { column_name: "diet", data_type: "jsonb", is_nullable: "YES" },
+      { column_name: "diet_derivation", data_type: "jsonb", is_nullable: "YES" },
+      { column_name: "diet_override", data_type: "jsonb", is_nullable: "YES" },
+    ]);
+  });
+
+  it("option_group_items carries the nullable add_origins/remove_origins jsonb columns", async () => {
+    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
+      db,
+      sql`select column_name, data_type, is_nullable from information_schema.columns
+          where table_name = 'option_group_items'
+            and column_name in ('add_origins','remove_origins')
+          order by column_name`,
+    );
+    expect(cols).toEqual([
+      { column_name: "add_origins", data_type: "jsonb", is_nullable: "YES" },
+      { column_name: "remove_origins", data_type: "jsonb", is_nullable: "YES" },
+    ]);
+  });
+
   it("products carries a nullable image text column", async () => {
     // The image column is a path REFERENCE (a content-addressed filename), never bytes — nullable
     // because a product legitimately has no photo (distinct from allergens' null, which is a

@@ -41,4 +41,31 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
     await expectNoA11yViolations(host);
   });
+
+  it("a basket with diet & contains badges (dietary-classification, Task 7) has no violations", async () => {
+    const store = new WorkingOrderStore();
+    const salad: TillProduct = {
+      ...cafe,
+      id: "salad",
+      descriptions: { es: "Ensalada" },
+      dietDerivation: { origins: ["plant"], pending: false },
+    };
+    const meat: TillProduct = {
+      ...cafe,
+      id: "meat",
+      descriptions: { es: "Chuleta" },
+      dietDerivation: { origins: ["meat"], pending: false },
+    };
+    const mystery: TillProduct = {
+      ...cafe,
+      id: "mystery",
+      descriptions: { es: "Plato del día" },
+      dietDerivation: { origins: [], pending: true },
+    };
+    store.addProduct(salad, "1");
+    store.addProduct(meat, "1");
+    store.addProduct(mystery, "1");
+    const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
 });

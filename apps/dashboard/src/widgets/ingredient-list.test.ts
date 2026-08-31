@@ -17,6 +17,7 @@ function ingredient(overrides: Partial<Ingredient> = {}): Ingredient {
     id: "ing-1",
     name: "Harina de trigo",
     allergens: null,
+    dietaryOrigin: null,
     active: true,
     ...overrides,
   };

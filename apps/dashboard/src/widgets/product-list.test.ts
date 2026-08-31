@@ -22,6 +22,7 @@ function product(overrides: Partial<Product> = {}): Product {
     vatClass: "reduced",
     active: true,
     allergens: null,
+    dietOverride: null,
     manualAllergens: null,
     image: null,
     ...overrides,

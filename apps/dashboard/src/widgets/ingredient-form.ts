@@ -9,10 +9,13 @@ import "@waitron/ui/src/components/wt-switch.js";
 // effect, so `<dashboard-allergen-picker>` is registered before this form renders it (the
 // widget-registration pattern `product-form` uses for the picker).
 import "./allergen-picker.js";
+// Value import (side effect): register `<dashboard-dietary-origin-picker>` before this form renders it.
+import "./dietary-origin-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
   AllergenDeclaration,
+  DietaryOrigin,
   Ingredient,
   IngredientInput,
   IngredientPatch,
@@ -96,6 +99,12 @@ export class IngredientForm extends LitElement {
   // the picker and resets its per-code source inputs mid-typing.
   @state() private allergens: AllergenDeclaration = null;
   @state() private seedAllergens: AllergenDeclaration = null;
+  // The live dietary origin (seeded, then updated by the picker's event). The picker takes its seed
+  // directly from `seedOrigin`; the origin picker does not re-seed on the operator's own edits, so —
+  // unlike the allergen picker with its per-code source inputs — the live value can safely share the
+  // seed. They are still kept separate for symmetry with the allergen pair and clarity of intent.
+  @state() private dietaryOrigin: DietaryOrigin | null = null;
+  @state() private seedOrigin: DietaryOrigin | null = null;
   @state() private validationError: string | null = null;
 
   /**
@@ -113,6 +122,8 @@ export class IngredientForm extends LitElement {
     this.active = ing?.active ?? true;
     this.allergens = ing?.allergens ?? null;
     this.seedAllergens = ing?.allergens ?? null;
+    this.dietaryOrigin = ing?.dietaryOrigin ?? null;
+    this.seedOrigin = ing?.dietaryOrigin ?? null;
     this.validationError = null;
   }
 
@@ -131,6 +142,12 @@ export class IngredientForm extends LitElement {
   #onAllergensChanged(event: CustomEvent<{ value: AllergenDeclaration }>): void {
     event.stopPropagation();
     this.allergens = event.detail.value;
+  }
+
+  /** Capture the origin picker's selection; `stopPropagation` keeps its composed event inside this form. */
+  #onOriginChanged(event: CustomEvent<{ origin: DietaryOrigin | null }>): void {
+    event.stopPropagation();
+    this.dietaryOrigin = event.detail.origin;
   }
 
   /**
@@ -155,6 +172,9 @@ export class IngredientForm extends LitElement {
         name: this.name,
         active: this.active,
         allergens: this.allergens,
+        // `null` (uncategorise) is legal on a PATCH, so the origin always travels — unlike the create
+        // asymmetry below, where a null origin is omitted to keep the body minimal.
+        dietaryOrigin: this.dietaryOrigin,
       };
       this.dispatchEvent(
         new CustomEvent<UpdateIngredientDetail>("update-ingredient", {
@@ -168,6 +188,9 @@ export class IngredientForm extends LitElement {
 
     const body: CreateIngredientDetail = { name: this.name };
     if (this.allergens !== null) body.allergens = this.allergens;
+    // A null origin (uncategorised) is the server default, so it is OMITTED on create — the picker's
+    // empty option leaves the created ingredient uncategorised without sending the key.
+    if (this.dietaryOrigin !== null) body.dietaryOrigin = this.dietaryOrigin;
     this.dispatchEvent(
       new CustomEvent<CreateIngredientDetail>("create-ingredient", {
         detail: body,
@@ -214,6 +237,13 @@ export class IngredientForm extends LitElement {
               ></wt-switch>`
             : nothing
         }
+        <dashboard-dietary-origin-picker
+          class="field"
+          data-test="dietary-origin"
+          .value=${this.seedOrigin}
+          @origin-changed=${(e: CustomEvent<{ origin: DietaryOrigin | null }>) =>
+            this.#onOriginChanged(e)}
+        ></dashboard-dietary-origin-picker>
         <dashboard-allergen-picker
           data-test="allergens"
           .declaration=${this.seedAllergens}

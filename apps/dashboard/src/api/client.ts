@@ -104,6 +104,60 @@ export interface AllergenEntry {
  */
 export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
+/**
+ * An ingredient's dietary-origin category (design §diet) — the taxonomy the recipes/catalogue folds
+ * roll up into a product's `diet`. A LOCAL copy of `@waitron/catalogue`'s `DIETARY_ORIGINS` token
+ * union (no runtime import — the #70 bundle rule, as the allergen shapes above are). `null` on an
+ * ingredient means UNCATEGORISED, which makes every product using it publish diet-PENDING rather than
+ * a false "vegan"; the server's `validateOrigin` is the `diet.invalid_origin` authority.
+ */
+export type DietaryOrigin =
+  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
+
+/**
+ * The dietary-origin taxonomy in DISPLAY order — the runtime companion of {@link DietaryOrigin}, the
+ * single dashboard-local source both the ingredient-form origin picker and the option-group manager's
+ * per-item origin overlay render from (the way `i18n/domain.ts`'s `ALLERGEN_CODES` is shared by the
+ * allergen picker and the same manager). Kept LOCAL, not imported from `@waitron/catalogue`, so its
+ * barrel — and through it `@waitron/db` and Node builtins — stays out of the browser bundle (the #70
+ * rule). The raw tokens stay the WIRE VALUES (emitted `origin` and `<option>` values); each renders
+ * its localised label at the render edge through `t("origin.<token>")`, so this stays `as const` to
+ * keep the literal keys.
+ */
+export const DIETARY_ORIGINS = [
+  "plant",
+  "meat",
+  "fish",
+  "shellfish",
+  "dairy",
+  "egg",
+  "honey",
+  "other_animal",
+] as const;
+
+/** The contains-tags a diet override may hand-assert / hand-strip — the strictly-smaller subset of
+ * {@link DietaryOrigin} the derivation surfaces as `contains`. A LOCAL copy of `@waitron/catalogue`'s
+ * `CONTAINS_TAGS` union (no runtime import — the #70 bundle rule). */
+export type ContainsTag = "meat" | "fish";
+
+/**
+ * A product's staff DIET OVERRIDE (design §diet) — the diet twin of the manual allergen overlay. A
+ * LOCAL copy of `@waitron/catalogue`'s `DietOverride` (no runtime import — the #70 rule). Each label
+ * field, when present, FORCES that diet regardless of the recipe-derived profile (`"yes"`/`"no"`); an
+ * ABSENT field defers to derivation (halal/kosher have no derivation, so their meaningful states are
+ * still absent/yes/no). `addContains`/`removeContains` hand-add / hand-strip a contains-tag over the
+ * derived set. The server's `validateDietOverride` is the `diet.*` authority; an EMPTY override (no
+ * forced labels, no contains edits) is stored as `null`, never `{}`.
+ */
+export interface DietOverride {
+  vegan?: "yes" | "no";
+  vegetarian?: "yes" | "no";
+  halal?: "yes" | "no";
+  kosher?: "yes" | "no";
+  addContains?: ContainsTag[];
+  removeContains?: ContainsTag[];
+}
+
 /** One `GET/POST /management-api/catalogues` row — mirrors catalogue's `Catalogue`. */
 export interface CatalogueSummary {
   id: string;
@@ -147,6 +201,10 @@ export interface Product {
    * `allergens` (which is the computed union of this overlay and any recipe-derived floor). The product
    * editor seeds its allergen picker from THIS, so recipe-derived allergens are never re-saved as manual. */
   manualAllergens: AllergenDeclaration;
+  /** The staff diet override ALONE (the diet twin of `manualAllergens`), or null when none. The product
+   * editor seeds its diet-override sub-form from THIS, so the recipe-derived profile is never
+   * double-counted into the override on the next save. */
+  dietOverride: DietOverride | null;
   image: string | null;
 }
 
@@ -170,6 +228,9 @@ export interface ProductInput {
   unitPrice: string;
   vatClass: VatClass;
   allergens?: Record<string, AllergenEntry>;
+  /** The staff diet override; omitted or `null` leaves the product with no override (published `diet`
+   * is the recipe-derived profile alone). An EMPTY override is sent as `null`, never `{}`. */
+  dietOverride?: DietOverride | null;
   image?: string;
   active?: boolean;
   optionGroupIds?: string[];
@@ -190,6 +251,9 @@ export interface ProductPatch {
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
   allergens?: AllergenDeclaration;
+  /** Patch the staff diet override; `null` clears it (published `diet` reverts to the recipe-derived
+   * profile), omitted leaves it unchanged. An EMPTY override is sent as `null`, never `{}`. */
+  dietOverride?: DietOverride | null;
   image?: string | null;
   active?: boolean;
   optionGroupIds?: string[];
@@ -236,6 +300,13 @@ export interface OptionGroupItem {
    * for none. A code appearing in both `addAllergens` and here is rejected server-side
    * (`allergen.add_remove_conflict`). */
   removeAllergens: string[] | null;
+  /** Dietary ORIGINS this option ADDS to the dish ("add bacon" → ["meat"]), or `null` for none — the
+   * diet twin of `addAllergens` (Task 5 folds these into the as-served diet). */
+  addOrigins: string[] | null;
+  /** Dietary origins this option REMOVES from the dish ("no cheese" → ["dairy"]), or `null` for none.
+   * Unlike allergens an origin add/remove is not a conflict (add wins the fold), so there is no
+   * disjointness check. */
+  removeOrigins: string[] | null;
 }
 
 /** The `POST /management-api/option-groups` body — mirrors catalogue's `CreateOptionGroupInput`.
@@ -280,6 +351,10 @@ export interface OptionGroupItemInput {
    * removes nothing. A code in both is rejected `allergen.add_remove_conflict`. */
   addAllergens?: AllergenDeclaration;
   removeAllergens?: string[] | null;
+  /** Dietary origins this option adds / removes (see {@link OptionGroupItem}); omitted (or `null`) adds /
+   * removes nothing. Each entry is validated against the origin taxonomy server-side. */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 /** The `PATCH /management-api/option-groups/:groupId/items/:itemId` body — mirrors catalogue's
@@ -297,6 +372,10 @@ export interface OptionGroupItemPatch {
    * `null` clears it. A code in both is rejected `allergen.add_remove_conflict`. */
   addAllergens?: AllergenDeclaration;
   removeAllergens?: string[] | null;
+  /** Dietary origins this option adds / removes (see {@link OptionGroupItem}); absent leaves each
+   * unchanged, `null` clears it. Each present side is validated against the origin taxonomy. */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 // ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────
@@ -314,21 +393,27 @@ export interface Ingredient {
   id: string;
   name: string;
   allergens: AllergenDeclaration;
+  /** The dietary-origin category, or null when uncategorised (dependent products go diet-PENDING). */
+  dietaryOrigin: DietaryOrigin | null;
   active: boolean;
 }
 
 /** The `POST /management-api/ingredients` body — mirrors recipes' `CreateIngredientInput`. `allergens`
- * omitted leaves the ingredient unreviewed (null); a supplied map is validated server-side. */
+ * omitted leaves the ingredient unreviewed (null); `dietaryOrigin` omitted leaves it uncategorised
+ * (null); a supplied map/value is validated server-side. */
 export interface IngredientInput {
   name: string;
   allergens?: Record<string, AllergenEntry>;
+  dietaryOrigin?: DietaryOrigin | null;
 }
 
 /** The `PATCH /management-api/ingredients/:id` body — mirrors recipes' `UpdateIngredientInput`. Every
- * key is optional; `allergens: null` clears the declaration back to unreviewed, `active` toggles it. */
+ * key is optional; `allergens: null` clears the declaration back to unreviewed, `dietaryOrigin: null`
+ * uncategorises the ingredient, `active` toggles it. */
 export interface IngredientPatch {
   name?: string;
   allergens?: AllergenDeclaration;
+  dietaryOrigin?: DietaryOrigin | null;
   active?: boolean;
 }
 

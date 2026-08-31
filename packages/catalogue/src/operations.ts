@@ -19,6 +19,15 @@ import {
   type ProductAllergens,
 } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
+import {
+  deriveDietProfile,
+  overlayDietProfile,
+  validateDietOverride,
+  validateOrigins,
+  type DietDerivation,
+  type DietOverride,
+  type DietProfile,
+} from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
 /**
@@ -66,6 +75,11 @@ export interface Product {
    * Exposed distinctly from `allergens` so an editor seeds its picker from the manual value without
    * double-counting recipe-derived allergens. */
   manualAllergens: ProductAllergens | null;
+  /** The staff diet override (`products.diet_override`) ALONE, or null when none — the diet twin of
+   * `manualAllergens`. Exposed distinctly from the published `diet` union so the dashboard's diet-override
+   * editor seeds its tri-state controls from the manual value without double-counting the recipe-derived
+   * profile on the next save. */
+  dietOverride: DietOverride | null;
   /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
   image: string | null;
 }
@@ -79,6 +93,10 @@ export interface CreateProductInput {
   vatClass: VatClass;
   /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
   allergens?: ProductAllergens;
+  /** The staff diet override (forced vegan/vegetarian/halal/kosher + hand contains-tags). Omitted or
+   * `null` leaves it null (no override); checked disjoint before the write (CLAUDE.md §3). At create
+   * there is no recipe, so published `diet` = the override overlaid on the empty derived profile. */
+  dietOverride?: DietOverride | null;
   /** A stored photo reference (`<sha256>.<ext>`); omitted leaves it null (no picture). */
   image?: string;
   /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
@@ -96,6 +114,9 @@ export interface UpdateProductInput {
   categoryId?: string | null;
   /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
   allergens?: ProductAllergens | null;
+  /** Patch the staff diet override. `null` clears it (published `diet` reverts to the recipe-derived
+   * profile); omitted leaves it unchanged. Checked disjoint before the write, then republished. */
+  dietOverride?: DietOverride | null;
   /** `null` clears the photo reference; omitted leaves it unchanged. */
   image?: string | null;
   /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
@@ -123,6 +144,12 @@ export interface ResolvedOptionItem {
    * dish's published allergens to compute the as-served profile. */
   addAllergens: ProductAllergens | null;
   removeAllergens: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4), the diet twin of the allergen overlay. `addOrigins`:
+   * origins this option introduces ("add bacon" → ["meat"]), null when it adds nothing;
+   * `removeOrigins`: origins it removes ("no cheese" → ["dairy"]), null when it removes nothing. Task 5
+   * folds these into the dish's as-served diet (`deriveAsServedDiet`). */
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 /**
@@ -153,6 +180,18 @@ export interface AvailableProduct {
   vatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
+  /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
+   * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`; Task 6's
+   * till menu filter reads it. Beyond `PriceableProduct` and ignored by priceBasket. */
+  diet: DietProfile | null;
+  /** The recipe-derived diet overlay (`products.dietDerivation`) — the folded ingredient origins + a
+   * `pending` flag — or null when there is no recipe. Carried so Task 5 can recompute the as-served
+   * diet from the base derivation plus the selected options' origin overlays. */
+  dietDerivation: DietDerivation | null;
+  /** The staff diet override (`products.dietOverride`) ALONE, or null when none — exposed distinctly
+   * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
+   * `manualAllergens`. */
+  dietOverride: DietOverride | null;
   /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
    * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
    * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
@@ -195,6 +234,7 @@ const PRODUCT_COLUMNS = {
   active: products.active,
   allergens: products.allergens,
   manualAllergens: products.manualAllergens,
+  dietOverride: products.dietOverride,
   image: products.image,
 };
 
@@ -211,6 +251,18 @@ interface RawProduct {
   active: boolean;
   allergens: ProductAllergens | null;
   manualAllergens: ProductAllergens | null;
+  // The `diet_override` jsonb column's `$type` is looser than {@link DietOverride} (its contains lists
+  // are `string[]`, not the `ContainsTag[]` the leaf narrows to), so `toProduct` re-attaches the narrow
+  // type the DB's write-side `validateDietOverride` already guarantees — the same cast the till read
+  // (`listAvailableProducts`) makes.
+  dietOverride: {
+    vegan?: "yes" | "no";
+    vegetarian?: "yes" | "no";
+    halal?: "yes" | "no";
+    kosher?: "yes" | "no";
+    addContains?: string[];
+    removeContains?: string[];
+  } | null;
   image: string | null;
 }
 
@@ -222,6 +274,7 @@ function toProduct(row: RawProduct): Product {
     ...row,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    dietOverride: row.dietOverride as DietOverride | null,
   };
 }
 
@@ -331,6 +384,81 @@ export async function applyRecipeDerivation(
   await republishProduct(tx, productId);
 }
 
+/**
+ * Republish `products.diet` from the two diet overlays on the row — the diet twin of
+ * {@link republishProduct}. `diet` is COMPUTED: the recipe module writes `diet_derivation` (the
+ * folded ingredient origins + a `pending` flag), staff author `diet_override`, and the published
+ * profile is `overlayDietProfile(deriveDietProfile(derivation), override)` (dietary.ts). Called after
+ * any change to either overlay — createProduct/updateProduct (override) or applyDietDerivation
+ * (derivation). A missing/absent derivation folds as "no recipe": empty origins but PENDING, so the
+ * published vegan/vegetarian read "unknown" (the CAUTIOUS posture — an unreviewed dish must never
+ * assert a positive diet claim), mirroring the allergen `republish`'s null-derivation → pending. A
+ * well-formed id that names no row is a silent no-op (the SELECT returns nothing, the UPDATE matches
+ * nothing), matching {@link republishProduct}.
+ */
+async function republishProductDiet(tx: Transaction, id: string): Promise<void> {
+  const [row] = await tx
+    .select({ deriv: products.dietDerivation, override: products.dietOverride })
+    .from(products)
+    .where(eq(products.id, id));
+  const derivation = (row?.deriv ?? { origins: [], pending: true }) as DietDerivation;
+  const derived = deriveDietProfile(derivation);
+  const published = overlayDietProfile(derived, (row?.override ?? null) as DietOverride | null);
+  await tx.update(products).set({ diet: published }).where(eq(products.id, id));
+}
+
+/**
+ * Republish BOTH `products.allergens` and `products.diet` from the row's four overlay columns in a
+ * SINGLE SELECT + a SINGLE UPDATE — the combined form of {@link republishProduct} +
+ * {@link republishProductDiet}, for the common `updateProduct` case that changed BOTH overlays. Each
+ * published value is computed EXACTLY as the two functions do (`republish(manual, derivation)` for
+ * allergens; `overlayDietProfile(deriveDietProfile(derivation), override)` for diet, with the same
+ * empty-recipe default of `{ origins: [], pending: true }`), so the pair of columns lands byte-for-byte
+ * where the two separate round trips would have left them — one query pair instead of two. A
+ * well-formed id that names no row is a silent no-op (the SELECT returns nothing, the UPDATE matches
+ * nothing), matching both single-overlay functions.
+ */
+async function republishProductOverlays(tx: Transaction, id: string): Promise<void> {
+  const [row] = await tx
+    .select({
+      manual: products.manualAllergens,
+      recipeDerivation: products.recipeDerivation,
+      deriv: products.dietDerivation,
+      override: products.dietOverride,
+    })
+    .from(products)
+    .where(eq(products.id, id));
+  const publishedAllergens = republish(row?.manual ?? null, row?.recipeDerivation ?? null);
+  const derivation = (row?.deriv ?? { origins: [], pending: true }) as DietDerivation;
+  const publishedDiet = overlayDietProfile(
+    deriveDietProfile(derivation),
+    (row?.override ?? null) as DietOverride | null,
+  );
+  await tx
+    .update(products)
+    .set({ allergens: publishedAllergens, diet: publishedDiet })
+    .where(eq(products.id, id));
+}
+
+/**
+ * Set a product's recipe-derived diet overlay and republish its diet profile — the diet twin of
+ * {@link applyRecipeDerivation}. `@waitron/recipes` calls it when a recipe or its ingredients change;
+ * `null` clears the derivation (no recipe), after which the published profile reverts to the override
+ * overlaid on the empty, PENDING derived profile — vegan/vegetarian read "unknown" unless the override
+ * forces them (the cautious posture: an unreviewed dish asserts no positive diet claim).
+ */
+export async function applyDietDerivation(
+  tx: Transaction,
+  productId: string,
+  derivation: DietDerivation | null,
+): Promise<void> {
+  await tx
+    .update(products)
+    .set({ dietDerivation: derivation, updatedAt: sql`now()` })
+    .where(eq(products.id, productId));
+  await republishProductDiet(tx, productId);
+}
+
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
@@ -338,6 +466,16 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // published `allergens` is `republish(manual, null)` — which is exactly `manual` (or null when
   // unreviewed), preserving today's round-trip behaviour.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
+  // The diet override is the staff overlay; at create there is no recipe (no derivation), so the
+  // published `diet` is the override overlaid on the EMPTY, PENDING derived profile — the override's
+  // own labels win, and any label it does not set reads "unknown" (the CAUTIOUS posture: an
+  // unreviewed dish never asserts a positive vegan/vegetarian claim, mirroring the allergen twin's
+  // pending). Checked disjoint before the write (defence-in-depth, never trust the caller —
+  // CLAUDE.md §3). The recipe fold overwrites `diet` once a recipe is set (applyDietDerivation →
+  // republishProductDiet).
+  // Validate the untrusted override (labels ∈ {yes,no}, contains-tags ∈ {meat,fish}, disjoint) before
+  // the write — the diet twin of `validateAllergens`, defence-in-depth at the core (CLAUDE.md §3).
+  const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const [row] = await tx
     .insert(products)
     .values({
@@ -351,6 +489,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       active: input.active ?? true,
       manualAllergens: allergens,
       allergens: republish(allergens, null),
+      dietOverride,
+      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
       image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
@@ -377,17 +517,33 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, ...rest } = patch;
+  const { allergens, dietOverride, ...rest } = patch;
   if (allergens != null) validateAllergens(allergens);
+  // The diet override is split out like `allergens`: a supplied override is checked disjoint before
+  // the write (`null`/`undefined` skip it), only a non-`undefined` value reaches the `diet_override`
+  // column, and `diet` is republished only when the override was in the patch — an unrelated edit
+  // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
+  if (dietOverride !== undefined) validateDietOverride(dietOverride);
   await tx
     .update(products)
     .set({
       ...rest,
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
+      ...(dietOverride !== undefined ? { dietOverride } : {}),
       updatedAt: sql`now()`,
     })
     .where(eq(products.id, id));
-  if (allergens !== undefined) await republishProduct(tx, id);
+  // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
+  // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
+  // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
+  // the untouched column is never even re-read.
+  if (allergens !== undefined && dietOverride !== undefined) {
+    await republishProductOverlays(tx, id);
+  } else if (allergens !== undefined) {
+    await republishProduct(tx, id);
+  } else if (dietOverride !== undefined) {
+    await republishProductDiet(tx, id);
+  }
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
@@ -588,6 +744,9 @@ export async function listAvailableProducts(
       vatClass: products.vatClass,
       category: categories.name,
       allergens: products.allergens,
+      diet: products.diet,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
       courseId: products.courseId,
       catalogueId: catalogues.id,
       catalogueName: catalogues.name,
@@ -632,6 +791,8 @@ export async function listAvailableProducts(
         maxQuantity: optionGroupItems.maxQuantity,
         addAllergens: optionGroupItems.addAllergens,
         removeAllergens: optionGroupItems.removeAllergens,
+        addOrigins: optionGroupItems.addOrigins,
+        removeOrigins: optionGroupItems.removeOrigins,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -680,6 +841,8 @@ export async function listAvailableProducts(
           maxQuantity: r.maxQuantity!,
           addAllergens: r.addAllergens as ProductAllergens | null,
           removeAllergens: r.removeAllergens as string[] | null,
+          addOrigins: r.addOrigins as string[] | null,
+          removeOrigins: r.removeOrigins as string[] | null,
         });
       }
     }
@@ -694,6 +857,9 @@ export async function listAvailableProducts(
     vatClass: row.vatClass as VatClass,
     category: row.category,
     allergens: row.allergens,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
     courseId: row.courseId,
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
@@ -739,6 +905,10 @@ export interface OptionGroupItem {
   /** The per-option allergen overlay (Task 4): codes this option adds/removes, each null when empty. */
   addAllergens: ProductAllergens | null;
   removeAllergens: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4), the diet twin: origins this option adds/removes, each
+   * null when empty. */
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 export interface CreateOptionGroupInput {
@@ -778,6 +948,10 @@ export interface CreateOptionGroupItemInput {
    * Validated and checked disjoint before the write — never trusted from the caller (CLAUDE.md §3). */
   addAllergens?: ProductAllergens | null;
   removeAllergens?: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4). Omitted leaves the column NULL; `null` is the same. Each
+   * entry is validated against the origin taxonomy before the write (`validateOrigins`). */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 export interface UpdateOptionGroupItemInput {
@@ -792,6 +966,11 @@ export interface UpdateOptionGroupItemInput {
    * enforced on the RESULTING row (the current other side is read when only one is patched). */
   addAllergens?: ProductAllergens | null;
   removeAllergens?: string[] | null;
+  /** Patch the ORIGIN overlay. Omitted leaves the column unchanged; `null` clears it. Each present
+   * side is validated against the origin taxonomy (`validateOrigins`); an origin add/remove is not a
+   * conflict (add wins the fold), so no disjointness check — unlike the allergen overlay. */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 const OPTION_GROUP_COLUMNS = {
@@ -815,6 +994,8 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   maxQuantity: optionGroupItems.maxQuantity,
   addAllergens: optionGroupItems.addAllergens,
   removeAllergens: optionGroupItems.removeAllergens,
+  addOrigins: optionGroupItems.addOrigins,
+  removeOrigins: optionGroupItems.removeOrigins,
 };
 
 /**
@@ -884,6 +1065,32 @@ function normalizeOverlay(
   const removeNorm = remove && remove.length > 0 ? remove : null;
   assertAllergenOverlayDisjoint(addNorm, removeNorm);
   return { addAllergens: addNorm, removeAllergens: removeNorm };
+}
+
+/**
+ * Validate + normalise the per-option ORIGIN overlay patch (Task 4) — the diet twin of
+ * {@link normalizeOverlay}, but simpler: origins carry NO disjointness rule (an add and a remove of
+ * the same origin is not a contradiction — the as-served fold applies removes then adds, so add wins),
+ * so each side is normalised INDEPENDENTLY and there is no current-row read. Only the sides the caller
+ * touched appear in the result, so an UPDATE writes exactly the patched columns (Drizzle `.set()`
+ * ignores absent keys) and a CREATE lets the untouched columns default to NULL. A present side is
+ * validated against the origin taxonomy (`validateOrigins`), then an empty list collapses to NULL so
+ * the column has a single "no overlay" representation (mirroring the allergen overlay's collapse).
+ */
+function normalizeOriginOverlay(input: {
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
+}): { addOrigins?: string[] | null; removeOrigins?: string[] | null } {
+  // A present side normalises identically: null/empty collapse to null, otherwise the validated
+  // non-empty list. Called only for a side the caller supplied (not undefined).
+  const side = (v: string[] | null): string[] | null => {
+    const validated = v == null ? null : validateOrigins(v);
+    return validated && validated.length > 0 ? validated : null;
+  };
+  const out: { addOrigins?: string[] | null; removeOrigins?: string[] | null } = {};
+  if (input.addOrigins !== undefined) out.addOrigins = side(input.addOrigins);
+  if (input.removeOrigins !== undefined) out.removeOrigins = side(input.removeOrigins);
+  return out;
 }
 
 export async function createOptionGroup(
@@ -969,6 +1176,8 @@ export async function createOptionGroupItem(
       ...(input.active === undefined ? {} : { active: input.active }),
       // Both overlay columns default to NULL when the caller touched neither; validated + disjoint.
       ...(normalizeOverlay(input) ?? {}),
+      // The origin overlay columns default to NULL likewise; validated against the taxonomy.
+      ...normalizeOriginOverlay(input),
     })
     .returning(OPTION_GROUP_ITEM_COLUMNS);
   return {
@@ -976,6 +1185,8 @@ export async function createOptionGroupItem(
     vatClass: row!.vatClass as VatClass | null,
     addAllergens: row!.addAllergens as ProductAllergens | null,
     removeAllergens: row!.removeAllergens as string[] | null,
+    addOrigins: row!.addOrigins as string[] | null,
+    removeOrigins: row!.removeOrigins as string[] | null,
   };
 }
 
@@ -994,6 +1205,8 @@ export async function listOptionGroupItems(
     vatClass: r.vatClass as VatClass | null,
     addAllergens: r.addAllergens as ProductAllergens | null,
     removeAllergens: r.removeAllergens as string[] | null,
+    addOrigins: r.addOrigins as string[] | null,
+    removeOrigins: r.removeOrigins as string[] | null,
   }));
 }
 
@@ -1029,6 +1242,9 @@ export async function updateOptionGroupItem(
       }),
     );
   }
+  // The origin overlay is independent (no disjointness → no current-row read): validate + normalise
+  // each patched side and write exactly those columns.
+  Object.assign(write, normalizeOriginOverlay(patch));
   await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 

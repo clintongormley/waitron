@@ -63,6 +63,8 @@ const optionGroupItems: OptionGroupItem[] = [
     maxQuantity: 1,
     addAllergens: null,
     removeAllergens: null,
+    addOrigins: null,
+    removeOrigins: null,
   },
 ];
 
@@ -77,6 +79,7 @@ const products: Product[] = [
     vatClass: "reduced",
     active: true,
     allergens: null,
+    dietOverride: null,
     manualAllergens: null,
     image: null,
   },
@@ -92,6 +95,9 @@ function createDetail(overrides: Record<string, unknown> = {}) {
     vatClass: "reduced" as const,
     pricingUnit: "each" as const,
     active: true,
+    // The form ALWAYS emits dietOverride (null when the sub-form is all-auto) — the screen threads it
+    // straight into the ProductInput, so the base detail carries it too.
+    dietOverride: null,
     ...overrides,
   };
 }
@@ -206,6 +212,7 @@ describe("catalogue-screen", () => {
       vatClass: "reduced",
       pricingUnit: "each",
       active: true,
+      dietOverride: null,
     });
     expect(api.updateProduct).not.toHaveBeenCalled();
     expect(api.listProducts).toHaveBeenCalledTimes(2); // reloaded
@@ -234,6 +241,7 @@ describe("catalogue-screen", () => {
       vatClass: "reduced",
       pricingUnit: "each",
       active: false,
+      dietOverride: null,
     });
     expect(api.updateProduct).not.toHaveBeenCalled();
     expect(api.listProducts).toHaveBeenCalledTimes(2);
@@ -264,6 +272,7 @@ describe("catalogue-screen", () => {
       vatClass: "reduced",
       pricingUnit: "each",
       active: true,
+      dietOverride: null,
       allergens: { gluten: { presence: "contains", source: "trigo" } },
       image: "sha.png",
     });
@@ -849,6 +858,25 @@ describe("catalogue-screen", () => {
 
     expect(api.createProduct).toHaveBeenCalledWith(
       expect.objectContaining({ optionGroupIds: ["og1"] }),
+    );
+  });
+
+  it("threads the form's dietOverride into createProduct (Task 8b)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    await el.updateComplete;
+
+    emit(
+      form(el),
+      "create-product",
+      createDetail({ dietOverride: { vegan: "yes", addContains: ["meat"] } }),
+    );
+    await flush(el);
+
+    expect(api.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ dietOverride: { vegan: "yes", addContains: ["meat"] } }),
     );
   });
 });

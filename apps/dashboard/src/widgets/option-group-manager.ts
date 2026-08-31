@@ -9,6 +9,7 @@ import "./allergen-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
+import { DIETARY_ORIGINS } from "../api/client.js";
 import type { AllergenDeclaration, OptionGroup, OptionGroupItem, VatClass } from "../api/client.js";
 
 /** The VAT bands the item VAT-override select offers — mirrors `product-form.ts`'s `VAT_CLASSES` (the
@@ -348,6 +349,25 @@ export class OptionGroupManager extends LitElement {
     this.#updateItem(groupId, itemId, { removeAllergens: selected.length ? selected : null });
   }
 
+  /** An item's ADD-ORIGINS or REMOVE-ORIGINS multiselect changed (Task 8b — the diet twin of the
+   * allergen overlay), parametrised on which field it targets: gather the picked origin tokens and
+   * emit them, sending `null` (not `[]`) for an empty pick so "adds/removes nothing" clears cleanly.
+   * Native `change` is `composed: false`, so `stopPropagation` is defensive consistency, mirroring
+   * `#onItemRemoveChange` above. */
+  #onItemOriginsChange(
+    groupId: string,
+    itemId: string,
+    field: "addOrigins" | "removeOrigins",
+    event: Event,
+  ): void {
+    event.stopPropagation();
+    const selected = Array.from(
+      (event.target as HTMLSelectElement).selectedOptions,
+      (o) => o.value,
+    );
+    this.#updateItem(groupId, itemId, { [field]: selected.length ? selected : null });
+  }
+
   #renderItemRow(groupId: string, item: OptionGroupItem) {
     return html`
       <wt-card data-test=${`item-row-${item.id}`}>
@@ -403,6 +423,43 @@ export class OptionGroupManager extends LitElement {
                     .selected=${(item.removeAllergens ?? []).includes(code)}
                   >
                     ${allergenName(code)}
+                  </option>`,
+              )}
+            </select>
+          </label>
+          <label class="adds">
+            ${t("option_group.adds_origins")}
+            <select
+              multiple
+              data-test=${`item-add-origins-${item.id}`}
+              @change=${(e: Event) => this.#onItemOriginsChange(groupId, item.id, "addOrigins", e)}
+            >
+              ${DIETARY_ORIGINS.map(
+                (origin) =>
+                  html`<option
+                    value=${origin}
+                    .selected=${(item.addOrigins ?? []).includes(origin)}
+                  >
+                    ${t(`origin.${origin}`)}
+                  </option>`,
+              )}
+            </select>
+          </label>
+          <label class="removes">
+            ${t("option_group.removes_origins")}
+            <select
+              multiple
+              data-test=${`item-remove-origins-${item.id}`}
+              @change=${(e: Event) =>
+                this.#onItemOriginsChange(groupId, item.id, "removeOrigins", e)}
+            >
+              ${DIETARY_ORIGINS.map(
+                (origin) =>
+                  html`<option
+                    value=${origin}
+                    .selected=${(item.removeOrigins ?? []).includes(origin)}
+                  >
+                    ${t(`origin.${origin}`)}
                   </option>`,
               )}
             </select>

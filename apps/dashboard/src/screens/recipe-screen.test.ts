@@ -18,9 +18,10 @@ const ingredients: Ingredient[] = [
     id: "i1",
     name: "Harina de trigo",
     allergens: { gluten: { presence: "contains" } },
+    dietaryOrigin: null,
     active: true,
   },
-  { id: "i2", name: "Sal", allergens: {}, active: true },
+  { id: "i2", name: "Sal", allergens: {}, dietaryOrigin: null, active: true },
 ];
 
 const catalogues: CatalogueSummary[] = [
@@ -39,6 +40,7 @@ const products: Product[] = [
     vatClass: "reduced",
     active: true,
     allergens: null,
+    dietOverride: null,
     manualAllergens: null,
     image: null,
   },

@@ -4,6 +4,7 @@ import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
 import type {
   StationQueueCourse,
@@ -92,6 +93,7 @@ function courseOrder(course: StationQueueCourse | null): number {
 export class TillStationQueue extends LitElement {
   static override styles = [
     baseStyles,
+    dietBadgeStyles,
     css`
       :host {
         display: block;
@@ -263,6 +265,13 @@ export class TillStationQueue extends LitElement {
       .allergen-pending {
         color: var(--wt-color-warning-text, var(--wt-color-text));
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* The as-served DIET & contains row (dietary-classification, Task 7), indented like the allergen
+         row beneath the dish. The badge/chip look comes from the shared dietBadgeStyles; only the indent
+         is station-specific. */
+      .line-diet {
+        padding-left: var(--wt-space-3);
       }
 
       .line.state-queued {
@@ -760,11 +769,12 @@ export class TillStationQueue extends LitElement {
     </span>`;
     const modifiers = this.#modifiers(item);
     const allergens = this.#allergens(item);
+    const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     if (held || NEXT[item.state] === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${modifiers}${allergens}</span
+        >${main}${modifiers}${allergens}${diet}</span
       >`;
     }
     return html`<button
@@ -773,7 +783,7 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${main}${modifiers}${allergens}
+      ${main}${modifiers}${allergens}${diet}
     </button>`;
   }
 

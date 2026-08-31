@@ -243,6 +243,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: null,
       removeAllergens: ["gluten"],
+      addOrigins: null,
+      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -285,6 +287,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
       removeAllergens: null,
+      addOrigins: null,
+      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -352,6 +356,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
       removeAllergens: null,
+      addOrigins: null,
+      removeOrigins: null,
     };
     const tostada: TillProduct = {
       ...cafe,
@@ -385,6 +391,178 @@ describe("till-basket", () => {
     expect(asServed!.textContent).toMatch(/gluten/i);
     expect(asServed!.textContent).not.toMatch(/milk|leche/i);
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+  });
+
+  // ── As-served diet & contains badges (dietary-classification, Task 7) ────────────────────────
+  // The basket computes each line's AS-SERVED DIET profile CLIENT-side (`asServedDiet`, the diet twin
+  // of `asServedAllergens`) and renders vegan/vegetarian/halal/kosher badges + contains chips beside
+  // the allergen chips — with a NEUTRAL "not reviewed" note (never a positive claim) when pending.
+
+  it("shows a vegan badge for a plant-only reviewed dish", async () => {
+    const salad: TillProduct = {
+      ...cafe,
+      id: "salad",
+      descriptions: { es: "Ensalada" },
+      dietDerivation: { origins: ["plant"], pending: false },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(salad, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet='vegan']")).not.toBeNull();
+    expect(diet!.querySelector("[data-diet='vegetarian']")).not.toBeNull();
+    expect(diet!.textContent).toContain(t("diet.vegan"));
+    // A reviewed dish makes no "not reviewed" claim.
+    expect(diet!.textContent).not.toMatch(/review|revisi/i);
+  });
+
+  it("shows a contains-meat chip and no positive badge for a meat dish", async () => {
+    const chuleta: TillProduct = {
+      ...cafe,
+      id: "chuleta",
+      descriptions: { es: "Chuleta" },
+      dietDerivation: { origins: ["meat"], pending: false },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(chuleta, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-contains='meat']")).not.toBeNull();
+    expect(diet!.textContent).toContain(t("diet.contains.meat"));
+    // A meat dish is neither vegan nor vegetarian — no positive badge.
+    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+    expect(diet!.querySelector("[data-diet='vegetarian']")).toBeNull();
+  });
+
+  it("shows the NEUTRAL 'not reviewed' state for an unreviewed (pending) diet, never a positive claim", async () => {
+    const mystery: TillProduct = {
+      ...cafe,
+      id: "mystery",
+      descriptions: { es: "Plato del día" },
+      dietDerivation: { origins: [], pending: true },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(mystery, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(diet!.textContent).toMatch(/review|revisi/i);
+    // Pending must NOT read as vegan/vegetarian.
+    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+    expect(diet!.querySelector("[data-diet='vegetarian']")).toBeNull();
+  });
+
+  it("renders NO diet row for a product carrying no diet data (avoids noise)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // no dietDerivation / dietOverride
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
+  });
+
+  it("re-derives the as-served diet from a meat-adding modifier (contains meat)", async () => {
+    const addBacon: TillOptionItem = {
+      id: "opt-bacon",
+      name: { es: "Beicon" },
+      priceDelta: "1.00",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: null,
+      removeAllergens: null,
+      addOrigins: ["meat"],
+      removeOrigins: null,
+    };
+    const salad: TillProduct = {
+      ...cafe,
+      id: "salad-bacon",
+      descriptions: { es: "Ensalada" },
+      dietDerivation: { origins: ["plant"], pending: false },
+      optionGroups: [
+        {
+          id: "grp-extras",
+          name: { es: "Extras" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [addBacon],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(salad, "1", [
+      { optionGroupItemId: "opt-bacon", name: { es: "Beicon" }, priceDelta: "1.00" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    // Adding a meat origin drops vegan and adds the contains-meat chip.
+    expect(diet!.querySelector("[data-diet-contains='meat']")).not.toBeNull();
+    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+  });
+
+  it("shows halal + kosher badges from a staff override", async () => {
+    const kebab: TillProduct = {
+      ...cafe,
+      id: "kebab",
+      descriptions: { es: "Kebab" },
+      dietDerivation: { origins: ["meat"], pending: false },
+      dietOverride: { halal: "yes", kosher: "yes" },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(kebab, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet='halal']")).not.toBeNull();
+    expect(diet!.querySelector("[data-diet='kosher']")).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-contains='meat']")).not.toBeNull();
+  });
+
+  it("shows the 'not reviewed' note when an override resolves vegan but vegetarian is still unknown (Copilot)", async () => {
+    // A pending (unreviewed) derivation with a staff override that resolves ONLY vegan
+    // (`{ vegan: "no" }`) leaves vegetarian derived-unknown. Checking `diet.vegan === "unknown"`
+    // alone would miss this — vegan already reads "no" — and with no positives/contains the row
+    // would render nothing at all, silently dropping the "not reviewed" note vegetarian still needs.
+    const mystery: TillProduct = {
+      ...cafe,
+      id: "mystery-partial-override",
+      descriptions: { es: "Plato del día" },
+      dietDerivation: { origins: [], pending: true },
+      dietOverride: { vegan: "no" },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(mystery, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(diet!.textContent).toMatch(/review|revisi/i);
+    // Still no positive claim — the resolved "no" and the still-unknown vegetarian both stay silent.
+    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+    expect(diet!.querySelector("[data-diet='vegetarian']")).toBeNull();
+  });
+
+  it("renders NO diet row for a reviewed dish that is neither vegan/vegetarian nor tagged (nothing to assert)", async () => {
+    const gelatin: TillProduct = {
+      ...cafe,
+      id: "gelatin",
+      descriptions: { es: "Gelatina" },
+      // Reviewed (not pending), an animal origin that is neither meat/fish nor vegetarian-ok → vegan
+      // "no", vegetarian "no", contains [] — the helper has nothing positive to show, so no row.
+      dietDerivation: { origins: ["other_animal"], pending: false },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(gelatin, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
   });
 
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {

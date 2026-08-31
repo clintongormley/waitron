@@ -337,6 +337,9 @@ export class CatalogueScreen extends LitElement {
       };
       if (detail.allergens !== undefined) input.allergens = detail.allergens;
       if (detail.image !== undefined) input.image = detail.image;
+      // The diet override is ALWAYS carried (null when empty) — unlike allergens there is no
+      // create-vs-patch asymmetry, `dietOverride: null` is legal on create (leaves no override).
+      input.dietOverride = detail.dietOverride;
       await this.api.createProduct(input);
       this.formOpen = false;
       await this.#reloadProducts();

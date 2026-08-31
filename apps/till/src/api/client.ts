@@ -136,6 +136,46 @@ export interface VatBreakdownEntry {
 }
 
 /**
+ * The dietary shapes (dietary-classification, Task 6), LOCAL redefinitions of catalogue's `dietary.ts`
+ * types — deliberately NOT imported from `@waitron/catalogue`, the same bundle-decoupling rationale as
+ * every other type in this file (see the file header). They are structurally identical to the shared
+ * shapes, so a value the deep-imported `deriveAsServedDiet` returns/accepts is assignable across the
+ * boundary. `DietaryOrigin` is the ingredient-origin taxonomy (`plant`, `meat`, …); `ContainsTag` is
+ * the meat/fish subset the "no-meat"/"no-fish" filters read; `DietLabel` is a cautious tri-state
+ * (`"unknown"` when the base recipe is unreviewed — never a positive claim).
+ */
+export type DietaryOrigin =
+  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
+export type ContainsTag = "meat" | "fish";
+export type DietLabel = "yes" | "no" | "unknown";
+
+/** The recipe-derived diet basis (`products.dietDerivation`): the folded ingredient origins plus a
+ * `pending` flag that is true while the recipe is unreviewed (holding vegan/vegetarian at "unknown"). */
+export interface DietDerivation {
+  origins: DietaryOrigin[];
+  pending: boolean;
+}
+/** A staff diet OVERRIDE (`products.dietOverride`): explicit label wins over the derivation, plus
+ * halal/kosher (which are never derived) and contains-tag add/remove. Absent fields don't override. */
+export interface DietOverride {
+  vegan?: "yes" | "no";
+  vegetarian?: "yes" | "no";
+  halal?: "yes" | "no";
+  kosher?: "yes" | "no";
+  addContains?: ContainsTag[];
+  removeContains?: ContainsTag[];
+}
+/** The PUBLISHED diet profile of a product (`products.diet`) — the derivation folded with the override.
+ * `contains` lists the meat/fish tags present; halal/kosher appear only when the override set them. */
+export interface DietProfile {
+  vegan: DietLabel;
+  vegetarian: DietLabel;
+  contains: ContainsTag[];
+  halal?: "yes" | "no";
+  kosher?: "yes" | "no";
+}
+
+/**
  * One selectable choice inside a {@link TillOptionGroup} (ordering modifiers, Task 3). A LOCAL mirror
  * of catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
  * bundle-decoupling rationale as every other type in this file. `priceDelta` is the GROSS
@@ -170,6 +210,17 @@ export interface TillOptionItem {
    */
   addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
   removeAllergens: string[] | null;
+  /**
+   * The option's per-item ORIGIN overlay (dietary-classification, Task 6) — the diet twin of
+   * `addAllergens`/`removeAllergens`, carried so the basket can compute each dish line's AS-SERVED diet
+   * CLIENT-side (`deriveAsServedDiet`) exactly as it does the as-served allergens. `addOrigins`: the
+   * ingredient origins this option CONTRIBUTES ("add bacon" → `["meat"]`), null when it adds nothing.
+   * `removeOrigins`: the origins it STRIPS ("no cheese" → `["dairy"]`), null when it strips nothing.
+   * Carried as `string[]` (the wire shape from catalogue's `listAvailableProducts`); `asServedDiet`
+   * narrows to the origin union at the fold boundary, as the server's `deriveAsServedDiet` call does.
+   */
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 /**
@@ -235,6 +286,22 @@ export interface TillProduct {
    * imported (the bundle rule).
    */
   optionGroups?: TillOptionGroup[];
+  /**
+   * The product's PUBLISHED diet profile (dietary-classification, Task 6) — catalogue's `products.diet`,
+   * the derivation folded with any staff override. The menu diet filter (`filterProductsByDiet`) reads
+   * it; the diet screen renders it. OPTIONAL/nullable for the same fixture reason as {@link courseId}: a
+   * `null`/absent value reads as an unreviewed dish (never vegan/vegetarian), so those filters exclude it.
+   * Mirrors catalogue's `AvailableProduct.diet`, which `GET /api/products` always sends. NOT imported.
+   */
+  diet?: DietProfile | null;
+  /** The recipe-derived diet basis (`products.dietDerivation`) — origins + `pending`, carried so the
+   * basket can recompute the AS-SERVED diet client-side. Null/absent = no recipe (folds as pending).
+   * Mirrors `AvailableProduct.dietDerivation`; OPTIONAL for the fixture reason above. NOT imported. */
+  dietDerivation?: DietDerivation | null;
+  /** The staff diet OVERRIDE ALONE (`products.dietOverride`), re-applied over the as-served derivation.
+   * Null/absent = no override. Mirrors `AvailableProduct.dietOverride`; OPTIONAL for the fixture reason
+   * above. NOT imported. */
+  dietOverride?: DietOverride | null;
 }
 
 /**
@@ -479,6 +546,12 @@ export interface StationQueueItem {
    *  payload or a pre-Task-8 fixture, treated as "no profile attached" (nothing rendered) — a plain dish
    *  reads exactly as before. */
   asServed?: AsServedAllergens;
+  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the diet twin of
+   *  {@link asServed}: the recipe-derived origins folded with the options' overlays, the staff override
+   *  re-applied. The KDS renders vegan/vegetarian/halal/kosher badges + contains chips beside the
+   *  allergen chips, and a neutral "not reviewed" note while `vegan === "unknown"` (pending). Optional/
+   *  absent (⇒ nothing rendered) on an older payload or a pre-diet fixture. */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
    *  {@link asServed}) — the KDS renders each as a struck "NO <allergen>" callout, the allergen name
    *  localised like the "contains" chips ("gluten-free bun" removed gluten). Optional/absent (⇒ empty)
@@ -608,6 +681,10 @@ export interface ExpoItem {
    *  "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on
    *  an older payload or a plain-dish fixture. */
   asServed?: AsServedAllergens;
+  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the same fold
+   *  {@link StationQueueItem.asServedDiet} carries; the pass renders diet badges + contains chips and a
+   *  neutral "not reviewed" note when pending. Optional/absent (⇒ nothing rendered). */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed};
    *  the pass renders each as a struck, localised "NO <allergen>" callout. Optional/absent (⇒ empty). */
   removed?: string[];

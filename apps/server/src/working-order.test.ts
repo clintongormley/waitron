@@ -18,6 +18,7 @@ import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
+  applyDietDerivation,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -873,7 +874,14 @@ async function addOption(
   name: string,
   // The allergen OVERLAY this option carries as served (Task 8): the codes it adds and the codes it
   // removes. Omitted for a plain option (the modifier sub-item tests), so both columns stay null.
-  overlay?: { add?: AllergenMap; remove?: string[] },
+  // `addOrigins`/`removeOrigins` are the DIET twin (Task 5): the dietary origins the option adds and
+  // removes, folded into the dish's as-served diet.
+  overlay?: {
+    add?: AllergenMap;
+    remove?: string[];
+    addOrigins?: string[];
+    removeOrigins?: string[];
+  },
 ): Promise<string> {
   const [group] = await tx
     .insert(optionGroups)
@@ -897,6 +905,8 @@ async function addOption(
       sort: 0,
       addAllergens: overlay?.add ?? null,
       removeAllergens: overlay?.remove ?? null,
+      addOrigins: overlay?.addOrigins ?? null,
+      removeOrigins: overlay?.removeOrigins ?? null,
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
@@ -1474,6 +1484,77 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       });
       expect(item.asServed.pending).toBe(false);
       expect(item.removed).toEqual([]);
+    });
+  });
+
+  // Task 5 — the DIET twin of the as-served allergen fold. A creamy dish (dairy origin ⇒ not vegan)
+  // with a dairy-free swap that REMOVES the only dairy origin reads vegan as served, on both the
+  // station queue and the expo pass. The safe direction is respected: the remove is applied over a
+  // NON-pending derivation, so the "yes" is honest (a remove over a pending base stays "unknown").
+  it("attaches an as-served diet profile with the removed origin making the dish vegan", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        descriptions: { [LOCALE]: "Crema" },
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "general",
+      });
+      // Recipe-derived: the only origin is dairy (reviewed, not pending) ⇒ vegetarian but not vegan.
+      await applyDietDerivation(tx, dish.id, { origins: ["dairy"], pending: false });
+      const dairyFree = await addOption(tx, dish.id, "Sin lácteos", { removeOrigins: ["dairy"] });
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: dairyFree }] },
+      ]);
+      const [parent] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            sql`${workingOrderLines.parentLineId} is null`,
+          ),
+        );
+      const parentLineId = parent!.id;
+
+      // Station queue carries the as-served diet — the removed dairy origin makes the plate vegan.
+      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const item = queue
+        .flatMap((g) => g.items)
+        .find((i) => i.workingOrderLineId === parentLineId)!;
+      expect(item.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+
+      // The expo read attaches the same profile.
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.asServedDiet!.vegan).toBe("yes");
+      expect(expoItem.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+    });
+  });
+
+  // Task 5 — the CAUTIOUS negative control. A dish with NO recipe (null `diet_derivation`) must NOT
+  // read a positive vegan/vegetarian: the fold defaults a null derivation to empty-but-PENDING, so the
+  // as-served vegan/vegetarian read "unknown" on BOTH reads. An unreviewed plate asserts no diet claim.
+  it("reads an as-served diet of unknown for a no-recipe dish (cautious posture)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, {}); // no recipe → null diet_derivation
+      await placeOrderWith(tx, cfg, [line(dish)]);
+
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.asServedDiet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
+
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.asServedDiet).toEqual({
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
+      });
     });
   });
 

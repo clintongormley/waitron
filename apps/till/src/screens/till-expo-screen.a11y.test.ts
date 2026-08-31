@@ -55,6 +55,9 @@ const queue: ExpoOrder[] = [
             // strike-through swept for contrast here.
             asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
             removed: ["gluten"],
+            // As-served diet (dietary-classification, Task 7): a vegetarian+halal success-toned badge
+            // pair, swept for contrast here alongside the allergen chips.
+            asServedDiet: { vegan: "no", vegetarian: "yes", contains: [], halal: "yes" },
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",
@@ -97,6 +100,8 @@ const queue: ExpoOrder[] = [
             state: "queued",
             firedAt: null,
             awayAt: null,
+            // A contains-meat chip + the NEUTRAL "not reviewed" diet note, swept here (a held/greyed item).
+            asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: ["meat"] },
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",

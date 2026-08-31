@@ -23,10 +23,12 @@ export const INGREDIENT_COLUMNS: {
   id: typeof ingredients.id;
   name: typeof ingredients.name;
   allergens: typeof ingredients.allergens;
+  dietaryOrigin: typeof ingredients.dietaryOrigin;
   active: typeof ingredients.active;
 } = {
   id: ingredients.id,
   name: ingredients.name,
   allergens: ingredients.allergens,
+  dietaryOrigin: ingredients.dietaryOrigin,
   active: ingredients.active,
 };
