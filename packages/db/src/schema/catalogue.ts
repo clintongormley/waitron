@@ -196,6 +196,15 @@ export const optionGroupItems = pgTable(
     // column existed, its child line counted at the dish quantity alone. A value of N lets a diner
     // take the option up to ×N per dish; the pricer multiplies the dish quantity by the chosen count.
     maxQuantity: integer("max_quantity").notNull().default(1),
+    // The per-option ALLERGEN OVERLAY (EU 1169/2011 Annex II), applied to the dish's published
+    // allergens to produce the as-served profile (@waitron/catalogue deriveAsServedAllergens). Both
+    // NULLABLE and additive: option_group_items' existing FORCE RLS + policy + app_user grants (0082)
+    // cover them with no change (the same way products' allergen overlays ride on products' policy).
+    // `add_allergens`: codes this option ADDS ("extra cheese" → milk). NULL = adds nothing.
+    addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
+    // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
+    // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
+    removeAllergens: jsonb("remove_allergens").$type<string[]>(),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },

@@ -4,7 +4,7 @@ import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js"
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
-import { catalogues, optionGroups } from "./catalogue.js";
+import { catalogues, optionGroupItems, optionGroups } from "./catalogue.js";
 import { tenants } from "./tenants.js";
 
 // Real Postgres, not PGlite, and not describeEachTarget: this suite proves the RLS-needs-nothing
@@ -112,7 +112,7 @@ describe("option_group_items under real row-level security", () => {
     // Insert an item under A's GUC as app_user (the table-level grant + the policy's WITH CHECK), then
     // read every visible item back (the grant + the policy's USING). Raw SQL so the RED phase fails on
     // `relation "option_group_items" does not exist` rather than a drizzle-schema mismatch.
-    const rows = await withTenant(optionSuite.admin, OG_TENANT_A, async (tx) => {
+    const { rows, item } = await withTenant(optionSuite.admin, OG_TENANT_A, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into option_group_items (tenant_id, group_id, name, price_delta)
@@ -120,10 +120,25 @@ describe("option_group_items under real row-level security", () => {
       const result = await tx.execute<{ tenant_id: string }>(
         sql`select tenant_id from option_group_items`,
       );
-      return result.rows;
+      // The allergen-overlay round-trip: a nullable add_allergens + a non-null remove_allergens
+      // string[], written and read back as the app role. Proves the two additive JSONB columns ride
+      // on option_group_items' existing grant + WITH CHECK + USING with no RLS change (design §4).
+      const [overlayItem] = await tx
+        .insert(optionGroupItems)
+        .values({
+          tenantId: OG_TENANT_A,
+          groupId: groupA,
+          name: { en: "Gluten-free bun" },
+          addAllergens: null,
+          removeAllergens: ["gluten"],
+        })
+        .returning();
+      return { rows: result.rows, item: overlayItem };
     });
     expect(rows.length).toBe(1);
     expect(rows.every((r) => r.tenant_id === OG_TENANT_A)).toBe(true);
+    expect(item!.removeAllergens).toEqual(["gluten"]);
+    expect(item!.addAllergens).toBeNull();
   });
 
   it("hides another tenant's option_group_items under the isolation policy", async () => {
