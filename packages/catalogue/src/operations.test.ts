@@ -639,6 +639,37 @@ describe("catalogue operations", () => {
     expect(seen.manualAllergens).toEqual({ gluten: { presence: "contains" } });
   });
 
+  // The management read exposes the staff diet OVERRIDE distinctly from the published `diet` union, so
+  // the dashboard's diet-override editor (Task 8b) seeds its tri-state controls from the manual value —
+  // the diet twin of `manualAllergens` above. A product with no override reads `dietOverride: null`.
+  it("exposes diet_override on the management product read", async () => {
+    const [withOverride, without] = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const forced = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "falafel" },
+        pricingUnit: "each",
+        unitPrice: "4.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
+      });
+      const plain = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "plain" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
+      const rows = await listProducts(tx, cat.id);
+      return [rows.find((p) => p.id === forced.id)!, rows.find((p) => p.id === plain.id)!];
+    });
+    expect(withOverride.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
+    expect(without.dietOverride).toBeNull();
+  });
+
   // A pending derivation forces PENDING (null), even with a manual overlay present.
   it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
     const seen = await withTenant(fx.db, tenantId, async (tx) => {

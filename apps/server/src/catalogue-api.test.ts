@@ -558,6 +558,11 @@ describe("mountCatalogueApi — products", () => {
       },
     });
     expect(res.status).toBe(201);
+    // The management product read exposes the staff override distinctly (the diet twin of
+    // `manualAllergens`), so the dashboard's diet-override editor (Task 8b) can seed from it.
+    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    const products = (await list.json()) as { dietOverride: unknown }[];
+    expect(products[0]!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
   });
 
   it.each([

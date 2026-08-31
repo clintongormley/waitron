@@ -75,6 +75,11 @@ export interface Product {
    * Exposed distinctly from `allergens` so an editor seeds its picker from the manual value without
    * double-counting recipe-derived allergens. */
   manualAllergens: ProductAllergens | null;
+  /** The staff diet override (`products.diet_override`) ALONE, or null when none — the diet twin of
+   * `manualAllergens`. Exposed distinctly from the published `diet` union so the dashboard's diet-override
+   * editor seeds its tri-state controls from the manual value without double-counting the recipe-derived
+   * profile on the next save. */
+  dietOverride: DietOverride | null;
   /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
   image: string | null;
 }
@@ -229,6 +234,7 @@ const PRODUCT_COLUMNS = {
   active: products.active,
   allergens: products.allergens,
   manualAllergens: products.manualAllergens,
+  dietOverride: products.dietOverride,
   image: products.image,
 };
 
@@ -245,6 +251,18 @@ interface RawProduct {
   active: boolean;
   allergens: ProductAllergens | null;
   manualAllergens: ProductAllergens | null;
+  // The `diet_override` jsonb column's `$type` is looser than {@link DietOverride} (its contains lists
+  // are `string[]`, not the `ContainsTag[]` the leaf narrows to), so `toProduct` re-attaches the narrow
+  // type the DB's write-side `validateDietOverride` already guarantees — the same cast the till read
+  // (`listAvailableProducts`) makes.
+  dietOverride: {
+    vegan?: "yes" | "no";
+    vegetarian?: "yes" | "no";
+    halal?: "yes" | "no";
+    kosher?: "yes" | "no";
+    addContains?: string[];
+    removeContains?: string[];
+  } | null;
   image: string | null;
 }
 
@@ -256,6 +274,7 @@ function toProduct(row: RawProduct): Product {
     ...row,
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    dietOverride: row.dietOverride as DietOverride | null,
   };
 }
 

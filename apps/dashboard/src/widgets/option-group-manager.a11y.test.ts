@@ -36,6 +36,8 @@ const items: OptionGroupItem[] = [
     maxQuantity: 1,
     addAllergens: null,
     removeAllergens: null,
+    addOrigins: null,
+    removeOrigins: null,
   },
 ];
 

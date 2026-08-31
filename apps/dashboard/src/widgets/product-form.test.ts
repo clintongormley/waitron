@@ -196,6 +196,8 @@ describe("product-form", () => {
       pricingUnit: "each",
       active: true,
       optionGroupIds: [],
+      // The diet override is ALWAYS carried (null when all-auto) — no create-vs-patch asymmetry.
+      dietOverride: null,
     });
     // The create-vs-patch asymmetry: an explicit `allergens: null` makes the server throw
     // `allergen.invalid_code`, so a PENDING picker must OMIT the key entirely, not send null.
@@ -302,6 +304,7 @@ describe("product-form", () => {
     allergens: { gluten: { presence: "contains" } },
     // No recipe floor, so the manual overlay equals the published union — the picker seeds from this.
     manualAllergens: { gluten: { presence: "contains" } },
+    dietOverride: null,
     image: "img123.png",
   };
 
@@ -360,6 +363,7 @@ describe("product-form", () => {
       vatClass: "super_reduced",
       pricingUnit: "weight",
       allergens: { gluten: { presence: "contains" } },
+      dietOverride: null,
       image: "img123.png",
       active: false,
       optionGroupIds: [],
@@ -403,6 +407,7 @@ describe("product-form", () => {
         gluten: { presence: "contains" as const },
       },
       manualAllergens: { gluten: { presence: "contains" as const } },
+      dietOverride: null,
     };
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
       ...baseProps(),
@@ -848,5 +853,103 @@ describe("product-form", () => {
     el.open = true;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("[data-test^=option-group-attached-]").length).toBe(0);
+  });
+
+  // ── Diet override (Task 8b) ──────────────────────────────────────────────────────────────────────
+  // A tri-state control per diet label (vegan/vegetarian/halal/kosher — auto/yes/no) plus a
+  // tri-state per contains-tag (meat/fish — auto/add/remove) assembles a `DietOverride`, the diet
+  // twin of the allergen picker. An EMPTY override (all auto) submits as `null`, never `{}`.
+
+  it("offers auto/yes/no on each diet label and auto/add/remove on each contains-tag", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    for (const field of ["diet-vegan", "diet-vegetarian", "diet-halal", "diet-kosher"]) {
+      const values = [
+        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(`[data-test=${field}] option`),
+      ].map((o) => o.value);
+      expect(values).toEqual(["", "yes", "no"]);
+    }
+    for (const tag of ["diet-contains-meat", "diet-contains-fish"]) {
+      const values = [
+        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(`[data-test=${tag}] option`),
+      ].map((o) => o.value);
+      expect(values).toEqual(["", "add", "remove"]);
+    }
+  });
+
+  // All-auto, no contains edits → an EMPTY override, sent as `null` (not `{}`) in the create body.
+  it("submits dietOverride null when every diet control is left on auto", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    await setInput(el, "description-es", "Café");
+    const created = nextEvent<{ dietOverride: unknown }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.dietOverride).toBe(null);
+  });
+
+  // A forced vegan=yes + halal=yes assembles exactly those two keys — the absent labels defer to
+  // derivation and are OMITTED from the override (the leaf's key-absent = auto semantics).
+  it("assembles a DietOverride from the forced labels, omitting the auto ones", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    await setInput(el, "description-es", "Ensalada");
+    await setSelect(el, "diet-vegan", "yes");
+    await setSelect(el, "diet-halal", "yes");
+    const created = nextEvent<{ dietOverride: unknown }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.dietOverride).toEqual({ vegan: "yes", halal: "yes" });
+  });
+
+  // The contains tri-states map to addContains/removeContains; a tag on "auto" appears in neither, so
+  // the same tag can never be in both lists (the disjointness the server enforces, prevented here by
+  // construction).
+  it("maps the contains tri-states to addContains / removeContains", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    await setInput(el, "description-es", "Pizza");
+    await setSelect(el, "diet-contains-meat", "add");
+    await setSelect(el, "diet-contains-fish", "remove");
+    const created = nextEvent<{ dietOverride: unknown }>(el, "create-product");
+    confirm(el);
+    expect((await created).detail.dietOverride).toEqual({
+      addContains: ["meat"],
+      removeContains: ["fish"],
+    });
+  });
+
+  // Edit mode seeds every tri-state from the product's stored `dietOverride` (the manual value alone,
+  // the diet twin of seeding the allergen picker from `manualAllergens`).
+  it("seeds the diet controls from the product's dietOverride in edit mode", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: {
+        ...EDIT_PRODUCT,
+        dietOverride: { vegetarian: "yes", kosher: "no", addContains: ["meat"] },
+      },
+    });
+    await el.updateComplete;
+    const val = (id: string) =>
+      el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${id}]`)!.value;
+    expect(val("diet-vegetarian")).toBe("yes");
+    expect(val("diet-kosher")).toBe("no");
+    expect(val("diet-vegan")).toBe("");
+    expect(val("diet-contains-meat")).toBe("add");
+    expect(val("diet-contains-fish")).toBe("");
+  });
+
+  // An edit patch ALWAYS carries dietOverride (the diet twin of always carrying allergens): a seeded
+  // override edited to all-auto sends `null`, clearing the override server-side.
+  it("clears the override to null in an edit patch when every control is reset to auto", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      open: true,
+      catalogueId: "cat-1",
+      categories: CATEGORIES,
+      product: { ...EDIT_PRODUCT, dietOverride: { vegan: "yes" } },
+    });
+    await el.updateComplete;
+    await setSelect(el, "diet-vegan", "");
+    const updated = nextEvent<{ patch: { dietOverride: unknown } }>(el, "update-product");
+    confirm(el);
+    const patch = (await updated).detail.patch;
+    expect("dietOverride" in patch).toBe(true);
+    expect(patch.dietOverride).toBe(null);
   });
 });
