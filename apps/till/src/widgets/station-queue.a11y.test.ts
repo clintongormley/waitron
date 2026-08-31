@@ -148,6 +148,46 @@ const modifierGroups: StationQueueGroup[] = [
   },
 ];
 
+// A dish carrying an as-served allergen profile (modifier↔allergen, Task 9): a CONTAINS-milk chip, a
+// struck "NO GLUTEN" removal callout, and a second, PENDING item (unreviewed base ⇒ the "not reviewed"
+// warning). The chip/callout/warning use a data-driven danger colour + strike-through/text weight, so
+// axe sweeps their contrast in both themes here (colour is never the only signal — the sweep confirms
+// the colour that IS there also passes).
+const allergenGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-al",
+    orderNumber: 11,
+    label: null,
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    thresholds: DEFAULT_THRESHOLDS,
+    status: "placed",
+    items: [
+      {
+        id: "ti-al",
+        workingOrderLineId: "wol-al",
+        state: "queued",
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
+        removed: ["gluten"],
+      },
+      {
+        id: "ti-al-pending",
+        workingOrderLineId: "wol-al-pending",
+        state: "queued",
+        descriptions: { "es-ES": "Especial" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        asServed: { allergens: {}, pending: true },
+        removed: [],
+      },
+    ],
+  },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -200,6 +240,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: modifierGroups, stationId: "st-1", view: "rail" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("the as-served allergen rail (contains chips, struck NO <CODE> removals, pending note) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: allergenGroups, stationId: "st-1", view: "rail" },
       theme,
     );
     await expectNoA11yViolations(host);

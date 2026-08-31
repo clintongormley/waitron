@@ -2,7 +2,8 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
 import type {
   StationQueueCourse,
@@ -219,6 +220,47 @@ export class TillStationQueue extends LitElement {
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
+         modifiers: localised "contains" chips, struck "NO <CODE>" removal callouts, and a pending note.
+         A flex-wrap row (chips + callouts flow), the same indent as the modifiers list. */
+      .line-allergens {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        padding-left: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+
+      .allergen-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .allergen-chip {
+        display: inline-block;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full, 999px);
+      }
+
+      /* A REMOVED base allergen — a struck "NO <CODE>" callout. Colour is NEVER the only signal: the
+         "NO" text AND the strike-through both mark it, so it reads on a monochrome display and passes
+         the contrast sweep (danger-as-text on the surface, the same pairing the expo forgotten-flag
+         ships). The CODE stays raw+uppercased (compact + scannable on a ticket); the chips localise. */
+      .allergen-removed {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-danger);
+        text-decoration: line-through;
+      }
+
+      /* The pending note earns emphasis — a cook must NOT read an unreviewed dish as allergen-free (the
+         Cautious policy). Text weight is the non-colour tell beside the colour (house a11y rule). */
+      .allergen-pending {
+        color: var(--wt-color-warning-text, var(--wt-color-text));
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .line.state-queued {
@@ -715,11 +757,12 @@ export class TillStationQueue extends LitElement {
       <span class="line-name">${this.#dish(item)}</span>${secondary}
     </span>`;
     const modifiers = this.#modifiers(item);
+    const allergens = this.#allergens(item);
     const held = item.firedAt === null;
     if (held || NEXT[item.state] === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${modifiers}</span
+        >${main}${modifiers}${allergens}</span
       >`;
     }
     return html`<button
@@ -728,8 +771,50 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${main}${modifiers}
+      ${main}${modifiers}${allergens}
     </button>`;
+  }
+
+  /**
+   * The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish + its
+   * modifiers: the folded {@link StationQueueItem.asServed} codes as localised "contains" chips
+   * (`allergenName`, never a hardcoded EU-14 list), each {@link StationQueueItem.removed} base code as a
+   * struck **"NO &lt;CODE&gt;"** callout (a swap made the plate safe of it), and a "not reviewed" warning
+   * whenever the fold is `pending` (the dish's own allergens unreviewed — the Cautious policy, since a
+   * cook must never read an unverified plate as allergen-free). Colour is NEVER the only signal (house
+   * a11y rule, the order-timing bands' convention): the removal carries its "NO" text + strike-through,
+   * the chips their names, the warning its text/weight. `nothing` when there is nothing to say — no
+   * profile attached, nothing removed, not pending — so a plain dish renders exactly as before this task.
+   */
+  #allergens(item: StationQueueItem): TemplateResult | typeof nothing {
+    const asServed = item.asServed;
+    const removed = item.removed ?? [];
+    const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
+    const pending = asServed?.pending ?? false;
+    if (codes.length === 0 && removed.length === 0 && !pending) return nothing;
+    const locale = currentLocale();
+    return html`<span class="line-allergens" data-item-allergens=${item.id}>
+      ${
+        codes.length > 0
+          ? html`<span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
+                (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
+              )}`
+          : nothing
+      }
+      ${[...removed]
+        .sort()
+        .map(
+          (code) =>
+            html`<span class="allergen-removed" data-removed=${code}
+              >${t("allergens.without")} ${code.toUpperCase()}</span
+            >`,
+        )}
+      ${
+        pending
+          ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`
+          : nothing
+      }
+    </span>`;
   }
 
   /** The dish's selected options (ordering modifiers, Task 14) as indented `+ <name>` sub-text beneath

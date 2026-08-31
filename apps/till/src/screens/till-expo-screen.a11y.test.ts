@@ -50,6 +50,10 @@ const queue: ExpoOrder[] = [
             // A dish with selected options (ordering modifiers, Task 14) — the indented "+ name" sub-text
             // is non-interactive plain text under the same item box, swept here for both themes.
             modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
+            // As-served allergens (modifier↔allergen, Task 9): a CONTAINS-milk chip and a struck
+            // "NO GLUTEN" removal callout — their danger colour + strike-through swept for contrast here.
+            asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
+            removed: ["gluten"],
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",
@@ -121,6 +125,9 @@ const queue: ExpoOrder[] = [
             state: "preparing", // fired, not-all-ready → the Curso listo lever
             firedAt: FIRED,
             awayAt: null,
+            // Own allergens unreviewed (null base) ⇒ pending — the "not reviewed" warning, swept here.
+            asServed: { allergens: {}, pending: true },
+            removed: [],
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",

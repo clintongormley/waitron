@@ -198,6 +198,11 @@ export const en = {
   "allergens.as_served": "As served",
   "allergens.as_served_none": "No declared allergens",
   "allergens.not_reviewed": "Allergens not fully reviewed",
+  // The KDS/expo "as-served" allergen line (modifier↔allergen, Task 9). `without` is the negation prefix
+  // for a REMOVED base allergen — rendered as a struck "NO <CODE>" callout on the kitchen/pass ticket
+  // ("SIN" in Spanish, the kitchen's own gluten-free idiom); the CODE stays the raw uppercased allergen
+  // code (compact + scannable on a ticket), while the "contains" chips beside it use the localised names.
+  "allergens.without": "NO",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",
   "schedule.title": "My schedule",
@@ -449,6 +454,7 @@ export const es: Record<StringKey, string> = {
   "allergens.as_served": "Tal como se sirve",
   "allergens.as_served_none": "Sin alérgenos declarados",
   "allergens.not_reviewed": "Alérgenos pendientes de revisión",
+  "allergens.without": "SIN",
   "schedule.open": "Mi horario",
   "schedule.title": "Mi horario",
   "schedule.back": "Volver a la caja",

@@ -310,6 +310,76 @@ describe("till-expo-screen", () => {
     });
   });
 
+  describe("as-served allergens (Task 9): contains chips, NO <CODE> removals, not-reviewed note", () => {
+    // A fired pass item carrying the server-attached as-served profile: CONTAINS milk and REMOVED
+    // gluten — the exact shape `listExpoQueue` now returns (Task 8), which the pass doesn't render yet.
+    const orderWithAllergens: ExpoOrder = {
+      orderId: "wo-a",
+      orderNumber: 11,
+      openedMinutes: 1,
+      worstBand: "fresh",
+      courses: [
+        {
+          courseId: null,
+          courseName: null,
+          displayOrder: null,
+          fired: true,
+          away: false,
+          items: [
+            {
+              id: "ti-a",
+              name: { "es-ES": "Hamburguesa" },
+              qty: "1.000",
+              stationName: "Cocina",
+              state: "queued",
+              firedAt: FIRED,
+              awayAt: null,
+              queuedAt: FIRED,
+              thresholds: DEFAULT_THRESHOLDS,
+              band: "fresh",
+              asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
+              removed: ["gluten"],
+            },
+            {
+              id: "ti-p",
+              name: { "es-ES": "Especial" },
+              qty: "1.000",
+              stationName: "Cocina",
+              state: "queued",
+              firedAt: FIRED,
+              awayAt: null,
+              queuedAt: FIRED,
+              thresholds: DEFAULT_THRESHOLDS,
+              band: "fresh",
+              // Own allergens unreviewed (null base) ⇒ the Cautious fold is pending.
+              asServed: { allergens: {}, pending: true },
+              removed: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    it("shows a struck 'NO GLUTEN' removal callout and a localised 'Milk' contains chip", async () => {
+      const el = await mount({ api: stubApi([orderWithAllergens]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-a"]')!;
+      expect(item.textContent).toMatch(/no gluten/i);
+      expect(item.textContent).toMatch(/milk/i);
+      expect(item.querySelector('[data-removed="gluten"]')).not.toBeNull();
+    });
+
+    it("shows a not-reviewed warning when the as-served fold is pending", async () => {
+      const el = await mount({ api: stubApi([orderWithAllergens]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-p"]')!;
+      expect(item.textContent).toContain(t("allergens.not_reviewed"));
+    });
+
+    it("a plain item with no as-served profile and nothing removed renders no allergen row (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries asServed/removed
+      expect(el.shadowRoot!.querySelectorAll(".item-allergens")).toHaveLength(0);
+    });
+  });
+
   // --- Per-course lever by state -------------------------------------------------------------
 
   it("a HELD course under fire_control='expo' shows the Fire lever", async () => {
