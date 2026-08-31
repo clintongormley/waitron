@@ -190,6 +190,14 @@ export const en = {
   "allergens.may_contain": "May contain",
   "allergens.print": "Print",
   "allergens.close": "Close",
+  // As-served allergens on the basket dish line (modifier↔allergen, Task 7). `as_served` labels the
+  // per-line chip row (the dish's declared allergens folded with its modifiers). `none` is shown when
+  // the fold leaves an empty set on a REVIEWED dish (nothing to declare). `not_reviewed` is the
+  // Cautious note the waiter sees whenever the dish's own allergens are unreviewed — the note must
+  // read as "review pending" (the browser test pins /review|pendiente/i).
+  "allergens.as_served": "As served",
+  "allergens.as_served_none": "No declared allergens",
+  "allergens.not_reviewed": "Allergens not fully reviewed",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",
   "schedule.title": "My schedule",
@@ -438,6 +446,9 @@ export const es: Record<StringKey, string> = {
   "allergens.may_contain": "Puede contener",
   "allergens.print": "Imprimir",
   "allergens.close": "Cerrar",
+  "allergens.as_served": "Tal como se sirve",
+  "allergens.as_served_none": "Sin alérgenos declarados",
+  "allergens.not_reviewed": "Alérgenos pendientes de revisión",
   "schedule.open": "Mi horario",
   "schedule.title": "Mi horario",
   "schedule.back": "Volver a la caja",

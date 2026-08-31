@@ -157,6 +157,19 @@ export interface TillOptionItem {
    * client uses it only to bound the stepper UX; the server re-validates the count authoritatively.
    */
   maxQuantity: number;
+  /**
+   * The option's per-item allergen OVERLAY (modifier↔allergen, Task 4), carried so the basket can
+   * compute each dish line's AS-SERVED profile CLIENT-side (`deriveAsServedAllergens`), the same way
+   * it prices lines client-side — no server round trip. `addAllergens`: the codes this option
+   * CONTRIBUTES ("extra cheese" → milk), keyed by allergen code, null when it adds nothing.
+   * `removeAllergens`: the codes it STRIPS from the dish's declared set ("gluten-free bun" → gluten),
+   * null when it strips nothing. A LOCAL redefinition of catalogue's `ResolvedOptionItem` overlay,
+   * deliberately NOT imported from `@waitron/catalogue` — same bundle-decoupling rationale as every
+   * other type in this file. `GET /api/products` sends both (a straight passthrough of catalogue's
+   * `listAvailableProducts`, which projects them onto each item).
+   */
+  addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  removeAllergens: string[] | null;
 }
 
 /**

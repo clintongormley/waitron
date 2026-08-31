@@ -1,11 +1,13 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
+import { asServedAllergens } from "../state/as-served.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 
@@ -98,6 +100,37 @@ export class TillBasket extends LitElement {
       .option-total {
         font-variant-numeric: tabular-nums;
       }
+
+      /* The line's AS-SERVED allergen profile (modifier↔allergen, Task 7) — indented under the dish
+         like its options, a label plus the declared codes as chips, with a "not fully reviewed" note
+         when the dish's own allergens are unreviewed (the Cautious policy, visible to the waiter). */
+      .line-allergens {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        padding: var(--wt-space-1) 0 var(--wt-space-2);
+        padding-left: var(--wt-space-4);
+        font-size: var(--wt-font-size-sm, 0.85em);
+        color: var(--wt-color-text-muted);
+      }
+
+      .allergen-label {
+        font-weight: 600;
+      }
+
+      .allergen-chip {
+        display: inline-block;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full, 999px);
+      }
+
+      /* The pending note earns emphasis — a waiter must not read an unreviewed dish as allergen-free. */
+      .allergen-pending {
+        color: var(--wt-color-warning-text, var(--wt-color-text));
+        font-weight: 600;
+      }
     `,
   ];
 
@@ -148,6 +181,7 @@ export class TillBasket extends LitElement {
               </div>
             `,
           )}
+          ${this.#allergenRow(line, index)}
         `,
       )}
     `;
@@ -189,6 +223,43 @@ export class TillBasket extends LitElement {
           <span aria-hidden="true">+</span>
         </wt-button>
       </span>
+    `;
+  }
+
+  /**
+   * The line's as-served allergen row, or `nothing` for the noise-free common case: a plain line with
+   * no modifiers AND no declared allergens on the dish renders nothing at all. When it DOES render, the
+   * chips are the folded `asServedAllergens` set (localised via the till's allergen-name i18n) and the
+   * "not fully reviewed" note appears whenever the fold is pending (the dish's own allergens unreviewed
+   * — the Cautious policy, since a removed-but-unknown base can't be proven allergen-free). A reviewed
+   * fold that leaves an empty set reads as "No declared allergens" rather than a bare label.
+   */
+  #allergenRow(line: OrderLine, index: number) {
+    const hasOptions = (line.options ?? []).length > 0;
+    const hasAllergens = line.product.allergens != null;
+    if (!hasOptions && !hasAllergens) return nothing;
+
+    const asServed = asServedAllergens(line);
+    const locale = currentLocale();
+    const codes = Object.keys(asServed.allergens).sort();
+    return html`
+      <div class="line-allergens" data-test=${`line-allergens-${index}`}>
+        <span class="allergen-label">${t("allergens.as_served")}</span>
+        ${
+          codes.length > 0
+            ? codes.map(
+                (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
+              )
+            : asServed.pending
+              ? nothing
+              : html`<span class="allergen-none">${t("allergens.as_served_none")}</span>`
+        }
+        ${
+          asServed.pending
+            ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`
+            : nothing
+        }
+      </div>
     `;
   }
 }
