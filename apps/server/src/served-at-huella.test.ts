@@ -1,12 +1,24 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { asAppUser, ticketItems, withTenant, workingOrderLines, workingOrders } from "@waitron/db";
+import { and, eq, isNotNull } from "drizzle-orm";
+import {
+  asAppUser,
+  saleLines,
+  sales,
+  ticketItems,
+  withTenant,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createOptionGroup,
+  createOptionGroupItem,
   createProduct,
+  listOptionGroupItems,
+  setProductOptionGroups,
 } from "@waitron/catalogue";
 import { VerifactuBackend, registerSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -24,6 +36,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
 import {
+  addTabRound,
   advanceTicketItem,
   fireLines,
   markLineServed,
@@ -542,5 +555,169 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
     expect(() => expect(plainState.ticketStates).toEqual(["ready", "ready"])).toThrow();
     expect(() => expect(kitchenState.ticketStates).toEqual([])).toThrow();
     expect(() => expect(plainState.collectedAt).not.toBeNull()).toThrow();
+  });
+});
+
+/**
+ * Attach a ONE-item option group to this shop's `agua` product and return the item's id (plus its
+ * group's, for the read-back). The item's fiscal-bearing fields — `name`, `priceDelta`, `vatClass` —
+ * are held CONSTANT across the two shops (the constants below); the ONLY thing `overlay` varies is the
+ * catalogue allergen overlay (`removeAllergens`/`addAllergens`), which the ring path never reads. With
+ * the group at maxSelect 1 the ring can select this one item, expanding the dish into a parent row + a
+ * single child modifier row whose price/name/vat are snapshotted from these constants (working-order.ts
+ * `selectedOptions.map` copies name/priceDelta/vatClass and NOTHING else — the overlay is structurally
+ * excluded there). `agua` is each-priced, so the ring accepts an option on it.
+ */
+const OPTION_ITEM_NAME = { [LOCALE]: "Panecillo" };
+const OPTION_ITEM_PRICE_DELTA = "0.50";
+const OPTION_ITEM_VAT_CLASS = "general" as const;
+
+async function attachOption(
+  shop: Shop,
+  overlay: { removeAllergens: string[] | null },
+): Promise<{ groupId: string; itemId: string }> {
+  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const group = await createOptionGroup(tx, {
+      name: { [LOCALE]: "Pan" },
+      minSelect: 0,
+      maxSelect: 1,
+      required: false,
+    });
+    const item = await createOptionGroupItem(tx, group.id, {
+      name: OPTION_ITEM_NAME,
+      priceDelta: OPTION_ITEM_PRICE_DELTA,
+      vatClass: OPTION_ITEM_VAT_CLASS,
+      removeAllergens: overlay.removeAllergens,
+    });
+    await setProductOptionGroups(tx, shop.aguaId, [group.id]);
+    return { groupId: group.id, itemId: item.id };
+  });
+}
+
+/**
+ * Open a two-line tab — `agua` WITH the option `itemId` selected (→ a parent dish row + one child
+ * modifier row) plus a plain `cafe` — then pay it through the real pay path with the FROZEN clock, and
+ * return the filed registro's huella. Same helper shape as `openServeAndPay`/`openKitchenLifecycleAndPay`:
+ * `payWorkingOrder` files from the tab's STORED locked lines and chains registro #1 on this shop's node,
+ * asserted to be exactly one row at secuencia 1 so the huella is genuinely that of a first record.
+ */
+async function openWithOptionAndPay(
+  shop: Shop,
+  itemId: string,
+): Promise<{ tabId: string; huella: string }> {
+  const { cfg, aguaId, cafeId, tableId } = shop;
+  // Open the tab empty, then ADD a round carrying the option — `openTab` takes only plain
+  // `{productId, quantity}` lines, while `addTabRound` is the path that accepts `options` and expands
+  // the dish into a parent row + one child modifier row (working-order.ts `priceOrderLines`).
+  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return openTab(tx, cfg, { tableId });
+  });
+  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await addTabRound(tx, cfg, tabId, [
+      { productId: aguaId, quantity: "1", options: [{ optionGroupItemId: itemId }] },
+      { productId: cafeId, quantity: "1" },
+    ]);
+  });
+
+  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    id: tabId,
+    lines: [],
+    tender: { method: "cash", amount: "10.00" },
+  });
+
+  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows[0]!.secuencia).toBe(1);
+    return rows[0]!.huella;
+  });
+  return { tabId, huella };
+}
+
+/** How many child modifier lines (`parent_line_id IS NOT NULL`) were FILED on the sale this tab paid
+ *  into — proves the option was genuinely rung into a child `sale_lines` row, not silently dropped. The
+ *  sale is found by its `working_order_id` back-pointer (the pay path stamps it, till-sale.ts). */
+async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
+  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await tx
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .innerJoin(sales, eq(sales.id, saleLines.saleId))
+      .where(and(eq(sales.workingOrderId, tabId), isNotNull(saleLines.parentLineId)));
+    return rows.length;
+  });
+}
+
+/** This shop's one option item's `removeAllergens` overlay, read back through `listOptionGroupItems`
+ *  (the authoring read side) — the field the self-check pins to prove the two shops GENUINELY differ. */
+async function overlayOf(shop: Shop, groupId: string, itemId: string): Promise<string[] | null> {
+  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const items = await listOptionGroupItems(tx, groupId);
+    const item = items.find((i) => i.id === itemId);
+    expect(item).toBeDefined();
+    return item!.removeAllergens;
+  });
+}
+
+// The modifier↔allergen firewall (spec §7 / CLAUDE.md §5). The per-option allergen overlay
+// (`option_group_items.add_allergens`/`remove_allergens`) is a CATALOGUE field the sale path never
+// reads: when a dish's option is rung into a child modifier line, working-order.ts snapshots ONLY the
+// option's `name`/`priceDelta`/`vatClass` onto the line (`selectedOptions.map`) — the overlay is not
+// among them — and nothing in `sale_lines` or `record-sale.ts` names an allergen column at all (the
+// structural half — the commit body's grep, zero hits). The as-served allergen profile is computed on
+// DISPLAY read paths (till/KDS) only. This proves the same BEHAVIOURALLY: two shops file the IDENTICAL
+// basket with the IDENTICAL option (same name/price/vat), one shop's option carrying a `removeAllergens`
+// overlay and the other's carrying none, and must file registros with the IDENTICAL huella.
+describe("an option's allergen overlay is not part of the huella", () => {
+  it("files an IDENTICAL huella whether the rung option carries an allergen overlay or none — the overlay never enters the fiscal record", async () => {
+    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
+    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + rung option
+    // (name/price/vat) + chain-position + (frozen) clock all fixed, the option's allergen OVERLAY is the
+    // ONLY thing that differs between the two filings.
+    const emisorNif = nextNif();
+    const shopOverlay = await seedShop(emisorNif);
+    const shopPlain = await seedShop(emisorNif);
+
+    // Both option items are byte-identical in name/priceDelta/vatClass (the constants) so the child
+    // sale_lines are identical; only the catalogue allergen overlay differs.
+    const overlayItem = await attachOption(shopOverlay, { removeAllergens: ["gluten"] });
+    const plainItem = await attachOption(shopPlain, { removeAllergens: null });
+
+    const overlay = await openWithOptionAndPay(shopOverlay, overlayItem.itemId);
+    const plain = await openWithOptionAndPay(shopPlain, plainItem.itemId);
+
+    // The invariant. A FAILURE here means an allergen field leaked into the filed record (CLAUDE.md §5:
+    // our own metadata must never enter computeHuella) — STOP and report, do NOT adjust the test; fix
+    // the LEAK.
+    expect(overlay.huella).toBe(plain.huella);
+    // Not a trivial pass: a real uppercase-hex SHA-256 digest, so "both null/empty → equal" cannot
+    // masquerade as the invariant holding.
+    expect(overlay.huella).toMatch(/^[0-9A-F]{64}$/);
+
+    // Self-check (§1: a measurement where both answers look alike measures nothing). Confirm the two
+    // shops' options GENUINELY differ in overlay: the overlay shop's item strips `gluten`; the plain
+    // shop's item strips nothing (NULL). Without this, a silent break in the overlay plumbing would
+    // leave BOTH options bare and this test would pass while differing nothing — no longer testing what
+    // its name claims.
+    const overlayRemove = await overlayOf(shopOverlay, overlayItem.groupId, overlayItem.itemId);
+    const plainRemove = await overlayOf(shopPlain, plainItem.groupId, plainItem.itemId);
+    expect(overlayRemove).toEqual(["gluten"]);
+    expect(plainRemove).toBeNull();
+
+    // Second self-check: the option was GENUINELY rung into a child `sale_lines` row on BOTH sales (one
+    // per sale — the agua's single modifier). Without this, an option silently dropped on the ring path
+    // would leave both sales modifier-less and the huella equality would hold VACUOUSLY, no longer
+    // exercising the modifier↔fiscal boundary the test name claims.
+    expect(await filedChildLineCount(shopOverlay, overlay.tabId)).toBe(1);
+    expect(await filedChildLineCount(shopPlain, plain.tabId)).toBe(1);
   });
 });
