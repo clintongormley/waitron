@@ -330,8 +330,14 @@ export interface ProductCatalogue {
  * server re-validates any `doneness` it receives against that enum (`order.invalid_doneness`). NON-FISCAL:
  * doneness lives only on `working_order_lines`/`ticket_items` (snapshotted at fire), never on the fiscal
  * projection or a huella.
+ *
+ * Declared as a runtime `as const` TUPLE so the `Doneness` TYPE is DERIVED from it — the client picker
+ * (`line-extras-editor`) imports this one array rather than re-listing the five values, and the type
+ * pins them so the array and the union can never drift. Kept a client-local literal, NOT imported from
+ * `@waitron/db` at runtime (the bundle rule — see the file header).
  */
-export type Doneness = "rare" | "medium_rare" | "medium" | "medium_well" | "well_done";
+export const DONENESS = ["rare", "medium_rare", "medium", "medium_well", "well_done"] as const;
+export type Doneness = (typeof DONENESS)[number];
 
 /**
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.

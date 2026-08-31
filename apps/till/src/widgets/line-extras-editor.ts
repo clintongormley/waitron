@@ -1,6 +1,7 @@
 import { css, html, nothing } from "lit";
 import { t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
+import { DONENESS } from "../api/client.js";
 import type { Doneness, TillProduct } from "../api/client.js";
 
 /**
@@ -17,16 +18,6 @@ import type { Doneness, TillProduct } from "../api/client.js";
  * shadow boundary), and the host keeps ownership of the note/doneness state. The host passes the current
  * `note`/`doneness` and two change callbacks; nothing here holds state.
  */
-
-/** The meat-doneness values, in cooking order, as the gated `<select>` offers them. Mirrors the
- * server's `DONENESS` tuple; each maps to a `doneness.<value>` i18n key. */
-export const DONENESS: readonly Doneness[] = [
-  "rare",
-  "medium_rare",
-  "medium",
-  "medium_well",
-  "well_done",
-];
 
 /** Whether the doneness picker applies to a product: only when its published diet asserts it contains
  * meat. Fish, unreviewed and diet-less products never show it — the SAME gate the picker used inline. */
@@ -106,7 +97,7 @@ function renderDoneness(props: LineExtrasEditorProps) {
           props.onDonenessChange((e.target as HTMLSelectElement).value as Doneness | "")}
       >
         <option value="">${t("doneness.none")}</option>
-        ${DONENESS.map((d) => html`<option value=${d}>${t(`doneness.${d}` as StringKey)}</option>`)}
+        ${DONENESS.map((d) => html`<option value=${d}>${donenessLabel(d)}</option>`)}
       </select>
     </label>
   `;

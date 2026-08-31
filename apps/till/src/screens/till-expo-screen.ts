@@ -3,9 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
@@ -626,7 +626,7 @@ export class TillExpoScreen extends LitElement {
       ${
         doneness !== null
           ? html`<span class="item-doneness" data-doneness=${doneness}
-              >${t("doneness.label")}: ${t(`doneness.${doneness}` as StringKey)}</span
+              >${t("doneness.label")}: ${donenessLabel(doneness)}</span
             >`
           : nothing
       }

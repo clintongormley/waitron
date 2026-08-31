@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
 import { selectStyles } from "../select-styles.js";
 import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
@@ -12,7 +13,6 @@ import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { StringKey } from "../i18n/strings.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -269,7 +269,7 @@ export class TillBasket extends LitElement {
           line.doneness !== undefined
             ? html`<span class="line-extras-doneness"
                 ><span class="line-extras-label">${t("doneness.label")}:</span>
-                ${t(`doneness.${line.doneness}` as StringKey)}</span
+                ${donenessLabel(line.doneness)}</span
               >`
             : nothing
         }

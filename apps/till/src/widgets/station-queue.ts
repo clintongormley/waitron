@@ -3,8 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
 import type {
@@ -824,7 +824,7 @@ export class TillStationQueue extends LitElement {
       ${
         doneness !== null
           ? html`<span class="line-doneness" data-doneness=${doneness}
-              >${t("doneness.label")}: ${t(`doneness.${doneness}` as StringKey)}</span
+              >${t("doneness.label")}: ${donenessLabel(doneness)}</span
             >`
           : nothing
       }

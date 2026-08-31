@@ -111,10 +111,17 @@ export function toWireOption(option: SelectedLineOption): {
  * send builder spreads onto its wire line (`SaleLine`, `RoundLine`). Each key is present ONLY when the
  * line carries it — the same omission pattern as {@link toWireOption} — so a plain line's wire is
  * byte-identical to before (an empty object spreads nothing). The ONE mapping shared by `till-app`'s
- * `#currentSaleLines` and `till-table-order-screen`'s round builder. The server trims/validates both;
- * they never reach a sale or a huella.
+ * `#currentSaleLines`, `till-table-order-screen`'s round builder, and the modifier picker's confirm
+ * (`product-grid`). The server trims/validates both; they never reach a sale or a huella.
+ *
+ * The parameter is the MINIMAL `{ note?; doneness? }` shape, not the full `OrderLine` — both `OrderLine`
+ * and the picker's `ModifierConfirmDetail` satisfy it structurally, so every caller passes its own line
+ * object directly without hand-copying the two fields first.
  */
-export function toWireLineExtras(line: OrderLine): { note?: string; doneness?: Doneness } {
+export function toWireLineExtras(line: { note?: string; doneness?: Doneness }): {
+  note?: string;
+  doneness?: Doneness;
+} {
   const extras: { note?: string; doneness?: Doneness } = {};
   if (line.note !== undefined) {
     extras.note = line.note;
