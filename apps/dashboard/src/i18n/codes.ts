@@ -192,6 +192,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",
   },
+  // Option-group per-option allergen overlay (modifier↔allergen association, Task 9). The per-option
+  // adds/removes editor rejects with this when an operator picks the SAME allergen in both the adds
+  // picker and the removes multiselect for one option — the resulting row would both contain and not
+  // contain it (packages/catalogue/src/allergens.ts).
+  "allergen.add_remove_conflict": {
+    en: "An allergen can't be both added and removed",
+    es: "Un alérgeno no puede añadirse y quitarse a la vez",
+  },
   // Option-group authoring (apps/server/src/catalogue-api.ts, Task 11). The manager's group create/edit
   // rejects with this when the min/max selection bounds are inconsistent (max below min, a negative
   // min) or a required group's minimum is below 1 — the same two rules the DB CHECKs enforce, surfaced
