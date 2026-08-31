@@ -95,7 +95,7 @@ describe("recipe composition and allergen derivation", () => {
   // The diet roll-up mirrors the allergen roll-up: PGlite is enough here — the fold only reads
   // `ingredients.dietary_origin` rows and writes `products.diet_derivation`/`diet`, no privilege or
   // concurrency behaviour, which is proven on real Postgres for RLS in the .rls suites.
-  it("recomputeProductDiet: an uncategorised ingredient makes the product diet-pending", async () => {
+  it("recomputeProductDerivations (diet): an uncategorised ingredient makes the product diet-pending", async () => {
     const row = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
       // one plant ingredient (categorised) + one NULL-origin ingredient (uncategorised)
@@ -139,7 +139,7 @@ describe("recipe composition and allergen derivation", () => {
     expect(row.dietDeriv).toEqual({ origins: [], pending: true });
   });
 
-  it("recomputeProductDiet: all-plant reviewed → vegan", async () => {
+  it("recomputeProductDerivations (diet): all-plant reviewed → vegan", async () => {
     const row = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const spinach = await createIngredient(tx, { name: "spinach" });
@@ -157,7 +157,7 @@ describe("recipe composition and allergen derivation", () => {
     expect(row.diet).toMatchObject({ vegan: "yes", vegetarian: "yes", contains: [] });
   });
 
-  it("recomputeProductDiet: a multi-origin recipe stores origins SORTED (via the fold, not just applyDietDerivation)", async () => {
+  it("recomputeProductDerivations (diet): a multi-origin recipe stores origins SORTED (via the fold, not just applyDietDerivation)", async () => {
     const row = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
       // Insert in an order that is NOT already sorted (meat before dairy) so a missing sort shows.
@@ -181,7 +181,7 @@ describe("recipe composition and allergen derivation", () => {
     expect(row).toEqual({ origins: ["dairy", "meat"], pending: false });
   });
 
-  it("recomputeProductDiet: clearing the recipe resets the derivation to null", async () => {
+  it("recomputeProductDerivations (diet): clearing the recipe resets the derivation to null", async () => {
     const cleared = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const beef = await createIngredient(tx, { name: "beef" });
