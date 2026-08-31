@@ -4,7 +4,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillBasket } from "./basket.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillOptionItem, TillProduct } from "../api/client.js";
 import type { SelectedLineOption } from "../state/working-order.js";
 
 const cafe: TillProduct = {
@@ -227,6 +227,164 @@ describe("till-basket", () => {
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.product).toBe(cafe);
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(0);
+  });
+
+  // ── As-served allergens (modifier↔allergen, Task 7) ──────────────────────────────────────────
+  // The basket computes each line's AS-SERVED allergen profile CLIENT-side — the dish's declared
+  // allergens folded with its selected options' overlays (`deriveAsServedAllergens`, the shared
+  // catalogue leaf) — the same way it already computes display prices without a server round trip.
+
+  it("shows the as-served allergen set for a dish with a gluten-removing modifier — gluten gone, no pending note", async () => {
+    const glutenFreeBun: TillOptionItem = {
+      id: "opt-1",
+      name: { es: "Pan sin gluten" },
+      priceDelta: "0.00",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: null,
+      removeAllergens: ["gluten"],
+    };
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+      allergens: { gluten: { presence: "contains" } }, // base REVIEWED, declares gluten
+      optionGroups: [
+        {
+          id: "grp-bun",
+          name: { es: "Pan" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [glutenFreeBun],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [
+      { optionGroupItemId: "opt-1", name: { es: "Pan sin gluten" }, priceDelta: "0.00" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(asServed).not.toBeNull();
+    // The modifier strips the base gluten → the as-served set names no gluten (the label "Cereales
+    // con gluten"/"Cereals containing gluten" both contain the word, so its absence proves the strip).
+    expect(asServed!.textContent).not.toMatch(/gluten/i);
+    // The base was reviewed, so nothing is pending: no "not fully reviewed" note.
+    expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+  });
+
+  it("marks the as-served set 'not fully reviewed' when the dish's own allergens are unreviewed (Cautious)", async () => {
+    const extraCheese: TillOptionItem = {
+      id: "opt-cheese",
+      name: { es: "Extra queso" },
+      priceDelta: "0.50",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: { milk: { presence: "contains" } },
+      removeAllergens: null,
+    };
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+      allergens: null, // base UNREVIEWED → the plate stays pending
+      optionGroups: [
+        {
+          id: "grp-extras",
+          name: { es: "Extras" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [extraCheese],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [
+      { optionGroupItemId: "opt-cheese", name: { es: "Extra queso" }, priceDelta: "0.50" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(asServed).not.toBeNull();
+    // Unreviewed base → the always-safe ADD still shows (milk), and the waiter sees the note.
+    expect(asServed!.textContent).toMatch(/milk|leche/i);
+    expect(asServed!.textContent).toMatch(/review|pendiente/i);
+  });
+
+  it("shows the as-served set for a plain dish that carries allergens even with no modifiers", async () => {
+    const tostada: TillProduct = {
+      ...cafe,
+      id: "tostada",
+      descriptions: { es: "Tostada" },
+      allergens: { gluten: { presence: "contains" } },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(tostada, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(asServed).not.toBeNull();
+    expect(asServed!.textContent).toMatch(/gluten/i);
+    expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+  });
+
+  it("renders NO allergen row for a plain no-allergen line (avoids noise)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // allergens: null, no options
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`)).toBeNull();
+  });
+
+  // A STALE selection — an `optionGroupItemId` absent from the product's option groups (`itemById.get`
+  // misses) — must degrade to an EMPTY overlay rather than throwing (`as-served.ts`). The row still
+  // renders from the reviewed base; the phantom option folds as no add/no remove.
+  it("degrades a stale option selection to no overlay without throwing", async () => {
+    const realCheese: TillOptionItem = {
+      id: "opt-real",
+      name: { es: "Extra queso" },
+      priceDelta: "0.50",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: { milk: { presence: "contains" } },
+      removeAllergens: null,
+    };
+    const tostada: TillProduct = {
+      ...cafe,
+      id: "tostada-stale",
+      descriptions: { es: "Tostada" },
+      allergens: { gluten: { presence: "contains" } }, // base REVIEWED → the row renders
+      optionGroups: [
+        {
+          id: "grp-extras",
+          name: { es: "Extras" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [realCheese],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    // The selection points at an id NOT present in `optionGroups` (a stale/removed option).
+    const stale: SelectedLineOption = {
+      optionGroupItemId: "opt-ghost",
+      name: { es: "Fantasma" },
+      priceDelta: "0.00",
+    };
+    store.addProduct(tostada, "1", [stale]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(asServed).not.toBeNull();
+    // Base gluten survives; the phantom option added nothing (no milk) and removed nothing, and no throw.
+    expect(asServed!.textContent).toMatch(/gluten/i);
+    expect(asServed!.textContent).not.toMatch(/milk|leche/i);
+    expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
   });
 
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {

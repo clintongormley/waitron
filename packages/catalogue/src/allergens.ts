@@ -53,3 +53,30 @@ export function validateAllergens(value: unknown): ProductAllergens {
   }
   return value as ProductAllergens;
 }
+
+/** Validate a caller/JSON-supplied remove-list. Returns it narrowed; throws on any fault. */
+export function validateRemoveAllergens(value: unknown): AllergenCode[] {
+  if (!Array.isArray(value)) throw new AppError("allergen.invalid_code", { code: String(value) });
+  const out: AllergenCode[] = [];
+  for (const code of value) {
+    if (typeof code !== "string" || !CODES.has(code)) {
+      throw new AppError("allergen.invalid_code", { code: String(code) });
+    }
+    out.push(code as AllergenCode);
+  }
+  return out;
+}
+
+/** Reject an overlay that both adds and removes the same code (design §3). No-op if either side is
+ * absent. Defence-in-depth at the core — never trust the caller (CLAUDE.md §3). */
+export function assertAllergenOverlayDisjoint(
+  add: ProductAllergens | null,
+  remove: readonly string[] | null,
+): void {
+  if (!add || !remove) return;
+  for (const code of remove) {
+    if (Object.prototype.hasOwnProperty.call(add, code)) {
+      throw new AppError("allergen.add_remove_conflict", { code });
+    }
+  }
+}

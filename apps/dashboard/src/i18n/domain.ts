@@ -288,6 +288,15 @@ export function allergenName(code: string, locale: string = currentLocale()): st
   return resolve(ALLERGEN_NAMES, code, locale);
 }
 
+/**
+ * The 14 EU allergen codes (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order — the keys of
+ * {@link ALLERGEN_NAMES}, so the list and its localised labels stay single-sourced (one table, no
+ * second order to drift). Exposed for a widget that renders a plain code list — the option-group
+ * manager's per-option "removes" multiselect — where the allergen picker's three-state grid is the
+ * wrong control. Same order the picker's own local `ALLERGEN_DISPLAY_ORDER` uses.
+ */
+export const ALLERGEN_CODES: readonly string[] = Object.keys(ALLERGEN_NAMES);
+
 /** A purchase-invoice VAT regime (general / equivalence_surcharge) → its display name (raw-value
  * fallback for an unmapped regime). */
 export function regimeName(value: string, locale: string = currentLocale()): string {

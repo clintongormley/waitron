@@ -157,6 +157,19 @@ export interface TillOptionItem {
    * client uses it only to bound the stepper UX; the server re-validates the count authoritatively.
    */
   maxQuantity: number;
+  /**
+   * The option's per-item allergen OVERLAY (modifier↔allergen, Task 4), carried so the basket can
+   * compute each dish line's AS-SERVED profile CLIENT-side (`deriveAsServedAllergens`), the same way
+   * it prices lines client-side — no server round trip. `addAllergens`: the codes this option
+   * CONTRIBUTES ("extra cheese" → milk), keyed by allergen code, null when it adds nothing.
+   * `removeAllergens`: the codes it STRIPS from the dish's declared set ("gluten-free bun" → gluten),
+   * null when it strips nothing. A LOCAL redefinition of catalogue's `ResolvedOptionItem` overlay,
+   * deliberately NOT imported from `@waitron/catalogue` — same bundle-decoupling rationale as every
+   * other type in this file. `GET /api/products` sends both (a straight passthrough of catalogue's
+   * `listAvailableProducts`, which projects them onto each item).
+   */
+  addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  removeAllergens: string[] | null;
 }
 
 /**
@@ -424,6 +437,20 @@ export interface QueueModifier {
 }
 
 /**
+ * The AS-SERVED allergen profile of a queue/expo item (modifier↔allergen, Task 8/9) — the parent
+ * product's published allergens folded with its selected options' overlays (Cautious: a `remove` strips
+ * a code, an `add` merges one), computed SERVER-side and attached to each read. `allergens` is keyed by
+ * allergen code (`presence` = contains/may-contain strength, `source` names the specific substance when
+ * known); `pending` is true when the dish's OWN allergens are unreviewed (a null base), so the KDS shows
+ * the plate as unverified. Display-only — never a fiscal value. A LOCAL mirror of catalogue's / the
+ * server's `AsServedAllergens`, NOT imported — same bundle-decoupling rationale as every type in this file.
+ */
+export interface AsServedAllergens {
+  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+  pending: boolean;
+}
+
+/**
  * One ticket item on a station's queue (KDS-1 §3c) — its id (the per-line bump target for
  * {@link TillApi.advanceTicketItem}), the working-order line it was fired from, and its current kitchen
  * `state`. A LOCAL mirror of the server's `StationQueueItem` (`apps/server/src/working-order.ts`), NOT
@@ -446,6 +473,17 @@ export interface StationQueueItem {
    *  plain-dish fixture, treated identically to an empty array — a modifier-free item renders exactly
    *  as before. */
   modifiers?: QueueModifier[];
+  /** The dish's AS-SERVED allergen profile (modifier↔allergen, Task 8/9) — the parent's published
+   *  allergens folded with its selected options' overlays; the KDS renders its codes as "contains" chips
+   *  and shows a "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent on an older
+   *  payload or a pre-Task-8 fixture, treated as "no profile attached" (nothing rendered) — a plain dish
+   *  reads exactly as before. */
+  asServed?: AsServedAllergens;
+  /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
+   *  {@link asServed}) — the KDS renders each as a struck "NO <allergen>" callout, the allergen name
+   *  localised like the "contains" chips ("gluten-free bun" removed gluten). Optional/absent (⇒ empty)
+   *  on an older payload, like {@link asServed}. */
+  removed?: string[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
    *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
    *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
@@ -565,6 +603,14 @@ export interface ExpoItem {
    *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically
    *  to an empty array — a modifier-free item renders exactly as before. */
   modifiers?: QueueModifier[];
+  /** The dish's AS-SERVED allergen profile (modifier↔allergen, Task 8/9) — the same fold
+   *  {@link StationQueueItem.asServed} carries; the pass renders its codes as "contains" chips and a
+   *  "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on
+   *  an older payload or a plain-dish fixture. */
+  asServed?: AsServedAllergens;
+  /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed};
+   *  the pass renders each as a struck, localised "NO <allergen>" callout. Optional/absent (⇒ empty). */
+  removed?: string[];
   /**
    * This item's own `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11), ISO —
    * UNLIKE {@link StationQueueGroup.thresholds} this rides PER ITEM: a single expo order's items can

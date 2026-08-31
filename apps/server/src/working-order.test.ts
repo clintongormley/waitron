@@ -14,7 +14,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -867,7 +867,14 @@ async function placeOrderWith(
 
 /** Attach a fresh single-item option group to `productId` and return the option-item id — the shape a
  *  line's `options: [{ optionGroupItemId }]` selects, for the modifier sub-item tests. */
-async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+async function addOption(
+  tx: Transaction,
+  productId: string,
+  name: string,
+  // The allergen OVERLAY this option carries as served (Task 8): the codes it adds and the codes it
+  // removes. Omitted for a plain option (the modifier sub-item tests), so both columns stay null.
+  overlay?: { add?: AllergenMap; remove?: string[] },
+): Promise<string> {
   const [group] = await tx
     .insert(optionGroups)
     .values({
@@ -888,6 +895,8 @@ async function addOption(tx: Transaction, productId: string, name: string): Prom
       priceDelta: "0.50",
       vatClass: "reduced",
       sort: 0,
+      addAllergens: overlay?.add ?? null,
+      removeAllergens: overlay?.remove ?? null,
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
@@ -1338,6 +1347,133 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { descriptions: { [LOCALE]: "Grande" } },
         { descriptions: { [LOCALE]: "Leche avena" } },
       ]);
+    });
+  });
+
+  // Task 8 (modifier↔allergen) — the KDS station/expo reads attach the AS-SERVED allergen profile per
+  // fired dish line: the parent product's published allergens folded with its selected options'
+  // overlays (Cautious — a `remove` strips a code, an `add` merges one), plus `removed` (the base
+  // codes the options subtracted) for the "swap made this safe" chip. Display-only; no fiscal path.
+  it("attaches an as-served profile with the removed allergen dropped", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`, the option removes it.
+      const burger = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        descriptions: { [LOCALE]: "Hamburguesa" },
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains" } },
+      });
+      const gfBun = await addOption(tx, burger.id, "Pan sin gluten", { remove: ["gluten"] });
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: gfBun }] },
+      ]);
+      // The parent dish line (parentLineId IS NULL) — the key the queue item is attached under.
+      const [parent] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            sql`${workingOrderLines.parentLineId} is null`,
+          ),
+        );
+      const parentLineId = parent!.id;
+
+      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const item = queue
+        .flatMap((g) => g.items)
+        .find((i) => i.workingOrderLineId === parentLineId)!;
+      expect(item.asServed.allergens).toEqual({});
+      expect(item.asServed.pending).toBe(false);
+      expect(item.removed).toEqual(["gluten"]);
+
+      // The expo read attaches the same profile to its item.
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.asServed.allergens).toEqual({});
+      expect(expoItem.asServed.pending).toBe(false);
+      expect(expoItem.removed).toEqual(["gluten"]);
+    });
+  });
+
+  // A dish whose OWN allergens are unreviewed (products.allergens NULL) stays `pending` — a remove
+  // cannot subtract from an unknown base, so `removed` is empty and only always-safe adds would show.
+  it("marks the as-served profile pending when the dish's base allergens are unreviewed", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
+      const opt = await addOption(tx, dish, "Extra", { remove: ["gluten"] });
+      await placeOrderWith(tx, cfg, [
+        { productId: dish, quantity: "1", options: [{ optionGroupItemId: opt }] },
+      ]);
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.asServed.pending).toBe(true);
+      expect(item.asServed.allergens).toEqual({});
+      expect(item.removed).toEqual([]);
+    });
+  });
+
+  // A PLAIN, modifier-less dish whose base is unreviewed (products.allergens NULL, NO options at all)
+  // still gets an as-served profile attached to its parent line — the server errs safe and marks the
+  // plate `pending` so the KDS shows it unverified. (Divergence from the till, which SUPPRESSES the row
+  // for this same case — pinned in basket.test.ts. Kept as-is: the KDS is deliberately the cautious one.)
+  it("attaches a pending profile to a plain, modifier-less unreviewed dish (KDS errs safe)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
+      await placeOrderWith(tx, cfg, [line(dish)]); // no options at all
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.modifiers).toEqual([]);
+      expect(item.asServed.pending).toBe(true);
+      expect(item.asServed.allergens).toEqual({});
+      expect(item.removed).toEqual([]);
+      // The expo read attaches the same pending profile to its item.
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.modifiers).toEqual([]);
+      expect(expoItem.asServed.pending).toBe(true);
+      expect(expoItem.asServed.allergens).toEqual({});
+      expect(expoItem.removed).toEqual([]);
+    });
+  });
+
+  // An option that ADDS an allergen merges it into the served profile (over-declaring is the safe
+  // direction), leaving the reviewed base non-pending and `removed` empty.
+  it("attaches an added allergen from the option overlay", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        descriptions: { [LOCALE]: "Ensalada" },
+        pricingUnit: "each",
+        unitPrice: "7.00",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains" } },
+      });
+      const nuts = await addOption(tx, dish.id, "Con nueces", {
+        add: { nuts: { presence: "contains" } },
+      });
+      await placeOrderWith(tx, cfg, [
+        { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: nuts }] },
+      ]);
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.asServed.allergens).toEqual({
+        gluten: { presence: "contains" },
+        nuts: { presence: "contains" },
+      });
+      expect(item.asServed.pending).toBe(false);
+      expect(item.removed).toEqual([]);
     });
   });
 

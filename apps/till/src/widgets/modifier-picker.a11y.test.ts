@@ -27,6 +27,8 @@ const burger: TillProduct = {
           priceDelta: "0.00",
           vatClass: null,
           maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
         },
         {
           id: "i-medium",
@@ -34,6 +36,8 @@ const burger: TillProduct = {
           priceDelta: "0.00",
           vatClass: null,
           maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
         },
       ],
     },
@@ -50,6 +54,8 @@ const burger: TillProduct = {
           priceDelta: "1.00",
           vatClass: null,
           maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
         },
         {
           id: "i-bacon",
@@ -57,6 +63,8 @@ const burger: TillProduct = {
           priceDelta: "1.50",
           vatClass: null,
           maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
         },
         // A per-option-quantity item (maxQuantity 2) so the sweep also covers the stepper controls.
         {
@@ -65,6 +73,8 @@ const burger: TillProduct = {
           priceDelta: "0.60",
           vatClass: null,
           maxQuantity: 2,
+          addAllergens: null,
+          removeAllergens: null,
         },
       ],
     },

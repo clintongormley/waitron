@@ -151,3 +151,18 @@ it("has a sentence for the location-menus screen code", () => {
   expect(codeMessage("catalogue.not_found", "es")).not.toBe(GENERIC_ES);
   expect(codeMessage("catalogue.not_found", "en")).not.toBe(GENERIC_EN);
 });
+
+it("has a sentence for the option-group per-option allergen codes (modifier↔allergen association, Task 9)", () => {
+  // The option-group manager's per-option allergen adds/removes editor (apps/server/src/catalogue-api.ts
+  // → packages/catalogue/src/allergens.ts) rejects with `allergen.invalid_code` for an unknown EU-14
+  // code and `allergen.add_remove_conflict` when an operator picks the SAME code in both the adds
+  // picker and the removes multiselect — the resulting row would both contain and not contain it, so
+  // the second PATCH's disjointness check trips (400). Both must map to real copy, never the raw wire
+  // code and never the GENERIC fallback. Proven by deletion: drop either from CODE_MESSAGES and
+  // codeMessage returns GENERIC_ES → the not.toBe(GENERIC_ES) assertion goes red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  for (const code of ["allergen.invalid_code", "allergen.add_remove_conflict"]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+  }
+});

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { ALLERGEN_CODES, validateAllergens } from "./allergens.js";
+import {
+  ALLERGEN_CODES,
+  assertAllergenOverlayDisjoint,
+  validateAllergens,
+  validateRemoveAllergens,
+} from "./allergens.js";
 
 describe("ALLERGEN_CODES", () => {
   it("is the closed EU-14 list", () => {
@@ -63,5 +68,58 @@ describe("validateAllergens", () => {
   it("accepts an entry with no source", () => {
     const a = { gluten: { presence: "contains" } };
     expect(validateAllergens(a)).toEqual(a);
+  });
+});
+
+describe("validateRemoveAllergens", () => {
+  it("accepts valid EU-14 codes", () => {
+    expect(validateRemoveAllergens(["gluten", "milk"])).toEqual(["gluten", "milk"]);
+  });
+
+  it("rejects a non-array", () => {
+    expect(() => validateRemoveAllergens({})).toThrow(AppError);
+    try {
+      validateRemoveAllergens({});
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as AppError).code).toBe("allergen.invalid_code");
+    }
+  });
+
+  it("rejects an unknown code", () => {
+    expect(() => validateRemoveAllergens(["banana"])).toThrow(AppError);
+    try {
+      validateRemoveAllergens(["banana"]);
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as AppError).code).toBe("allergen.invalid_code");
+    }
+  });
+});
+
+describe("assertAllergenOverlayDisjoint", () => {
+  it("throws when a code is both added and removed", () => {
+    expect(() =>
+      assertAllergenOverlayDisjoint({ gluten: { presence: "contains" } }, ["gluten"]),
+    ).toThrow(AppError);
+    try {
+      assertAllergenOverlayDisjoint({ gluten: { presence: "contains" } }, ["gluten"]);
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as AppError).code).toBe("allergen.add_remove_conflict");
+    }
+  });
+
+  it("is a no-op when either side is null", () => {
+    expect(() => assertAllergenOverlayDisjoint(null, ["gluten"])).not.toThrow();
+    expect(() =>
+      assertAllergenOverlayDisjoint({ milk: { presence: "contains" } }, null),
+    ).not.toThrow();
+  });
+
+  it("is a no-op when add and remove are disjoint", () => {
+    expect(() =>
+      assertAllergenOverlayDisjoint({ milk: { presence: "contains" } }, ["gluten"]),
+    ).not.toThrow();
   });
 });

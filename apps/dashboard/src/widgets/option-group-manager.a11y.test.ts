@@ -34,6 +34,8 @@ const items: OptionGroupItem[] = [
     sort: 0,
     active: true,
     maxQuantity: 1,
+    addAllergens: null,
+    removeAllergens: null,
   },
 ];
 

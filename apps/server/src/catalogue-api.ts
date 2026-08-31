@@ -104,6 +104,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
+  "allergen.add_remove_conflict": 400,
   "media.missing": 400,
   "media.unsupported_type": 415,
   "media.too_large": 413,
@@ -664,6 +665,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         sort?: unknown;
         active?: unknown;
         maxQuantity?: unknown;
+        addAllergens?: unknown;
+        removeAllergens?: unknown;
       }>(c);
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
@@ -686,6 +689,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
         ...(maxQuantity === undefined ? {} : { maxQuantity }),
+        ...(body.addAllergens === undefined
+          ? {}
+          : { addAllergens: body.addAllergens as ProductAllergens | null }),
+        ...(body.removeAllergens === undefined
+          ? {}
+          : { removeAllergens: body.removeAllergens as string[] | null }),
       };
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
@@ -709,6 +718,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         sort?: unknown;
         active?: unknown;
         maxQuantity?: unknown;
+        addAllergens?: unknown;
+        removeAllergens?: unknown;
       }>(c);
       const patch: UpdateOptionGroupItemInput = {};
       if (body.name !== undefined) {
@@ -734,6 +745,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "active" });
         }
         patch.active = body.active;
+      }
+      if (body.addAllergens !== undefined) {
+        patch.addAllergens = body.addAllergens as ProductAllergens | null;
+      }
+      if (body.removeAllergens !== undefined) {
+        patch.removeAllergens = body.removeAllergens as string[] | null;
       }
       // No mutable field → 204 no-op, sidestepping updateOptionGroupItem's empty `.set()` (which Drizzle
       // rejects). A well-formed-but-missing item id is a silent no-op (the updateProduct posture).

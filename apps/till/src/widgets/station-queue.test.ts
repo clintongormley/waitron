@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
@@ -231,6 +232,128 @@ describe("till-station-queue", () => {
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
+    });
+  });
+
+  describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
+    // A fired dish carrying the server-attached as-served profile: it CONTAINS milk (a "+ extra cheese"
+    // option added it) and REMOVED gluten (a "gluten-free bun" option stripped it) — the exact shape
+    // `listStationQueue` returns (Task 8), which the KDS renders as the chips + "NO <allergen>" callout
+    // this suite asserts below.
+    const withAllergens: StationQueueGroup = {
+      orderId: "wo-a",
+      orderNumber: 11,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      thresholds: DEFAULT_THRESHOLDS,
+      status: "placed",
+      items: [
+        {
+          id: "ti-a",
+          workingOrderLineId: "wol-a",
+          state: "queued",
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
+          asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
+          removed: ["gluten"],
+        },
+      ],
+    };
+
+    // A dish whose OWN allergens are unreviewed (a null base) — the Cautious fold is `pending`, so the
+    // KDS must warn the cook the plate is not verified rather than read it as allergen-free.
+    const pendingItem: StationQueueGroup = {
+      orderId: "wo-p",
+      orderNumber: 12,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      thresholds: DEFAULT_THRESHOLDS,
+      status: "placed",
+      items: [
+        {
+          id: "ti-p",
+          workingOrderLineId: "wol-p",
+          state: "queued",
+          descriptions: { "es-ES": "Especial" },
+          quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
+          asServed: { allergens: {}, pending: true },
+          removed: [],
+        },
+      ],
+    };
+
+    it("rail: shows a struck 'NO <allergen>' removal callout and a localised 'Milk' contains chip", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withAllergens],
+        view: "rail",
+        stationId: "st-a",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-a"]')!;
+      // The removal callout localises the code (default locale en-GB) — never the raw English code.
+      const removed = item.querySelector('[data-removed="gluten"]')!;
+      expect(removed).not.toBeNull();
+      expect(removed.textContent).toContain(
+        `${t("allergens.without")} ${allergenName("gluten", currentLocale())}`,
+      );
+      expect(item.textContent).toMatch(/milk/i);
+    });
+
+    it("kanban: shows the same removal callout and contains chip beneath the cell's dish", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withAllergens],
+        stationId: "st-a",
+      });
+      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
+      expect(cell.querySelector('[data-removed="gluten"]')!.textContent).toContain(
+        allergenName("gluten", currentLocale()),
+      );
+      expect(cell.textContent).toMatch(/milk/i);
+    });
+
+    it("localises the removal callout for the operator locale (es-ES shows 'SIN Leche', not 'MILK')", async () => {
+      // A removed MILK code proves localisation: es 'Leche' differs unmistakably from the English code.
+      const esRemoval: StationQueueGroup = {
+        ...withAllergens,
+        items: [
+          { ...withAllergens.items[0]!, id: "ti-es", asServed: undefined, removed: ["milk"] },
+        ],
+      };
+      setLocale("es-ES");
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [esRemoval],
+          view: "rail",
+          stationId: "st-es",
+        });
+        const removed = el.shadowRoot!.querySelector('[data-item="ti-es"] [data-removed="milk"]')!;
+        expect(removed.textContent).toContain("SIN Leche");
+        expect(removed.textContent).not.toMatch(/milk/i);
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    it("shows a not-reviewed warning when the as-served fold is pending", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [pendingItem],
+        view: "rail",
+        stationId: "st-p",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-p"]')!;
+      expect(item.textContent).toContain(t("allergens.not_reviewed"));
+    });
+
+    it("a plain item with no as-served profile and nothing removed renders no allergen row (regression-safe)", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups, // the top-level fixture — no item carries asServed/removed
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.querySelectorAll(".line-allergens")).toHaveLength(0);
     });
   });
 

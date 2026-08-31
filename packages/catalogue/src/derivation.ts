@@ -41,3 +41,49 @@ export function republish(
   if (manual === null && derivation === null) return null; // nothing reviewed at all
   return mergeAllergenMaps(derivation?.allergens ?? {}, manual ?? {});
 }
+
+/** A selected option's allergen overlay: the codes it ADDS and the codes it REMOVES. */
+export interface OptionAllergenOverlay {
+  add: ProductAllergens | null;
+  remove: readonly string[] | null;
+}
+
+/** The as-served allergen profile of one dish line: the declared set, a `pending` flag when the dish's
+ * own allergens are unreviewed, and `removed` — the base codes the options SUBTRACTED (present in the
+ * reviewed base but not in the resulting `allergens`), for the "swap made this safe" callout. `removed`
+ * is empty for a pending (null) base — a remove cannot act on an unknown base — and for a code an add
+ * put back on the plate (add wins, so it is not removed). */
+export interface AsServedAllergens {
+  allergens: ProductAllergens;
+  pending: boolean;
+  removed: string[];
+}
+
+/** Fold a dish's published allergens with its selected options' overlays (design §4, "Cautious").
+ * `base === null` (unreviewed) → the plate stays pending: removes cannot subtract from an unknown
+ * base, so only the (always-safe) adds show. A reviewed base has its removed codes deleted entirely
+ * (both `contains` and `may_contain`) and the adds merged in — adds applied last, so an add WINS a
+ * cross-option conflict (over-declaring is the safe direction). `removed` reports the base codes no
+ * longer on the resulting plate (a code removed by one option but ADDED back by another is NOT in
+ * `removed`, since it survives in `allergens`). Pure and total. */
+export function deriveAsServedAllergens(
+  base: ProductAllergens | null,
+  options: readonly OptionAllergenOverlay[],
+): AsServedAllergens {
+  let adds: ProductAllergens = {};
+  const removes = new Set<string>();
+  for (const opt of options) {
+    if (opt.add) adds = mergeAllergenMaps(adds, opt.add);
+    if (opt.remove) for (const code of opt.remove) removes.add(code);
+  }
+  if (base === null) return { allergens: adds, pending: true, removed: [] };
+  const stripped: ProductAllergens = {};
+  for (const [code, decl] of Object.entries(base)) {
+    if (!removes.has(code)) stripped[code] = decl;
+  }
+  const allergens = mergeAllergenMaps(stripped, adds);
+  // A base code is "removed" only when it is no longer on the resulting plate: a code an add put back
+  // (add wins a cross-option conflict) stays in `allergens`, so it is NOT reported as removed.
+  const removed = Object.keys(base).filter((code) => !(code in allergens));
+  return { allergens, pending: false, removed };
+}
