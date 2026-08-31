@@ -14,7 +14,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { AllergenMap, Database, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -848,7 +848,15 @@ async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
 async function placeOrderWith(
   tx: Transaction,
   cfg: TillConfig,
-  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+  // `note`/`doneness` are the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder`
+  // validates + persists them on the parent dish line, and `fireLines` snapshots them onto the ticket.
+  lines: {
+    productId: string;
+    quantity: string;
+    options?: { optionGroupItemId: string }[];
+    note?: string;
+    doneness?: Doneness;
+  }[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
   await createOpenOrder(tx, cfg, id, lines, null);
@@ -1002,6 +1010,50 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setCategoryStation(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
+    });
+  });
+
+  it("snapshots the line note + doneness at fire, and a later draft edit never moves the fired ticket (NON-FISCAL, spec §2/§3)", async () => {
+    // The note/doneness counterpart of "Re-route the category AFTER firing" above: a fired ticket_items
+    // row is a SNAPSHOT (like station_id/course_id), so editing the working_order_line afterwards must
+    // NOT rewrite food already sent to the pass. Task 2's tabs.test.ts already pins that fire CAPTURES
+    // the values; this pins that they stay FROZEN against a later edit — the immutability half.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const p = await makeProduct(tx, cfg, catalogueId, {});
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: p, quantity: "1", note: "sin cebolla", doneness: "medium_rare" },
+      ]);
+
+      // Fire snapshotted the parent line's note/doneness onto the ticket item.
+      const [before] = await tx
+        .select({ note: ticketItems.note, doneness: ticketItems.doneness })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(before).toMatchObject({ note: "sin cebolla", doneness: "medium_rare" });
+
+      // Edit the DRAFT working_order_line AFTER firing.
+      await tx
+        .update(workingOrderLines)
+        .set({ note: "con cebolla", doneness: "well_done" })
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+
+      // Self-contained guard (mirrors verify.test.ts's entorno test): confirm the DRAFT actually
+      // changed, so the ticket_items assertion below cannot pass merely because the update no-op'd.
+      const [draft] = await tx
+        .select({ note: workingOrderLines.note, doneness: workingOrderLines.doneness })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      expect(draft).toMatchObject({ note: "con cebolla", doneness: "well_done" });
+
+      // The already-fired ticket is UNCHANGED — the snapshot did not move.
+      const [after] = await tx
+        .select({ note: ticketItems.note, doneness: ticketItems.doneness })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(after).toMatchObject({ note: "sin cebolla", doneness: "medium_rare" });
     });
   });
 

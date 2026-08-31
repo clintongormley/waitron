@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
+import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
@@ -369,5 +370,102 @@ describe("parent_line_id is not part of the huella", () => {
     const withParent = await huellaFor(1);
     const withoutParent = await huellaFor(null);
     expect(withParent).toBe(withoutParent);
+  });
+});
+
+describe("line note/doneness are not part of the huella", () => {
+  // The note/doneness counterpart of the "parent_line_id is not part of the huella" block above and
+  // verify.test.ts's "entorno is not part of the huella" — the §5 invariant "never put our own metadata
+  // into a hash", applied to the per-line kitchen customisation (spec §2/§3). A line's `note` (free-text
+  // kitchen instruction) and `doneness` (the meat-doneness enum) are NON-FISCAL KDS metadata: they live
+  // ONLY on `working_order_lines` and — snapshotted at fire — `ticket_items`, and never on the fiscal
+  // projection. `RecordSaleLine` (packages/core/src/record-sale.ts) carries no such field, `sale_lines`
+  // has no such column, and `backend.recordSale` is handed only `total` + `vatBreakdown` +
+  // `descriptionOfOperation` — so a line's note/doneness have no channel into `computeHuella`'s input at
+  // all.
+  //
+  // This is a REGRESSION GUARD, not a red-first test: because there is no channel today, it passes the
+  // day it is written (map §4 — no line data feeds computeHuella). It earns its place by failing the day
+  // someone threads a line field into the record — PROVEN by construction in Task 3 (temporarily folding
+  // a line's `note` into the hashed `DescripcionOperacion` in `record-sale.ts` turned the two huellas
+  // apart, then reverted). The two variants below carry DIFFERENT note+doneness — attached to a line via
+  // a spread, since these fields deliberately do NOT exist on `RecordSaleLine`, and that absence IS the
+  // boundary — and must hash IDENTICALLY.
+  //
+  // **Deviation from the brief**, which named `verify.test.ts`. That suite operates purely at the
+  // abstract chain layer (`altaFor` has no per-line structure at all), so a note/doneness hash
+  // comparison cannot even be expressed there; this file is the one place the REAL `recordSale` →
+  // `computeHuella` path runs, exactly where a line field could wrongly leak — the same reasoning that
+  // put the parent_line_id guard here. `record-sale.ts:348` already points callers at "the
+  // huella-invariance test in packages/fiscal-verifactu's write-path e2e" for precisely this property.
+  //
+  // Byte-identical huellas need the same NumSerieFactura against the same empty chain, so — exactly as
+  // the parent_line_id block above — each sale is recorded, its huella read back INSIDE its transaction,
+  // and the transaction then ROLLED BACK, reverting `invoice_series.next_number` and the `cadenas` head
+  // so the next call re-allocates the identical `A/1` against the same still-empty chain.
+  const ROLLBACK = new Error("rollback: huella captured");
+
+  /** The default two-line basket, with `note`/`doneness` spread onto the dish line — a wider shape than
+   *  `RecordSaleLine` on purpose (those fields are not on it). All amounts stay the saleInput defaults,
+   *  so the total and the default settlement still balance; only the KDS metadata differs between calls. */
+  function linesWith(note: string, doneness: string) {
+    const dish: RecordSaleLine = {
+      lineNo: 1,
+      descriptions: { "es-ES": "Café solo" },
+      quantity: "2",
+      unitPrice: "5.00",
+      vatRate: "21.00",
+      lineTotal: "10.00",
+    };
+    const water: RecordSaleLine = {
+      lineNo: 2,
+      descriptions: { "es-ES": "Agua" },
+      quantity: "1",
+      unitPrice: "2.10",
+      vatRate: "10.00",
+      lineTotal: "2.10",
+    };
+    return [{ ...dish, note, doneness }, water];
+  }
+
+  async function huellaFor(note: string, doneness: string): Promise<string> {
+    let huella: string | undefined;
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({ tenantId, tillId, nodeId, seriesId, lines: linesWith(note, doneness) }),
+      );
+      const { rows } = await tx.execute<{ huella: string }>(
+        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+      );
+      huella = rows[0]!.huella;
+      // Roll the whole sale back so the next call re-allocates the identical NumSerieFactura against the
+      // same empty chain — see the block comment above.
+      throw ROLLBACK;
+    }).catch((error) => {
+      if (error !== ROLLBACK) throw error;
+    });
+    return huella!;
+  }
+
+  it("hashes identically regardless of a line's note/doneness, because neither reaches the record", async () => {
+    const rare = await huellaFor("no mayo", "rare");
+    const wellDone = await huellaFor("extra mayo", "well_done");
+    expect(rare).toBe(wellDone);
+  });
+
+  it("keeps note and doneness off the fiscal sale_lines projection entirely", async () => {
+    // The structural reason the hashes above can never diverge: the sale/fiscal projection has no
+    // column for either field, so nothing a kitchen line carries can ride into a filed record. If a
+    // future migration ever added `note`/`doneness` to `sale_lines`, this fails — the earliest possible
+    // warning that the NON-FISCAL boundary has moved.
+    const { rows } = await pg.db.execute<{ column_name: string }>(
+      sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
+    );
+    const cols = rows.map((r) => r.column_name);
+    expect(cols).not.toContain("note");
+    expect(cols).not.toContain("doneness");
   });
 });
