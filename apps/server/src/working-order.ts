@@ -43,6 +43,7 @@ import {
 import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import {
   deriveAsServedAllergens,
+  deriveAsServedDiet,
   listAvailableProducts,
   priceBasket,
   priceBasketWithOptions,
@@ -51,7 +52,12 @@ import {
 } from "@waitron/catalogue";
 import type {
   BasketItemWithOptions,
+  DietaryOrigin,
+  DietDerivation,
+  DietOverride,
+  DietProfile,
   LockedLine,
+  OptionOriginOverlay,
   PricedLines,
   ProductAllergens,
 } from "@waitron/catalogue";
@@ -3151,6 +3157,13 @@ export interface StationQueueItem {
    *  `{ allergens: {}, pending: true }` when the parent line is absent from the read (belt-and-braces).
    *  The fold's `removed` rides as the sibling {@link removed} field, not nested here. */
   asServed: { allergens: ProductAllergens; pending: boolean };
+  /** The AS-SERVED diet profile (Task 5) — the diet twin of {@link asServed}: the parent product's
+   *  recipe-derived origins folded with its selected options' origin overlays (a `remove` strips an
+   *  origin, an `add` merges one), then the staff override re-applied. `vegan`/`vegetarian` read
+   *  "unknown" while the derivation is pending. Display-only; defaults to a derived-empty
+   *  `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is absent from
+   *  the read (belt-and-braces, parity with {@link asServed}'s `{ allergens: {}, pending: true }`). */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
    *  {@link asServed}) — the "swap made this safe" chip. Empty for a pending base (a remove cannot
    *  subtract from an unknown base) or when nothing was removed. */
@@ -3245,13 +3258,21 @@ async function readQueueSubItems(
   modifiersByParent: Map<string, QueueModifier[]>;
   asServedByParent: Map<
     string,
-    { asServed: { allergens: ProductAllergens; pending: boolean }; removed: string[] }
+    {
+      asServed: { allergens: ProductAllergens; pending: boolean };
+      removed: string[];
+      asServedDiet: DietProfile;
+    }
   >;
 }> {
   const modifiersByParent = new Map<string, QueueModifier[]>();
   const asServedByParent = new Map<
     string,
-    { asServed: { allergens: ProductAllergens; pending: boolean }; removed: string[] }
+    {
+      asServed: { allergens: ProductAllergens; pending: boolean };
+      removed: string[];
+      asServedDiet: DietProfile;
+    }
   >();
   if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
 
@@ -3265,6 +3286,8 @@ async function readQueueSubItems(
       descriptions: workingOrderLines.descriptions,
       addAllergens: optionGroupItems.addAllergens,
       removeAllergens: optionGroupItems.removeAllergens,
+      addOrigins: optionGroupItems.addOrigins,
+      removeOrigins: optionGroupItems.removeOrigins,
     })
     .from(workingOrderLines)
     .leftJoin(
@@ -3285,6 +3308,9 @@ async function readQueueSubItems(
     string,
     { add: AllergenMap | null; remove: string[] | null }[]
   >();
+  // The DIET twin of `overlaysByParent` (Task 5) — each parent's options' ORIGIN overlays, built from
+  // the SAME child rows/join, so the diet fold rides the one child read the allergen fold already does.
+  const originOverlaysByParent = new Map<string, OptionOriginOverlay[]>();
   for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
@@ -3293,12 +3319,25 @@ async function readQueueSubItems(
     const overlays = overlaysByParent.get(child.parentLineId!) ?? [];
     overlays.push({ add: child.addAllergens ?? null, remove: child.removeAllergens ?? null });
     overlaysByParent.set(child.parentLineId!, overlays);
+    const originOverlays = originOverlaysByParent.get(child.parentLineId!) ?? [];
+    // `add_origins`/`remove_origins` are stored `string[]`; narrow to the origin union at the query
+    // boundary, as the allergen fold casts `AllergenMap`.
+    originOverlays.push({
+      add: (child.addOrigins ?? null) as DietaryOrigin[] | null,
+      remove: (child.removeOrigins ?? null) as DietaryOrigin[] | null,
+    });
+    originOverlaysByParent.set(child.parentLineId!, originOverlays);
   }
 
   // Base allergens per parent line — the PARENT line's product (LEFT join: a null/pending base is
   // allowed and yields `pending: true`). Fold each parent's base with its options' overlays.
   const parents = await tx
-    .select({ lineId: workingOrderLines.id, allergens: products.allergens })
+    .select({
+      lineId: workingOrderLines.id,
+      allergens: products.allergens,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
+    })
     .from(workingOrderLines)
     .leftJoin(
       products,
@@ -3310,11 +3349,21 @@ async function readQueueSubItems(
   for (const p of parents) {
     const base = (p.allergens ?? null) as ProductAllergens | null;
     const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
+    // The DIET twin (Task 5) — fold the product's recipe-derived origins with its options' origin
+    // overlays, then re-apply the staff override. A null derivation folds as "no recipe" (empty
+    // origins, NOT pending), the same default `republishProductDiet` uses when publishing the product's
+    // own diet, so the as-served profile matches the product-level one for an option-less dish.
+    const asServedDiet = deriveAsServedDiet(
+      (p.dietDerivation ?? { origins: [], pending: false }) as DietDerivation,
+      (p.dietOverride ?? null) as DietOverride | null,
+      originOverlaysByParent.get(p.lineId) ?? [],
+    );
     // Project only `{ allergens, pending }` onto the wire — `removed` rides as a sibling top-level field
     // (the client reads that one), so the nested copy would be dead weight.
     asServedByParent.set(p.lineId, {
       asServed: { allergens: asServed.allergens, pending: asServed.pending },
       removed: asServed.removed,
+      asServedDiet,
     });
   }
   return { modifiersByParent, asServedByParent };
@@ -3460,6 +3509,13 @@ export async function listStationQueue(
         allergens: {},
         pending: true,
       },
+      // The as-served diet profile (Task 5), safe-defaulted to a derived-empty "unknown" profile when
+      // the parent line is absent from the read (belt-and-braces, parity with `asServed`'s default).
+      asServedDiet: asServedByParent.get(row.workingOrderLineId)?.asServedDiet ?? {
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
+      },
       removed: asServedByParent.get(row.workingOrderLineId)?.removed ?? [],
       // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
       // `courseId` is present its name/order are too; a null course serialises `course: null`.
@@ -3503,6 +3559,12 @@ export interface ExpoItem {
    *  true }` when the parent line is absent from the read. The fold's `removed` rides as the sibling
    *  {@link removed} field, not nested here. */
   asServed: { allergens: ProductAllergens; pending: boolean };
+  /** The AS-SERVED diet profile (Task 5) — the same fold {@link StationQueueItem.asServedDiet} carries:
+   *  the parent product's recipe-derived origins minus the options' removes plus their adds, the staff
+   *  override re-applied, "unknown" while the derivation is pending. Display-only; defaults to a
+   *  derived-empty `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is
+   *  absent from the read. */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed}. */
   removed: string[];
   /** `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11) — the expo spans stations, so
@@ -3777,6 +3839,12 @@ export async function listExpoQueue(
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {
         allergens: {},
         pending: true,
+      },
+      // Task 5 — the same as-served diet profile the station read attaches, safe-defaulted identically.
+      asServedDiet: asServedByParent.get(row.lineId)?.asServedDiet ?? {
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
       },
       removed: asServedByParent.get(row.lineId)?.removed ?? [],
       queuedAt: row.queuedAt,
