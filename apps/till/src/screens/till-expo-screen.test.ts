@@ -313,7 +313,8 @@ describe("till-expo-screen", () => {
 
   describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
     // A fired pass item carrying the server-attached as-served profile: CONTAINS milk and REMOVED
-    // gluten — the exact shape `listExpoQueue` now returns (Task 8), which the pass doesn't render yet.
+    // gluten — the exact shape `listExpoQueue` returns (Task 8), which the pass renders as the chips +
+    // removal callout this suite asserts below.
     const orderWithAllergens: ExpoOrder = {
       orderId: "wo-a",
       orderNumber: 11,
