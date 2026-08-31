@@ -109,15 +109,20 @@ Four components, described in §5–§8. Nothing here writes to the database.
 
 ## 5. Server: request correlation
 
-A Hono middleware, mounted **early** — before the mirror read-only gate so it
-covers every route, including `/health` — that on each request:
+A Hono middleware, mounted **early** — after `/health` is registered but before
+the mirror read-only gate, so it wraps every API route. It does **not** cover
+`/health` itself: Hono applies a `use()` only to routes registered after it, and
+`/health` (a liveness probe that needs no correlation) is registered at app
+creation, before this middleware — a deliberate exclusion. On each request it:
 
 - reads an inbound `x-request-id` header if present (so a client can supply its
   own and the two trails share one key), otherwise generates one with
   `crypto.randomUUID()`;
-- **sanitises** the id regardless of origin: cap length (e.g. 64 chars) and strip
-  to `[A-Za-z0-9._-]`, so a hostile client cannot forge log lines by injecting
-  newlines or control characters (log-injection defence);
+- **validates** that id rather than transforming it — an inbound value is accepted
+  only if it already matches `[A-Za-z0-9._-]{1,64}`; anything else (over-length,
+  empty, or carrying control characters) is rejected and the generated UUID used
+  instead, so a hostile client cannot forge log lines by injecting newlines or
+  control characters (log-injection defence);
 - stashes it in the Hono context (`c.set("requestId", id)`, via a `hono`
   `ContextVariableMap` augmentation) so any handler and the error boundary can read
   it with `c.get("requestId")`. There is **no per-handler child logger** in this
@@ -216,12 +221,16 @@ Contents:
   `{ at, level, event, requestId?, code?, fields? }`, evicting oldest first. Cheap
   and in-memory, scoped to the app session. `snapshot()` returns a copy (Slice 2
   sends it; the method lives here now).
-- **Redaction guard** — the *only* way to push an event. It validates `fields`
-  against an **allowlist of key names and primitive value types**; anything
-  nested, or any non-allowlisted key, is dropped (and throws in test mode so the
-  guard is provable). This is what makes "never a body" a property of the code,
-  not of the caller. Proven by deletion: remove the allowlist check, feed a body,
-  assert it leaks.
+- **Redaction guard** — the *only* way to push an event. It keeps a field only if
+  its value is a **primitive** (string/number/boolean), dropping anything nested —
+  so a request/response **body** (an object/array) can never reach the trail —
+  and capping string length and field count (throwing in test mode so the guard is
+  provable). This is what makes "never a body" a property of the code, not of the
+  caller. Proven by deletion: remove the primitive check, feed a body, assert it
+  leaks. A field's **key** is not yet allowlisted — the Slice-1 callers (the
+  package's own fetch/error hooks and a `nav` `{screen}` event) control which keys
+  they pass, and none pass free-form data; a key-name allowlist is a **Slice-2
+  hardening** for when the trail is actually forwarded to the vendor.
 - **Error boundary** — an installer that takes a `Window`-like target (injected, so
   the package tests under Node without a DOM) and attaches `error` /
   `unhandledrejection` listeners, recording an `error` event with the error

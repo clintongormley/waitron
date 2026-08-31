@@ -6,7 +6,7 @@ import { requestIdMiddleware, sanitizeRequestId } from "./request-id.js";
 const at = () => new Date("2026-08-31T10:00:00.000Z");
 
 describe("sanitizeRequestId", () => {
-  it("strips control chars and caps length; rejects empty/garbage", () => {
+  it("accepts an allowlisted id and rejects (returns null) control chars, over-length, empty and absent", () => {
     expect(sanitizeRequestId("abc-123.DEF_9")).toBe("abc-123.DEF_9");
     expect(sanitizeRequestId("bad\nid; rm -rf")).toBeNull(); // contains disallowed chars
     expect(sanitizeRequestId("x".repeat(200))).toBeNull(); // too long

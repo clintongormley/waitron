@@ -295,4 +295,19 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
       error: { code: "diagnostics.invalid_verbosity" },
     });
   });
+
+  it("coerces an empty POST body to a clean 400, not an opaque 500", async () => {
+    const v = await setupVenue();
+    const { app } = mountApp(v, stubReader().reader);
+    // No body: `c.req.json()` would throw SyntaxError → the boundary answers `server.internal` 500;
+    // `readJsonBody` coerces it to `{}` so the field guard refuses it as `diagnostics.invalid_verbosity`.
+    const res = await app.request("/management-api/diagnostics/verbosity", {
+      method: "POST",
+      headers: { cookie: v.managerCookie, "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "diagnostics.invalid_verbosity", params: { reason: "level" } },
+    });
+  });
 });

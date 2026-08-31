@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
+import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import type { LogLevel, Logger } from "./logger.js";
 import type { LogReader } from "./log-file.js";
@@ -109,7 +110,9 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
   app.post("/management-api/diagnostics/verbosity", (c) =>
     run(c, log, async () => {
       await authorize(c);
-      const body = (await c.req.json()) as { level?: unknown; ttlMinutes?: unknown };
+      // `readJsonBody` (not `c.req.json()`) so an empty/malformed body coerces to `{}` and the field
+      // guards below reject it as a clean 400 `diagnostics.invalid_verbosity`, never an opaque 500.
+      const body = await readJsonBody<{ level?: unknown; ttlMinutes?: unknown }>(c);
       const level = body.level;
       if (typeof level !== "string" || !ALLOWED_LEVELS.includes(level as LogLevel)) {
         throw new AppError("diagnostics.invalid_verbosity", { reason: "level" });

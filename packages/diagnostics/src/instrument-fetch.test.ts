@@ -172,4 +172,30 @@ describe("createInstrumentedFetch", () => {
     expect(end.level).toBe("error");
     expect(end.fields).toMatchObject({ phase: "end", requestId: "rid-6", error: "network" });
   });
+
+  it("honours a Request input: logs its method + masked url and preserves its headers", async () => {
+    const log = createDiagnosticsLog();
+    let seenHeaders: Headers | undefined;
+    const base = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seenHeaders = new Headers(init?.headers);
+      return new Response(null, { status: 204 });
+    });
+    const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
+      makeId: () => "rid-req",
+    });
+    const req = new Request("http://box/api/persons/2f1c8e2a-0000-4000-8000-000000000000", {
+      method: "DELETE",
+      headers: { "x-existing": "kept" },
+    });
+    await f(req);
+    // Old code stringified the Request to "[object Request]": method "GET", wrong path, header dropped.
+    expect(seenHeaders?.get("x-request-id")).toBe("rid-req");
+    expect(seenHeaders?.get("x-existing")).toBe("kept");
+    const end = log.snapshot().at(-1)!;
+    expect(end.fields).toMatchObject({
+      method: "DELETE",
+      path: "/api/persons/:id",
+      requestId: "rid-req",
+    });
+  });
 });

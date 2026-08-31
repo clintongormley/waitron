@@ -19,16 +19,24 @@ export function createInstrumentedFetch(
   const makeId = opts.makeId ?? (() => crypto.randomUUID());
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const id = makeId();
-    const method = (init?.method ?? "GET").toUpperCase();
+    // Typed as `typeof fetch`, so honour a `Request` input too: take its url/method/headers as the
+    // base and let `init` overlay them, rather than stringifying it to `[object Request]`.
+    const req = input instanceof Request ? input : undefined;
+    const method = (init?.method ?? req?.method ?? "GET").toUpperCase();
     const urlStr =
-      typeof input === "string" ? input : input instanceof URL ? input.href : String(input);
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (req?.url ?? String(input));
     let path = urlStr;
     try {
       path = maskPath(new URL(urlStr, opts.baseUrl ?? "http://local").pathname);
     } catch {
       /* keep raw */
     }
-    const headers = new Headers(init?.headers);
+    const headers = new Headers(req?.headers);
+    if (init?.headers) for (const [k, v] of new Headers(init.headers)) headers.set(k, v);
     headers.set("x-request-id", id);
     log.record("debug", "api", { phase: "start", method, path, requestId: id });
     try {
