@@ -32,6 +32,7 @@ import "./screens/purchases-screen.js";
 import "./screens/recipe-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
+import "./screens/diagnostics-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
@@ -69,7 +70,8 @@ type Screen =
   | "purchases"
   | "recipe"
   | "devices"
-  | "printers";
+  | "printers"
+  | "diagnostics";
 
 /** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
  * single source so the JS `matchMedia` query and the CSS `@media` block below cannot drift — a media
@@ -77,8 +79,9 @@ type Screen =
  * matches the existing repo precedent in `apps/till/src/screens/till-counter-screen.ts:111`. */
 const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
-/** One nav entry: the face it switches to and the i18n key for its label. */
-type NavItem = { screen: Screen; labelKey: StringKey };
+/** One nav entry: the face it switches to, the i18n key for its label, and whether it is manager-gated
+ * (`requiresManager` hides it from a `supervisor` session — `#nav()` filters on it before mapping). */
+type NavItem = { screen: Screen; labelKey: StringKey; requiresManager?: boolean };
 /** One sidebar group: an optional header label (the pinned first group has none) and its items. */
 type NavGroup = { headerKey?: StringKey; items: NavItem[] };
 
@@ -132,6 +135,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "receipt", labelKey: "nav.receipt" },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
+      { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
     ],
   },
 ];
@@ -644,17 +648,24 @@ export class DashboardApp extends LitElement {
         ${NAV_GROUPS.map(
           (group) => html`
             ${group.headerKey ? html`<h2 class="nav-group">${t(group.headerKey)}</h2>` : nothing}
-            ${group.items.map(
-              (item) =>
-                html`<wt-button
-                  class="nav-item"
-                  variant=${this.screen === item.screen ? "primary" : "secondary"}
-                  aria-current=${this.screen === item.screen ? "page" : nothing}
-                  data-test="nav-${item.screen}"
-                  @click=${() => this.#selectScreen(item.screen)}
-                  >${t(item.labelKey)}</wt-button
-                >`,
-            )}
+            ${group.items
+              .filter(
+                (item) =>
+                  !item.requiresManager ||
+                  this.sessionRole === "manager" ||
+                  this.sessionRole === "admin",
+              )
+              .map(
+                (item) =>
+                  html`<wt-button
+                    class="nav-item"
+                    variant=${this.screen === item.screen ? "primary" : "secondary"}
+                    aria-current=${this.screen === item.screen ? "page" : nothing}
+                    data-test="nav-${item.screen}"
+                    @click=${() => this.#selectScreen(item.screen)}
+                    >${t(item.labelKey)}</wt-button
+                  >`,
+              )}
           `,
         )}
       </nav>
@@ -714,6 +725,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
       case "printers":
         return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
+      case "diagnostics":
+        return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }
