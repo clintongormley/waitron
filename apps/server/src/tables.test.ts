@@ -825,7 +825,7 @@ describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
   });
 
   it("keeps a just-passed reservation on the floor within the grace window, drops it beyond", async () => {
-    // now = Madrid 12:00. RESERVATION_GRACE_MINUTES is 30, so the floor floor is 11:30. A booking at
+    // now = Madrid 12:00. RESERVATION_GRACE_MINUTES is 30, so the grace floor is 11:30. A booking at
     // 11:45 (15 min past, within grace) STILL surfaces — the reserved cue is most useful when a guest is
     // due or running late — while one at 11:15 (45 min past, beyond grace) is gone. Both are today +
     // booked; only their time relative to the grace floor differs.
