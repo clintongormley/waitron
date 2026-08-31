@@ -22,7 +22,11 @@ import type { TillConfig } from "./till-config.js";
 
 /** A configured kitchen station as the CRUD surface returns it — the slim shape the config editor and
  *  the station picker both read. `createdAt` is INTERNAL, not part of this surface (the same choice
- *  tables.ts's {@link FloorZone} makes for its own `createdAt`). */
+ *  tables.ts's {@link FloorZone} makes for its own `createdAt`). The three `*AfterMinutes` fields (KDS
+ *  order-timing alerts, design §8) ride this same read so the dashboard's threshold editor
+ *  (`kitchen-screen.ts`) can SEED its form from the row's persisted values rather than always
+ *  re-showing the column defaults — {@link updateStation}'s own doc explains why the CHECK ordering is
+ *  never re-validated on this read side. */
 export interface Station {
   id: string;
   name: string;
@@ -31,6 +35,9 @@ export interface Station {
    *  unique. Written only by {@link setDefaultStation} / {@link createStation}, never a plain update. */
   isDefault: boolean;
   active: boolean;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
 }
 
 /**
@@ -126,6 +133,9 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       displayOrder: kitchenStations.displayOrder,
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
@@ -133,11 +143,15 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
 }
 
 /**
- * Edit a station's `name`/`displayOrder`/`active` (any subset) — NOT `is_default`, which only
- * {@link setDefaultStation} may flip (so the partial unique is never risked by a plain update).
- * Reactivation is `updateStation({ active: true })`, the `update`-shaped surface tables.ts's
+ * Edit a station's `name`/`displayOrder`/`active`/timing-thresholds (any subset) — NOT `is_default`,
+ * which only {@link setDefaultStation} may flip (so the partial unique is never risked by a plain
+ * update). Reactivation is `updateStation({ active: true })`, the `update`-shaped surface tables.ts's
  * {@link updateZone} uses. An absent id (or another tenant's, RLS-hidden) throws `station.not_found`; a
- * name collision throws `station.name_taken`.
+ * name collision throws `station.name_taken`. The three `*AfterMinutes` fields (KDS order-timing
+ * alerts, design §8) are validated by the ROUTE before this is called — positive integers with
+ * `warm < overdue < forgotten` — so the raw `kitchen_stations_thresholds_ordered` CHECK (23514) is
+ * never reachable from here; this verb only forwards whatever the caller already validated, the same
+ * division of labour `name`/`displayOrder` already have with their route-side screens.
  */
 export async function updateStation(
   tx: Transaction,
@@ -146,12 +160,30 @@ export async function updateStation(
   // tables.ts's updateZone).
   _cfg: TillConfig,
   id: string,
-  patch: { name?: string; displayOrder?: number; active?: boolean },
+  patch: {
+    name?: string;
+    displayOrder?: number;
+    active?: boolean;
+    warmAfterMinutes?: number;
+    overdueAfterMinutes?: number;
+    forgottenAfterMinutes?: number;
+  },
 ): Promise<void> {
-  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  const set: {
+    name?: string;
+    displayOrder?: number;
+    active?: boolean;
+    warmAfterMinutes?: number;
+    overdueAfterMinutes?: number;
+    forgottenAfterMinutes?: number;
+  } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
   if (patch.active !== undefined) set.active = patch.active;
+  if (patch.warmAfterMinutes !== undefined) set.warmAfterMinutes = patch.warmAfterMinutes;
+  if (patch.overdueAfterMinutes !== undefined) set.overdueAfterMinutes = patch.overdueAfterMinutes;
+  if (patch.forgottenAfterMinutes !== undefined)
+    set.forgottenAfterMinutes = patch.forgottenAfterMinutes;
 
   let updated: { id: string }[];
   try {

@@ -82,6 +82,9 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           orderNumber: 5,
           label: "Mesa 4",
           queuedAt: "2026-08-17T10:00:00.000Z",
+          // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds, so the
+          // widget's classifyBand call doesn't throw on the missing field.
+          thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
           items: [
             {
               id: "ti-1",

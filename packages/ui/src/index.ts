@@ -1,4 +1,5 @@
 export { applyTokens } from "./tokens/index.js";
+export { TickingClock } from "./ticking-clock.js";
 export { baseStyles, disabledStyles, floorTrayStyles, selectStyles } from "./base-styles.js";
 export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
 export { WtButton } from "./components/wt-button.js";

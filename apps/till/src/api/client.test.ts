@@ -1045,11 +1045,11 @@ describe("TillApi", () => {
     expect(r).toEqual(statuses);
   });
 
-  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute and the tab fields", async () => {
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
     // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
     // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
     // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
-    // — both shapes round-trip.
+    // — both shapes round-trip. `timingBand` (KDS order-timing alerts, design §7.3) rides on BOTH.
     const rows: TableState[] = [
       {
         id: "t1",
@@ -1065,6 +1065,7 @@ describe("TillApi", () => {
         pendingToServe: 2,
         readyToServe: 3,
         enRoute: 1,
+        timingBand: "forgotten",
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         // Bookings-1 §4: an imminent reservation rides the read-model and must round-trip decoded.
         nextReservation: { time: "20:30" },
@@ -1085,6 +1086,7 @@ describe("TillApi", () => {
         pendingToServe: 0,
         readyToServe: 0,
         enRoute: 0,
+        timingBand: "fresh",
         status: null,
         nextReservation: null,
         // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).

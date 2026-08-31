@@ -1,8 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StationThresholds } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
+
+// The station's KDS order-timing thresholds (KDS order-timing alerts, design §4/§6) — the shipped
+// DB defaults (warm 5 / overdue 10 / forgotten 15 minutes), reused across every fixture below so the
+// existing minute-based scenarios keep meaning what they said before the two-band `#ageBucket` became
+// the shared three-band `classifyBand`.
+const DEFAULT_THRESHOLDS: StationThresholds = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
 
 // Two orders' worth of lines at one station: order 5 has a queued + a preparing line, order 6 a ready
 // line — one item in each of the three kitchen states, so the kanban columns and the rail cards can be
@@ -15,6 +26,7 @@ const groupA: StationQueueGroup = {
   // A fired-at-placing Mode-I/T order awaiting the FISCAL collect — NOT collectable via the Mode-P
   // handover, so its card shows no collect button.
   status: "placed",
+  thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
       id: "ti-1",
@@ -47,6 +59,7 @@ const groupB: StationQueueGroup = {
   // A SETTLED Mode-P pickup awaiting its counter handover — COLLECTABLE, so its rail card shows the
   // collect button.
   status: "settled",
+  thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
       id: "ti-3",
@@ -135,6 +148,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       status: "settled",
+      thresholds: DEFAULT_THRESHOLDS,
       items: [
         {
           id: "ti-x",
@@ -164,6 +178,7 @@ describe("till-station-queue", () => {
       orderNumber: 9,
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
+      thresholds: DEFAULT_THRESHOLDS,
       status: "placed",
       items: [
         {
@@ -384,16 +399,16 @@ describe("till-station-queue", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("age-colours each ticket by how long its oldest line has waited (fresh / warm / hot)", async () => {
-    // `now` is injected so the buckets are deterministic. groupA queued at 10:00Z, groupB at 10:05Z.
-    const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → hot, B: 7 min → warm
+  it("age-colours each ticket by how long its oldest line has waited (fresh / warm / overdue)", async () => {
+    // `now` is injected so the bands are deterministic. groupA queued at 10:00Z, groupB at 10:05Z.
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, B: 7 min → warm
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       view: "rail",
       now,
     });
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
-    expect(tickets[0]!.classList.contains("age-hot")).toBe(true);
+    expect(tickets[0]!.classList.contains("age-overdue")).toBe(true);
     expect(tickets[1]!.classList.contains("age-warm")).toBe(true);
   });
 
@@ -405,6 +420,99 @@ describe("till-station-queue", () => {
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-fresh")).toBe(true);
+  });
+
+  it("a line 16 minutes old escalates to forgotten (past the default 15-minute threshold)", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      view: "rail",
+      now,
+    });
+    expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-forgotten")).toBe(true);
+  });
+
+  it("kanban: the age accent is also applied to each cell (today only the rail ticket carried it)", async () => {
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      now, // default view: kanban
+    });
+    const cell = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest(".cell")!;
+    expect(cell.classList.contains("age-overdue")).toBe(true);
+  });
+
+  it("the header shows a legible overdue+forgotten count badge — a non-colour tell, not just borders", async () => {
+    // groupA is 12 min old (overdue), groupB is 7 min old (warm) — one group has escalated.
+    const now = Date.parse("2026-08-17T10:12:00.000Z");
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      now,
+    });
+    const badge = el.shadowRoot!.querySelector(".overdue-count")!;
+    expect(badge.textContent).toContain("1");
+    expect(badge.textContent).toContain(t("station.overdue_count"));
+  });
+
+  it("the header shows no badge at all when nothing has escalated to overdue", async () => {
+    const now = Date.parse("2026-08-17T10:01:00.000Z"); // both groups fresh/near-fresh
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      view: "rail",
+      now,
+    });
+    expect(el.shadowRoot!.querySelector(".overdue-count")).toBeNull();
+  });
+
+  it("the header counts BOTH overdue and forgotten groups (band rank ≥ overdue)", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten, B: 11 min → overdue
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      view: "rail",
+      now,
+    });
+    expect(el.shadowRoot!.querySelector(".overdue-count")!.textContent).toContain("2");
+  });
+
+  it("forgotten flashes by default (motion allowed) — the flash class rides alongside the steady accent", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      view: "rail",
+      now,
+      reducedMotion: false,
+    });
+    const ticket = el.shadowRoot!.querySelector(".ticket")!;
+    expect(ticket.classList.contains("age-forgotten")).toBe(true);
+    expect(ticket.classList.contains("flash")).toBe(true);
+  });
+
+  it("reduced motion: a forgotten ticket renders the steady-red class with NO flash/animation class", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      view: "rail",
+      now,
+      reducedMotion: true,
+    });
+    const ticket = el.shadowRoot!.querySelector(".ticket")!;
+    // Still the steady red accent — just never the class the flashing @keyframes is scoped to.
+    expect(ticket.classList.contains("age-forgotten")).toBe(true);
+    expect(ticket.classList.contains("flash")).toBe(false);
+  });
+
+  it("reduced motion never applies flash to a merely-overdue (non-forgotten) ticket either", async () => {
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, not forgotten
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [groupA],
+      view: "rail",
+      now,
+      reducedMotion: false,
+    });
+    const ticket = el.shadowRoot!.querySelector(".ticket")!;
+    expect(ticket.classList.contains("age-overdue")).toBe(true);
+    expect(ticket.classList.contains("flash")).toBe(false);
   });
 });
 
@@ -425,6 +533,7 @@ const coursedOrder: StationQueueGroup = {
   label: "Mesa 2",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "placed",
+  thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
       id: "it-main",

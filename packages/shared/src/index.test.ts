@@ -4,6 +4,8 @@ import {
   AppError,
   assertMoney,
   assertSupportedLocale,
+  BAND_RANK,
+  classifyBand,
   compareDecimal,
   COUNTRY_DEFAULT_LOCALE,
   decimal,
@@ -36,6 +38,7 @@ import {
   toScale,
   workingOrderId,
   workingOrderLineId,
+  worstBand,
 } from "./index.js";
 
 /**
@@ -100,5 +103,12 @@ describe("package public surface (./index.js)", () => {
     expect(FALLBACK_LOCALE).toBe("en-GB");
     expect(COUNTRY_DEFAULT_LOCALE).toEqual({ ES: "es-ES" });
     expect(PROVINCE_DEFAULT_LOCALE).toEqual({});
+  });
+
+  it("re-exports the timing band classifier", () => {
+    const t = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
+    expect(classifyBand(0, 5 * 60_000, t)).toBe("warm");
+    expect(worstBand(["fresh", "overdue", "warm"])).toBe("overdue");
+    expect(BAND_RANK.forgotten).toBe(3);
   });
 });

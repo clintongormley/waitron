@@ -1223,6 +1223,107 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 
+  it("PATCH edits the warm/overdue/forgotten thresholds together; a non-positive value, an out-of-order set, or a partial trio → 400 management.request_invalid", async () => {
+    const id = await createStation(unique("Thresh"));
+    const ok = await req(
+      `/stations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      },
+      managerCookie,
+    );
+    expect(ok.status).toBe(204);
+    const row = await suite.admin.execute<{
+      warm_after_minutes: number;
+      overdue_after_minutes: number;
+      forgotten_after_minutes: number;
+    }>(
+      sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
+        from kitchen_stations where id = ${id}`,
+    );
+    expect(row.rows[0]).toMatchObject({
+      warm_after_minutes: 3,
+      overdue_after_minutes: 8,
+      forgotten_after_minutes: 12,
+    });
+
+    // A non-positive (or non-integer) value is a single-field fault — caught before the trio is ever
+    // considered as a group.
+    const nonPositive = await req(
+      `/stations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          warmAfterMinutes: 0,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      },
+      managerCookie,
+    );
+    expect(nonPositive.status).toBe(400);
+    expect(await nonPositive.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "warmAfterMinutes" } },
+    });
+
+    // An out-of-order set (warm >= overdue) is a group fault — the CHECK it would otherwise trip
+    // (`kitchen_stations_thresholds_ordered`) is never reached.
+    const outOfOrder = await req(
+      `/stations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          warmAfterMinutes: 10,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      },
+      managerCookie,
+    );
+    expect(outOfOrder.status).toBe(400);
+    expect(await outOfOrder.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes" },
+      },
+    });
+
+    // A partial trio (one of the three given without its siblings) cannot be ordered-checked at all,
+    // so it is refused the same way as an out-of-order set — the same compound field name.
+    const partial = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ warmAfterMinutes: 3 }) },
+      managerCookie,
+    );
+    expect(partial.status).toBe(400);
+    expect(await partial.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes" },
+      },
+    });
+
+    // The row is unchanged by every rejected attempt above.
+    const after = await suite.admin.execute<{
+      warm_after_minutes: number;
+      overdue_after_minutes: number;
+      forgotten_after_minutes: number;
+    }>(
+      sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
+        from kitchen_stations where id = ${id}`,
+    );
+    expect(after.rows[0]).toMatchObject({
+      warm_after_minutes: 3,
+      overdue_after_minutes: 8,
+      forgotten_after_minutes: 12,
+    });
+  });
+
   it("DELETE deactivates a station (drops off the active list); unknown/malformed :id → 404", async () => {
     const id = await createStation(unique("Del"));
     expect((await listStations()).find((s) => s.id === id)).toBeDefined();

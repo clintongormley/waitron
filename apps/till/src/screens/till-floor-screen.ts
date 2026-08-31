@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import type { TimingBand } from "@waitron/shared";
 // `baseStyles` also loads the `@waitron/ui` barrel, which registers `<wt-floor-canvas>` and
 // `<wt-table-token>` (self-registering `wt-*` components) — the map view and the tray consume them by
 // tag below. The type-only imports carry the canvas's copy/table/placement-event shapes.
@@ -159,6 +160,57 @@ export class TillFloorScreen extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
+      /* Order-timing accent (KDS order-timing alerts, design §7.3): a table whose worst unserved line
+         has escalated gets a subtler steady amber (warm) through steady red (overdue) up to a
+         FLASHING red (forgotten) — the SAME age- and flash class scheme till-station-queue's rail
+         card and till-expo-screen's order card use, so the escalation reads as one visual language
+         across every KDS surface. Laid down as an INSET BOX-SHADOW rather than another border/border-left
+         colour, deliberately: .card's left edge already carries the OCCUPANCY accent (.state-* above),
+         and a box-shadow is a wholly separate CSS property, so the two accents can never fight over
+         ownership of the same edge — both render, always, side by side (a11y: two independent
+         signals, never one clobbering the other). 'fresh' gets no override. */
+      .card.age-warm {
+        box-shadow: inset 0 0 0 2px var(--wt-color-primary);
+      }
+
+      .card.age-overdue,
+      .card.age-forgotten {
+        box-shadow: inset 0 0 0 2px var(--wt-color-danger);
+      }
+
+      /* The FORGOTTEN flash: a repeating fade of the inset accent, never a colour/motion change behind
+         text — .flash is applied only when the OS/browser has NOT asked for reduced motion
+         (#prefersReducedMotion), so an assistive-motion setting renders the steady red box-shadow
+         above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
+         the same preference (belt-and-suspenders, house a11y rule) — mirrors till-station-queue's/
+         till-expo-screen's identical treatment. */
+      .card.age-forgotten.flash {
+        animation: age-forgotten-flash 1s ease-in-out infinite;
+      }
+
+      @keyframes age-forgotten-flash {
+        50% {
+          box-shadow: inset 0 0 0 2px transparent;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .card.age-forgotten.flash {
+          animation: none;
+        }
+      }
+
+      /* The forgotten badge (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
+         table (not just under reduced motion), so a colour-blind operator or a reduced-motion setting
+         still sees the escalation without relying on the flashing-red accent alone. A FILLED danger
+         chip (like .badge.en-route's filled-primary treatment above) rather than plain text, since
+         this card already has a rich badge system — the same a11y-correct danger/on-danger token pair
+         every other filled chrome in this app uses. */
+      .badge.forgotten {
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+      }
+
       .card-head {
         display: flex;
         align-items: baseline;
@@ -291,6 +343,29 @@ export class TillFloorScreen extends LitElement {
    * transition, so even a stray `back-to-counter` cannot escape the shell.
    */
   @property({ attribute: false }) canExitToCounter = true;
+  /**
+   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
+   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
+   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
+   * deterministic assertion — the same injectable-override shape `till-station-queue`/
+   * `till-expo-screen` already use (KDS order-timing alerts, design §7.3).
+   *
+   * NO `TickingClock` here, unlike those two widgets — a deliberate call, not an oversight.
+   * `listTablesWithState` (Task 4) ships each table's ALREADY-REDUCED worst `timingBand` only, never
+   * the raw per-line ages/thresholds `classifyBand` needs (confirmed against
+   * `apps/server/src/working-order.ts`'s `TableState` — unlike `StationQueueGroup.thresholds` /
+   * `ExpoItem.thresholds`, which exist precisely so those widgets CAN re-derive a climbing band
+   * locally). `#card` reads `table.timingBand` directly, so a tick would re-render the identical
+   * classes — inert. The floor also has no polling refresh to piggyback on: `till-app.ts`'s
+   * `#refreshFloor`/`#loadFloor` only run on explicit actions (mount, a placement write, the
+   * `floor-refresh` event), confirmed by grep — design §7.4 reserves interval refetching for the
+   * manager overview alone ("the ONE screen that refetches on an interval"). A table already
+   * `forgotten` at the last fetch flashes immediately (the CSS `@keyframes` needs no JS clock to
+   * run); a table that CROSSES into a worse band while the floor sits untouched surfaces only on the
+   * next actual refresh, exactly like every other occupancy field on this screen (`state`,
+   * `pendingToServe`, …) — none of which tick between fetches either.
+   */
+  @property({ attribute: false }) reducedMotion?: boolean;
 
   /**
    * Which zone tab is showing: a zone id, `null` for the "Sin zona" tab, or `undefined` before the
@@ -595,9 +670,27 @@ export class TillFloorScreen extends LitElement {
     </wt-button>`;
   }
 
+  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
+   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
+   *  motion must respect the OS preference). Mirrors `till-station-queue`/`till-expo-screen`. */
+  #prefersReducedMotion(): boolean {
+    return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  /** The order-timing accent class for a table's `timingBand` (KDS order-timing alerts, design §7.3):
+   *  `fresh` renders nothing (the card's occupancy accent is untouched); `warm`/`overdue` get the
+   *  steady `age-*` class; `forgotten` additionally gets `flash` unless motion is reduced. Space-
+   *  prefixed (or empty) so it can be interpolated directly after `.card` in the template. Mirrors
+   *  `till-station-queue`'s `#accentClasses`/`till-expo-screen`'s `#accentClasses`. */
+  #timingAccentClass(band: TimingBand): string {
+    if (band === "fresh") return "";
+    const flash = band === "forgotten" && !this.#prefersReducedMotion();
+    return ` age-${band}${flash ? " flash" : ""}`;
+  }
+
   #card(table: TableState): TemplateResult {
     return html`<button
-      class="card state-${table.state}"
+      class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
       data-table=${table.id}
       @click=${() => this.#openTable(table)}
     >
@@ -617,6 +710,11 @@ export class TillFloorScreen extends LitElement {
             ? html`<span class="badge reserved" data-reserved
                 >${t("floor.reserved")} ${table.nextReservation.time}</span
               >`
+            : nothing
+        }
+        ${
+          table.timingBand === "forgotten"
+            ? html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`
             : nothing
         }
         ${

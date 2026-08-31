@@ -98,11 +98,38 @@ describe("kitchen-station config", () => {
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     // Same display_order (0) → tie-broken by name (Alpha, Barra, Zebra). Defaults applied: displayOrder
-    // 0, isDefault false, active true — the exact Station shape (no createdAt).
+    // 0, isDefault false, active true, and the KDS timing-threshold columns' own defaults (5/10/15) —
+    // the exact Station shape (no createdAt).
+    const defaultThresholds = {
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    };
     expect(list).toEqual([
-      { id: expect.any(String), name: "Alpha", displayOrder: 0, isDefault: false, active: true },
-      { id: expect.any(String), name: "Barra", displayOrder: 0, isDefault: false, active: true },
-      { id: expect.any(String), name: "Zebra", displayOrder: 0, isDefault: false, active: true },
+      {
+        id: expect.any(String),
+        name: "Alpha",
+        displayOrder: 0,
+        isDefault: false,
+        active: true,
+        ...defaultThresholds,
+      },
+      {
+        id: expect.any(String),
+        name: "Barra",
+        displayOrder: 0,
+        isDefault: false,
+        active: true,
+        ...defaultThresholds,
+      },
+      {
+        id: expect.any(String),
+        name: "Zebra",
+        displayOrder: 0,
+        isDefault: false,
+        active: true,
+        ...defaultThresholds,
+      },
     ]);
   });
 
@@ -135,7 +162,16 @@ describe("kitchen-station config", () => {
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
     await asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true, displayOrder: 9 }));
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([
-      { id, name: "Parrilla", displayOrder: 9, isDefault: false, active: true },
+      {
+        id,
+        name: "Parrilla",
+        displayOrder: 9,
+        isDefault: false,
+        active: true,
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      },
     ]);
   });
 

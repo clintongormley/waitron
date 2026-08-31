@@ -258,3 +258,46 @@ test("toFloorTable defaults null coordinates to 0 and a missing tab total to nul
   expect(table.tabTotal).toBeNull();
   expect(table.state).toBe("free");
 });
+
+// KDS order-timing alerts (design §7.3): timingBand threads through from the occupancy half so the
+// map/tray token (fed by this exact function, `till-floor-screen.ts`'s `#toFloorTable`) can render the
+// same flash-red accent the till's list card shows.
+test("toFloorTable threads a supplied timingBand through onto the FloorTable", () => {
+  const table = toFloorTable(
+    {
+      id: "t1",
+      label: "1",
+      capacity: 4,
+      posX: 200,
+      posY: 300,
+      shape: "rect",
+      rotation: 90,
+      zoneId: "z1",
+    },
+    {
+      state: "open-tab",
+      tabTotal: "12.50",
+      pendingToServe: 2,
+      status: null,
+      timingBand: "forgotten",
+    },
+  );
+  expect(table.timingBand).toBe("forgotten");
+});
+
+test("toFloorTable leaves timingBand undefined when the occupancy input omits it (the dashboard's neutral case)", () => {
+  const table = toFloorTable(
+    {
+      id: "t2",
+      label: "2",
+      capacity: null,
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+      zoneId: null,
+    },
+    { state: "free", pendingToServe: 0, status: null },
+  );
+  expect(table.timingBand).toBeUndefined();
+});

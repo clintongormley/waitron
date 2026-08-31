@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database, Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
@@ -92,6 +92,31 @@ describe("kitchen_stations schema (RLS + grants + partial unique)", () => {
     expect(row!.name).toBe("Cocina");
     expect(row!.isDefault).toBe(false);
     expect(row!.active).toBe(true);
+  });
+
+  it("carries ordered timing thresholds with sane defaults (KDS order-timing alerts)", async () => {
+    // The three per-station bands (warm/overdue/forgotten) default 5/10/15 minutes, and the
+    // kitchen_stations_thresholds_ordered CHECK rejects an out-of-order UPDATE. Read back via raw SQL
+    // (the columns are new); the ordering guard is the deletion-proof target — dropping the CHECK lets
+    // warm=20 (>= overdue=10) through instead of raising 23514.
+    const id = await seedStation(TENANT_A, LOCATION_A, "Timing station");
+    const row = await asApp(TENANT_A, (tx) =>
+      tx
+        .execute<{ w: number; o: number; f: number }>(
+          sql`select warm_after_minutes as w, overdue_after_minutes as o, forgotten_after_minutes as f
+              from kitchen_stations where id = ${id}`,
+        )
+        .then((r) => r.rows[0]),
+    );
+    expect(row).toMatchObject({ w: 5, o: 10, f: 15 });
+    // An out-of-order update (warm=20 >= overdue=10) violates the CHECK.
+    const e = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(sql`update kitchen_stations set warm_after_minutes = 20 where id = ${id}`),
+      ),
+    );
+    expect(pgErrorCode(e)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 
   it("app_user has no DELETE on kitchen_stations (deactivate, never delete)", async () => {

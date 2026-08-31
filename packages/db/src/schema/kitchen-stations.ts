@@ -52,6 +52,13 @@ export const kitchenStations = pgTable(
     name: text("name").notNull(),
     // Author-controlled ordering in the config editor + the station picker.
     displayOrder: integer("display_order").notNull().default(0),
+    // Per-station order-age bands (minutes) for the KDS timing alerts (KDS order-timing-alerts): a
+    // fired order goes WARM after `warm_after_minutes`, OVERDUE after `overdue_after_minutes`, and
+    // FORGOTTEN after `forgotten_after_minutes`. The hand-written --custom migration adds the
+    // kitchen_stations_thresholds_ordered CHECK (warm < overdue < forgotten) drizzle-kit cannot model.
+    warmAfterMinutes: integer("warm_after_minutes").notNull().default(5),
+    overdueAfterMinutes: integer("overdue_after_minutes").notNull().default(10),
+    forgottenAfterMinutes: integer("forgotten_after_minutes").notNull().default(15),
     // The counter/pass fallback station a fired line lands on when neither its product nor its
     // category names one. At most one per location — the partial unique (hand-written) enforces it.
     isDefault: boolean("is_default").notNull().default(false),

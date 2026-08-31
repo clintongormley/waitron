@@ -70,3 +70,5 @@ export {
   resolveActiveLocale,
 } from "./locales.js";
 export type { SupportedLocale } from "./locales.js";
+export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
+export type { StationThresholds, TimingBand } from "./timing.js";

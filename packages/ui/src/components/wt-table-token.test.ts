@@ -1,7 +1,8 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host, mount } from "../test-helpers.js";
 import type { FloorTable } from "../floor.js";
 import "./wt-table-token.js";
+import type { TableTokenLabels } from "./wt-table-token.js";
 
 afterEach(cleanup);
 
@@ -22,14 +23,23 @@ function table(overrides: Partial<FloorTable> = {}): FloorTable {
   };
 }
 
-async function mountToken(t: FloorTable, labels?: unknown): Promise<HTMLElement> {
+/** Mounts a token, optionally assigning `labels` and — for the order-timing accent's reduced-motion
+ *  gate — an injectable `reducedMotion` (the same test-deterministic override
+ *  `till-station-queue`/`till-expo-screen`/`till-floor-screen` already use). */
+async function mountToken(
+  t: FloorTable,
+  labels?: TableTokenLabels,
+  reducedMotion?: boolean,
+): Promise<HTMLElement> {
   const el = (await mount("<wt-table-token></wt-table-token>")) as HTMLElement & {
     table: FloorTable;
-    labels?: unknown;
+    labels?: TableTokenLabels;
+    reducedMotion?: boolean;
     updateComplete: Promise<unknown>;
   };
   el.table = t;
   if (labels) el.labels = labels;
+  if (reducedMotion !== undefined) el.reducedMotion = reducedMotion;
   await el.updateComplete;
   return el;
 }
@@ -139,4 +149,81 @@ test("an unplaced (shapeless) token falls back to the rounded-rect shape", async
   // tray is visually unchanged by the shape work.
   const bare = await mountToken(table({ shape: null }));
   expect(bare.shadowRoot!.querySelector(".card")!.classList.contains("shape-rect")).toBe(true);
+});
+
+// ── KDS order-timing alerts (design §7.3, fix round 1): the flash-red requirement on the MAP/canvas
+// token, mirroring till-floor-screen's LIST card treatment so the escalation reads as one visual
+// language on whichever floor view a manager happens to be looking at. ──────────────────────────────
+describe("order-timing accent (timingBand)", () => {
+  test("renders no timing accent when timingBand is undefined (fresh) — occupancy accent untouched", async () => {
+    const el = await mountToken(table({ state: "free" }));
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("state-free")).toBe(true);
+    expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  test("renders the subtler steady accent for a warm table, no flash, no marker", async () => {
+    const el = await mountToken(table({ timingBand: "warm" }));
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("age-warm")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  test("renders the steady red accent for an overdue table, no flash, no marker", async () => {
+    const el = await mountToken(table({ timingBand: "overdue" }));
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("age-overdue")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  test("forgotten flashes by default (motion allowed) and shows the non-colour forgotten marker", async () => {
+    const el = await mountToken(table({ timingBand: "forgotten" }), undefined, false);
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("age-forgotten")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
+  });
+
+  test("reduced motion: a forgotten table renders steady red with NO flash class, marker still shown", async () => {
+    const el = await mountToken(table({ timingBand: "forgotten" }), undefined, true);
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("age-forgotten")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(false);
+    // The marker is the non-colour tell — it renders regardless of the motion setting, exactly like
+    // till-floor-screen's .badge.forgotten text chip (never gated on reducedMotion itself).
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
+  });
+
+  test("reduced motion never applies flash to a merely-overdue (non-forgotten) table either", async () => {
+    const el = await mountToken(table({ timingBand: "overdue" }), undefined, false);
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("age-overdue")).toBe(true);
+    expect(card.classList.contains("flash")).toBe(false);
+  });
+
+  test("coexists with the occupancy accent — a forgotten OPEN-TAB token carries BOTH classes", async () => {
+    const el = await mountToken(table({ state: "open-tab", timingBand: "forgotten" }));
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("state-open-tab")).toBe(true);
+    expect(card.classList.contains("age-forgotten")).toBe(true);
+  });
+
+  test("the forgotten marker is decorative (aria-hidden) with no consumer-supplied label", async () => {
+    const el = await mountToken(table({ timingBand: "forgotten" }));
+    const marker = el.shadowRoot!.querySelector("[data-forgotten]")!;
+    expect(marker.getAttribute("aria-hidden")).toBe("true");
+    expect(marker.hasAttribute("aria-label")).toBe(false);
+    expect(marker.hasAttribute("role")).toBe(false);
+  });
+
+  test("the forgotten marker takes its accessible name from an app-supplied label, never hardcoded here", async () => {
+    const el = await mountToken(table({ timingBand: "forgotten" }), { forgotten: "Olvidada" });
+    const marker = el.shadowRoot!.querySelector("[data-forgotten]")!;
+    expect(marker.getAttribute("role")).toBe("img");
+    expect(marker.getAttribute("aria-label")).toBe("Olvidada");
+    expect(marker.hasAttribute("aria-hidden")).toBe(false);
+  });
 });

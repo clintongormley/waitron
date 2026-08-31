@@ -76,6 +76,7 @@ const freeTable: TableState = {
   pendingToServe: 0,
   readyToServe: 0,
   enRoute: 0,
+  timingBand: "fresh",
   status: null,
   nextReservation: null,
   // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
@@ -99,6 +100,7 @@ const openTable: TableState = {
   pendingToServe: 1,
   readyToServe: 0,
   enRoute: 0,
+  timingBand: "fresh",
   status: null,
   nextReservation: null,
   posX: null,
@@ -163,6 +165,9 @@ const stationGroup = {
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "settled" as const,
+  // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds, so the widget's
+  // classifyBand call doesn't throw on the missing field.
+  thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   items: [
     {
       id: "ti-1",

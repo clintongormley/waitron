@@ -21,7 +21,16 @@ afterEach(cleanupWidgets);
 const CATEGORIES: CategorySummary[] = [{ id: "cat-1", name: "Bebidas" }];
 
 const STATIONS: Station[] = [
-  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
+  {
+    id: "s1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
 ];
 
 const OPTION_GROUPS: OptionGroup[] = [

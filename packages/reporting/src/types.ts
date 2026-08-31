@@ -1,4 +1,4 @@
-import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, TenantId, TillId, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tender_method` in packages/db/src/schema/sales.ts. */
@@ -154,4 +154,28 @@ export interface DailyClose {
   vat: VatSummary;
   cash: CashUp;
   counts: CloseCounts;
+}
+
+/** The manager overview's overdue-orders query: THIS node's currently-open kitchen orders, scoped
+ * exactly as the other `/reports` routes are (design §7.4). No business-day range — the read is a
+ * live snapshot of right now, not a closed historical period. */
+export interface OverdueOrdersInput {
+  tenantId: TenantId;
+  nodeId: NodeId;
+}
+
+/** One currently-open order whose worst UNSERVED line has crossed into `overdue` or `forgotten`
+ * (design §7.4) — the manager overview's "orders taking too long" list, worst-first. `stationName`
+ * and `ageMinutes` describe that WORST line (an order can span several stations; this is the one
+ * driving the escalation), not necessarily the order's oldest or first-fired line. */
+export interface OverdueOrder {
+  orderId: string;
+  orderNumber: number;
+  /** The dining table this order is served at (a tab's back-pointer or a counter delivery), or
+   *  `null` for a bare walk-up — the same optionality `ExpoOrder.tableLabel` carries. */
+  tableLabel: string | null;
+  stationName: string;
+  ageMinutes: number;
+  /** Only ever `"overdue"` or `"forgotten"` — a `"fresh"`/`"warm"` order never reaches this list. */
+  band: TimingBand;
 }

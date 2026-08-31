@@ -89,6 +89,12 @@ export const en = {
   "station.view_kanban": "Board",
   "station.view_rail": "Tickets",
   "station.min": "min",
+  // The overdue+forgotten count badge (KDS order-timing alerts, design §7.1/§7.2) — shared by the
+  // station-queue header (station-queue.ts) and the expo pass (till-expo-screen.ts). A suffix word
+  // like `station.min`, not a sentence: `${n} ${t("station.overdue_count")}` ("3 overdue"). Counts every
+  // group whose band has escalated to at least `overdue` (overdue OR forgotten) — a non-colour tell
+  // beside the border accents, shown only when the count is non-zero.
+  "station.overdue_count": "overdue",
   "station.advance": "Advance",
   "station.bump_ticket": "Advance ticket",
   // The per-order Mode-P handover control on the rail card — hand a settled, fired order to the customer,
@@ -148,6 +154,11 @@ export const en = {
   // shown on every card (unlike the station display, which hides it in device mode). Same verb as
   // `station.reprint`, kept in its own screen namespace like the other KDS action keys.
   "expo.reprint": "Reprint",
+  // The item-level FORGOTTEN flag (KDS order-timing alerts, design §7.2) — a non-colour tell shown
+  // beside a single item's station/state when its OWN station has badly lagged (past the forgotten
+  // threshold), distinct from `station.overdue_count`'s pass-wide count badge: this flags the
+  // SPECIFIC item, not the whole pass. A short adjective label, not a sentence.
+  "expo.item_forgotten": "Forgotten",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal (sub-project 7 Task 9)
   "card.collecting": "Tap or insert card…",
@@ -220,6 +231,11 @@ export const en = {
   // The reserved-on-floor chip (Bookings-1 §4): rendered as `${t("floor.reserved")} ${time}`
   // ("Reserved 20:30") — the label PREFIXES the wall-clock time, unlike the count-suffix labels above.
   "floor.reserved": "Reserved",
+  // The forgotten-table badge (KDS order-timing alerts, design §7.3) — a non-colour tell shown
+  // whenever a table's `timingBand` is `forgotten`, unconditionally (not just under reduced motion —
+  // mirrors `expo.item_forgotten`), so a colour-blind operator or one with a reduced-motion setting
+  // still sees the escalation without relying on the flashing-red accent alone.
+  "floor.forgotten": "Forgotten",
   // Spatial floor plan (FP-2): the map/list toggle, the manager-only edit toggle, the unplaced tray,
   // and the edit-mode inspector copy threaded into `<wt-floor-canvas>`. `floor.view_map`/`view_list`
   // label the toggle with the view it SWITCHES TO. `floor.shape_*` name the three canvas shapes.
@@ -363,6 +379,7 @@ export const es: Record<StringKey, string> = {
   "station.view_kanban": "Tablero",
   "station.view_rail": "Comandas",
   "station.min": "min",
+  "station.overdue_count": "atrasados",
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",
   "station.collect": "Entregar",
@@ -390,6 +407,7 @@ export const es: Record<StringKey, string> = {
   "expo.ready": "Curso listo",
   "expo.away": "En camino",
   "expo.reprint": "Reimprimir",
+  "expo.item_forgotten": "Olvidado",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
   "card.cancel": "Cancelar",
@@ -450,6 +468,7 @@ export const es: Record<StringKey, string> = {
   "floor.pending_delivery": "por entregar",
   "floor.free": "Libre",
   "floor.reserved": "Reservada",
+  "floor.forgotten": "Olvidada",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
   "floor.edit_plan": "Editar plano",

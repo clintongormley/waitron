@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StationThresholds } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -6,6 +7,16 @@ import { TillExpoScreen } from "./till-expo-screen.js";
 import type { ExpoOrder, TillApi } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
+
+// The station's KDS order-timing thresholds (KDS order-timing alerts, design §4/§6) — the shipped DB
+// defaults. The lever/course fixtures below (threeCourseOrder, firedNotReadyOrder, withAwayCourse)
+// don't test bands, so every item just carries this + a fixed `queuedAt`/`band`; the DEDICATED
+// age-band fixtures further down (bandOrder) vary `queuedAt` against an injected `now` instead.
+const DEFAULT_THRESHOLDS: StationThresholds = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
 
 /** An order with THREE courses — the null (auto-fired) course first, a FIRED all-ready course
  *  (Entrantes → the "En camino" away lever), and a HELD later course (Principales → the "Marchar"
@@ -16,6 +27,7 @@ const threeCourseOrder: ExpoOrder = {
   orderNumber: 5,
   tableLabel: "Mesa 4",
   openedMinutes: 3,
+  worstBand: "fresh",
   courses: [
     {
       courseId: null,
@@ -32,6 +44,9 @@ const threeCourseOrder: ExpoOrder = {
           state: "ready",
           firedAt: FIRED,
           awayAt: null,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -50,6 +65,9 @@ const threeCourseOrder: ExpoOrder = {
           state: "ready",
           firedAt: FIRED,
           awayAt: null,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -68,6 +86,9 @@ const threeCourseOrder: ExpoOrder = {
           state: "queued",
           firedAt: null,
           awayAt: null,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -80,6 +101,7 @@ const firedNotReadyOrder: ExpoOrder = {
   orderId: "wo-2",
   orderNumber: 6,
   openedMinutes: 7,
+  worstBand: "fresh",
   courses: [
     {
       courseId: "co-3",
@@ -96,6 +118,9 @@ const firedNotReadyOrder: ExpoOrder = {
           state: "preparing",
           firedAt: FIRED,
           awayAt: null,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -108,6 +133,7 @@ const withAwayCourse: ExpoOrder = {
   orderId: "wo-3",
   orderNumber: 8,
   openedMinutes: 12,
+  worstBand: "fresh",
   courses: [
     {
       courseId: "co-4",
@@ -124,6 +150,9 @@ const withAwayCourse: ExpoOrder = {
           state: "ready",
           firedAt: FIRED,
           awayAt: FIRED,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -142,6 +171,9 @@ const withAwayCourse: ExpoOrder = {
           state: "ready",
           firedAt: FIRED,
           awayAt: null,
+          queuedAt: FIRED,
+          thresholds: DEFAULT_THRESHOLDS,
+          band: "fresh",
         },
       ],
     },
@@ -173,6 +205,8 @@ async function flush(el: TillExpoScreen): Promise<void> {
 async function mount(props: {
   api: TillApi;
   fireControl?: "waiter" | "kitchen" | "expo";
+  now?: number;
+  reducedMotion?: boolean;
 }): Promise<TillExpoScreen> {
   const { el } = await mountWidget<TillExpoScreen>("till-expo-screen", props);
   await flush(el);
@@ -229,6 +263,7 @@ describe("till-expo-screen", () => {
       orderId: "wo-9",
       orderNumber: 9,
       openedMinutes: 1,
+      worstBand: "fresh",
       courses: [
         {
           courseId: null,
@@ -245,6 +280,9 @@ describe("till-expo-screen", () => {
               state: "queued",
               firedAt: FIRED,
               awayAt: null,
+              queuedAt: FIRED,
+              thresholds: DEFAULT_THRESHOLDS,
+              band: "fresh",
               modifiers: [
                 { descriptions: { "es-ES": "Grande" } },
                 { descriptions: { "es-ES": "Leche avena" } },
@@ -409,16 +447,165 @@ describe("till-expo-screen", () => {
     expect(alert!.textContent).toContain(codeMessage("server.internal"));
   });
 
-  // --- Age colouring --------------------------------------------------------------------------
+  // --- Age / timing bands (KDS order-timing alerts, design §7.2) ------------------------------
+  //
+  // The old two-band 5/10-minute `#ageBucket` (fresh/warm/hot, driven by the server's static
+  // `openedMinutes`) is gone. The card's accent is now `classifyBand` (`@waitron/shared`) applied
+  // to EACH item's own `queuedAt`/`thresholds` (an expo order's items can span several stations,
+  // each with its own thresholds), reduced to the worst band across the card's visible items —
+  // deterministic here via the injected `now`, never the real wall clock.
 
-  it("colours each card by its open-minutes bucket (fresh <5, warm <10, hot >=10)", async () => {
+  /** A single-item, single-course order whose card's worst band is driven entirely by that one
+   *  item's `classifyBand(queuedAt, now, thresholds)` — never `openedMinutes`, which is set to an
+   *  unrelated value here to prove it is no longer consulted for the accent. */
+  function bandOrder(
+    orderId: string,
+    orderNumber: number,
+    itemId: string,
+    queuedAt: string,
+  ): ExpoOrder {
+    return {
+      orderId,
+      orderNumber,
+      openedMinutes: 999, // deliberately absurd — proves the accent ignores it
+      worstBand: "fresh", // the server's fetch-time value — the live accent re-derives, not this
+      courses: [
+        {
+          courseId: "co-x",
+          courseName: "Postres",
+          displayOrder: 0,
+          fired: true,
+          away: false,
+          items: [
+            {
+              id: itemId,
+              name: { "es-ES": "Flan" },
+              qty: "1.000",
+              stationName: "Cocina",
+              state: "preparing",
+              firedAt: FIRED,
+              awayAt: null,
+              queuedAt,
+              thresholds: DEFAULT_THRESHOLDS,
+              band: "fresh", // the server's fetch-time value — likewise re-derived, not read
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("colours a card by classifyBand on its item's queuedAt/thresholds, ignoring openedMinutes", async () => {
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // 12 min → overdue
     const el = await mount({
-      api: stubApi([threeCourseOrder, firedNotReadyOrder, withAwayCourse]),
-      fireControl: "expo",
+      api: stubApi([bandOrder("wo-a", 21, "ti-a", "2026-08-17T10:00:00.000Z")]),
+      now,
     });
-    expect(orderCard(el, 5)!.classList).toContain("age-fresh"); // 3 min
-    expect(orderCard(el, 6)!.classList).toContain("age-warm"); // 7 min
-    expect(orderCard(el, 8)!.classList).toContain("age-hot"); // 12 min
+    expect(orderCard(el, 21)!.classList).toContain("age-overdue");
+  });
+
+  it("a fresh item's card carries no escalation accent", async () => {
+    const now = Date.parse("2026-08-17T10:01:00.000Z"); // 1 min → fresh
+    const el = await mount({
+      api: stubApi([bandOrder("wo-fresh", 20, "ti-fresh", "2026-08-17T10:00:00.000Z")]),
+      now,
+    });
+    expect(orderCard(el, 20)!.classList).toContain("age-fresh");
+  });
+
+  it("a forgotten item flags BOTH the card's accent and the item itself (a non-colour tell)", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z"); // 16 min → forgotten (past the 15-min default)
+    const el = await mount({
+      api: stubApi([bandOrder("wo-b", 22, "ti-b", "2026-08-17T10:00:00.000Z")]),
+      now,
+    });
+    const card = orderCard(el, 22)!;
+    expect(card.classList).toContain("age-forgotten");
+    const flag = card.querySelector<HTMLElement>('[data-item="ti-b"] [data-forgotten]');
+    expect(flag).not.toBeNull();
+    expect(flag!.textContent).toContain(t("expo.item_forgotten"));
+  });
+
+  it("a merely-overdue item is NOT flagged forgotten (negative control)", async () => {
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // 12 min → overdue, not forgotten
+    const el = await mount({
+      api: stubApi([bandOrder("wo-c", 23, "ti-c", "2026-08-17T10:00:00.000Z")]),
+      now,
+    });
+    expect(orderCard(el, 23)!.querySelector('[data-item="ti-c"] [data-forgotten]')).toBeNull();
+  });
+
+  it("the pass-wide count reads the number of orders at overdue-or-worse (BAND_RANK)", async () => {
+    // wo-d is 16 min old (forgotten); wo-e is 15 min old (still just overdue, not forgotten) —
+    // both count; a third, fresh order (from bandOrder's own fresh-item test) is not mixed in here.
+    const now = Date.parse("2026-08-17T10:16:00.000Z");
+    const el = await mount({
+      api: stubApi([
+        bandOrder("wo-d", 24, "ti-d", "2026-08-17T10:00:00.000Z"),
+        bandOrder("wo-e", 25, "ti-e", "2026-08-17T10:01:00.000Z"),
+      ]),
+      now,
+    });
+    const badge = el.shadowRoot!.querySelector(".overdue-count")!;
+    expect(badge.textContent).toContain("2");
+    expect(badge.textContent).toContain(t("station.overdue_count"));
+  });
+
+  it("shows no pass-wide count badge when nothing has escalated to overdue", async () => {
+    const now = Date.parse("2026-08-17T10:01:00.000Z"); // 1 min → fresh
+    const el = await mount({
+      api: stubApi([bandOrder("wo-f", 26, "ti-f", "2026-08-17T10:00:00.000Z")]),
+      now,
+    });
+    expect(el.shadowRoot!.querySelector(".overdue-count")).toBeNull();
+  });
+
+  it("forgotten flashes by default (motion allowed) — the flash class rides the steady accent", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z");
+    const el = await mount({
+      api: stubApi([bandOrder("wo-g", 27, "ti-g", "2026-08-17T10:00:00.000Z")]),
+      now,
+      reducedMotion: false,
+    });
+    const card = orderCard(el, 27)!;
+    expect(card.classList).toContain("age-forgotten");
+    expect(card.classList).toContain("flash");
+  });
+
+  it("reduced motion: a forgotten card renders the steady accent with NO flash class", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z");
+    const el = await mount({
+      api: stubApi([bandOrder("wo-h", 28, "ti-h", "2026-08-17T10:00:00.000Z")]),
+      now,
+      reducedMotion: true,
+    });
+    const card = orderCard(el, 28)!;
+    expect(card.classList).toContain("age-forgotten");
+    expect(card.classList).not.toContain("flash");
+  });
+
+  it("reduced motion never applies flash to a merely-overdue (non-forgotten) card either", async () => {
+    const now = Date.parse("2026-08-17T10:12:00.000Z"); // 12 min → overdue, not forgotten
+    const el = await mount({
+      api: stubApi([bandOrder("wo-i", 29, "ti-i", "2026-08-17T10:00:00.000Z")]),
+      now,
+      reducedMotion: false,
+    });
+    const card = orderCard(el, 29)!;
+    expect(card.classList).toContain("age-overdue");
+    expect(card.classList).not.toContain("flash");
+  });
+
+  it("injected now advances the band without a new fetch (the ticking-clock contract)", async () => {
+    const api = stubApi([bandOrder("wo-j", 30, "ti-j", "2026-08-17T10:00:00.000Z")]);
+    const el = await mount({ api, now: Date.parse("2026-08-17T10:01:00.000Z") }); // 1 min → fresh
+    expect(orderCard(el, 30)!.classList).toContain("age-fresh");
+
+    // Move the injected clock forward past the forgotten threshold and re-render — no re-fetch.
+    el.now = Date.parse("2026-08-17T10:16:00.000Z"); // 16 min → forgotten
+    await el.updateComplete;
+    expect(orderCard(el, 30)!.classList).toContain("age-forgotten");
+    expect(api.getExpoQueue).toHaveBeenCalledOnce(); // still just the initial connect fetch
   });
 
   // --- Empty / degrade / back -----------------------------------------------------------------

@@ -9,8 +9,26 @@ afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 
 const stations: Station[] = [
-  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
-  { id: "s2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
+  {
+    id: "s1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
+  {
+    id: "s2",
+    name: "Barra",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
 ];
 
 const devices: DeviceRow[] = [

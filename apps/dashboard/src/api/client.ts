@@ -9,12 +9,17 @@
  * 401.
  *
  * The types below are LOCAL copies of the server's JSON shapes, deliberately NOT imported from
- * `@waitron/identity` (or any `@waitron/*`). A runtime import from those packages would drag their
- * barrels — and through them `@waitron/db` and Node builtins — into the browser bundle. A handful of
- * duplicated field lists is the price of keeping the bundle free of server code, exactly as
- * `apps/till/src/api/client.ts` does. If those server shapes change, these follow — a mismatch
- * surfaces as a runtime shape error a view test catches, not a compile break.
+ * `@waitron/identity` (or any DB/server-touching `@waitron/*`). A runtime import from those packages
+ * would drag their barrels — and through them `@waitron/db` and Node builtins — into the browser
+ * bundle. A handful of duplicated field lists is the price of keeping the bundle free of server code,
+ * exactly as `apps/till/src/api/client.ts` does. If those server shapes change, these follow — a
+ * mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+ *
+ * `TimingBand` below is the one exception, imported from `@waitron/shared` rather than re-declared —
+ * that package is GENERIC (types + pure functions, no DB/Node builtins) and already a dashboard
+ * dependency, exactly the precedent `apps/till/src/api/client.ts` sets for the same type.
  */
+import type { TimingBand } from "@waitron/shared";
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -437,13 +442,20 @@ export interface DashboardTable {
 
 /** One `kitchen_stations` row as the config surface returns it (`GET /management-api/stations`, active
  * only, by `displayOrder` then `name`) — mirrors the server's `Station`. `isDefault` marks the venue's
- * single counter/pass fallback (only {@link DashboardApi.setDefaultStation}/`createStation` flip it). */
+ * single counter/pass fallback (only {@link DashboardApi.setDefaultStation}/`createStation` flip it).
+ * The three `*AfterMinutes` fields (KDS order-timing alerts, design §8) are the station's configured
+ * order-age bands in MINUTES — a fired ticket item goes `warm` after `warmAfterMinutes`, `overdue`
+ * after `overdueAfterMinutes`, `forgotten` after `forgottenAfterMinutes` — and are what the Cocina
+ * threshold editor (`kitchen-screen.ts`) seeds its three inputs from. */
 export interface Station {
   id: string;
   name: string;
   displayOrder: number;
   isDefault: boolean;
   active: boolean;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
 }
 
 /** The venue's whole-ticket bump mode (`locations.bump_mode`) — `line` = per-line bump only; `ticket`
@@ -999,6 +1011,25 @@ export interface SalesOverview {
   topSellers: TopSellerRow[];
 }
 
+/**
+ * One `GET /management-api/reports/overdue-orders` row (KDS order-timing alerts, design §7.4) —
+ * mirrors `@waitron/reporting`'s `OverdueOrder`: a currently-open order whose worst UNSERVED line has
+ * crossed into `overdue`/`forgotten`, worst-first. `stationName`/`ageMinutes`/`band` describe that
+ * WORST line, not necessarily the order's oldest. `tableLabel` is `null` for a bare walk-up (the same
+ * optionality the till's `ExpoOrder.tableLabel` carries) — the manager overview screen renders that as
+ * the em-dash placeholder `staff-list.ts` already uses for an absent field, not a new i18n string.
+ */
+export interface OverdueOrder {
+  orderId: string;
+  orderNumber: number;
+  tableLabel: string | null;
+  stationName: string;
+  ageMinutes: number;
+  /** Only ever `"overdue"` or `"forgotten"` in practice — the route never returns a fresh/warm order —
+   * but typed as the full union to mirror the server shape exactly, as every DTO here does. */
+  band: TimingBand;
+}
+
 /** `GET /management-api/reports/daily-close?businessDay=` — the full daily close for ONE explicit
  * business day: VAT summary, cash-up, record counts and top sellers. */
 export interface DailyCloseDto {
@@ -1523,11 +1554,22 @@ export class DashboardApi {
     return this.#request<{ id: string }>("/management-api/stations", "POST", input);
   }
 
-  /** `PATCH /management-api/stations/:id` — patch a station's mutable slice (name, order, active — NOT
-   * is_default, which only {@link setDefaultStation} flips). Answers an empty 204. */
+  /** `PATCH /management-api/stations/:id` — patch a station's mutable slice (name, order, active,
+   * timing thresholds — NOT is_default, which only {@link setDefaultStation} flips). The three
+   * `*AfterMinutes` fields (KDS order-timing alerts, design §8) travel as ONE group, mirroring the
+   * route's own all-or-nothing validation: supplying one requires all three, strictly ordered
+   * `warm < overdue < forgotten`, or the route rejects the whole patch with
+   * `management.request_invalid`. Answers an empty 204. */
   updateStation(
     id: string,
-    patch: { name?: string; displayOrder?: number; active?: boolean },
+    patch: {
+      name?: string;
+      displayOrder?: number;
+      active?: boolean;
+      warmAfterMinutes?: number;
+      overdueAfterMinutes?: number;
+      forgottenAfterMinutes?: number;
+    },
   ): Promise<void> {
     return this.#request<void>(`/management-api/stations/${id}`, "PATCH", patch);
   }
@@ -2077,6 +2119,16 @@ export class DashboardApi {
   getSalesPeriod(from: string, to: string): Promise<SalesPeriodDto> {
     return this.#request<SalesPeriodDto>(
       `/management-api/reports/period?from=${from}&to=${to}`,
+      "GET",
+    );
+  }
+
+  /** `GET /management-api/reports/overdue-orders` — this node's currently-open orders whose worst
+   * unserved line is `overdue`/`forgotten`, worst-first (KDS order-timing alerts, design §7.4). A live
+   * snapshot, not a business-day query. Backs `dashboard-overview-screen`'s poll-on-an-interval tile. */
+  getOverdueOrders(): Promise<{ orders: OverdueOrder[] }> {
+    return this.#request<{ orders: OverdueOrder[] }>(
+      "/management-api/reports/overdue-orders",
       "GET",
     );
   }

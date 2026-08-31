@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 interface Token extends HTMLElement {
   table: FloorTable;
-  labels: { covers?: string; toServe?: string; reserved?: string };
+  labels: { covers?: string; toServe?: string; reserved?: string; forgotten?: string };
   updateComplete: Promise<unknown>;
 }
 
@@ -66,6 +66,25 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
 
   test("a delivery-pending token is accessible", async () => {
     await mountToken(tableData({ state: "delivery-pending", pendingToServe: 2 }), theme);
+    await expectNoA11yViolations(host);
+  });
+
+  // KDS order-timing alerts (design §7.3, fix round 1): the map/canvas token's order-timing accent +
+  // forgotten marker, across both themes — the a11y case the LIST-card suite cannot cover.
+  test("a warm-band token (steady accent, no marker) is accessible", async () => {
+    await mountToken(tableData({ state: "open-tab", timingBand: "warm" }), theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a forgotten-band token with a DECORATIVE marker (no consumer label) is accessible", async () => {
+    await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a forgotten-band token with a LABELLED marker (app-supplied accessible name) is accessible", async () => {
+    const el = await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
+    el.labels = { ...el.labels, forgotten: "Olvidada" };
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

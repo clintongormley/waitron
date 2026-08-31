@@ -15,8 +15,26 @@ import type { Course, DashboardApi, Station } from "../api/client.js";
  * carry HA-styled labels for axe.
  */
 const STATIONS: Station[] = [
-  { id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
-  { id: "s2", name: "Plancha", displayOrder: 1, isDefault: false, active: true },
+  {
+    id: "s1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
+  {
+    id: "s2",
+    name: "Plancha",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  },
 ];
 
 const COURSES: Course[] = [

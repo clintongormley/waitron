@@ -1,8 +1,20 @@
 import { afterEach, describe, it } from "vitest";
+import type { StationThresholds } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
+
+// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults, reused across
+// every fixture below. No fixture injects `now`, so every ticket ages off the REAL wall clock against
+// its fixed `queuedAt` — every one of these fixtures predates "now" by far more than 15 minutes, so
+// each ticket renders `forgotten` (flashing, unless the test browser's `prefers-reduced-motion` is on)
+// and the header's overdue-count badge appears too; the sweep below covers exactly that state.
+const DEFAULT_THRESHOLDS: StationThresholds = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
 
 // One order with a line in each of the three kitchen states + a second order, so axe sees the queued,
 // preparing and (inert) ready cells plus a labelled and an unlabelled ticket in one mount.
@@ -13,6 +25,7 @@ const groups: StationQueueGroup[] = [
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed", // awaiting the fiscal collect — no handover button
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-1",
@@ -49,6 +62,7 @@ const groups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "settled", // a Mode-P pickup — its rail card carries the collect button (a11y-checked here)
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-4",
@@ -72,6 +86,7 @@ const coursedGroups: StationQueueGroup[] = [
     label: "Mesa 2",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "it-bread",
@@ -113,6 +128,7 @@ const modifierGroups: StationQueueGroup[] = [
     orderNumber: 9,
     label: null,
     queuedAt: "2026-08-17T10:00:00.000Z",
+    thresholds: DEFAULT_THRESHOLDS,
     status: "placed",
     items: [
       {

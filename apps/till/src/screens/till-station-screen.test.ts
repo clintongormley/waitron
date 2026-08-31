@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StationThresholds } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -11,6 +12,14 @@ const stations: Station[] = [
   { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
+// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults, reused across
+// every fixture in this file (none of these tests are about ageing; they only need a valid shape).
+const DEFAULT_THRESHOLDS: StationThresholds = {
+  warmAfterMinutes: 5,
+  overdueAfterMinutes: 10,
+  forgottenAfterMinutes: 15,
+};
+
 const cocinaQueue: StationQueueGroup[] = [
   {
     orderId: "wo-1",
@@ -18,6 +27,7 @@ const cocinaQueue: StationQueueGroup[] = [
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "settled", // a Mode-P pickup — collectable from the rail lens (the handover test below)
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-1",
@@ -39,6 +49,7 @@ const barraQueue: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
         id: "ti-2",
@@ -593,6 +604,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         label: null,
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "placed",
+        thresholds: DEFAULT_THRESHOLDS,
         items: [
           {
             id: "it-h",
@@ -719,6 +731,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         label: null,
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "placed",
+        thresholds: DEFAULT_THRESHOLDS,
         items: [
           {
             id: "ti-a",

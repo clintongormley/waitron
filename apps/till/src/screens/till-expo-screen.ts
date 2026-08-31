@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { TickingClock, baseStyles } from "@waitron/ui";
+import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
@@ -38,9 +39,24 @@ function courseOrder(course: ExpoCourse): number {
  * Like `till-station-screen` it OWNS its `.api` (the pass is the whole node's, so there is no picker and
  * nothing to screen): it fetches `getExpoQueue` on connect and after every lever, and a failed lever is
  * SWALLOWED and the reload reconciles the board to server truth — the degrade-gracefully shape the
- * station/floor screens use (the pass touches no fiscal path). AGE: each card is accented by how long its
- * order has been open (`openedMinutes`, the server's urgency clock — no local clock needed): fresh (< 5),
- * warm (< 10), hot (≥ 10), as a LEFT BORDER (never behind text, so the accent cannot fail a11y contrast).
+ * station/floor screens use (the pass touches no fiscal path).
+ *
+ * AGE (KDS order-timing alerts, design §7.2). UNLIKE the per-station kitchen display
+ * (`till-station-queue`, one station ⇒ one set of thresholds ⇒ one age per order), an expo order's
+ * items can span SEVERAL stations, each with its own thresholds — so each {@link ExpoItem} carries its
+ * OWN `queuedAt`/`thresholds`, classified via the shared `classifyBand` (`@waitron/shared`): fresh →
+ * warm → overdue → **forgotten**. A card's own accent is the WORST band across its visible items
+ * ({@link worstBand}), as a LEFT BORDER (never behind text, so the accent cannot fail a11y contrast) —
+ * the same `age-*`/`flash` class scheme `till-station-queue`'s rail card uses, reduced-motion aware
+ * (`#prefersReducedMotion`, checked live or injected via {@link reducedMotion}). A `forgotten` band
+ * additionally FLAGS the individual lagging item with a non-colour tell (a text label beside its
+ * station/state, never a second border colour competing with the item's own kitchen-state border) —
+ * the item-level counterpart to the header's {@link #overdueCount} count badge, the pass-wide
+ * non-colour tell. A `TickingClock` ({@link #clock}) advances the display while it sits idle, between
+ * the container's own refreshes; `now` is still directly injectable so a test controls the band
+ * deterministically. The server's `ExpoItem.band`/`ExpoOrder.worstBand` are authoritative only for
+ * the very first paint — this screen re-derives both locally so they keep escalating between
+ * refreshes with no new fetch.
  *
  * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome, so it follows the operator's
  * theme like every sibling; the token/course-header/state-class/action-button primitives mirror
@@ -124,14 +140,63 @@ export class TillExpoScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y). Fresh keeps
-         the default border; warm/hot escalate, matching the station rail's age accents. */
+      /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y). Three
+         escalating bands (KDS order-timing alerts, design §7.2), the SAME scheme
+         till-station-queue's rail card uses: warm (amber-ish primary), overdue (red), forgotten
+         (red + a repeating flash, .flash below). 'fresh' gets no override — it keeps the base
+         .order border colour. */
       .order.age-warm {
         border-left-color: var(--wt-color-primary);
       }
 
-      .order.age-hot {
+      .order.age-overdue,
+      .order.age-forgotten {
         border-left-color: var(--wt-color-danger);
+      }
+
+      /* The FORGOTTEN flash (design §7.1/§7.2/§2): a repeating fade of the left border, never a
+         colour/motion change behind text — .flash is applied only when the OS/browser has NOT asked
+         for reduced motion (#prefersReducedMotion), so an assistive-motion setting renders the steady
+         red border above with no @keyframes at all. The @media guard is a second, CSS-only line of
+         defence for the same preference (belt-and-suspenders, house a11y rule) — mirrors
+         till-station-queue's identical treatment of its .ticket/.cell. */
+      .order.age-forgotten.flash {
+        animation: age-forgotten-flash 1s ease-in-out infinite;
+      }
+
+      @keyframes age-forgotten-flash {
+        50% {
+          border-left-color: transparent;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .order.age-forgotten.flash {
+          animation: none;
+        }
+      }
+
+      /* The pass-wide overdue+forgotten count badge (design §7.2) — a non-colour tell ("2 overdue")
+         so the escalation is legible without relying on the border colour alone (a11y), mirroring
+         till-station-queue's identical header badge. */
+      .overdue-count {
+        margin: 0;
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+        display: inline-block;
+      }
+
+      /* The item-level FORGOTTEN flag (design §7.2) — a non-colour tell (a text label, never a
+         second border colour on .item, which would compete with its own kitchen-state border for
+         the same CSS property) beside the item's station/state, shown only for a forgotten item. */
+      .item-forgotten-flag {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        white-space: nowrap;
       }
 
       /* A coursing subsection of a card — its named course header, its items, and the state's one lever. */
@@ -280,6 +345,18 @@ export class TillExpoScreen extends LitElement {
    *  shows the Fire lever on a held course ONLY under `expo`; the ready/away levers are the pass's own
    *  regardless of this (the setting decides who FIRES, not who dispatches — server route docs). */
   @property() fireControl: FireControlMode = "waiter";
+  /** Injectable clock for age classification; falls back to the {@link #clock}'s ticked time (never a
+   *  bare `Date.now()`, so a re-render from the tick and a re-render from a fresh fetch use the SAME
+   *  clock source) when unset. Set in tests for deterministic bands — mirrors `till-station-queue`. */
+  @property({ attribute: false }) now?: number;
+  /**
+   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
+   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
+   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
+   * deterministic assertion — the same injectable-override shape {@link now} already uses, mirroring
+   * `till-station-queue`.
+   */
+  @property({ attribute: false }) reducedMotion?: boolean;
 
   /** This node's open orders, grouped into courses across stations (reloaded after every lever). */
   @state() private orders: ExpoOrder[] = [];
@@ -291,6 +368,12 @@ export class TillExpoScreen extends LitElement {
    * localised banner shape instead. Cleared on the next reprint attempt.
    */
   @state() private reprintErrorCode?: string;
+
+  /** Drives the display forward while it sits idle — no refetch, just the client-side re-tick the
+   *  order-timing design calls for (§5.2): every ~20s it bumps {@link TickingClock.now} and requests a
+   *  re-render, so an item can climb fresh → warm → overdue → forgotten between the container's own
+   *  refreshes. {@link now}, when set, always wins (tests stay deterministic). */
+  readonly #clock = new TickingClock(this);
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -354,6 +437,7 @@ export class TillExpoScreen extends LitElement {
             ${t("expo.back")}
           </wt-button>
         </header>
+        ${this.#overdueBadge()}
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
@@ -375,10 +459,11 @@ export class TillExpoScreen extends LitElement {
   }
 
   /** One order's card: its number + optional table label + age, then its non-away courses in
-   *  `display_order` (null course first). */
+   *  `display_order` (null course first). The left-border accent is the WORST band across the card's
+   *  visible items (design §7.2), never the old hardcoded `openedMinutes` bucket. */
   #card(order: ExpoOrder): TemplateResult {
-    const bucket = this.#ageBucket(order.openedMinutes);
-    return html`<article class="order age-${bucket}" data-order=${order.orderNumber}>
+    const band = this.#orderBand(order);
+    return html`<article class="order ${this.#accentClasses(band)}" data-order=${order.orderNumber}>
       <div class="order-head">
         <span class="number">#${order.orderNumber}</span>
         ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}
@@ -429,14 +514,25 @@ export class TillExpoScreen extends LitElement {
 
   /** An item row: the dish (`qty× name`), its STATION (the cross-station label), its kitchen state, and
    *  — beneath, indented (ordering modifiers, Task 14) — its selected options as `+ <name>` sub-text.
-   *  Greyed when HELD (its course unfired) — a non-interactive box (the pass acts per course). */
+   *  Greyed when HELD (its course unfired) — a non-interactive box (the pass acts per course). A
+   *  FORGOTTEN item additionally carries a non-colour tell (design §7.2) — its own station is badly
+   *  lagging, flagged with a text label rather than a second border colour (which would compete with
+   *  this item's own kitchen-state border for the same CSS property). */
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
+    const forgotten = this.#itemBand(item) === "forgotten";
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
         <span class="item-name">${trimQuantity(item.qty)}× ${descriptionFor(item.name, "")}</span>
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
+        ${
+          forgotten
+            ? html`<span class="item-forgotten-flag" data-forgotten
+                >${t("expo.item_forgotten")}</span
+              >`
+            : nothing
+        }
       </span>
       ${this.#modifiers(item)}
     </span>`;
@@ -505,11 +601,66 @@ export class TillExpoScreen extends LitElement {
     </button>`;
   }
 
-  /** The age bucket for a card, from the order's open-minutes: fresh (< 5), warm (< 10), hot (≥ 10). */
-  #ageBucket(openedMinutes: number): "fresh" | "warm" | "hot" {
-    if (openedMinutes >= 10) return "hot";
-    if (openedMinutes >= 5) return "warm";
-    return "fresh";
+  /** The current clock reading for age classification: {@link now} when injected (deterministic
+   *  tests), else the {@link #clock}'s own ticked time — never a fresh `Date.now()` call, so every
+   *  render in one tick sees the identical `now` and the display genuinely advances only when the
+   *  clock ticks (or a test moves {@link now}). Mirrors `till-station-queue`'s `#clockNow`. */
+  #clockNow(): number {
+    return this.now ?? this.#clock.now;
+  }
+
+  /** An item's escalation band against its OWN station's thresholds (`classifyBand`,
+   *  `@waitron/shared`) — fresh / warm / overdue / forgotten (design §7.2). UNLIKE
+   *  `till-station-queue`'s per-GROUP `#band` (one station ⇒ one clock), this is per-ITEM: an expo
+   *  order's items can span several stations, each with its own `queuedAt`/`thresholds`. Recomputed
+   *  from the item's own data on every render rather than trusting the server's `ExpoItem.band`
+   *  snapshot, so it keeps climbing between refreshes under the `TickingClock`. */
+  #itemBand(item: ExpoItem): TimingBand {
+    return classifyBand(Date.parse(item.queuedAt), this.#clockNow(), item.thresholds);
+  }
+
+  /** An order's card accent: the WORST band across its currently-VISIBLE items ({@link
+   *  #visibleCourses} — a fully-away course's items are already off the board), via `worstBand`
+   *  (`@waitron/shared`). Recomputed locally rather than reading the server's `ExpoOrder.worstBand`
+   *  snapshot, for the same tick-consistency reason as {@link #itemBand}. */
+  #orderBand(order: ExpoOrder): TimingBand {
+    return worstBand(
+      this.#visibleCourses(order).flatMap((course) =>
+        course.items.map((item) => this.#itemBand(item)),
+      ),
+    );
+  }
+
+  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
+   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
+   *  motion must respect the OS preference). Mirrors `till-station-queue`'s identical check. */
+  #prefersReducedMotion(): boolean {
+    return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  /** The age-accent class list for a band: always `age-${band}`, plus `flash` for `forgotten` unless
+   *  motion is reduced — the CSS `.order.age-forgotten.flash` rule carries the `@keyframes`, so a
+   *  reduced-motion render never gets the class an animation is defined against. Mirrors
+   *  `till-station-queue`'s identical helper. */
+  #accentClasses(band: TimingBand): string {
+    const flash = band === "forgotten" && !this.#prefersReducedMotion();
+    return `age-${band}${flash ? " flash" : ""}`;
+  }
+
+  /** Count of orders whose card band has escalated to at least `overdue` (overdue OR forgotten,
+   *  `BAND_RANK`) — the pass-wide non-colour tell (design §7.2): an expediter who cannot distinguish
+   *  the border colours still sees a number, mirroring `till-station-queue`'s per-station count. */
+  #overdueOrderCount(): number {
+    return this.orders.filter((order) => BAND_RANK[this.#orderBand(order)] >= BAND_RANK.overdue)
+      .length;
+  }
+
+  /** The pass-wide overdue+forgotten count badge, shown only when the count is non-zero (a pass
+   *  running entirely fresh/warm shows no badge at all, rather than a noisy "0 overdue"). */
+  #overdueBadge(): TemplateResult | typeof nothing {
+    const count = this.#overdueOrderCount();
+    if (count === 0) return nothing;
+    return html`<p class="overdue-count">${count} ${t("station.overdue_count")}</p>`;
   }
 }
 

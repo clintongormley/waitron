@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { TickingClock, baseStyles } from "@waitron/ui";
+import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
 import type {
@@ -70,10 +71,18 @@ function courseOrder(course: StationQueueCourse | null): number {
  * whole-order convenience (so ticket mode needs {@link stationId}). A `ready` line is terminal and renders
  * inert (no button), like the prep-queue's collected row.
  *
- * AGE. Each order is coloured by how long its OLDEST line has waited ({@link StationQueueGroup.queuedAt}):
- * fresh (< 5 min), warm (< 10), hot (≥ 10). The accent is a LEFT BORDER, never a text background, so the
- * arbitrary colour cannot fail a11y contrast (the `till-floor-screen` occupancy-accent trick). `now` is an
- * injectable clock so the buckets are deterministic under test.
+ * AGE (KDS order-timing alerts, design §3/§7.1). Each order is banded by how long its OLDEST line has
+ * waited ({@link StationQueueGroup.queuedAt}) against ITS STATION's own thresholds
+ * ({@link StationQueueGroup.thresholds}), via the shared `classifyBand` (`@waitron/shared`): fresh → warm
+ * → overdue → **forgotten**. The accent is a LEFT BORDER, never a text background, so the arbitrary
+ * colour cannot fail a11y contrast (the `till-floor-screen` occupancy-accent trick) — applied to the
+ * rail's `.ticket` card AND, nested outside the kitchen-state border, the kanban's per-cell wrapper. A
+ * `forgotten` band additionally FLASHES the border unless the OS/browser has asked for reduced motion
+ * (`prefers-reduced-motion`, checked live or injected via {@link reducedMotion}), in which case it
+ * renders the same steady red instead — never colour/motion as the only signal, and the header's
+ * {@link #overdueCount} count badge is the non-colour tell for the whole station. A `TickingClock`
+ * ({@link #clock}) advances the display while it sits idle, between the container's own refreshes; `now`
+ * is still directly injectable so a test controls the band deterministically.
  *
  * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome colour/spacing, so it follows
  * the operator's theme like every sibling. Copy is the till's i18n (`station.*`); identifiers stay English.
@@ -248,13 +257,69 @@ export class TillStationQueue extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* Age accents on the rail card's left edge — a data-driven colour, never behind text (a11y). */
+      /* Age accents on the rail card's left edge — a data-driven colour, never behind text (a11y).
+         Three escalating bands (KDS order-timing alerts, design §7.1): warm (amber-ish primary),
+         overdue (red), forgotten (red + a repeating flash, .flash below). 'fresh' gets no override —
+         it keeps the base .ticket border colour. */
       .ticket.age-warm {
         border-left-color: var(--wt-color-primary);
       }
 
-      .ticket.age-hot {
+      .ticket.age-overdue,
+      .ticket.age-forgotten {
         border-left-color: var(--wt-color-danger);
+      }
+
+      /* KANBAN age accent — the cell wrapper's OWN left border, nested outside the inner .line's
+         kitchen-STATE border (queued/preparing/ready) so the two colours never overwrite each other —
+         the same outer/inner nesting the rail's .ticket/.line pair already uses. */
+      .cell {
+        border-left: var(--wt-space-1) solid var(--wt-color-border);
+        min-width: 0;
+      }
+
+      .cell.age-warm {
+        border-left-color: var(--wt-color-primary);
+      }
+
+      .cell.age-overdue,
+      .cell.age-forgotten {
+        border-left-color: var(--wt-color-danger);
+      }
+
+      /* The FORGOTTEN flash (design §7.1/§2): a repeating fade of the left border, never a colour/motion
+         change behind text — .flash is applied only when the OS/browser has NOT asked for reduced
+         motion (#prefersReducedMotion), so an assistive-motion setting renders the steady red border
+         above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
+         the same preference (belt-and-suspenders, house a11y rule). */
+      .ticket.age-forgotten.flash,
+      .cell.age-forgotten.flash {
+        animation: age-forgotten-flash 1s ease-in-out infinite;
+      }
+
+      @keyframes age-forgotten-flash {
+        50% {
+          border-left-color: transparent;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ticket.age-forgotten.flash,
+        .cell.age-forgotten.flash {
+          animation: none;
+        }
+      }
+
+      /* The header's overdue+forgotten count badge (design §7.1) — a non-colour tell ("3 overdue") so
+         the escalation is legible without relying on the border colour alone (a11y). */
+      .overdue-count {
+        margin: 0 0 var(--wt-space-2);
+        padding: var(--wt-space-1) var(--wt-space-3);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+        display: inline-block;
       }
 
       /* A course subsection within a rail card (KDS-2 §5a) — its held/fired lines under a course header,
@@ -333,8 +398,23 @@ export class TillStationQueue extends LitElement {
    * across orders, so a per-order action has no home there.
    */
   @property({ type: Boolean }) showReprint = false;
-  /** Injectable clock for age colouring; defaults to the wall clock. Set in tests for deterministic buckets. */
+  /** Injectable clock for age colouring; falls back to the {@link #clock}'s ticked time (never a bare
+   *  `Date.now()`, so a re-render from the tick and a re-render from a fresh fetch use the SAME clock
+   *  source) when unset. Set in tests for deterministic bands. */
   @property({ attribute: false }) now?: number;
+  /**
+   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
+   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
+   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
+   * deterministic assertion, the same injectable-override shape {@link now} already uses.
+   */
+  @property({ attribute: false }) reducedMotion?: boolean;
+
+  /** Drives the display forward while it sits idle — no refetch, just the client-side re-tick the
+   *  order-timing design calls for (§5.2): every ~20s it bumps {@link TickingClock.now} and requests a
+   *  re-render, so a ticket can climb fresh → warm → overdue → forgotten between the container's own
+   *  refreshes. {@link now}, when set, always wins (tests stay deterministic). */
+  readonly #clock = new TickingClock(this);
 
   /** Advance the tapped line — per-line in `line` mode (the truth), whole-ticket in `ticket` mode (the
    * convenience). A terminal (`ready`) line has no successor, so this is a no-op for it; ticket mode with
@@ -426,32 +506,73 @@ export class TillStationQueue extends LitElement {
     return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
   }
 
-  /** The age bucket for a group's oldest line: fresh (< 5 min), warm (< 10), hot (≥ 10). */
-  #ageBucket(queuedAt: string): "fresh" | "warm" | "hot" {
-    const elapsedMin = ((this.now ?? Date.now()) - Date.parse(queuedAt)) / 60000;
-    if (elapsedMin >= 10) return "hot";
-    if (elapsedMin >= 5) return "warm";
-    return "fresh";
+  /** The current clock reading for age classification: {@link now} when injected (deterministic
+   *  tests), else the {@link #clock}'s own ticked time — never a fresh `Date.now()` call, so every
+   *  render in one tick sees the identical `now` and the display genuinely advances only when the
+   *  clock ticks (or a test moves {@link now}). */
+  #clockNow(): number {
+    return this.now ?? this.#clock.now;
+  }
+
+  /** The escalation band for a group's oldest line, against its OWN station's thresholds
+   *  (`classifyBand`, `@waitron/shared`) — fresh / warm / overdue / forgotten (KDS order-timing
+   *  alerts, design §3). Replaces the old hardcoded 5/10-minute two-band `#ageBucket`. */
+  #band(group: StationQueueGroup): TimingBand {
+    return classifyBand(Date.parse(group.queuedAt), this.#clockNow(), group.thresholds);
   }
 
   /** Whole minutes a group has waited (never negative), for the "N min" age label. */
   #elapsedMinutes(queuedAt: string): number {
-    return Math.max(0, Math.floor(((this.now ?? Date.now()) - Date.parse(queuedAt)) / 60000));
+    return Math.max(0, Math.floor((this.#clockNow() - Date.parse(queuedAt)) / 60000));
+  }
+
+  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
+   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
+   *  motion must respect the OS preference; the ticking of bands themselves is unaffected). */
+  #prefersReducedMotion(): boolean {
+    return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  /** The age-accent class list for a band: always `age-${band}`, plus `flash` for `forgotten` unless
+   *  motion is reduced — the CSS `.age-forgotten.flash` rule carries the `@keyframes`, so a reduced-
+   *  motion render never gets the class an animation is defined against (belt-and-suspenders with the
+   *  `@media` guard in the stylesheet, which also disables it if this check is ever bypassed). */
+  #accentClasses(band: TimingBand): string {
+    const flash = band === "forgotten" && !this.#prefersReducedMotion();
+    return `age-${band}${flash ? " flash" : ""}`;
+  }
+
+  /** Count of groups whose band has escalated to at least `overdue` (overdue OR forgotten,
+   *  `BAND_RANK`) — the header's non-colour tell (design §7.1): a cook who cannot distinguish the
+   *  border colours still sees a number. */
+  #overdueCount(): number {
+    return this.groups.filter((group) => BAND_RANK[this.#band(group)] >= BAND_RANK.overdue).length;
+  }
+
+  /** The queue header: the overdue+forgotten count badge, shown only when the count is non-zero (a
+   *  station running entirely fresh/warm shows no badge at all, rather than a noisy "0 overdue"). */
+  #header(): TemplateResult | typeof nothing {
+    const count = this.#overdueCount();
+    if (count === 0) return nothing;
+    return html`<p class="overdue-count">${count} ${t("station.overdue_count")}</p>`;
   }
 
   override render() {
     if (this.groups.length === 0) {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
-    return this.view === "rail" ? this.#rail() : this.#kanban();
+    return html`${this.#header()}${this.view === "rail" ? this.#rail() : this.#kanban()}`;
   }
 
   /** RAIL — a card per order, its lines GROUPED BY COURSE (KDS-2 §5a) with per-line bump on fired lines. */
   #rail(): TemplateResult {
     return html`<div class="rail">
       ${this.groups.map((group) => {
-        const bucket = this.#ageBucket(group.queuedAt);
-        return html`<article class="ticket age-${bucket}" data-order=${group.orderNumber}>
+        const band = this.#band(group);
+        return html`<article
+          class="ticket ${this.#accentClasses(band)}"
+          data-order=${group.orderNumber}
+        >
           <div class="ticket-head">
             <span class="number">#${group.orderNumber}</span>
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
@@ -543,10 +664,20 @@ export class TillStationQueue extends LitElement {
         const cells = flat.filter((f) => f.item.state === state);
         return html`<section class="column column-${state}" data-column=${state}>
           <h2 class="column-title">${t(`station.state.${state}` as const)}</h2>
-          ${cells.map(({ group, item }) => this.#cell(group, item))}
+          ${cells.map(({ group, item }) => this.#kanbanCell(group, item))}
         </section>`;
       })}
     </div>`;
+  }
+
+  /** A kanban cell wrapped in its order's age accent (KDS order-timing alerts, design §7.1 — the
+   *  kanban lens carried no age colour before this; today only the rail's `.ticket` did). The accent
+   *  is the WRAPPER's own left border, nested outside the inner `.line`'s kitchen-STATE border — the
+   *  same outer/inner nesting the rail's `.ticket`/`.line` pair already uses — so the age colour never
+   *  overwrites the queued/preparing/ready colour the cell itself carries. */
+  #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
+    const band = this.#band(group);
+    return html`<div class="cell ${this.#accentClasses(band)}">${this.#cell(group, item)}</div>`;
   }
 
   /** A rail line: the dish (`qty× name`) + its localised state, tappable to bump unless terminal
