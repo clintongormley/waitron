@@ -125,6 +125,29 @@ export const products = pgTable(
       allergens: AllergenMap;
       pending: boolean;
     }>(),
+    // Diet analogue of `recipe_derivation`: the set of reviewed ingredient origins + pending, written
+    // by @waitron/recipes. Separate from `recipe_derivation` because allergen-pending and diet-pending
+    // are independent (an ingredient may have reviewed allergens but an uncategorised origin).
+    dietDerivation: jsonb("diet_derivation").$type<{ origins: string[]; pending: boolean }>(),
+    // Staff override — forced vegan/vegetarian/halal/kosher + hand contains-tags. halal/kosher live
+    // ONLY here (no derivation). NULL = no override.
+    dietOverride: jsonb("diet_override").$type<{
+      vegan?: "yes" | "no";
+      vegetarian?: "yes" | "no";
+      halal?: "yes" | "no";
+      kosher?: "yes" | "no";
+      addContains?: string[];
+      removeContains?: string[];
+    }>(),
+    // Published, display diet profile — the diet twin of the published `allergens` column, recomputed
+    // by @waitron/catalogue whenever derivation or override changes. Read by the menu filter/grid.
+    diet: jsonb("diet").$type<{
+      vegan: "yes" | "no" | "unknown";
+      vegetarian: "yes" | "no" | "unknown";
+      contains: string[];
+      halal?: "yes" | "no";
+      kosher?: "yes" | "no";
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -205,6 +228,11 @@ export const optionGroupItems = pgTable(
     // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
     // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
     removeAllergens: jsonb("remove_allergens").$type<string[]>(),
+    // Per-option ORIGIN overlay (the diet twin of add/remove_allergens). `add_origins`: origins this
+    // option introduces ("add bacon" → ["meat"]). `remove_origins`: origins it removes ("no cheese" →
+    // ["dairy"]). NULL = none. Additive nullable — rides option_group_items' existing RLS/policy/grants.
+    addOrigins: jsonb("add_origins").$type<string[]>(),
+    removeOrigins: jsonb("remove_origins").$type<string[]>(),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },
