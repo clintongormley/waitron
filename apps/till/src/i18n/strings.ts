@@ -199,9 +199,10 @@ export const en = {
   "allergens.as_served_none": "No declared allergens",
   "allergens.not_reviewed": "Allergens not fully reviewed",
   // The KDS/expo "as-served" allergen line (modifier↔allergen, Task 9). `without` is the negation prefix
-  // for a REMOVED base allergen — rendered as a struck "NO <CODE>" callout on the kitchen/pass ticket
-  // ("SIN" in Spanish, the kitchen's own gluten-free idiom); the CODE stays the raw uppercased allergen
-  // code (compact + scannable on a ticket), while the "contains" chips beside it use the localised names.
+  // for a REMOVED base allergen — rendered as a struck "NO <allergen>" callout on the kitchen/pass ticket
+  // (e.g. "SIN Leche"; "SIN" is Spanish, the kitchen's own gluten-free idiom). The allergen NAME beside
+  // it is localised via `allergenName`, the SAME helper the "contains" chips use, so an es-ES ticket never
+  // mixes a Spanish chip with a raw English removal code (fix round 1).
   "allergens.without": "NO",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",

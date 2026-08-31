@@ -480,8 +480,9 @@ export interface StationQueueItem {
    *  reads exactly as before. */
   asServed?: AsServedAllergens;
   /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
-   *  {@link asServed}) — the KDS renders each as a struck "NO <CODE>" callout ("gluten-free bun" removed
-   *  gluten). Optional/absent (⇒ empty) on an older payload, like {@link asServed}. */
+   *  {@link asServed}) — the KDS renders each as a struck "NO <allergen>" callout, the allergen name
+   *  localised like the "contains" chips ("gluten-free bun" removed gluten). Optional/absent (⇒ empty)
+   *  on an older payload, like {@link asServed}. */
   removed?: string[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
    *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
@@ -608,7 +609,7 @@ export interface ExpoItem {
    *  an older payload or a plain-dish fixture. */
   asServed?: AsServedAllergens;
   /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed};
-   *  the pass renders each as a struck "NO <CODE>" callout. Optional/absent (⇒ empty). */
+   *  the pass renders each as a struck, localised "NO <allergen>" callout. Optional/absent (⇒ empty). */
   removed?: string[];
   /**
    * This item's own `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11), ISO —

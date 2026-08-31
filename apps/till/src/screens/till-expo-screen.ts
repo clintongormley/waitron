@@ -286,9 +286,10 @@ export class TillExpoScreen extends LitElement {
         border-radius: var(--wt-radius-full, 999px);
       }
 
-      /* A REMOVED base allergen — a struck "NO <CODE>" callout. Colour is NEVER the only signal: the
-         "NO" text AND the strike-through both mark it, so it reads on a monochrome display and passes
-         the contrast sweep (danger-as-text on the surface, the same pairing .item-forgotten-flag ships). */
+      /* A REMOVED base allergen — a struck "NO <allergen>" callout (e.g. "SIN Leche"). Colour is NEVER
+         the only signal: the "NO"/"SIN" text AND the strike-through both mark it, so it reads on a
+         monochrome display and passes the contrast sweep (danger-as-text on the surface, the same
+         pairing .item-forgotten-flag ships). The allergen is localised via allergenName, like the chips. */
       .allergen-removed {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-danger);
@@ -583,7 +584,8 @@ export class TillExpoScreen extends LitElement {
    * The item's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish + its
    * modifiers — the SAME rendering the per-station display uses: the folded {@link ExpoItem.asServed}
    * codes as localised "contains" chips (`allergenName`, never a hardcoded EU-14 list), each
-   * {@link ExpoItem.removed} base code as a struck **"NO &lt;CODE&gt;"** callout, and a "not reviewed"
+   * {@link ExpoItem.removed} base code as a struck **"NO &lt;allergen&gt;"** callout — the allergen
+   * localised the SAME way as the chips (`allergenName`), never a raw English code — and a "not reviewed"
    * warning whenever the fold is `pending` (the dish's own allergens unreviewed — the Cautious policy).
    * Colour is NEVER the only signal (house a11y rule): the removal carries its "NO" text + strike-through,
    * the chips their names, the warning its text/weight. `nothing` when there is nothing to say — no
@@ -609,7 +611,7 @@ export class TillExpoScreen extends LitElement {
         .map(
           (code) =>
             html`<span class="allergen-removed" data-removed=${code}
-              >${t("allergens.without")} ${code.toUpperCase()}</span
+              >${t("allergens.without")} ${allergenName(code, locale)}</span
             >`,
         )}
       ${

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
 import type { ExpoOrder, TillApi } from "../api/client.js";
@@ -360,12 +361,46 @@ describe("till-expo-screen", () => {
       ],
     };
 
-    it("shows a struck 'NO GLUTEN' removal callout and a localised 'Milk' contains chip", async () => {
+    it("shows a struck 'NO <allergen>' removal callout and a localised 'Milk' contains chip", async () => {
       const el = await mount({ api: stubApi([orderWithAllergens]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-a"]')!;
-      expect(item.textContent).toMatch(/no gluten/i);
+      // The removal callout localises the code (default locale en-GB) — never the raw English code.
+      const removed = item.querySelector('[data-removed="gluten"]')!;
+      expect(removed).not.toBeNull();
+      expect(removed.textContent).toContain(
+        `${t("allergens.without")} ${allergenName("gluten", currentLocale())}`,
+      );
       expect(item.textContent).toMatch(/milk/i);
-      expect(item.querySelector('[data-removed="gluten"]')).not.toBeNull();
+    });
+
+    it("localises the removal callout for the operator locale (es-ES shows 'SIN Leche', not 'MILK')", async () => {
+      const esOrder: ExpoOrder = {
+        ...orderWithAllergens,
+        courses: [
+          {
+            ...orderWithAllergens.courses[0]!,
+            items: [
+              {
+                ...orderWithAllergens.courses[0]!.items[0]!,
+                id: "ti-es",
+                asServed: undefined,
+                removed: ["milk"],
+              },
+            ],
+          },
+        ],
+      };
+      setLocale("es-ES");
+      try {
+        const el = await mount({ api: stubApi([esOrder]) });
+        const removed = el.shadowRoot!.querySelector<HTMLElement>(
+          '[data-item="ti-es"] [data-removed="milk"]',
+        )!;
+        expect(removed.textContent).toContain("SIN Leche");
+        expect(removed.textContent).not.toMatch(/milk/i);
+      } finally {
+        setLocale("en-GB");
+      }
     });
 
     it("shows a not-reviewed warning when the as-served fold is pending", async () => {

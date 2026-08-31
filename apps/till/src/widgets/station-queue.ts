@@ -246,10 +246,11 @@ export class TillStationQueue extends LitElement {
         border-radius: var(--wt-radius-full, 999px);
       }
 
-      /* A REMOVED base allergen — a struck "NO <CODE>" callout. Colour is NEVER the only signal: the
-         "NO" text AND the strike-through both mark it, so it reads on a monochrome display and passes
-         the contrast sweep (danger-as-text on the surface, the same pairing the expo forgotten-flag
-         ships). The CODE stays raw+uppercased (compact + scannable on a ticket); the chips localise. */
+      /* A REMOVED base allergen — a struck "NO <allergen>" callout (e.g. "SIN Leche"). Colour is NEVER
+         the only signal: the "NO"/"SIN" text AND the strike-through both mark it, so it reads on a
+         monochrome display and passes the contrast sweep (danger-as-text on the surface, the same
+         pairing the expo forgotten-flag ships). The allergen is localised via allergenName, exactly
+         like the chips — never a raw English code beside a localised chip on a Spanish kitchen surface. */
       .allergen-removed {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-danger);
@@ -779,7 +780,8 @@ export class TillStationQueue extends LitElement {
    * The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish + its
    * modifiers: the folded {@link StationQueueItem.asServed} codes as localised "contains" chips
    * (`allergenName`, never a hardcoded EU-14 list), each {@link StationQueueItem.removed} base code as a
-   * struck **"NO &lt;CODE&gt;"** callout (a swap made the plate safe of it), and a "not reviewed" warning
+   * struck **"NO &lt;allergen&gt;"** callout (a swap made the plate safe of it) — the allergen localised
+   * the SAME way as the chips (`allergenName`), never a raw English code — and a "not reviewed" warning
    * whenever the fold is `pending` (the dish's own allergens unreviewed — the Cautious policy, since a
    * cook must never read an unverified plate as allergen-free). Colour is NEVER the only signal (house
    * a11y rule, the order-timing bands' convention): the removal carries its "NO" text + strike-through,
@@ -806,7 +808,7 @@ export class TillStationQueue extends LitElement {
         .map(
           (code) =>
             html`<span class="allergen-removed" data-removed=${code}
-              >${t("allergens.without")} ${code.toUpperCase()}</span
+              >${t("allergens.without")} ${allergenName(code, locale)}</span
             >`,
         )}
       ${

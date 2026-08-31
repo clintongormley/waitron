@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
@@ -284,17 +285,20 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("rail: shows a struck 'NO GLUTEN' removal callout and a localised 'Milk' contains chip", async () => {
+    it("rail: shows a struck 'NO <allergen>' removal callout and a localised 'Milk' contains chip", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
         view: "rail",
         stationId: "st-a",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-a"]')!;
-      expect(item.textContent).toMatch(/no gluten/i);
+      // The removal callout localises the code (default locale en-GB) — never the raw English code.
+      const removed = item.querySelector('[data-removed="gluten"]')!;
+      expect(removed).not.toBeNull();
+      expect(removed.textContent).toContain(
+        `${t("allergens.without")} ${allergenName("gluten", currentLocale())}`,
+      );
       expect(item.textContent).toMatch(/milk/i);
-      // The removal is a dedicated, targetable callout (its own class + data attribute), not just text.
-      expect(item.querySelector('[data-removed="gluten"]')).not.toBeNull();
     });
 
     it("kanban: shows the same removal callout and contains chip beneath the cell's dish", async () => {
@@ -303,8 +307,33 @@ describe("till-station-queue", () => {
         stationId: "st-a",
       });
       const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(cell.textContent).toMatch(/no gluten/i);
+      expect(cell.querySelector('[data-removed="gluten"]')!.textContent).toContain(
+        allergenName("gluten", currentLocale()),
+      );
       expect(cell.textContent).toMatch(/milk/i);
+    });
+
+    it("localises the removal callout for the operator locale (es-ES shows 'SIN Leche', not 'MILK')", async () => {
+      // A removed MILK code proves localisation: es 'Leche' differs unmistakably from the English code.
+      const esRemoval: StationQueueGroup = {
+        ...withAllergens,
+        items: [
+          { ...withAllergens.items[0]!, id: "ti-es", asServed: undefined, removed: ["milk"] },
+        ],
+      };
+      setLocale("es-ES");
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [esRemoval],
+          view: "rail",
+          stationId: "st-es",
+        });
+        const removed = el.shadowRoot!.querySelector('[data-item="ti-es"] [data-removed="milk"]')!;
+        expect(removed.textContent).toContain("SIN Leche");
+        expect(removed.textContent).not.toMatch(/milk/i);
+      } finally {
+        setLocale("en-GB");
+      }
     });
 
     it("shows a not-reviewed warning when the as-served fold is pending", async () => {
