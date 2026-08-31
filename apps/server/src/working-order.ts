@@ -67,6 +67,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { requireNullableString } from "./request-screens.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -97,6 +98,15 @@ type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
  * catalogue and re-pricing the identical basket a second time. Same shape as plain `priceBasket`'s
  * result (both return `PricedLines`); this alias just names the one `priceOrderLines` actually calls. */
 type PricedBasket = PricedLines;
+
+/**
+ * Per-line customisation carried on the wire and threaded through every order path (spec §2/§3): a
+ * free-text kitchen `note` and, for a meat product, a `doneness`. BOTH ARE NON-FISCAL — validated and
+ * persisted server-side on the parent dish line (and snapshotted onto its ticket item at fire), and
+ * NEVER threaded into any sale/fiscal projection or huella. Intersected into each request/parameter
+ * line shape so the field pair (and this rationale) is declared ONCE rather than re-copied per site.
+ */
+export type LineExtras = { note?: string; doneness?: Doneness };
 
 /**
  * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
@@ -134,20 +144,17 @@ async function priceOrderLines(
   // an option MAY carry `quantity` (a small positive integer, absent = 1) — the count of THIS option
   // per dish, capped by the item's `max_quantity`; the child is priced at `dishQty × optionQty`.
   //
-  // Per-line customisation (spec §2/§3): a line MAY carry a free-text `note` (a kitchen instruction) and
-  // a `doneness` (the meat-doneness enum). Both are NON-FISCAL — they live only on `working_order_lines`
-  // and (snapshotted at fire) `ticket_items`, NEVER on the sale/fiscal projection. The note is trimmed
-  // and length-capped (`order.note_too_long`); the doneness is validated against the enum
-  // (`order.invalid_doneness`). Both attach to the PARENT dish line only — a child modifier row carries
-  // neither. Absent = NULL (not chosen); a whitespace-only note folds to NULL.
-  lines: {
+  // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note` and a
+  // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`order.note_too_long`); the
+  // doneness is validated against the enum (`order.invalid_doneness`). Both attach to the PARENT dish
+  // line only — a child modifier row carries neither. Absent = NULL (not chosen); a whitespace-only
+  // note folds to NULL.
+  lines: ({
     productId: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
-    note?: string;
-    doneness?: Doneness;
-  }[],
+  } & LineExtras)[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   if (lines.length === 0) {
     // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
@@ -191,13 +198,17 @@ async function priceOrderLines(
     }
 
     // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
-    // value aborts the whole basket rather than half-persisting. The note is trimmed (trailing
-    // whitespace never trips the cap), then capped at 200 chars; a note that is empty after trimming is
-    // "not chosen" and folds to NULL. The doneness is screened against the enum — the wire type is a
-    // lie (JSON), so this runtime check is what keeps a crafted value out of the `working_order_lines`
-    // insert. Both belong to the PARENT dish line and are carried on its `lineMeta` entry below.
+    // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
+    // note is TYPE-SCREENED first: a non-string (e.g. `123`) is refused `management.request_invalid`
+    // (a clean 400) rather than reaching `.trim()` as a `123.trim is not a function` TypeError → an
+    // opaque 500 — an absent (`undefined`) note stays "not chosen", the same as before. It is then
+    // trimmed (trailing whitespace never trips the cap) and capped at 200 chars; a note empty after
+    // trimming folds to NULL. The doneness is screened against the enum — the same runtime check keeps a
+    // crafted value out of the `working_order_lines` insert. Both belong to the PARENT dish line and are
+    // carried on its `lineMeta` entry below.
     const NOTE_LIMIT = 200;
-    const trimmedNote = line.note?.trim() ?? "";
+    const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
+    const trimmedNote = screenedNote?.trim() ?? "";
     if (trimmedNote.length > NOTE_LIMIT) {
       throw new AppError("order.note_too_long", { length: trimmedNote.length, limit: NOTE_LIMIT });
     }
@@ -611,9 +622,9 @@ export function toVatBreakdown(
  */
 export interface ParkOrderRequest {
   id: string;
-  // A line MAY carry a per-line `note`/`doneness` (spec §2/§3, NON-FISCAL), forwarded to
-  // `priceOrderLines` via `createOpenOrder`.
-  lines: { productId: string; quantity: string; note?: string; doneness?: Doneness }[];
+  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
+  // `createOpenOrder`.
+  lines: ({ productId: string; quantity: string } & LineExtras)[];
   label?: string;
   operatorId?: string;
 }
@@ -646,15 +657,13 @@ export async function createOpenOrder(
   // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
   // which validates them and expands the line into a parent dish row + child option rows. A walk-up
   // counter sale threads them here; park/openTab pass a plain `{productId, quantity}` line (no options).
-  // A line MAY also carry a per-line `note`/`doneness` (spec §2/§3, NON-FISCAL) — likewise forwarded to
-  // `priceOrderLines`, which validates + persists them on the parent dish line.
-  lines: {
+  // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
+  // which validates + persists them on the parent dish line.
+  lines: ({
     productId: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
-    note?: string;
-    doneness?: Doneness;
-  }[],
+  } & LineExtras)[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
   // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
@@ -1287,17 +1296,15 @@ export async function addTabRound(
   // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
   // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
   // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Per-line
-  // customisation (spec §2/§3): a line MAY carry a `note`/`doneness` (NON-FISCAL), persisted on the
+  // customisation (`LineExtras`): a line MAY carry a `note`/`doneness` (NON-FISCAL), persisted on the
   // parent dish line and snapshotted onto its ticket item at fire. All optional, so existing callers
   // (and the till's current `{productId, quantity}` send-round) are unchanged.
-  lines: {
+  lines: ({
     productId: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
-    note?: string;
-    doneness?: Doneness;
-  }[],
+  } & LineExtras)[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
   if (lines.length === 0) {
@@ -2519,9 +2526,8 @@ export async function getHeldOrder(
  * The basket is a full REPLACEMENT, not a delta: whatever the till sends becomes the order's lines.
  */
 export interface UpdateHeldOrderRequest {
-  // A line MAY carry a per-line `note`/`doneness` (spec §2/§3, NON-FISCAL), forwarded to
-  // `priceOrderLines`.
-  lines: { productId: string; quantity: string; note?: string; doneness?: Doneness }[];
+  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
+  lines: ({ productId: string; quantity: string } & LineExtras)[];
   label?: string;
 }
 

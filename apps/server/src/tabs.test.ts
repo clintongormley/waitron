@@ -442,6 +442,18 @@ describe("addTabRound per-line note + doneness (NON-FISCAL, spec §2/§3)", () =
       asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note }])),
     ).rejects.toMatchObject({ code: "order.note_too_long", params: { length: 201, limit: 200 } });
   });
+
+  it("rejects a non-string note with a clean 400 screen (management.request_invalid), not a 500", async () => {
+    // A crafted body could send `note: 123` (the wire type `note?: string` is a JSON lie). It must be
+    // type-screened to a structured 400 rather than reaching `.trim()` as a TypeError → an opaque 500.
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await expect(
+      asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: 123 as never }]),
+      ),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "note" } });
+  });
 });
 
 describe("voidTabLine", () => {
