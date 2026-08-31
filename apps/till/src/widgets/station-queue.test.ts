@@ -357,6 +357,97 @@ describe("till-station-queue", () => {
     });
   });
 
+  // ── As-served diet & contains badges (dietary-classification, Task 7) ────────────────────────
+  // The server projects each item's `asServedDiet`; the KDS renders vegan/vegetarian/halal/kosher
+  // badges + contains chips beside the allergen chips, with a NEUTRAL "not reviewed" note when pending.
+  describe("as-served diet badges", () => {
+    const veganItem: StationQueueGroup = {
+      orderId: "wo-v",
+      orderNumber: 21,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      thresholds: DEFAULT_THRESHOLDS,
+      status: "placed",
+      items: [
+        {
+          id: "ti-v",
+          workingOrderLineId: "wol-v",
+          state: "queued",
+          descriptions: { "es-ES": "Ensalada" },
+          quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
+          asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        },
+      ],
+    };
+
+    const meatItem: StationQueueGroup = {
+      ...veganItem,
+      items: [
+        {
+          ...veganItem.items[0]!,
+          id: "ti-m",
+          asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+        },
+      ],
+    };
+
+    const pendingDiet: StationQueueGroup = {
+      ...veganItem,
+      items: [
+        {
+          ...veganItem.items[0]!,
+          id: "ti-pd",
+          asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+        },
+      ],
+    };
+
+    it("shows vegan + vegetarian badges for a plant-only plate", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [veganItem],
+        view: "rail",
+        stationId: "st-v",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-v"]')!;
+      expect(item.querySelector("[data-diet='vegan']")).not.toBeNull();
+      expect(item.querySelector("[data-diet='vegetarian']")).not.toBeNull();
+      expect(item.textContent).not.toMatch(/review|revisi/i);
+    });
+
+    it("shows a contains-meat chip and no positive badge for a meat plate", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [meatItem],
+        view: "rail",
+        stationId: "st-m",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-m"]')!;
+      expect(item.querySelector("[data-diet-contains='meat']")).not.toBeNull();
+      expect(item.querySelector("[data-diet='vegan']")).toBeNull();
+    });
+
+    it("shows the NEUTRAL 'not reviewed' state for a pending diet, never a positive claim", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [pendingDiet],
+        view: "rail",
+        stationId: "st-pd",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-pd"]')!;
+      expect(item.querySelector("[data-diet-pending]")).not.toBeNull();
+      expect(item.querySelector("[data-diet='vegan']")).toBeNull();
+    });
+
+    it("renders no diet row for an item carrying no asServedDiet (regression-safe)", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups, // no item carries asServedDiet
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.querySelectorAll(".line-diet")).toHaveLength(0);
+    });
+  });
+
   it("line mode: tapping a queued line emits advance-ticket-item { itemId, to: 'preparing' }", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,

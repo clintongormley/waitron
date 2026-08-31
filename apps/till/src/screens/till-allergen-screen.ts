@@ -5,6 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { productName } from "../widgets/product-name.js";
 import type { TillProduct } from "../api/client.js";
 import type { AllergenCode } from "@waitron/catalogue";
@@ -74,6 +75,7 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
 export class TillAllergenScreen extends LitElement {
   static override styles = [
     baseStyles,
+    dietBadgeStyles,
     css`
       :host {
         display: block;
@@ -190,6 +192,16 @@ export class TillAllergenScreen extends LitElement {
       .detail-none {
         margin: 0;
         color: var(--wt-color-text-muted);
+      }
+
+      /* The product's DIET summary (dietary-classification, Task 7) in the detail dialog — the published
+         profile's vegan/vegetarian/halal/kosher badges + contains chips (and the neutral "not reviewed"
+         note when pending), set off from the allergen list above by a divider. The badge/chip look comes
+         from the shared dietBadgeStyles. */
+      .detail-diet {
+        margin-top: var(--wt-space-3);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
       }
     `,
   ];
@@ -332,6 +344,18 @@ export class TillAllergenScreen extends LitElement {
     </ul>`;
   }
 
+  /** The product's DIET summary in the detail dialog (dietary-classification, Task 7) — the PUBLISHED
+   * `product.diet` (never a per-line as-served fold; the allergen screen is a per-product lookup) as
+   * vegan/vegetarian/halal/kosher badges + contains chips, with the NEUTRAL "not reviewed" note when the
+   * derivation is pending. `nothing` when the product carries no diet (or nothing to assert), so an
+   * unreviewed-diet product simply shows no diet block rather than a false claim. Localised in the
+   * ACTIVE locale so a Print re-renders it in the invoice locale, exactly like the allergen names. */
+  #detailDiet(product: TillProduct) {
+    const badges = dietBadges(product.diet, "detail-diet", this.#activeLocale());
+    if (badges === nothing) return nothing;
+    return html`<div class="detail-diet">${badges}</div>`;
+  }
+
   /** The per-product detail dialog. Always present, driven by `selected`, so escape/backdrop closes
    * flow back through `wt-close` into `selected` rather than fighting the `.open` binding. */
   #detail() {
@@ -343,6 +367,7 @@ export class TillAllergenScreen extends LitElement {
       @wt-close=${() => this.#closeDetail()}
     >
       ${product ? this.#detailBody(product) : nothing}
+      ${product ? this.#detailDiet(product) : nothing}
       <wt-button
         slot="footer"
         class="detail-close"

@@ -5,7 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
-import type { ExpoOrder, TillApi } from "../api/client.js";
+import type { ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
 
@@ -413,6 +413,68 @@ describe("till-expo-screen", () => {
     it("a plain item with no as-served profile and nothing removed renders no allergen row (regression-safe)", async () => {
       const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries asServed/removed
       expect(el.shadowRoot!.querySelectorAll(".item-allergens")).toHaveLength(0);
+    });
+  });
+
+  describe("as-served diet badges (Task 7): vegan/vegetarian/contains chips, neutral not-reviewed note", () => {
+    const dietItem = (id: string, asServedDiet: ExpoItem["asServedDiet"]): ExpoItem => ({
+      id,
+      name: { "es-ES": "Ensalada" },
+      qty: "1.000",
+      stationName: "Cocina",
+      state: "queued",
+      firedAt: FIRED,
+      awayAt: null,
+      queuedAt: FIRED,
+      thresholds: DEFAULT_THRESHOLDS,
+      band: "fresh",
+      asServedDiet,
+    });
+    const orderWithDiet = (item: ExpoItem): ExpoOrder => ({
+      orderId: "wo-d",
+      orderNumber: 31,
+      openedMinutes: 1,
+      worstBand: "fresh",
+      courses: [
+        {
+          courseId: null,
+          courseName: null,
+          displayOrder: null,
+          fired: true,
+          away: false,
+          items: [item],
+        },
+      ],
+    });
+
+    it("shows vegan + vegetarian badges for a plant-only plate", async () => {
+      const item = dietItem("ti-v", { vegan: "yes", vegetarian: "yes", contains: [] });
+      const el = await mount({ api: stubApi([orderWithDiet(item)]) });
+      const node = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-v"]')!;
+      expect(node.querySelector("[data-diet='vegan']")).not.toBeNull();
+      expect(node.querySelector("[data-diet='vegetarian']")).not.toBeNull();
+      expect(node.textContent).not.toMatch(/review|revisi/i);
+    });
+
+    it("shows a contains-meat chip and no positive badge for a meat plate", async () => {
+      const item = dietItem("ti-m", { vegan: "no", vegetarian: "no", contains: ["meat"] });
+      const el = await mount({ api: stubApi([orderWithDiet(item)]) });
+      const node = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-m"]')!;
+      expect(node.querySelector("[data-diet-contains='meat']")).not.toBeNull();
+      expect(node.querySelector("[data-diet='vegan']")).toBeNull();
+    });
+
+    it("shows the NEUTRAL 'not reviewed' state for a pending diet, never a positive claim", async () => {
+      const item = dietItem("ti-pd", { vegan: "unknown", vegetarian: "unknown", contains: [] });
+      const el = await mount({ api: stubApi([orderWithDiet(item)]) });
+      const node = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-pd"]')!;
+      expect(node.querySelector("[data-diet-pending]")).not.toBeNull();
+      expect(node.querySelector("[data-diet='vegan']")).toBeNull();
+    });
+
+    it("a plain item with no asServedDiet renders no diet row (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries asServedDiet
+      expect(el.shadowRoot!.querySelectorAll(".line-diet")).toHaveLength(0);
     });
   });
 

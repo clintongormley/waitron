@@ -546,6 +546,12 @@ export interface StationQueueItem {
    *  payload or a pre-Task-8 fixture, treated as "no profile attached" (nothing rendered) — a plain dish
    *  reads exactly as before. */
   asServed?: AsServedAllergens;
+  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the diet twin of
+   *  {@link asServed}: the recipe-derived origins folded with the options' overlays, the staff override
+   *  re-applied. The KDS renders vegan/vegetarian/halal/kosher badges + contains chips beside the
+   *  allergen chips, and a neutral "not reviewed" note while `vegan === "unknown"` (pending). Optional/
+   *  absent (⇒ nothing rendered) on an older payload or a pre-diet fixture. */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
    *  {@link asServed}) — the KDS renders each as a struck "NO <allergen>" callout, the allergen name
    *  localised like the "contains" chips ("gluten-free bun" removed gluten). Optional/absent (⇒ empty)
@@ -675,6 +681,10 @@ export interface ExpoItem {
    *  "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on
    *  an older payload or a plain-dish fixture. */
   asServed?: AsServedAllergens;
+  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the same fold
+   *  {@link StationQueueItem.asServedDiet} carries; the pass renders diet badges + contains chips and a
+   *  neutral "not reviewed" note when pending. Optional/absent (⇒ nothing rendered). */
+  asServedDiet?: DietProfile;
   /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed};
    *  the pass renders each as a struck, localised "NO <allergen>" callout. Optional/absent (⇒ empty). */
   removed?: string[];

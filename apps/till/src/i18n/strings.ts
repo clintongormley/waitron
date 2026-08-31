@@ -204,6 +204,27 @@ export const en = {
   // it is localised via `allergenName`, the SAME helper the "contains" chips use, so an es-ES ticket never
   // mixes a Spanish chip with a raw English removal code (fix round 1).
   "allergens.without": "NO",
+  // Dietary classification (dietary-classification, Task 7). The POSITIVE diet labels shown as badges
+  // beside the as-served allergen chips (basket line, KDS/expo) — rendered ONLY when the profile
+  // asserts the claim (`vegan`/`vegetarian` === "yes"; `halal`/`kosher` === "yes"). `contains.meat`/
+  // `contains.fish` are the contains-tags the derivation asserts from KNOWN ingredient presence.
+  // `not_reviewed` is the NEUTRAL note shown when the diet derivation is pending (vegan === "unknown")
+  // — never a positive claim on an unreviewed dish (the Cautious policy). `label` prefixes the badge row.
+  "diet.label": "Diet",
+  "diet.vegan": "Vegan",
+  "diet.vegetarian": "Vegetarian",
+  "diet.halal": "Halal",
+  "diet.kosher": "Kosher",
+  "diet.contains.meat": "Contains meat",
+  "diet.contains.fish": "Contains fish",
+  "diet.not_reviewed": "Diet not reviewed",
+  // The menu diet FILTER chips (dietary-classification, Task 6/7) — the segmented control above the
+  // product grid that narrows the tiles via `filterProductsByDiet`. `filter.label` names the group;
+  // `no_meat`/`no_fish` are PREFERENCE filters (they keep unreviewed dishes), unlike the cautious
+  // vegan/vegetarian lenses (which reuse `diet.vegan`/`diet.vegetarian` above).
+  "diet.filter.label": "Dietary filter",
+  "diet.filter.no_meat": "No meat",
+  "diet.filter.no_fish": "No fish",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",
   "schedule.title": "My schedule",
@@ -456,6 +477,17 @@ export const es: Record<StringKey, string> = {
   "allergens.as_served_none": "Sin alérgenos declarados",
   "allergens.not_reviewed": "Alérgenos pendientes de revisión",
   "allergens.without": "SIN",
+  "diet.label": "Dieta",
+  "diet.vegan": "Vegano",
+  "diet.vegetarian": "Vegetariano",
+  "diet.halal": "Halal",
+  "diet.kosher": "Kosher",
+  "diet.contains.meat": "Contiene carne",
+  "diet.contains.fish": "Contiene pescado",
+  "diet.not_reviewed": "Dieta pendiente de revisión",
+  "diet.filter.label": "Filtro dietético",
+  "diet.filter.no_meat": "Sin carne",
+  "diet.filter.no_fish": "Sin pescado",
   "schedule.open": "Mi horario",
   "schedule.title": "Mi horario",
   "schedule.back": "Volver a la caja",

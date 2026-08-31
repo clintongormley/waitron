@@ -89,6 +89,38 @@ describe("till-table-order-screen", () => {
     expect(productGrid.store).toBe(basket.store);
   });
 
+  // ── Menu diet filter (dietary-classification, Task 7) ────────────────────────────────────────
+  it("shows NO diet filter when no product carries a published diet", async () => {
+    const { el } = await mount(); // cafe only — no diet
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+  });
+
+  it("shows the diet filter and narrows the round grid to the picked lens", async () => {
+    const veganDish: TillProduct = {
+      ...cafe,
+      id: "vegan",
+      descriptions: { es: "Ensalada" },
+      diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    };
+    const meatDish: TillProduct = {
+      ...cafe,
+      id: "meat",
+      descriptions: { es: "Chuleta" },
+      diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+    };
+    const { el } = await mount({ products: [veganDish, meatDish] });
+    const filter = el.shadowRoot!.querySelector("till-diet-filter")!;
+    expect(filter).not.toBeNull();
+    expect(
+      grid(el)
+        .products.map((p) => p.id)
+        .sort(),
+    ).toEqual(["meat", "vegan"]);
+    filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
+    await el.updateComplete;
+    expect(grid(el).products.map((p) => p.id)).toEqual(["vegan"]);
+  });
+
   it("accumulates a round and emits send-round with the picked lines, then clears the round", async () => {
     const { el } = await mount();
     // Pick a café into the current round (the grid rings an `each` tile straight into its store).

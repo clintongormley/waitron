@@ -211,6 +211,55 @@ describe("till-allergen-screen", () => {
     expect(dialog.textContent).not.toContain(t("allergens.pending", "en"));
   });
 
+  // ── Diet summary in the detail dialog (dietary-classification, Task 7) ───────────────────────
+  it("shows vegan/vegetarian diet badges in a product's detail dialog when its diet asserts them", async () => {
+    const salad: TillProduct = {
+      ...water,
+      id: "salad",
+      descriptions: { es: "Ensalada", en: "Salad" },
+      diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    };
+    const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+      products: [salad],
+      locale: "en",
+    });
+    rowFor(el, "Salad").querySelector<HTMLElement>(".row-open")!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    expect(dialog.querySelector("[data-diet='vegan']")).not.toBeNull();
+    expect(dialog.querySelector("[data-diet='vegetarian']")).not.toBeNull();
+    expect(dialog.textContent).toContain(t("diet.vegan", "en"));
+  });
+
+  it("shows the NEUTRAL 'not reviewed' diet state for a pending diet, never a positive claim", async () => {
+    const special: TillProduct = {
+      ...water,
+      id: "special",
+      descriptions: { es: "Especial", en: "Special" },
+      diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+    };
+    const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+      products: [special],
+      locale: "en",
+    });
+    rowFor(el, "Special").querySelector<HTMLElement>(".row-open")!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    expect(dialog.querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(dialog.querySelector("[data-diet='vegan']")).toBeNull();
+  });
+
+  it("shows NO diet block for a product carrying no published diet (regression-safe)", async () => {
+    const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+      products, // coffee/sandwich/water — none carry a `diet`
+      locale: "en",
+    });
+    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    expect(dialog.querySelector(".detail-diet")).toBeNull();
+  });
+
   it("clears the selection when the dialog closes itself (escape/backdrop)", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,

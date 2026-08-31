@@ -7,7 +7,8 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
-import { asServedAllergens } from "../state/as-served.js";
+import { asServedAllergens, asServedDiet } from "../state/as-served.js";
+import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 
@@ -41,6 +42,7 @@ function optionQuantityBadge(quantity: number | undefined): string {
 export class TillBasket extends LitElement {
   static override styles = [
     baseStyles,
+    dietBadgeStyles,
     css`
       :host {
         display: block;
@@ -131,6 +133,14 @@ export class TillBasket extends LitElement {
         color: var(--wt-color-warning-text, var(--wt-color-text));
         font-weight: 600;
       }
+
+      /* The as-served DIET & contains row (dietary-classification, Task 7) — indented under the dish
+         like its allergen row, beneath it. The badge/chip look comes from the shared dietBadgeStyles;
+         only the indent + spacing is basket-specific. */
+      .line-diet {
+        padding: 0 0 var(--wt-space-2);
+        padding-left: var(--wt-space-4);
+      }
     `,
   ];
 
@@ -181,10 +191,23 @@ export class TillBasket extends LitElement {
               </div>
             `,
           )}
-          ${this.#allergenRow(line, index)}
+          ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
     `;
+  }
+
+  /**
+   * The line's as-served DIET row (dietary-classification, Task 7), or `nothing`. Rendered ONLY when the
+   * product carries genuine diet data — a recipe-derived `dietDerivation` or a staff `dietOverride` — so
+   * a plain no-recipe item (a coffee) never sprouts a "not reviewed" note it has no diet to review. When
+   * it does render, the badges are the CLIENT-computed {@link asServedDiet} (the same shared fold the KDS
+   * and expo use), and a pending derivation shows the NEUTRAL "not reviewed" note, never a positive claim.
+   */
+  #dietRow(line: OrderLine, index: number) {
+    const hasDietData = line.product.dietDerivation != null || line.product.dietOverride != null;
+    if (!hasDietData) return nothing;
+    return dietBadges(asServedDiet(line), `line-diet-${index}`);
   }
 
   /**

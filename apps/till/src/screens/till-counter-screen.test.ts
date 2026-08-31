@@ -187,6 +187,39 @@ describe("till-counter-screen", () => {
     expect(grid.products).toBe(products);
   });
 
+  // ── Menu diet filter (dietary-classification, Task 7) ────────────────────────────────────────
+  const veganDish: TillProduct = {
+    ...cafe,
+    id: "vegan",
+    descriptions: { es: "Ensalada" },
+    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+  };
+  const meatDish: TillProduct = {
+    ...cafe,
+    id: "meat",
+    descriptions: { es: "Chuleta" },
+    diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+  };
+
+  it("shows NO diet filter when no product carries a published diet", async () => {
+    const { el } = await mount(); // cafe only — no diet
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+  });
+
+  it("shows the diet filter when some product carries a diet, and narrows the grid to the picked lens", async () => {
+    const { el } = await mount({ products: [veganDish, meatDish] });
+    const filter = el.shadowRoot!.querySelector("till-diet-filter")!;
+    expect(filter).not.toBeNull();
+    // Both dishes are in the grid before any lens.
+    let grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+    expect(grid.products.map((p) => p.id).sort()).toEqual(["meat", "vegan"]);
+    // Pick the vegan lens — the grid drops the meat dish.
+    filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
+    await el.updateComplete;
+    grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+    expect(grid.products.map((p) => p.id)).toEqual(["vegan"]);
+  });
+
   it("shows the logged-in operator name in the header", async () => {
     const { el } = await mount({ operatorName: "Bruno" });
     expect(el.shadowRoot!.querySelector(".operator")!.textContent).toContain("Bruno");

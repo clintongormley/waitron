@@ -1,8 +1,8 @@
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
-import { filterProductsByMenu } from "../menu-filter.js";
+import { type DietPredicate, filterProductsByDiet, filterProductsByMenu } from "../menu-filter.js";
 import { LAYOUT_A, type LayoutDef, type WidgetInstance } from "../layout.js";
 // Side-effect imports: registering each widget element so the layout below can render its tag. The
 // screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
@@ -14,6 +14,9 @@ import "../widgets/held-orders.js";
 import "../widgets/station-queue.js";
 // The multi-menu switcher shown above the grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
+// The menu DIET filter shown above the grid (dietary-classification, Task 7) — narrows the tiles to a
+// dietary lens via `filterProductsByDiet`. Rendered only when some product carries a published diet.
+import "../widgets/diet-filter.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
 import "./till-allergen-screen.js";
@@ -170,6 +173,14 @@ export class TillCounterScreen extends LitElement {
    * "Allergens" header button opens it; the screen's own Close (`close-allergens`) returns to the sale. */
   @state() private showAllergens = false;
   /**
+   * The active menu DIET filter (dietary-classification, Task 7), or `null` for none — a view-only lens
+   * that narrows the grid to vegan / vegetarian / no-meat / no-fish via {@link filterProductsByDiet}.
+   * Owned locally (unlike {@link selectedMenuId}, which the app owns): the diet lens touches ONLY which
+   * tiles are visible, never the basket, so it need not survive a screen switch. The diet-filter widget's
+   * `diet-filter-selected` toggles it.
+   */
+  @state() private selectedDiet: DietPredicate | null = null;
+  /**
    * A sale is in flight (the app is awaiting `recordSale`). Threaded straight through to the pay
    * widget, which disables its Pay/Confirm affordances while set — the visible half of the app's
    * single-flight double-file guard (see `till-app`'s `submitting`).
@@ -220,6 +231,25 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-expo", { bubbles: true, composed: true }));
   }
 
+  /** Apply the diet-filter widget's pick (`diet-filter-selected`) — a predicate or `null` (cleared). */
+  #pickDiet(predicate: DietPredicate | null): void {
+    this.selectedDiet = predicate;
+  }
+
+  /** The tiles the grid shows: the selected menu's products ({@link filterProductsByMenu}), then narrowed
+   *  to the active diet lens ({@link filterProductsByDiet}) when one is set. The allergen lookup screen
+   *  keeps the FULL set (a tab may span menus, and allergen lookup must reach every product). */
+  #gridProducts(): TillProduct[] {
+    const byMenu = filterProductsByMenu(this.products, this.selectedMenuId);
+    return this.selectedDiet ? filterProductsByDiet(byMenu, this.selectedDiet) : byMenu;
+  }
+
+  /** Whether to show the diet filter at all — only when some product carries a published diet, so a
+   *  venue with no dietary data adds no filter chrome above the grid. */
+  #hasDietData(): boolean {
+    return this.products.some((product) => product.diet != null);
+  }
+
   /** Reveal the allergen lookup screen in place of the sale body. */
   #openAllergens(): void {
     this.showAllergens = true;
@@ -244,7 +274,7 @@ export class TillCounterScreen extends LitElement {
         // doc). The value is validated 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`).
         const columns = instance.config.columns;
         return html`<till-product-grid
-          .products=${filterProductsByMenu(this.products, this.selectedMenuId)}
+          .products=${this.#gridProducts()}
           .store=${this.store}
           .columns=${typeof columns === "number" ? columns : undefined}
         ></till-product-grid>`;
@@ -325,6 +355,17 @@ export class TillCounterScreen extends LitElement {
                     .menus=${this.menus}
                     .selectedId=${this.selectedMenuId}
                   ></till-menu-switcher>
+                  ${
+                    this.#hasDietData()
+                      ? html`<till-diet-filter
+                          class="diet-filter"
+                          .selected=${this.selectedDiet}
+                          @diet-filter-selected=${(
+                            e: CustomEvent<{ predicate: DietPredicate | null }>,
+                          ) => this.#pickDiet(e.detail.predicate)}
+                        ></till-diet-filter>`
+                      : nothing
+                  }
                   ${inRegion("main").map((widget) => this.#widget(widget))}
                 </div>
                 <div class="region region-aside">

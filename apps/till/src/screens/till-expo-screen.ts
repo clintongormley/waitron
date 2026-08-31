@@ -5,6 +5,7 @@ import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/sh
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -68,6 +69,7 @@ function courseOrder(course: ExpoCourse): number {
 export class TillExpoScreen extends LitElement {
   static override styles = [
     baseStyles,
+    dietBadgeStyles,
     css`
       :host {
         display: block;
@@ -302,6 +304,13 @@ export class TillExpoScreen extends LitElement {
       .allergen-pending {
         color: var(--wt-color-warning-text, var(--wt-color-text));
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      /* The as-served DIET & contains row (dietary-classification, Task 7), indented like the allergen
+         row beneath the dish + modifiers. The badge/chip look comes from the shared dietBadgeStyles;
+         only the indent is expo-specific. */
+      .line-diet {
+        padding-left: var(--wt-space-3);
       }
 
       .item.state-queued {
@@ -577,7 +586,10 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#modifiers(item)}${this.#allergens(item)}
+      ${this.#modifiers(item)}${this.#allergens(item)}${dietBadges(
+        item.asServedDiet,
+        `item-diet-${item.id}`,
+      )}
     </span>`;
   }
 
