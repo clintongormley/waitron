@@ -174,6 +174,9 @@ export class OptionGroupManager extends LitElement {
   @state() private newItemVatClass: VatClass | null = null;
   @state() private newItemSort = 0;
   @state() private newItemActive = true;
+  /** The per-option quantity cap for the create-item draft; default 1 ("no per-option quantity" — a
+   * plain single choice). An integer like {@link newItemSort}, so it shares `#applyInteger`. */
+  @state() private newItemMaxQuantity = 1;
 
   /** Reset the create-ITEM draft whenever the expanded group changes, so switching groups (or closing
    * the panel) never carries stale typed values into a different group's create form. The create-GROUP
@@ -185,6 +188,7 @@ export class OptionGroupManager extends LitElement {
     this.newItemVatClass = null;
     this.newItemSort = 0;
     this.newItemActive = true;
+    this.newItemMaxQuantity = 1;
   }
 
   #onNewGroupNameChange(event: CustomEvent<{ value: string }>, locale: string): void {
@@ -290,6 +294,7 @@ export class OptionGroupManager extends LitElement {
           vatClass: this.newItemVatClass,
           sort: this.newItemSort,
           active: this.newItemActive,
+          maxQuantity: this.newItemMaxQuantity,
         },
         bubbles: true,
         composed: true,
@@ -353,6 +358,15 @@ export class OptionGroupManager extends LitElement {
           <wt-input
             class="field"
             type="number"
+            data-test=${`item-maxqty-${item.id}`}
+            label=${t("option_group.max_quantity")}
+            .value=${String(item.maxQuantity)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+              this.#applyInteger(e, (n) => this.#updateItem(groupId, item.id, { maxQuantity: n }))}
+          ></wt-input>
+          <wt-input
+            class="field"
+            type="number"
             data-test=${`item-sort-${item.id}`}
             label=${t("option_group.sort")}
             .value=${String(item.sort)}
@@ -410,6 +424,15 @@ export class OptionGroupManager extends LitElement {
               )}
             </select>
           </label>
+          <wt-input
+            class="field"
+            type="number"
+            data-test="item-new-maxqty"
+            label=${t("option_group.max_quantity")}
+            .value=${String(this.newItemMaxQuantity)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+              this.#applyInteger(e, (n) => (this.newItemMaxQuantity = n))}
+          ></wt-input>
           <wt-input
             class="field"
             type="number"

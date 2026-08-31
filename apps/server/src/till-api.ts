@@ -1423,12 +1423,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await c.req.json<{
         // A round line MAY carry selected modifier `options` (ordering modifiers) — threaded through
         // `addTabRound` → `priceOrderLines`, which expands each into a parent + child rows. Optional, so
-        // a plain `{productId, quantity}` round is unchanged.
+        // a plain `{productId, quantity}` round is unchanged. An option MAY carry a per-option `quantity`
+        // (absent = 1), validated + priced server-side against the item's `max_quantity`.
         lines: {
           productId: string;
           quantity: string;
           courseId?: string | null;
-          options?: { optionGroupItemId: string }[];
+          options?: { optionGroupItemId: string; quantity?: number }[];
         }[];
       }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {

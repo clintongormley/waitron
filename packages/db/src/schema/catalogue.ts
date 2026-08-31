@@ -191,12 +191,20 @@ export const optionGroupItems = pgTable(
     name: jsonb("name").$type<Record<string, string>>().notNull(),
     priceDelta: numeric("price_delta", { precision: 12, scale: 2 }).notNull().default("0"),
     vatClass: text("vat_class"),
+    // The AUTHORED cap on how many of THIS option a diner may take on one dish (per-option quantity).
+    // `1` (the default) means "no per-option quantity" — the option behaves exactly as before this
+    // column existed, its child line counted at the dish quantity alone. A value of N lets a diner
+    // take the option up to ×N per dish; the pricer multiplies the dish quantity by the chosen count.
+    maxQuantity: integer("max_quantity").notNull().default(1),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },
   (t) => [
     index("option_group_items_group_idx").on(t.groupId),
     unique("option_group_items_tenant_id_key").on(t.tenantId, t.id),
+    // A per-option cap is meaningless below 1: an option a diner can take zero times is just an
+    // inactive option. Enforced in the DB so no authoring path can persist a nonsensical cap.
+    check("option_group_items_qty_ck", sql`${t.maxQuantity} >= 1`),
     // Tenant-consistent FK: an item cannot reference a group belonging to another tenant. Cascades so
     // deleting a group removes its items. NULL vat_class = inherit; a non-null must match products'.
     foreignKey({

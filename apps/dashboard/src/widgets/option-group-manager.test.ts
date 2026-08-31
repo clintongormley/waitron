@@ -37,6 +37,7 @@ const items: OptionGroupItem[] = [
     vatClass: null,
     sort: 0,
     active: true,
+    maxQuantity: 1,
   },
   {
     id: "i2",
@@ -46,6 +47,7 @@ const items: OptionGroupItem[] = [
     vatClass: "reduced",
     sort: 1,
     active: true,
+    maxQuantity: 1,
   },
 ];
 
@@ -343,6 +345,30 @@ describe("option-group-manager", () => {
     expect(select.value).toBe(""); // i1 has vatClass: null → inherit
   });
 
+  it("renders each item row's authored max quantity", async () => {
+    const capped: OptionGroupItem[] = [
+      {
+        id: "i1",
+        groupId: "g1",
+        name: { es: "Pequeño" },
+        priceDelta: "0.00",
+        vatClass: null,
+        sort: 0,
+        active: true,
+        maxQuantity: 5,
+      },
+    ];
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      groups,
+      expandedGroupId: "g1",
+      items: capped,
+    });
+    const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=item-maxqty-i1]",
+    )!;
+    expect(input.value).toBe("5");
+  });
+
   // ── Create an item ───────────────────────────────────────────────────────────────────────────
 
   it("emits create-option-group-item for the expanded group with the typed fields", async () => {
@@ -368,7 +394,40 @@ describe("option-group-manager", () => {
       vatClass: "reduced",
       sort: 2,
       active: false,
+      maxQuantity: 1,
     });
+  });
+
+  // The per-option quantity cap defaults to 1 ("no per-option quantity") and rides along on create.
+  it("emits create-option-group-item with the default max quantity of 1 when untouched", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      groups,
+      expandedGroupId: "g1",
+      items: [],
+    });
+    const detail = new Promise<{ groupId: string } & Record<string, unknown>>((resolve) =>
+      el.addEventListener("create-option-group-item", (e) => resolve((e as CustomEvent).detail)),
+    );
+    type(el, "item-name-es", "Mediano");
+    await el.updateComplete;
+    click(el, "create-item");
+    expect((await detail).maxQuantity).toBe(1);
+  });
+
+  it("emits create-option-group-item with the typed max quantity", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      groups,
+      expandedGroupId: "g1",
+      items: [],
+    });
+    const detail = new Promise<{ groupId: string } & Record<string, unknown>>((resolve) =>
+      el.addEventListener("create-option-group-item", (e) => resolve((e as CustomEvent).detail)),
+    );
+    type(el, "item-name-es", "Mediano");
+    type(el, "item-new-maxqty", "5");
+    await el.updateComplete;
+    click(el, "create-item");
+    expect((await detail).maxQuantity).toBe(5);
   });
 
   it("emits create-option-group-item with vatClass null when inherit is left selected", async () => {
@@ -470,6 +529,35 @@ describe("option-group-manager", () => {
     );
     toggle(el, "item-active-i1", false);
     expect(await detail).toEqual({ groupId: "g1", itemId: "i1", patch: { active: false } });
+  });
+
+  it("emits update-option-group-item when an item row's max quantity changes", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      groups,
+      expandedGroupId: "g1",
+      items,
+    });
+    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
+      (resolve) =>
+        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
+    );
+    type(el, "item-maxqty-i1", "3");
+    expect(await detail).toEqual({ groupId: "g1", itemId: "i1", patch: { maxQuantity: 3 } });
+  });
+
+  it("ignores a non-numeric max-quantity edit (no event)", async () => {
+    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
+      groups,
+      expandedGroupId: "g1",
+      items,
+    });
+    let fired = false;
+    el.addEventListener("update-option-group-item", () => {
+      fired = true;
+    });
+    type(el, "item-maxqty-i1", "abc");
+    await el.updateComplete;
+    expect(fired).toBe(false);
   });
 
   it("surfaces an itemError as a role=alert inline message, localised", async () => {

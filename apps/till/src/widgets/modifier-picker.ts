@@ -7,7 +7,7 @@ import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
-import type { TillOptionGroup, TillProduct } from "../api/client.js";
+import type { TillOptionGroup, TillOptionItem, TillProduct } from "../api/client.js";
 
 /**
  * The `modifier-confirm` payload: the parent product the diner was configuring plus the modifiers they
@@ -26,17 +26,27 @@ export interface ModifierConfirmDetail {
  * carries a non-empty option group (Task 3) opens this over the till; the diner picks their options and
  * the picker rings the dish with them (via the grid, which calls `addProduct`).
  *
- * SELECTION UI, per group's `maxSelect`:
+ * SELECTION UI, per group's `maxSelect` and per item's `maxQuantity` (per-option quantity):
  *  - a SINGLE-select group (`maxSelect === 1`) renders RADIOS — exclusive by nature, so picking a new
- *    one replaces the old and the max is enforced without disabling anything;
- *  - a MULTI-select group renders CHECKBOXES, and once `maxSelect` are ticked the REMAINING unticked
- *    boxes disable (the ticked ones stay live so the diner can undo them).
+ *    one replaces the old and the max is enforced without disabling anything. A quantity > 1 is
+ *    impossible in a single-select group (its sum is capped at 1), so its items never get a stepper
+ *    however high their `maxQuantity`;
+ *  - a MULTI-select group renders CHECKBOXES for `maxQuantity === 1` items, and a STEPPER (`− N +`) for
+ *    an item whose `maxQuantity > 1` — the diner can take that option several times per dish. Once the
+ *    group's SUMMED quantity reaches `maxSelect` the remaining unticked boxes and every stepper's `+`
+ *    disable (a ticked box / a stepped item stays live so the diner can undo it); a stepper's `+` also
+ *    disables at the item's own `maxQuantity`, and its `−` at 0 (where it deselects the option).
+ *
+ * SELECTION STATE is a flat `quantities` map keyed by `option_group_items.id` — absent/0 is unselected,
+ * ≥ 1 is selected with that per-dish count. A checkbox tick is quantity 1; a radio sets its item to 1
+ * and clears its siblings; a stepper sets the count directly.
  *
  * CLIENT ENFORCEMENT is UX ONLY — the server re-validates every selection authoritatively (Task 6), so
- * this never reimplements the server's rules, it only gates the button and the boxes. "Add" is disabled
- * until every rendered group is SATISFIED: a `required` group (or one with `minSelect > 0`) needs at
- * least its minimum picked. A running price (dish gross + the selected deltas, at quantity 1) shows what
- * the line will cost — computed with the SAME `lineGross` the basket totals with, so the two agree.
+ * this never reimplements the server's rules, it only gates the button, the boxes and the steppers.
+ * "Add" is disabled until every rendered group is SATISFIED: a `required` group (or one with
+ * `minSelect > 0`) needs at least its minimum picked, counted as the group's SUMMED quantity. A running
+ * price (dish gross + the selected deltas, each at its stepped quantity, on a quantity-1 dish) shows
+ * what the line will cost — computed with the SAME `lineGross` the basket totals with, so the two agree.
  *
  * THE EMPTY-GROUP CARRY (Task 3, CLAUDE.md §5 — nothing may wedge a sale): a group whose active `items`
  * resolved to `[]` (all its items inactive, an authoring bug) is SKIPPED — never rendered, and a
@@ -75,6 +85,11 @@ export class TillModifierPicker extends LitElement {
         cursor: not-allowed;
       }
 
+      /* A stepper row is a plain container, not a single-control label, so it is not pointer-cued. */
+      .stepper-option {
+        cursor: default;
+      }
+
       .option-name {
         flex: 1;
       }
@@ -82,6 +97,19 @@ export class TillModifierPicker extends LitElement {
       .option-delta {
         color: var(--wt-color-text-muted);
         font-variant-numeric: tabular-nums;
+      }
+
+      .stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .stepper-count {
+        min-width: var(--wt-space-5);
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .running {
@@ -111,11 +139,13 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) product!: TillProduct;
 
   /**
-   * The chosen item ids per group, keyed by group id. A radio group holds at most one; a checkbox group
-   * holds up to its `maxSelect`. Held as a fresh object on each change (never mutated in place) so Lit's
-   * dirty check re-renders. Groups absent from the map have nothing selected.
+   * The chosen per-dish COUNT of each option, keyed by `option_group_items.id` (per-option quantity):
+   * absent or 0 = unselected, ≥ 1 = selected with that count. A radio/checkbox pick is a count of 1; a
+   * stepper sets the count directly (up to the item's `maxQuantity` and the group's remaining `maxSelect`
+   * allowance). Held as a fresh object on each change (never mutated in place) so Lit's dirty check
+   * re-renders; a count that reaches 0 is DELETED from the map, so an unselected item leaves no key.
    */
-  @state() private selection: Record<string, string[]> = {};
+  @state() private quantities: Record<string, number> = {};
 
   /** The product's groups that actually have something to pick — the empty-group carry drops `items: []`
    * groups here, so they are neither rendered nor counted as a constraint. */
@@ -129,9 +159,23 @@ export class TillModifierPicker extends LitElement {
     return group.required ? Math.max(group.minSelect, 1) : group.minSelect;
   }
 
-  /** Whether a group has its minimum picked. An empty group never reaches here (it is not rendered). */
+  /** The group's SUMMED quantity across its items — the count `maxSelect`/`minSelect` are measured
+   * against now that an option can be taken several times (per-option quantity). */
+  #groupQuantity(group: TillOptionGroup): number {
+    return group.items.reduce((sum, item) => sum + (this.quantities[item.id] ?? 0), 0);
+  }
+
+  /** Whether an item shows a STEPPER rather than a checkbox/radio: only in a multi-select group
+   * (`maxSelect > 1`) AND when the option may be taken more than once (`maxQuantity > 1`). A
+   * single-select group caps its sum at 1, so a quantity > 1 is impossible there. */
+  #hasStepper(group: TillOptionGroup, item: TillOptionItem): boolean {
+    return group.maxSelect > 1 && item.maxQuantity > 1;
+  }
+
+  /** Whether a group has its minimum picked — counted as the SUMMED quantity. An empty group never
+   * reaches here (it is not rendered). */
   #satisfied(group: TillOptionGroup): boolean {
-    return (this.selection[group.id]?.length ?? 0) >= this.#minFor(group);
+    return this.#groupQuantity(group) >= this.#minFor(group);
   }
 
   /** Whether every rendered group is satisfied — the gate on "Add". Vacuously true when no group needs
@@ -140,17 +184,20 @@ export class TillModifierPicker extends LitElement {
     return this.#renderableGroups.every((group) => this.#satisfied(group));
   }
 
-  /** The modifiers picked so far, in group-then-item order, as the wire/display `SelectedLineOption[]`. */
+  /** The modifiers picked so far, in group-then-item order, as the wire/display `SelectedLineOption[]`.
+   * Emits every item with a count ≥ 1, carrying `quantity` ONLY when it is > 1 — a single-count option
+   * omits the field, so a plain modifier's wire stays byte-identical to before (per-option quantity). */
   #selectedOptions(): SelectedLineOption[] {
     const options: SelectedLineOption[] = [];
     for (const group of this.#renderableGroups) {
-      const picked = this.selection[group.id] ?? [];
       for (const item of group.items) {
-        if (picked.includes(item.id)) {
+        const quantity = this.quantities[item.id] ?? 0;
+        if (quantity >= 1) {
           options.push({
             optionGroupItemId: item.id,
             name: item.name,
             priceDelta: item.priceDelta,
+            ...(quantity > 1 ? { quantity } : {}),
           });
         }
       }
@@ -169,17 +216,41 @@ export class TillModifierPicker extends LitElement {
     return formatMoney(lineGross(previewLine));
   }
 
-  /** Pick a radio: it becomes the group's sole selection. */
-  #chooseRadio(groupId: string, itemId: string): void {
-    this.selection = { ...this.selection, [groupId]: [itemId] };
+  /** Set an item's count, writing a fresh `quantities` object; a count of 0 (or less) DELETES the key so
+   * an unselected item leaves nothing behind. The single mutation point for radios, checkboxes and
+   * steppers alike. */
+  #setQuantity(itemId: string, quantity: number): void {
+    const next = { ...this.quantities };
+    if (quantity >= 1) {
+      next[itemId] = quantity;
+    } else {
+      delete next[itemId];
+    }
+    this.quantities = next;
   }
 
-  /** Toggle a checkbox: add the item, or remove it when unticked. The template disables an unticked box
-   * at `maxSelect`, so a check that would exceed the bound never fires. */
-  #toggleCheckbox(groupId: string, itemId: string, checked: boolean): void {
-    const current = this.selection[groupId] ?? [];
-    const next = checked ? [...current, itemId] : current.filter((id) => id !== itemId);
-    this.selection = { ...this.selection, [groupId]: next };
+  /** Pick a radio: it becomes the group's sole selection (count 1), clearing every sibling in the group. */
+  #chooseRadio(group: TillOptionGroup, itemId: string): void {
+    const next = { ...this.quantities };
+    for (const item of group.items) delete next[item.id];
+    next[itemId] = 1;
+    this.quantities = next;
+  }
+
+  /** Toggle a checkbox: select the item at count 1, or deselect it when unticked. The template disables
+   * an unticked box once the group's summed quantity is at `maxSelect`, so a check that would exceed the
+   * bound never fires. */
+  #toggleCheckbox(itemId: string, checked: boolean): void {
+    this.#setQuantity(itemId, checked ? 1 : 0);
+  }
+
+  /** Step an item's count by ±1 (per-option quantity), clamped to `[0, item.maxQuantity]`. The template
+   * disables `−` at 0 and `+` at the item's `maxQuantity` or the group's summed `maxSelect`, so a step
+   * past a bound never fires; the clamp is a belt-and-braces guard. */
+  #step(item: TillOptionItem, delta: number): void {
+    const current = this.quantities[item.id] ?? 0;
+    const clamped = Math.max(0, Math.min(item.maxQuantity, current + delta));
+    this.#setQuantity(item.id, clamped);
   }
 
   /** Emit the parent product + the chosen options. Guarded so a force-click past the disabled state can
@@ -228,40 +299,89 @@ export class TillModifierPicker extends LitElement {
 
   #renderGroup(group: TillOptionGroup) {
     const single = group.maxSelect === 1;
-    const picked = this.selection[group.id] ?? [];
-    const atMax = picked.length >= group.maxSelect;
+    // Measured against the group's SUMMED quantity now that an option can be taken several times.
+    const atGroupMax = this.#groupQuantity(group) >= group.maxSelect;
     return html`
       <fieldset class="group">
         <legend class="group-name">${descriptionFor(group.name, group.id)}</legend>
-        ${group.items.map((item) => {
-          const checked = picked.includes(item.id);
-          // A multi-select group at its max disables its remaining unticked boxes; radios stay live
-          // (selecting one just replaces the other), so they never disable.
-          const disabled = !single && !checked && atMax;
-          const delta = Number(item.priceDelta) !== 0 ? formatMoney(item.priceDelta) : nothing;
-          return html`
-            <label class="option">
-              <input
-                id="opt-${item.id}"
-                type=${single ? "radio" : "checkbox"}
-                name=${group.id}
-                .checked=${checked}
-                ?disabled=${disabled}
-                @change=${(e: Event) =>
-                  single
-                    ? this.#chooseRadio(group.id, item.id)
-                    : this.#toggleCheckbox(
-                        group.id,
-                        item.id,
-                        (e.target as HTMLInputElement).checked,
-                      )}
-              />
-              <span class="option-name">${descriptionFor(item.name, item.id)}</span>
-              <span class="option-delta">${delta}</span>
-            </label>
-          `;
-        })}
+        ${group.items.map((item) =>
+          this.#hasStepper(group, item)
+            ? this.#renderStepper(item, atGroupMax)
+            : this.#renderChoice(group, item, single, atGroupMax),
+        )}
       </fieldset>
+    `;
+  }
+
+  /** The shared modifier delta chip: the formatted price change, or nothing for a free option. */
+  #deltaOf(item: TillOptionItem) {
+    return Number(item.priceDelta) !== 0 ? formatMoney(item.priceDelta) : nothing;
+  }
+
+  /** A radio (single-select group) or checkbox (multi-select, `maxQuantity === 1`) row. */
+  #renderChoice(
+    group: TillOptionGroup,
+    item: TillOptionItem,
+    single: boolean,
+    atGroupMax: boolean,
+  ) {
+    const checked = (this.quantities[item.id] ?? 0) >= 1;
+    // A multi-select group at its summed max disables its remaining unticked boxes; radios stay live
+    // (selecting one just replaces the other), so they never disable.
+    const disabled = !single && !checked && atGroupMax;
+    return html`
+      <label class="option">
+        <input
+          id="opt-${item.id}"
+          type=${single ? "radio" : "checkbox"}
+          name=${group.id}
+          .checked=${checked}
+          ?disabled=${disabled}
+          @change=${(e: Event) =>
+            single
+              ? this.#chooseRadio(group, item.id)
+              : this.#toggleCheckbox(item.id, (e.target as HTMLInputElement).checked)}
+        />
+        <span class="option-name">${descriptionFor(item.name, item.id)}</span>
+        <span class="option-delta">${this.#deltaOf(item)}</span>
+      </label>
+    `;
+  }
+
+  /** A `− N +` stepper row for a multi-select item takeable more than once (per-option quantity). `−`
+   * disables at 0 (where a further step would deselect); `+` disables at the item's `maxQuantity` or when
+   * the group's summed quantity has reached `maxSelect`. Both buttons carry an accessible name. */
+  #renderStepper(item: TillOptionItem, atGroupMax: boolean) {
+    const count = this.quantities[item.id] ?? 0;
+    const name = descriptionFor(item.name, item.id);
+    return html`
+      <div class="option stepper-option">
+        <span class="option-name">${name}</span>
+        <span class="option-delta">${this.#deltaOf(item)}</span>
+        <span class="stepper">
+          <wt-button
+            class="step"
+            size="sm"
+            data-test="opt-${item.id}-dec"
+            aria-label=${`${t("modifier.decrease")} ${name}`}
+            ?disabled=${count <= 0}
+            @click=${() => this.#step(item, -1)}
+          >
+            −
+          </wt-button>
+          <span class="stepper-count" data-test="opt-${item.id}-count">${count}</span>
+          <wt-button
+            class="step"
+            size="sm"
+            data-test="opt-${item.id}-inc"
+            aria-label=${`${t("modifier.increase")} ${name}`}
+            ?disabled=${count >= item.maxQuantity || atGroupMax}
+            @click=${() => this.#step(item, 1)}
+          >
+            +
+          </wt-button>
+        </span>
+      </div>
     `;
   }
 }

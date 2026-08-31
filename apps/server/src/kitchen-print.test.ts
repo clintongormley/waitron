@@ -173,7 +173,11 @@ async function makePrinter(
 async function fireNewOrder(
   tx: Transaction,
   cfg: TillConfig,
-  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+  lines: {
+    productId: string;
+    quantity: string;
+    options?: { optionGroupItemId: string; quantity?: number }[];
+  }[],
 ): Promise<string> {
   const id = randomUUID();
   await createOpenOrder(tx, cfg, id, lines, null);
@@ -195,14 +199,21 @@ async function fireNewOrder(
  *  round line's `options: [{ optionGroupItemId }]` selects. Each call mints its OWN group (minSelect 0,
  *  maxSelect 1), so two calls give two independently-selectable options on one dish. The option carries
  *  NO station — a modifier never routes to its own station (that is the point of the parent-only rule). */
-async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+async function addOption(
+  tx: Transaction,
+  productId: string,
+  name: string,
+  maxQuantity = 1,
+): Promise<string> {
   const [group] = await tx
     .insert(optionGroups)
     .values({
       tenantId: sql`current_tenant_id()`,
       name: { [LOCALE]: `${name} group` },
       minSelect: 0,
-      maxSelect: 1,
+      // Per-option quantity counts toward maxSelect (working-order.ts), so a maxQuantity>1 option needs
+      // headroom here for its combined count to be accepted.
+      maxSelect: maxQuantity,
       required: false,
       sort: 0,
     })
@@ -215,6 +226,7 @@ async function addOption(tx: Transaction, productId: string, name: string): Prom
       name: { [LOCALE]: name },
       priceDelta: "0.50",
       vatClass: "reduced",
+      maxQuantity,
       sort: 0,
     })
     .returning({ id: optionGroupItems.id });
@@ -551,6 +563,43 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     // The options appear BELOW the dish, and each sub-text row carries the "+ " marker.
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Grande"));
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
+  });
+
+  it("badges a modifier's PER-DISH count when it exceeds one, leaving a plain modifier's line unchanged", async () => {
+    // Per-option quantity (landed feature): a modifier taken ×N per dish is filed as a CHILD line whose
+    // stored `quantity` is the COMBINED count = dishQuantity × perOptionQuantity. The kitchen ticket
+    // shows the per-dish count (childQuantity ÷ parentDishQuantity) as an ASCII "xN" suffix on the
+    // modifier line ONLY when it exceeds 1 — so a plain modifier prints `  + <name>` exactly as before.
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
+      const grande = await addOption(tx, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
+      const avena = await addOption(tx, cortado, "Leche avena"); // plain (max 1)
+
+      // Dish quantity 1; the "Grande" option taken ×2 → child quantity 2 (per-dish 2 → "x2"); the
+      // "Leche avena" option taken once → child quantity 1 (per-dish 1 → no suffix).
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: cortado,
+          quantity: "1",
+          options: [{ optionGroupItemId: grande, quantity: 2 }, { optionGroupItemId: avena }],
+        },
+      ]);
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const stationJobs = jobs.filter((j) => j.printerId === printerId);
+    expect(stationJobs).toHaveLength(1);
+    const ticket = decodeTicket(stationJobs[0]!.payload);
+    expect(ticket).toContain("Cortado");
+    expect(ticket).toContain("+ Grande x2"); // per-dish count badged with an ASCII "x"
+    expect(ticket).toContain("+ Leche avena"); // plain modifier — unchanged, no suffix
+    expect(ticket).not.toContain("Leche avena x"); // the plain modifier carries NO count
+    // Proven by contrast: without the badge the Grande line would read `+ Grande`, like the control.
+    expect(ticket).not.toMatch(/\+ Grande(?! x)/u);
   });
 
   it("never station-resolves a child line: a dish-with-options fires with NO default station", async () => {

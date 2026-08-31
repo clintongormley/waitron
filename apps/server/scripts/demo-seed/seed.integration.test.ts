@@ -189,6 +189,16 @@ describe("demo seed end-to-end", () => {
     expect(casaProducts.length).toBeGreaterThan(0);
     expect(diaProducts.length).toBeGreaterThan(0);
 
+    // Pick a product from each menu that carries NO required option group, so parking it WITHOUT
+    // options is valid. Products sort by `(created_at, id)` and the seed inserts them in one burst,
+    // so `created_at` ties and the random-uuid `id` breaks the tie — which product sorts first varies
+    // run to run. The coffee/steak carry required Size/Milk/Cooking groups (a real order could never
+    // park them optionless); any other product proves the same cross-menu union-reprice.
+    const optionFree = (p: (typeof read.products)[number]): boolean =>
+      !(p.optionGroups ?? []).some((g) => g.required && g.items.length > 0);
+    const casaProduct = casaProducts.find(optionFree) ?? casaProducts[0]!;
+    const diaProduct = diaProducts.find(optionFree) ?? diaProducts[0]!;
+
     // (4) Media: a sampled product's `image` is a content-addressed name that BOTH matches the served
     // filename shape AND resolves to a real file in the temp media dir the seed wrote to.
     expect(read.image).not.toBeNull();
@@ -206,8 +216,8 @@ describe("demo seed end-to-end", () => {
     const { orderNumber } = await parkOrder({ db: suite.admin }, cfg, {
       id: orderId,
       lines: [
-        { productId: casaProducts[0]!.id, quantity: "1" },
-        { productId: diaProducts[0]!.id, quantity: "2" },
+        { productId: casaProduct.id, quantity: "1" },
+        { productId: diaProduct.id, quantity: "2" },
       ],
       label: "Mesa 4",
     });
@@ -215,7 +225,7 @@ describe("demo seed end-to-end", () => {
 
     const held = await getHeldOrder({ db: suite.admin }, cfg, orderId);
     // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
-    expect(held.lines.map((l) => l.productId)).toEqual([casaProducts[0]!.id, diaProducts[0]!.id]);
+    expect(held.lines.map((l) => l.productId)).toEqual([casaProduct.id, diaProduct.id]);
     expect(held.lines[1]!.quantity).toBe("2.000");
   });
 });

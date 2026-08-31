@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
@@ -45,6 +45,13 @@ const LABEL = {
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
+
+/**
+ * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
+ * receipt (`apps/server/src/receipt-ticket.ts`) and the on-screen basket use, so the badge reads
+ * identically across the filed ticket, the paper receipt and the live basket.
+ */
+const QTY_BADGE = "×";
 
 /** A dish and the option lines filed beneath it — the shape {@link groupByParent} produces. */
 interface LineGroup {
@@ -352,12 +359,22 @@ export class TillTicketView extends LitElement {
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
               ${group.options.map(
-                (option) => html`
-                  <li class="line option">
-                    <span class="line-name">${lineName(option.descriptions, locale)}</span>
-                    <span class="line-gross">${formatMoney(option.gross, locale)}</span>
-                  </li>
-                `,
+                // Per-option quantity: the per-dish count is recovered from the filed COMBINED child
+                // quantity (see perDishOptionQuantity). Append a "×N" badge to the name ONLY when it
+                // exceeds 1; the common one-per-dish case shows no badge and is byte-identical to before.
+                // Same `×` badge as the printed receipt (`apps/server/src/receipt-ticket.ts`).
+                (option) => {
+                  const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
+                  const badge = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
+                  return html`
+                    <li class="line option">
+                      <span class="line-name"
+                        >${lineName(option.descriptions, locale)}${badge}</span
+                      >
+                      <span class="line-gross">${formatMoney(option.gross, locale)}</span>
+                    </li>
+                  `;
+                },
               )}
             `,
           )}

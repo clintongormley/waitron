@@ -589,6 +589,13 @@
       "when": 1788145086217,
       "tag": "0083_kds_timing_thresholds",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1788166028922,
+      "tag": "0084_special_bishop",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,7 @@ import {
   products,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import "./errors.js"; // load the code registry for `options.group_invalid` thrown below
+import "./errors.js"; // load the code registry for `options.group_invalid`/`options.item_invalid` thrown below
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
@@ -108,6 +108,10 @@ export interface ResolvedOptionItem {
   name: Record<string, string>;
   priceDelta: string;
   vatClass: VatClass | null;
+  /** The AUTHORED per-option cap (`option_group_items.max_quantity`, NOT NULL default 1): the most of
+   * THIS option a diner may take on one dish (per-option quantity). The sale path validates a selected
+   * option's quantity is an integer in `1..maxQuantity` and prices the child at `dishQty × optionQty`. */
+  maxQuantity: number;
 }
 
 /**
@@ -614,6 +618,7 @@ export async function listAvailableProducts(
         itemName: optionGroupItems.name,
         priceDelta: optionGroupItems.priceDelta,
         vatClass: optionGroupItems.vatClass,
+        maxQuantity: optionGroupItems.maxQuantity,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -659,6 +664,7 @@ export async function listAvailableProducts(
           name: r.itemName!,
           priceDelta: r.priceDelta!,
           vatClass: r.vatClass as VatClass | null,
+          maxQuantity: r.maxQuantity!,
         });
       }
     }
@@ -712,6 +718,9 @@ export interface OptionGroupItem {
   vatClass: VatClass | null;
   sort: number;
   active: boolean;
+  /** The most of this option a diner may take (`option_group_items.max_quantity`); 1 = no per-option
+   * quantity. Always an integer >= 1, mirrored from the column's `>= 1` CHECK. */
+  maxQuantity: number;
 }
 
 export interface CreateOptionGroupInput {
@@ -740,11 +749,13 @@ export interface UpdateOptionGroupInput {
 export interface CreateOptionGroupItemInput {
   name: Record<string, string>;
   /** Omitted defaults mirror the column defaults: priceDelta "0", vatClass null (inherit), sort 0,
-   * active true. */
+   * active true, maxQuantity 1. */
   priceDelta?: string;
   vatClass?: VatClass | null;
   sort?: number;
   active?: boolean;
+  /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
+  maxQuantity?: number;
 }
 
 export interface UpdateOptionGroupItemInput {
@@ -753,6 +764,8 @@ export interface UpdateOptionGroupItemInput {
   vatClass?: VatClass | null;
   sort?: number;
   active?: boolean;
+  /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
+  maxQuantity?: number;
 }
 
 const OPTION_GROUP_COLUMNS = {
@@ -773,6 +786,7 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   vatClass: optionGroupItems.vatClass,
   sort: optionGroupItems.sort,
   active: optionGroupItems.active,
+  maxQuantity: optionGroupItems.maxQuantity,
 };
 
 /**
@@ -788,6 +802,19 @@ function validateOptionGroupBounds(minSelect: number, maxSelect: number, require
   }
   if (required && minSelect < 1) {
     throw new AppError("options.group_invalid", { reason: "required_without_min" });
+  }
+}
+
+/**
+ * Enforce the `option_group_items` per-option-quantity invariant BEFORE the write: `max_quantity` must
+ * be an integer >= 1 (1 = no per-option quantity), so an invalid value is a clean `options.item_invalid`
+ * (400) rather than the opaque 500 the `option_group_items_qty_ck` CHECK (catalogue.ts) would raise as a
+ * backstop. Parallel to `validateOptionGroupBounds`; `reason` is the stable field-naming code
+ * `"max_quantity"` a translator renders, matching the group-level `options.group_invalid` shape.
+ */
+function validateOptionGroupItemMaxQuantity(maxQuantity: number): void {
+  if (!Number.isInteger(maxQuantity) || maxQuantity < 1) {
+    throw new AppError("options.item_invalid", { reason: "max_quantity" });
   }
 }
 
@@ -857,12 +884,17 @@ export async function createOptionGroupItem(
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
+  // Resolve the default HERE so the invariant is validated against the value that will land (the DB
+  // default is 1), the same posture createOptionGroup takes for its bounds.
+  const maxQuantity = input.maxQuantity ?? 1;
+  validateOptionGroupItemMaxQuantity(maxQuantity);
   const [row] = await tx
     .insert(optionGroupItems)
     .values({
       tenantId: CURRENT_TENANT,
       groupId,
       name: input.name,
+      maxQuantity,
       ...(input.priceDelta === undefined ? {} : { priceDelta: input.priceDelta }),
       ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
       ...(input.sort === undefined ? {} : { sort: input.sort }),
@@ -890,6 +922,10 @@ export async function updateOptionGroupItem(
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
+  // maxQuantity's invariant is single-field, so there is nothing to merge onto: a patch that omits it
+  // leaves the stored value untouched (Drizzle `.set()` only writes provided keys); a patch that sets
+  // it is re-validated here before the write, the same clean-error-before-the-CHECK posture create takes.
+  if (patch.maxQuantity !== undefined) validateOptionGroupItemMaxQuantity(patch.maxQuantity);
   await tx.update(optionGroupItems).set(patch).where(eq(optionGroupItems.id, itemId));
 }
 

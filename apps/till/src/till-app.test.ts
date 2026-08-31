@@ -815,6 +815,47 @@ describe("till-app", () => {
     );
   });
 
+  it("confirm-payment: forwards a per-option quantity > 1 and OMITS it at 1 (per-option quantity, feature A)", async () => {
+    // The picker sets `SelectedLineOption.quantity` for a modifier taken ×N; the send builder must
+    // forward it as `options[].quantity` so the server prices and re-validates the count. A quantity of
+    // 1 (or absent) is OMITTED so a plain modifier's wire stays byte-identical to before.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1", [
+      {
+        optionGroupItemId: "opt-shot",
+        name: { es: "Extra chupito" },
+        priceDelta: "0.50",
+        quantity: 2,
+      },
+      {
+        optionGroupItemId: "opt-oat",
+        name: { es: "Leche de avena" },
+        priceDelta: "0.50",
+        quantity: 1,
+      },
+    ]);
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [
+        {
+          productId: "cafe",
+          quantity: "1",
+          options: [
+            { optionGroupItemId: "opt-shot", quantity: 2 },
+            { optionGroupItemId: "opt-oat" }, // quantity 1 → omitted
+          ],
+        },
+      ],
+      { method: "cash", amount: "5" },
+      c.store.id,
+    );
+  });
+
   it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
     // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
     // server's filed result reports a different composition (agua×3). The rendered ticket must show the

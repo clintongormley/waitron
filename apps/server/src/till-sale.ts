@@ -72,11 +72,13 @@ export interface TillTender {
 export interface TillSaleRequest {
   /** The walk-up basket. A line MAY carry selected modifier `options` (ordering modifiers, Task 6) —
    *  each an `optionGroupItemId` chosen from the product's attached option groups; the server validates
-   *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. */
+   *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. An
+   *  option MAY carry `quantity` (a small positive integer, absent = 1) — the per-option count, capped
+   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate. */
   lines: {
     productId: string;
     quantity: string;
-    options?: { optionGroupItemId: string }[];
+    options?: { optionGroupItemId: string; quantity?: number }[];
   }[];
   /**
    * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
@@ -198,11 +200,12 @@ export interface PayWorkingOrderRequest {
   id: string;
   /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
    *  locked lines (see this interface's doc comment). A walk-up line MAY carry selected modifier
-   *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`. */
+   *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`; each
+   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. */
   lines: {
     productId: string;
     quantity: string;
-    options?: { optionGroupItemId: string }[];
+    options?: { optionGroupItemId: string; quantity?: number }[];
   }[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */

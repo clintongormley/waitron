@@ -543,6 +543,9 @@ describe("ordering modifiers — parent + child lines", () => {
           name: { es: "Bacon" },
           priceDelta: "0.50",
           vatClass: "reduced",
+          // Per-option quantity: Bacon may be taken up to ×3 on one dish (the per-option quantity
+          // filing test rings it ×3). Queso keeps the NOT-NULL default of 1.
+          maxQuantity: 3,
           sort: 0,
         },
         {
@@ -738,6 +741,71 @@ describe("ordering modifiers — parent + child lines", () => {
     // THREE filed sale_lines too, the two children carrying parent_line_id (Task 5 resolves it).
     expect(sl).toHaveLength(3);
     expect(sl.filter((l) => l.parentLineId !== null)).toHaveLength(2);
+  });
+
+  it("counter sale of a dish ×2 with an option ×3 files the child at the COMBINED quantity 6", async () => {
+    const v = await setupModifierVenue();
+    const burger = burgerOf(v);
+    const bacon = itemOf(burger, "Bacon"); // +0.50 reduced(10%), max_quantity 3
+    const workingOrderId = randomUUID();
+
+    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+      // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × option(3) = 6.
+      lines: [
+        {
+          productId: burger.id,
+          quantity: "2",
+          options: [{ optionGroupItemId: bacon.id, quantity: 3 }],
+        },
+      ],
+      tender: { method: "cash", amount: "30.00" },
+      workingOrderId,
+    });
+
+    // 9.00 × 2 dish = 18.00, plus 0.50 × 6 Bacon = 3.00 → 21.00 gross.
+    expect(result.total).toBe("21.00");
+    expect(result.lines).toHaveLength(2); // parent + one child (the duplicate is a single summed line)
+
+    const { wol, sl } = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const wol = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          quantity: workingOrderLines.quantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+        .orderBy(workingOrderLines.lineNo);
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId));
+      const sl = await tx
+        .select({
+          parentLineId: saleLines.parentLineId,
+          quantity: saleLines.quantity,
+        })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, sale!.id))
+        .orderBy(saleLines.lineNo);
+      return { wol, sl };
+    });
+
+    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross.
+    expect(wol).toHaveLength(2);
+    expect(wol[0]).toMatchObject({ productId: burger.id, parentLineId: null, quantity: "2.000" });
+    expect(wol[1]!.optionGroupItemId).toBe(bacon.id);
+    expect(wol[1]!.quantity).toBe("6.000");
+    expect(wol[1]!.lineTotal).toBe("3.00");
+
+    // The FILED child sale_line carries the same combined quantity (fiscal record).
+    expect(sl).toHaveLength(2);
+    const child = sl.find((l) => l.parentLineId !== null)!;
+    expect(child.quantity).toBe("6.000");
   });
 
   it("park → retrieve → pay re-prices children from their lock to the same total and desglose", async () => {

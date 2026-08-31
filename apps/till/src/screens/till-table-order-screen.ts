@@ -9,6 +9,7 @@ import { filterProductsByMenu } from "../menu-filter.js";
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { toWireOption } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
 // picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
@@ -459,9 +460,7 @@ export class TillTableOrderScreen extends LitElement {
         roundLine.courseId = courseId;
       }
       if (line.options !== undefined && line.options.length > 0) {
-        roundLine.options = line.options.map((option) => ({
-          optionGroupItemId: option.optionGroupItemId,
-        }));
+        roundLine.options = line.options.map(toWireOption);
       }
       return roundLine;
     });

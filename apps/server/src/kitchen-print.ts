@@ -38,6 +38,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { perDishOptionQuantity } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { formatKitchenTicket } from "./kitchen-ticket.js";
@@ -168,6 +169,7 @@ export async function enqueueKitchenTickets(
     .select({
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
       descriptions: workingOrderLines.descriptions,
     })
     .from(workingOrderLines)
@@ -178,12 +180,23 @@ export async function enqueueKitchenTickets(
       ),
     )
     .orderBy(workingOrderLines.lineNo);
-  // parent line id → its option names in line_no order (the `.orderBy` above fixes the order, and a Map
+  // parent line id → its option strings in line_no order (the `.orderBy` above fixes the order, and a Map
   // append preserves it). `parentLineId` is non-null on every row here (the `inArray` matched it).
+  //
+  // Per-option quantity (landed feature): the PER-DISH count is recovered from the filed COMBINED child
+  // quantity (see perDishOptionQuantity). We APPEND an ASCII "xN" suffix to the modifier string only when
+  // that count exceeds 1, matching `kitchen-ticket.ts`'s own `qty x name` convention (ASCII "x", so any
+  // single-byte printer code page renders it). One-per-dish — the common case, and any plain modifier —
+  // leaves the string `<name>` and prints `  + <name>` exactly as before. Every child's parent is in
+  // `lineById` (its `parentLineId` ∈ the fired `lineIds` the read covered).
   const modifiersByParent = new Map<string, string[]>();
   for (const child of childRows) {
+    const parent = lineById.get(child.parentLineId!)!;
+    const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
+    const name = ticketName(child.descriptions, cfg.locale);
+    const label = perDish > 1 ? `${name} x${perDish}` : name;
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(ticketName(child.descriptions, cfg.locale));
+    names.push(label);
     modifiersByParent.set(child.parentLineId!, names);
   }
 

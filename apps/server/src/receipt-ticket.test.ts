@@ -248,6 +248,54 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(compareDecimal(desgloseSum, decimal(withOptions.total))).toBe(0);
   });
 
+  it("badges an option's PER-DISH count when it exceeds one, leaving a plain option unbadged", () => {
+    // Per-option quantity (landed feature): a selected modifier is a CHILD line whose filed `quantity`
+    // is the COMBINED count = dishQuantity × perOptionQuantity. The receipt shows a "×N" badge on the
+    // option ONLY when the PER-DISH count (childQuantity ÷ parentDishQuantity, an exact integer) is > 1,
+    // so a plain modifier — even on a multi-quantity dish — is byte-identical to before.
+    const withPerOptionQty: TillSaleResult = {
+      invoiceNumber: "A/9",
+      issuedAt: "2026-08-17T12:34:00.000Z",
+      total: "34.50",
+      vatBreakdown: [{ rate: "21", base: "28.51", tax: "5.99" }],
+      lines: [
+        // A dish filed at quantity 3.
+        {
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "3",
+          gross: "33.00",
+          parentLineNo: null,
+        },
+        // An option taken ×2 per dish → filed at the COMBINED quantity 6 (3 dishes × 2). Per-dish = 2 →
+        // badged "×2". Its gross is the FILED delta, unchanged by the badge.
+        { descriptions: { "es-ES": "Extra queso" }, quantity: "6", gross: "1.50", parentLineNo: 1 },
+        // A plain option taken once per dish → filed at quantity 3 (== dish quantity). Per-dish = 1 → NO
+        // badge, rendered exactly as an unbadged option always was.
+        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "3", gross: "0.00", parentLineNo: 1 },
+      ],
+      change: "0.00",
+      qr: FILED_SALE.qr,
+    };
+    const s = decodeTicket(
+      formatReceipt({
+        result: withPerOptionQty,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+      }),
+    );
+
+    // The ×2 option: an indented line carrying the "×2" badge after the name, its filed gross unchanged.
+    expect(s).toMatch(/\n {2,}Extra queso ×2[^\n]*1,50/u);
+    // The plain option: NO badge, and the exact pre-feature line — name, padding, then the gross.
+    expect(s).toMatch(/\n {2,}Sin cebolla {2,}0,00/u);
+    expect(s).not.toContain("Sin cebolla ×");
+
+    // Proven by DELETION of the badge: without it the ×2 line would read `Extra queso` unbadged, like
+    // the control — so this negative is what distinguishes the badge from its absence.
+    expect(s).not.toMatch(/\n {2,}Extra queso {2,}1,50/u);
+  });
+
   it("ends in the full-cut command", () => {
     const bytes = formatReceipt({
       result: FILED_SALE,

@@ -48,7 +48,7 @@
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
  */
 import { esc } from "@waitron/printing";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
@@ -100,6 +100,14 @@ const LABEL = {
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
+
+/**
+ * The multiplication sign prefixed to a per-dish option-quantity badge (`×2`). Chosen to match the
+ * receipt's own convention: the ticket already emits a non-ASCII glyph (€, 0xAC) through the ESC/POS
+ * builder's Latin-1 encoding, and `×` (U+00D7) is likewise a single Latin-1 byte (0xD7), so it survives
+ * the same encode/decode round-trip cleanly. `receipt-ticket.test.ts` pins the rendered badge.
+ */
+const QTY_BADGE = "×";
 
 /**
  * The receipt's character column width, in monospace cells — the common 80mm / Font-A width the deli's
@@ -250,11 +258,17 @@ export function formatReceipt({
       ),
     );
     for (const option of options) {
-      // Indented, and WITHOUT the quantity prefix — an option is priced per dish, so its own count is
-      // the dish's and repeating it reads as noise. The gross is the delta this option added.
-      b.line(
-        twoColumn(`  ${lineName(option.descriptions, locale)}`, formatMoney(option.gross, locale)),
-      );
+      // Indented, and WITHOUT a leading quantity prefix — an option is priced per dish, so repeating the
+      // dish's own count as a prefix reads as noise. The gross is the delta this option added.
+      //
+      // Per-option quantity (landed feature): the PER-DISH count is recovered from the filed COMBINED
+      // child quantity (see perDishOptionQuantity). We APPEND a "×N" badge to the option's NAME only when
+      // that count exceeds 1; the common one-per-dish case shows no badge and is byte-identical to before.
+      // The gross is left as the filed delta, unchanged by the badge.
+      const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
+      const name = lineName(option.descriptions, locale);
+      const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+      b.line(twoColumn(label, formatMoney(option.gross, locale)));
     }
   }
   b.line();

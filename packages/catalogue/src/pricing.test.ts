@@ -217,6 +217,46 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
     expect(priced.vatBreakdown).toHaveLength(1); // dish + option share the 21% group
   });
 
+  it("prices an option taken ×N per dish (dish ×3, option ×2 → child qty 6, gross = priceDelta × 6)", () => {
+    // Per-option quantity: the child line is priced at dishQuantity × the option's own count. A
+    // non-trivial priceDelta (1.50) makes the total unambiguous — 1.50 × 6 = 9.00, which no other
+    // multiplication of the operands reaches.
+    const priced = priceBasketWithOptions([
+      {
+        product: each("4.00", "general"),
+        quantity: "3",
+        options: [{ name: { es: "Extra shot" }, priceDelta: "1.50", vatClass: null, quantity: 2 }],
+      },
+    ]);
+    // The child carries dish×option = 3 × 2 = 6, priced at 1.50 each → 9.00 gross.
+    expect(priced.lines[1]!.quantity).toBe("6");
+    expect(priced.grossLineTotals[1]).toBe(decimal("9.00"));
+    // The PARENT dish is untouched by the option count: still qty 3 at 4.00 → 12.00 gross.
+    expect(priced.lines[0]!.quantity).toBe("3");
+    expect(priced.grossLineTotals[0]).toBe(decimal("12.00"));
+    expect(priced.total).toBe(decimal("21.00")); // 4.00×3 + 1.50×6
+  });
+
+  it("treats an OMITTED option quantity exactly as quantity 1 (byte-identical path)", () => {
+    const build = (quantity?: number): BasketItemWithOptions[] => [
+      {
+        product: each("5.00", "general"),
+        quantity: "2",
+        options: [
+          {
+            name: { es: "Grande" },
+            priceDelta: "1.30",
+            vatClass: null,
+            ...(quantity !== undefined ? { quantity } : {}),
+          },
+        ],
+      },
+    ];
+    // An option with no `quantity` field must produce the identical priced result to one with
+    // `quantity: 1` — the no-per-option-count path is unchanged from before this feature.
+    expect(priceBasketWithOptions(build())).toEqual(priceBasketWithOptions(build(1)));
+  });
+
   it("with EMPTY options is line-for-line identical to priceBasket", () => {
     const items: BasketItemWithOptions[] = [
       { product: each("8.50", "general"), quantity: "2", options: [] },

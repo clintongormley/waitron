@@ -7,7 +7,23 @@ import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { WorkingOrderStore } from "../state/working-order.js";
+import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+
+/**
+ * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
+ * receipt (`apps/server/src/receipt-ticket.ts`) and the settled-ticket view use, so the badge reads
+ * identically on the screen basket, the paper receipt and the filed ticket.
+ */
+const QTY_BADGE = "×";
+
+/**
+ * The `×N` badge for a modifier taken more than once per dish (per-option quantity), or "" for the
+ * common one-per-dish case (quantity 1 or absent) so a plain option renders byte-identical to before.
+ * `quantity` is the CLIENT per-dish count carried directly on the selected option — no derivation.
+ */
+function optionQuantityBadge(quantity: number | undefined): string {
+  return quantity !== undefined && quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
+}
 
 /**
  * The running order: one row per rung-up line, each with the product's name, the quantity (a count,
@@ -46,6 +62,20 @@ export class TillBasket extends LitElement {
 
       .qty {
         color: var(--wt-color-text-muted);
+      }
+
+      /* Dish-line quantity stepper (feature B): the -/N/+ control on an each line. The count sits
+         between the two step buttons; a weight line renders the static kg label in this same cell. */
+      .stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .count {
+        min-width: 1.5ch;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
 
       .line-total {
@@ -91,9 +121,10 @@ export class TillBasket extends LitElement {
         (line, index) => html`
           <div class="line">
             <span class="name">${productName(line.product)}</span>
-            <span class="qty">${quantityLabel(line)}</span>
+            ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
+              class="remove"
               variant="ghost"
               size="md"
               aria-label=${`${t("action.remove")} ${productName(line.product)}`}
@@ -105,16 +136,59 @@ export class TillBasket extends LitElement {
           ${(line.options ?? []).map(
             // Each selected modifier on its own indented row — the option's name and its delta (0,00 for
             // a free option). No remove control: a child is removed only by removing its dish above,
-            // which drops the whole line (options and all).
+            // which drops the whole line (options and all). A modifier taken more than once per dish
+            // (per-option quantity) shows a "×N" badge on its name — the CLIENT per-dish count carried
+            // directly on the option (no derivation); a plain option (quantity 1/absent) is unchanged.
             (option) => html`
               <div class="option">
-                <span class="name">${descriptionFor(option.name, "")}</span>
+                <span class="name"
+                  >${descriptionFor(option.name, "")}${optionQuantityBadge(option.quantity)}</span
+                >
                 <span class="option-total">${formatMoney(optionGross(line, option))}</span>
               </div>
             `,
           )}
         `,
       )}
+    `;
+  }
+
+  /**
+   * The line's quantity cell. An `each` line gets a −/count/+ stepper (dish-line quantity, feature B):
+   * `+` bumps the count via {@link WorkingOrderStore.setLineQuantity} (no line merge — each add stays its
+   * own line), `−` lowers it but is DISABLED at 1 because deletion is the × remove control's job, never
+   * the stepper's. A `weight` line has no stepper — a measured weight has no +/- — so it keeps the static
+   * kg label ({@link quantityLabel}).
+   */
+  #quantityCell(line: OrderLine, index: number) {
+    if (line.product.pricingUnit === "weight") {
+      return html`<span class="qty">${quantityLabel(line)}</span>`;
+    }
+    const count = Number(line.quantity);
+    const name = productName(line.product);
+    return html`
+      <span class="qty stepper">
+        <wt-button
+          class="step step-dec"
+          variant="ghost"
+          size="sm"
+          aria-label=${`${t("basket.decrease")} ${name}`}
+          ?disabled=${count <= 1}
+          @click=${() => this.store.setLineQuantity(index, String(count - 1))}
+        >
+          <span aria-hidden="true">−</span>
+        </wt-button>
+        <span class="count">${line.quantity}</span>
+        <wt-button
+          class="step step-inc"
+          variant="ghost"
+          size="sm"
+          aria-label=${`${t("basket.increase")} ${name}`}
+          @click=${() => this.store.setLineQuantity(index, String(count + 1))}
+        >
+          <span aria-hidden="true">+</span>
+        </wt-button>
+      </span>
     `;
   }
 }

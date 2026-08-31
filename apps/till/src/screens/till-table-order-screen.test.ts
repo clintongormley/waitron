@@ -353,6 +353,38 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
+  it("send-round forwards a per-option quantity > 1 and OMITS it at 1 (per-option quantity, feature A)", async () => {
+    const { el } = await mount();
+    grid(el).store.addProduct(cafe, "1", [
+      {
+        optionGroupItemId: "opt-shot",
+        name: { es: "Extra chupito" },
+        priceDelta: "0.50",
+        quantity: 2,
+      },
+      {
+        optionGroupItemId: "opt-oat",
+        name: { es: "Leche de avena" },
+        priceDelta: "0.50",
+        quantity: 1,
+      },
+    ]);
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      {
+        productId: "cafe",
+        quantity: "1",
+        options: [
+          { optionGroupItemId: "opt-shot", quantity: 2 },
+          { optionGroupItemId: "opt-oat" }, // quantity 1 → omitted
+        ],
+      },
+    ]);
+  });
+
   it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);

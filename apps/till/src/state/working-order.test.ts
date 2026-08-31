@@ -86,6 +86,35 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(3); // two adds + one remove
   });
 
+  // Dish-line quantity (feature B): the operator sets how many of a product a line holds via the
+  // basket's +/- stepper, WITHOUT auto-merging identical lines. `setLineQuantity` is the store setter
+  // the stepper calls; it re-prices, marks the basket dirty and notifies, exactly like the other edits.
+  it("setLineQuantity updates the line's quantity, re-prices the total, marks dirty and notifies", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline, total 1.50
+    expect(s.total).toBe("1.50");
+    expect(s.dirty).toBe(false);
+    let n = 0;
+    s.subscribe(() => n++);
+    s.setLineQuantity(0, "3");
+    expect(s.lines[0]?.quantity).toBe("3");
+    expect(s.total).toBe("4.50"); // 1.50 × 3 — proves the pricing cache was invalidated
+    expect(s.dirty).toBe(true); // a quantity change is a line edit
+    expect(n).toBe(1);
+  });
+
+  it("setLineQuantity is a true no-op for an out-of-range index — no mutation, no notification", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    let n = 0;
+    s.subscribe(() => n++);
+    s.setLineQuantity(-1, "5");
+    s.setLineQuantity(3, "5"); // past the end
+    expect(s.lines[0]?.quantity).toBe("1");
+    expect(s.dirty).toBe(false);
+    expect(n).toBe(0);
+  });
+
   it("removeLine is a true no-op for an out-of-range index — no mutation, no notification", () => {
     const s = new WorkingOrderStore();
     let n = 0;
