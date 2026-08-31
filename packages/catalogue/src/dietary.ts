@@ -191,6 +191,3 @@ export function assertDietOverrideDisjoint(override: DietOverride | null): void 
     if (removing.has(t)) throw new AppError("diet.add_remove_conflict", { tag: t });
   }
 }
-
-// `CONTAINS` is re-exported for the validation task (Task 4), which validates contains-tags against it.
-export { CONTAINS };

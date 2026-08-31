@@ -31,9 +31,10 @@ import type { Logger } from "./logger.js";
  * scope every `withTenant` below, so RLS confines each read/write to this server's one tenant.
  * `cfg.nodeId` is this node's origin id, threaded into every write's `withTenant` exactly as
  * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no sync-capture
- * trigger, but a recipe write UPDATEs `products` — `setProductRecipe` → `recomputeProductAllergens` →
- * `applyRecipeDerivation`, and a PATCH's allergen change fans out the same recompute over every product
- * that uses the ingredient — and `products` IS sync-enrolled (`products_capture`,
+ * trigger, but a recipe write UPDATEs `products` — `setProductRecipe` → `recomputeProductDerivations`,
+ * which drives BOTH `applyRecipeDerivation` (allergens) and `applyDietDerivation` (diet origins), two
+ * separate `products` UPDATEs — and a PATCH's allergen change fans out the same recompute over every
+ * product that uses the ingredient — and `products` IS sync-enrolled (`products_capture`,
  * packages/sync/drizzle/0000_sync_outbox.sql:196). Without `nodeId`, that capture would record the
  * all-zero sentinel instead of this node (guarded by `sync-origin.rls.test.ts`). No card provider,
  * clock or media store either — these routes touch only the ingredient + recipe + product tables via

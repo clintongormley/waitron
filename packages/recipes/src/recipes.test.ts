@@ -116,6 +116,29 @@ describe("recipe composition and allergen derivation", () => {
     expect(row.diet).toMatchObject({ vegan: "unknown", vegetarian: "unknown" });
   });
 
+  // Task 8/simplify merged the allergen and diet roll-ups into one fold over one recipe read
+  // (`recomputeProductDerivations`). Pin that the two `pending` flags it writes stay independent:
+  // an ingredient can be allergen-REVIEWED (allergens: {}) while its origin is still uncategorised
+  // (dietaryOrigin omitted → null), and that must publish allergen-pending false / diet-pending true
+  // — not let one column's "reviewed" state bleed into the other's.
+  it("recomputeProductDerivations: allergen-pending and diet-pending are independent", async () => {
+    const row = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const reviewed = await createIngredient(tx, {
+        name: "reviewed-uncategorised",
+        allergens: {},
+      });
+      await setProductRecipe(tx, productId, [reviewed.id]);
+      const [r] = await tx
+        .select({ recipeDeriv: products.recipeDerivation, dietDeriv: products.dietDerivation })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!;
+    });
+    expect(row.recipeDeriv).toEqual({ allergens: {}, pending: false });
+    expect(row.dietDeriv).toEqual({ origins: [], pending: true });
+  });
+
   it("recomputeProductDiet: all-plant reviewed → vegan", async () => {
     const row = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
