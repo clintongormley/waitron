@@ -32,6 +32,7 @@ import {
   requireNullableBodyUuid,
   requireNullableString,
   requirePeriod,
+  requireString,
   requireUuidParam,
 } from "./request-screens.js";
 import type { TillConfig } from "./till-config.js";
@@ -83,13 +84,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // The one error boundary every booking route wraps its handler in — the shared `createErrorBoundary`
 // closed over this surface's `STATUS` map and its `booking.failed` log tag.
 const run = createErrorBoundary(STATUS, "booking.failed");
-
-/** Screen a REQUIRED body field as a string, refusing an absent/wrong-typed one as
- * `management.request_invalid` naming the field (never a downstream `text`/`numeric` 500). */
-function requireString(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
-  return v;
-}
 
 /** Screen a field that must reach an `integer` column: any non-integer (a float, a string, `undefined`)
  * is refused as `management.request_invalid` naming the field, never a downstream `22P02`. The

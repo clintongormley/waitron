@@ -30,7 +30,12 @@ import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
-import { requireNullableString, requirePeriod, requireUuidParam } from "./request-screens.js";
+import {
+  requireNullableString,
+  requirePeriod,
+  requireString,
+  requireUuidParam,
+} from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -80,13 +85,6 @@ const run = createErrorBoundary(STATUS, "purchase.failed");
  * screened (the same guard `catalogue-api.ts` applies to its object fields). */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Screen a REQUIRED body field as a string, refusing an absent/wrong-typed one as
- * `management.request_invalid` naming the field (never a downstream `numeric`/`text` 500). */
-function requireString(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
-  return v;
 }
 
 /** Screen the `regime` enum — one of the two `purchase_regime` members, else
