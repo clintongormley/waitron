@@ -21,10 +21,15 @@ import type { OrderLine } from "./working-order.js";
  * `deriveAsServedAllergens`, so the till, the KDS and the ticket all derive it identically.
  */
 export function asServedAllergens(line: OrderLine): AsServedAllergens {
-  const overlays: OptionAllergenOverlay[] = (line.options ?? []).map((sel) => {
-    const item = (line.product.optionGroups ?? [])
+  // Flatten the product's option items into a by-id lookup ONCE, not per selected option — otherwise a
+  // line with S options over G groups of I items rebuilt the flattened array S times (O(S·G·I)).
+  const itemById = new Map(
+    (line.product.optionGroups ?? [])
       .flatMap((group) => group.items)
-      .find((candidate) => candidate.id === sel.optionGroupItemId);
+      .map((item) => [item.id, item]),
+  );
+  const overlays: OptionAllergenOverlay[] = (line.options ?? []).map((sel) => {
+    const item = itemById.get(sel.optionGroupItemId);
     return { add: item?.addAllergens ?? null, remove: item?.removeAllergens ?? null };
   });
   return deriveAsServedAllergens(line.product.allergens ?? null, overlays);

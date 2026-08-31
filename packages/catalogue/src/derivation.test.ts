@@ -76,7 +76,11 @@ describe("deriveAsServedAllergens (Cautious policy)", () => {
     const r = deriveAsServedAllergens(null, [
       { add: { milk: { presence: "contains" } }, remove: ["gluten"] },
     ]);
-    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: true });
+    expect(r).toEqual({
+      allergens: { milk: { presence: "contains" } },
+      pending: true,
+      removed: [],
+    });
   });
 
   it("reviewed base → base minus removes, plus adds", () => {
@@ -84,14 +88,18 @@ describe("deriveAsServedAllergens (Cautious policy)", () => {
       { gluten: { presence: "contains" }, milk: { presence: "contains" } },
       [{ add: null, remove: ["gluten"] }],
     );
-    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: false });
+    expect(r).toEqual({
+      allergens: { milk: { presence: "contains" } },
+      pending: false,
+      removed: ["gluten"],
+    });
   });
 
   it("a remove clears may_contain too, not only contains", () => {
     const r = deriveAsServedAllergens({ nuts: { presence: "may_contain" } }, [
       { add: null, remove: ["nuts"] },
     ]);
-    expect(r).toEqual({ allergens: {}, pending: false });
+    expect(r).toEqual({ allergens: {}, pending: false, removed: ["nuts"] });
   });
 
   it("cross-option conflict: remove + add of same code → ADD WINS", () => {
@@ -99,22 +107,54 @@ describe("deriveAsServedAllergens (Cautious policy)", () => {
       { add: null, remove: ["gluten"] },
       { add: { gluten: { presence: "contains" } }, remove: null },
     ]);
-    expect(r).toEqual({ allergens: { gluten: { presence: "contains" } }, pending: false });
+    expect(r).toEqual({
+      allergens: { gluten: { presence: "contains" } },
+      pending: false,
+      removed: [],
+    });
+  });
+
+  it("a code removed by one option but ADDED by another is NOT in `removed` (add wins → still on the plate)", () => {
+    const r = deriveAsServedAllergens(
+      { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      [
+        { add: null, remove: ["gluten", "milk"] },
+        { add: { gluten: { presence: "contains" } }, remove: null },
+      ],
+    );
+    // gluten was re-added so it stays on the plate and is NOT "removed"; milk stays removed.
+    expect(r).toEqual({
+      allergens: { gluten: { presence: "contains" } },
+      pending: false,
+      removed: ["milk"],
+    });
   });
 
   it("empty options echo a reviewed base unchanged", () => {
     const base = { eggs: { presence: "contains" } } as const;
-    expect(deriveAsServedAllergens(base, [])).toEqual({ allergens: base, pending: false });
+    expect(deriveAsServedAllergens(base, [])).toEqual({
+      allergens: base,
+      pending: false,
+      removed: [],
+    });
   });
 
   it("reviewed-none base (`{}`) with an add → the add, not pending", () => {
     const r = deriveAsServedAllergens({}, [
       { add: { milk: { presence: "contains" } }, remove: null },
     ]);
-    expect(r).toEqual({ allergens: { milk: { presence: "contains" } }, pending: false });
+    expect(r).toEqual({
+      allergens: { milk: { presence: "contains" } },
+      pending: false,
+      removed: [],
+    });
   });
 
   it("null base with no options → empty + pending", () => {
-    expect(deriveAsServedAllergens(null, [])).toEqual({ allergens: {}, pending: true });
+    expect(deriveAsServedAllergens(null, [])).toEqual({
+      allergens: {},
+      pending: true,
+      removed: [],
+    });
   });
 });

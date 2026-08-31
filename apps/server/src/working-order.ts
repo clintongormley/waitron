@@ -3213,85 +3213,46 @@ export interface StationQueueGroup {
  * used (CLAUDE.md §4).
  */
 /**
- * Read the CHILD modifier lines of a set of PARENT dish lines in ONE grouped query, keyed by
- * `parent_line_id` — the shared sub-item read `listStationQueue`/`listExpoQueue` attach beneath each
- * queue item. Returns `parent_line_id → its options' snapshotted descriptions, in line_no (selection)
- * order`. A single `inArray` over the parents' ids, NOT an N+1 per item; a parent with no options
- * simply has no key (the caller defaults to `[]`). Tenant-scoped (belt-and-braces beside RLS). An empty
- * `parentLineIds` skips the query — an `inArray([])` would be a `false` predicate, but avoiding the
- * round trip is cheaper and clearer.
+ * Read a set of PARENT dish lines' CHILD modifier lines AND compute their AS-SERVED allergen profiles
+ * in ONE child read plus one base read — the shared sub-item read `listStationQueue`/`listExpoQueue`
+ * attach beneath each queue item. Returns two maps keyed by parent line id:
+ *
+ *  - `modifiersByParent` — each parent's options' snapshotted `descriptions` (for the KDS sub-text),
+ *    in `line_no` (selection) order; a parent with no options has no key (the caller defaults to `[]`);
+ *  - `asServedByParent` — each parent's `{ asServed, removed }` (modifier↔allergen, Task 8): the parent
+ *    product's published `allergens` folded with its options' overlays (`deriveAsServedAllergens`,
+ *    Cautious), plus the base codes the fold subtracted (`asServed.removed`).
+ *
+ * The CHILD read is a SINGLE `inArray` over the parents' ids (NOT an N+1), LEFT-joined to
+ * `option_group_items` on the nullable `option_group_item_id` (`ON DELETE SET NULL`, so a child whose
+ * option was deleted contributes an EMPTY overlay). Both the modifier `descriptions` AND the add/remove
+ * overlay come from those SAME child rows, so one query + one pass builds both maps — replacing the two
+ * back-to-back child reads this used to issue. The BASE read is one `inArray` over the parents
+ * themselves, LEFT-joined to `products` (a parent with a null/pending base yields `pending: true`). Both
+ * are plain `inArray` reads (never a correlated subquery — CLAUDE.md §3). Tenant-scoped (belt-and-braces
+ * beside RLS). An empty `parentLineIds` skips both round trips. `removed` is empty for a pending (null)
+ * base, since a remove cannot act on an unknown base. `AllergenMap`/`ProductAllergens` are structurally
+ * identical; cast at the query boundary as the option-item reads do.
  */
-async function readModifiersByParent(
+async function readQueueSubItems(
   tx: Transaction,
   tenantId: string,
   parentLineIds: string[],
-): Promise<Map<string, QueueModifier[]>> {
-  const byParent = new Map<string, QueueModifier[]>();
-  if (parentLineIds.length === 0) return byParent;
+): Promise<{
+  modifiersByParent: Map<string, QueueModifier[]>;
+  asServedByParent: Map<string, { asServed: AsServedAllergens; removed: string[] }>;
+}> {
+  const modifiersByParent = new Map<string, QueueModifier[]>();
+  const asServedByParent = new Map<string, { asServed: AsServedAllergens; removed: string[] }>();
+  if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
+
+  // ONE child read: the modifier descriptions AND the allergen overlay, both from the child modifier
+  // lines (LEFT join on the nullable `option_group_item_id`), in `line_no` (selection) order. Builds the
+  // modifiers map and the per-parent overlay list in a single pass — the two used to be separate reads.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
-    })
-    .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, tenantId),
-        inArray(workingOrderLines.parentLineId, parentLineIds),
-      ),
-    )
-    .orderBy(workingOrderLines.lineNo);
-  for (const child of childRows) {
-    // `parentLineId` is non-null on every row (the `inArray` matched it).
-    const list = byParent.get(child.parentLineId!) ?? [];
-    list.push({ descriptions: child.descriptions });
-    byParent.set(child.parentLineId!, list);
-  }
-  return byParent;
-}
-
-/**
- * Compute the AS-SERVED allergen profile of a set of PARENT dish lines (modifier↔allergen, Task 8),
- * keyed by parent line id — the read `listStationQueue`/`listExpoQueue` attach as each item's
- * {@link StationQueueItem.asServed} + {@link StationQueueItem.removed}. Two grouped queries, no N+1:
- *
- *  - the BASE per parent — its product's published `allergens`, LEFT-joined on the PARENT line's
- *    `product_id` (a parent with a null/pending base yields `pending: true`);
- *  - the OVERLAY per child — each child modifier line's option, LEFT-joined on its nullable
- *    `option_group_item_id` (`ON DELETE SET NULL`, so a child whose option was deleted has a null
- *    link and contributes an EMPTY overlay).
- *
- * Both queries are plain `inArray` reads (never a correlated subquery — CLAUDE.md §3), so the base
- * and overlay columns come from the row's OWN joined table, not from an outer correlation. Tenant-scoped
- * (belt-and-braces beside RLS). An empty `parentLineIds` skips both round trips. `removed` is the base
- * codes the fold subtracted — empty for a pending (null) base, since a remove cannot act on an unknown
- * base. `AllergenMap`/`ProductAllergens` are structurally identical; cast at the query boundary as the
- * option-item reads do.
- */
-async function readAsServedByParent(
-  tx: Transaction,
-  tenantId: string,
-  parentLineIds: string[],
-): Promise<Map<string, { asServed: AsServedAllergens; removed: string[] }>> {
-  const out = new Map<string, { asServed: AsServedAllergens; removed: string[] }>();
-  if (parentLineIds.length === 0) return out;
-  // Base allergens per parent line — the PARENT line's product (LEFT join: a null/pending base is
-  // allowed and yields `pending: true`). The parent line id is the row key.
-  const parents = await tx
-    .select({ lineId: workingOrderLines.id, allergens: products.allergens })
-    .from(workingOrderLines)
-    .leftJoin(
-      products,
-      and(eq(products.tenantId, tenantId), eq(products.id, workingOrderLines.productId)),
-    )
-    .where(
-      and(eq(workingOrderLines.tenantId, tenantId), inArray(workingOrderLines.id, parentLineIds)),
-    );
-  // Child overlays per parent — each child modifier line's option (LEFT join on the nullable
-  // `option_group_item_id`, so a deleted option contributes an empty overlay), in `line_no` order.
-  const children = await tx
-    .select({
-      parentLineId: workingOrderLines.parentLineId,
       addAllergens: optionGroupItems.addAllergens,
       removeAllergens: optionGroupItems.removeAllergens,
     })
@@ -3314,19 +3275,34 @@ async function readAsServedByParent(
     string,
     { add: AllergenMap | null; remove: string[] | null }[]
   >();
-  for (const c of children) {
+  for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
-    const list = overlaysByParent.get(c.parentLineId!) ?? [];
-    list.push({ add: c.addAllergens ?? null, remove: c.removeAllergens ?? null });
-    overlaysByParent.set(c.parentLineId!, list);
+    const mods = modifiersByParent.get(child.parentLineId!) ?? [];
+    mods.push({ descriptions: child.descriptions });
+    modifiersByParent.set(child.parentLineId!, mods);
+    const overlays = overlaysByParent.get(child.parentLineId!) ?? [];
+    overlays.push({ add: child.addAllergens ?? null, remove: child.removeAllergens ?? null });
+    overlaysByParent.set(child.parentLineId!, overlays);
   }
+
+  // Base allergens per parent line — the PARENT line's product (LEFT join: a null/pending base is
+  // allowed and yields `pending: true`). Fold each parent's base with its options' overlays.
+  const parents = await tx
+    .select({ lineId: workingOrderLines.id, allergens: products.allergens })
+    .from(workingOrderLines)
+    .leftJoin(
+      products,
+      and(eq(products.tenantId, tenantId), eq(products.id, workingOrderLines.productId)),
+    )
+    .where(
+      and(eq(workingOrderLines.tenantId, tenantId), inArray(workingOrderLines.id, parentLineIds)),
+    );
   for (const p of parents) {
     const base = (p.allergens ?? null) as ProductAllergens | null;
     const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
-    const removed = base ? Object.keys(base).filter((c) => !(c in asServed.allergens)) : [];
-    out.set(p.lineId, { asServed, removed });
+    asServedByParent.set(p.lineId, { asServed, removed: asServed.removed });
   }
-  return out;
+  return { modifiersByParent, asServedByParent };
 }
 
 export async function listStationQueue(
@@ -3422,17 +3398,10 @@ export async function listStationQueue(
     // fired together with an identical `queued_at` — render in a stable line order within the group.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
-  // The selected options of every queued dish, in ONE grouped read keyed by the parent line ids just
-  // returned — attached below as each item's `modifiers` sub-text (no N+1, no new routing).
-  const modifiersByParent = await readModifiersByParent(
-    tx,
-    cfg.tenantId,
-    rows.map((row) => row.workingOrderLineId),
-  );
-
-  // The as-served allergen profile of every queued dish (Task 8), keyed by the same parent line ids —
-  // attached below as each item's `asServed`/`removed`. One grouped read, no N+1.
-  const asServedByParent = await readAsServedByParent(
+  // The selected options AND the as-served allergen profile (Task 8) of every queued dish, keyed by the
+  // parent line ids just returned — attached below as each item's `modifiers` sub-text and
+  // `asServed`/`removed`. One child read + one base read, no N+1.
+  const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     cfg.tenantId,
     rows.map((row) => row.workingOrderLineId),
@@ -3475,6 +3444,7 @@ export async function listStationQueue(
       asServed: asServedByParent.get(row.workingOrderLineId)?.asServed ?? {
         allergens: {},
         pending: true,
+        removed: [],
       },
       removed: asServedByParent.get(row.workingOrderLineId)?.removed ?? [],
       // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
@@ -3726,17 +3696,10 @@ export async function listExpoQueue(
   // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
   // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
   // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
-  // The selected options of every item, in ONE grouped read keyed by the parent line ids — attached
-  // below as each item's `modifiers` sub-text (no N+1, no new routing).
-  const modifiersByParent = await readModifiersByParent(
-    tx,
-    cfg.tenantId,
-    rows.map((row) => row.lineId),
-  );
-
-  // The as-served allergen profile per fired dish line (Task 8), keyed on the same parent line ids —
-  // attached below as each expo item's `asServed`/`removed`.
-  const asServedByParent = await readAsServedByParent(
+  // The selected options AND the as-served allergen profile (Task 8) of every fired dish line, keyed on
+  // the parent line ids — attached below as each expo item's `modifiers` sub-text and `asServed`/
+  // `removed`. One child read + one base read, no N+1.
+  const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     cfg.tenantId,
     rows.map((row) => row.lineId),
@@ -3796,7 +3759,11 @@ export async function listExpoQueue(
       awayAt: row.awayAt,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       // Task 8 — the same as-served profile the station read attaches, safe-defaulted identically.
-      asServed: asServedByParent.get(row.lineId)?.asServed ?? { allergens: {}, pending: true },
+      asServed: asServedByParent.get(row.lineId)?.asServed ?? {
+        allergens: {},
+        pending: true,
+        removed: [],
+      },
       removed: asServedByParent.get(row.lineId)?.removed ?? [],
       queuedAt: row.queuedAt,
       thresholds,

@@ -849,25 +849,37 @@ function validateOptionGroupItemMaxQuantity(maxQuantity: number): void {
 /**
  * Validate and normalise a create/update overlay patch (Task 4). Returns `undefined` when the caller
  * touched NEITHER side (so the write omits both columns and the row defaults apply), otherwise the
- * resolved `{ addAllergens, removeAllergens }` with each side `null` when cleared/omitted and the
- * validated value when present. Disjointness is checked on the pair (defence-in-depth — never trust
- * the caller, CLAUDE.md §3). `updateOptionGroupItem` does NOT use this: its disjointness must hold on
- * the resulting row, so it reads the stored other side when only one is patched.
+ * resolved `{ addAllergens, removeAllergens }` with each patched side `null` when cleared and the
+ * validated value when present, and each UNPATCHED side taken from `current` (the stored row) — or
+ * `null` when `current` is omitted, which is the CREATE case (no stored row, so an unpatched side
+ * defaults to null). Disjointness is checked on the RESULTING pair (defence-in-depth — never trust the
+ * caller, CLAUDE.md §3), so `updateOptionGroupItem` passes the stored row as `current` and the check
+ * holds on the row the patch lands on, not just on the patch.
  */
-function normalizeOverlay(input: {
-  addAllergens?: ProductAllergens | null;
-  removeAllergens?: string[] | null;
-}): { addAllergens: ProductAllergens | null; removeAllergens: string[] | null } | undefined {
+function normalizeOverlay(
+  input: {
+    addAllergens?: ProductAllergens | null;
+    removeAllergens?: string[] | null;
+  },
+  current?: { addAllergens: ProductAllergens | null; removeAllergens: string[] | null },
+): { addAllergens: ProductAllergens | null; removeAllergens: string[] | null } | undefined {
   const hasAdd = input.addAllergens !== undefined;
   const hasRemove = input.removeAllergens !== undefined;
   if (!hasAdd && !hasRemove) return undefined;
-  const add = input.addAllergens == null ? null : validateAllergens(input.addAllergens);
-  const remove =
-    input.removeAllergens == null ? null : validateRemoveAllergens(input.removeAllergens);
+  const fallback = current ?? { addAllergens: null, removeAllergens: null };
+  const add = !hasAdd
+    ? fallback.addAllergens
+    : input.addAllergens == null
+      ? null
+      : validateAllergens(input.addAllergens);
+  const remove = !hasRemove
+    ? fallback.removeAllergens
+    : input.removeAllergens == null
+      ? null
+      : validateRemoveAllergens(input.removeAllergens);
   assertAllergenOverlayDisjoint(add, remove);
   return { addAllergens: add, removeAllergens: remove };
 }
-
 
 export async function createOptionGroup(
   tx: Transaction,
@@ -990,7 +1002,8 @@ export async function updateOptionGroupItem(
   // write, the same clean-error-before-the-CHECK posture create takes.
   if (patch.maxQuantity !== undefined) validateOptionGroupItemMaxQuantity(patch.maxQuantity);
   // Disjointness must hold on the RESULTING row, not just the patch: when only one side is patched,
-  // read the stored other side and check the effective pair. Defence-in-depth at the core — never
+  // `normalizeOverlay` falls the OTHER side back to the stored value (`current`) and checks the
+  // effective pair — the SAME validation create runs, unified. Defence-in-depth at the core — never
   // trust the caller (CLAUDE.md §3). A well-formed id that names no row leaves `cur` undefined, so
   // the effective sides fall back to null and the (zero-row) UPDATE is a silent no-op.
   const touchesOverlay = patch.addAllergens !== undefined || patch.removeAllergens !== undefined;
@@ -1003,21 +1016,13 @@ export async function updateOptionGroupItem(
       })
       .from(optionGroupItems)
       .where(eq(optionGroupItems.id, itemId));
-    const add =
-      patch.addAllergens === undefined
-        ? ((cur?.addAllergens as ProductAllergens | null) ?? null)
-        : patch.addAllergens == null
-          ? null
-          : validateAllergens(patch.addAllergens);
-    const remove =
-      patch.removeAllergens === undefined
-        ? ((cur?.removeAllergens as string[] | null) ?? null)
-        : patch.removeAllergens == null
-          ? null
-          : validateRemoveAllergens(patch.removeAllergens);
-    assertAllergenOverlayDisjoint(add, remove);
-    write.addAllergens = add;
-    write.removeAllergens = remove;
+    Object.assign(
+      write,
+      normalizeOverlay(patch, {
+        addAllergens: (cur?.addAllergens as ProductAllergens | null) ?? null,
+        removeAllergens: (cur?.removeAllergens as string[] | null) ?? null,
+      }),
+    );
   }
   await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
