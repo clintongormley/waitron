@@ -917,6 +917,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           courseId: null,
           catalogueId: aguaProduct.catalogueId,
           catalogueName: "Carta",
+          // Ordering modifiers (Task 3): the `AvailableProduct` shape carries attached option groups;
+          // these seeded products have none, so an empty array.
+          optionGroups: [],
         },
         {
           id: cervezaProduct.id,
@@ -929,6 +932,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           courseId: null,
           catalogueId: cervezaProduct.catalogueId,
           catalogueName: "Happy Hour",
+          optionGroups: [],
         },
       ],
     });

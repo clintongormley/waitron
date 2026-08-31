@@ -256,7 +256,12 @@ async function main(): Promise<void> {
     // series is per-node, so this continues Caja 1's chain.
     const ticket = await payWorkingOrder(deps, caja2, {
       id: orderId,
-      lines: retrieved.lines,
+      // A retrieved order IGNORES req.lines (design §2); these mirror the till round-trip only. Filter
+      // to product lines — HeldOrder.lines.productId is nullable since Task 2 (ordering modifiers), but
+      // a parked order carries only product lines today.
+      lines: retrieved.lines.filter(
+        (l): l is { productId: string; quantity: string } => l.productId !== null,
+      ),
       tender: { method: "cash", amount: "20.00" },
     });
 
@@ -265,8 +270,10 @@ async function main(): Promise<void> {
       backend.checkIntegrity(tx, caja1.tenantId, caja1.nodeId),
     );
 
-    const describe = (productId: string): string =>
-      available.find((p) => p.id === productId)?.descriptions[LOCALE] ?? productId;
+    const describe = (productId: string | null): string =>
+      productId === null
+        ? "(modifier)"
+        : (available.find((p) => p.id === productId)?.descriptions[LOCALE] ?? productId);
 
     console.log(
       "park-retrieve-demo: an order parked on one register, retrieved and paid on another",

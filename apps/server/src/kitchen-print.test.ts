@@ -2,7 +2,17 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, printJobs, withTenant, workingOrderLines } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  optionGroupItems,
+  optionGroups,
+  printJobs,
+  productOptionGroups,
+  ticketItems,
+  withTenant,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -157,11 +167,13 @@ async function makePrinter(
 }
 
 /** Open a fresh working order carrying `lines` and FIRE it — the isolated createOpenOrder → fireLines
- *  sequence placeOrder/sendToPrep run (the brief's order-firing helper). Returns the order id. */
+ *  sequence placeOrder/sendToPrep run (the brief's order-firing helper). Passes ALL persisted lines
+ *  (parent dishes AND child modifier lines) to `fireLines`, exactly as placeOrder/sendToPrep do — so
+ *  the parent-only filter under test lives in `fireLines`, not at this caller. Returns the order id. */
 async function fireNewOrder(
   tx: Transaction,
   cfg: TillConfig,
-  lines: { productId: string; quantity: string }[],
+  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
 ): Promise<string> {
   const id = randomUUID();
   await createOpenOrder(tx, cfg, id, lines, null);
@@ -170,12 +182,49 @@ async function fireNewOrder(
       id: workingOrderLines.id,
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
+      parentLineId: workingOrderLines.parentLineId,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
   await fireLines(tx, cfg, id, fired);
   return id;
+}
+
+/** Attach a fresh single-item option group to `productId` and return the option-item id — the shape a
+ *  round line's `options: [{ optionGroupItemId }]` selects. Each call mints its OWN group (minSelect 0,
+ *  maxSelect 1), so two calls give two independently-selectable options on one dish. The option carries
+ *  NO station — a modifier never routes to its own station (that is the point of the parent-only rule). */
+async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+  const [group] = await tx
+    .insert(optionGroups)
+    .values({
+      tenantId: sql`current_tenant_id()`,
+      name: { [LOCALE]: `${name} group` },
+      minSelect: 0,
+      maxSelect: 1,
+      required: false,
+      sort: 0,
+    })
+    .returning({ id: optionGroups.id });
+  const [item] = await tx
+    .insert(optionGroupItems)
+    .values({
+      tenantId: sql`current_tenant_id()`,
+      groupId: group!.id,
+      name: { [LOCALE]: name },
+      priceDelta: "0.50",
+      vatClass: "reduced",
+      sort: 0,
+    })
+    .returning({ id: optionGroupItems.id });
+  await tx.insert(productOptionGroups).values({
+    tenantId: sql`current_tenant_id()`,
+    productId,
+    groupId: group!.id,
+    sort: 0,
+  });
+  return item!.id;
 }
 
 /** Spy the single chokepoint every outbound TCP open funnels through (outbox.test.ts's proof): if the
@@ -426,6 +475,113 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     expect(jobs).toHaveLength(0); // nothing mapped → nothing enqueued (a pure no-op)
     expect(selectCalls).toBe(1); // ONLY the mapping read ran; the three detail SELECTs were skipped
+  });
+});
+
+describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
+  it("fires a dish with two options as ONE ticket_item (the parent), never one per child", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      // A dish with TWO options — even with a DEFAULT station present (so a child would otherwise route
+      // to it), only the parent must become a ticket item.
+      const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
+      const grande = await addOption(tx, cortado, "Grande");
+      const avena = await addOption(tx, cortado, "Leche avena");
+
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: cortado,
+          quantity: "1",
+          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+        },
+      ]);
+      // The persisted lines: one parent (product set, parent_line_id null) + two children.
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(3); // parent + two child modifier lines
+      const parent = lines.find((l) => l.parentLineId === null)!;
+      const ticketItemRows = await tx
+        .select({ workingOrderLineId: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      return { orderId, parentLineId: parent.id, ticketItemRows };
+    });
+
+    // Exactly ONE ticket item, and it is the PARENT's — the two children got none.
+    expect(ticketItemRows).toEqual([{ workingOrderLineId: parentLineId }]);
+    expect(orderId).toBeTruthy();
+  });
+
+  it("renders the dish then its two options as indented '+' sub-text on the kitchen ticket", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
+      const grande = await addOption(tx, cortado, "Grande");
+      const avena = await addOption(tx, cortado, "Leche avena");
+
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: cortado,
+          quantity: "1",
+          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+        },
+      ]);
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const stationJobs = jobs.filter((j) => j.printerId === printerId);
+    expect(stationJobs).toHaveLength(1);
+    const ticket = decodeTicket(stationJobs[0]!.payload);
+    expect(ticket).toContain("Cortado"); // the parent dish line
+    expect(ticket).toContain("+ Grande"); // each option as indented sub-text beneath the parent
+    expect(ticket).toContain("+ Leche avena");
+    // The options appear BELOW the dish, and each sub-text row carries the "+ " marker.
+    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Grande"));
+    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
+  });
+
+  it("never station-resolves a child line: a dish-with-options fires with NO default station", async () => {
+    // The child modifier line carries no product and no station of its own. With no venue default
+    // station, an independently-resolved child would fail LOUD with `station.no_default`. The parent-only
+    // filter means the child is never resolved — the fire succeeds and the parent uses its OWN station.
+    const { cfg, catalogueId } = await setupVenue();
+    const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
+      // A NON-default station: the product routes to it explicitly; there is NO is_default station, so a
+      // line that resolves neither a product nor category route has nowhere to go (station.no_default).
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
+      const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
+      const grande = await addOption(tx, cafe, "Grande");
+
+      // This must NOT throw station.no_default — the child is filtered before station resolution.
+      const orderId = await fireNewOrder(tx, cfg, [
+        { productId: cafe, quantity: "1", options: [{ optionGroupItemId: grande }] },
+      ]);
+      const ticketItemRows = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      return { stationId: barra.id, ticketItemRows };
+    });
+
+    // One ticket item — the parent — routed to the PARENT's own station, not a (missing) default.
+    expect(ticketItemRows).toHaveLength(1);
+    expect(ticketItemRows[0]!.stationId).toBe(stationId);
   });
 });
 

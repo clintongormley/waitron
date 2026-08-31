@@ -23,14 +23,43 @@
  * snapshot, not a bug.
  */
 import { priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { lineGross } from "./order-line.js";
 import type { TillProduct } from "../api/client.js";
+
+/**
+ * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
+ * of the server's `options: [{ optionGroupItemId }]` wire contract. The WIRE sends only
+ * `optionGroupItemId`; the server re-resolves the option's price, VAT and name AUTHORITATIVELY (a
+ * `weight` line carrying options is refused server-side). The extra `name`/`priceDelta` are carried for
+ * the CLIENT alone: `name` so the basket can render the modifier under its dish (Task 8) without a
+ * re-lookup, `priceDelta` so {@link lineGross} can add it to the DISPLAY-ONLY running line price. They
+ * are snapshotted at pick time and never reach a fiscal figure — the server prices from the id.
+ */
+export interface SelectedLineOption {
+  /** The chosen `option_group_items.id` — the ONLY field the wire (`SaleLine.options`) sends. */
+  optionGroupItemId: string;
+  /** locale -> text, snapshotted at pick time; the child modifier row the basket renders (Task 8). */
+  name: Record<string, string>;
+  /** GROSS (VAT-inclusive) price change this option adds, a `numeric(12,2)` literal ("0.50", "0.00" for
+   * a free option). DISPLAY-ONLY: {@link lineGross} adds `priceDelta × quantity`; the server re-prices. */
+  priceDelta: string;
+}
 
 /** One rung-up basket line: a product and how much of it (a count for `each`, a kg string for `weight`). */
 export interface OrderLine {
   product: TillProduct;
   /** A count (e.g. "2") for an `each` product; a measured kg weight (e.g. "0.320") for `weight`. */
   quantity: string;
+  /**
+   * The modifiers selected on this line (ordering modifiers, Task 9), or ABSENT for a plain line — the
+   * common case, kept absent (never `[]`) so a no-modifier add stays byte-identical to before. Each
+   * carries the `optionGroupItemId` the wire sends plus the display fields {@link lineGross} and the
+   * basket read. The DISH `quantity` above applies to every option too (a modifier is priced per dish,
+   * never counted independently), matching the server's `priceBasketWithOptions`.
+   */
+  options?: SelectedLineOption[];
 }
 
 /**
@@ -69,6 +98,14 @@ export class WorkingOrderStore {
    * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
    */
   #priced: Priced | null = null;
+  /**
+   * The memoised options-aware grand total, or `null` when a mutation invalidated it. Held SEPARATELY
+   * from {@link #priced} because `priceBasket` ignores selected modifier options (ordering modifiers) —
+   * so the grand total (and the cash-tender sufficiency gate + the readout that both read {@link total})
+   * is summed from the per-line {@link lineGross}, which DOES add each option's delta. Cleared in every
+   * mutation beside {@link #priced} and recomputed lazily.
+   */
+  #total: Decimal | null = null;
   /**
    * Whether {@link id} already names an OPEN row server-side (7c place/collect). A fresh store starts
    * `false` — nothing has synced it yet; {@link loadFrom} sets it `true` (a RETRIEVED order already
@@ -148,20 +185,55 @@ export class WorkingOrderStore {
     return this.#priced;
   }
 
-  /** The previewed grand total (VAT-inclusive), priced by the server's `priceBasket`. */
+  /**
+   * The previewed grand total (VAT-inclusive), OPTIONS-AWARE: the sum of every line's `lineGross`,
+   * which adds each selected modifier option's `priceDelta × quantity` on top of the dish. This is what
+   * the tender-pay sufficiency gate and the on-screen readout consume, so it must include the option
+   * deltas — `priceBasket` (which prices `vatBreakdown` below) ignores options and would under-report
+   * the total the customer owes once modifiers are picked. Summing the same rounded per-line grosses the
+   * receipt lists keeps this equal to the server's `priceBasketWithOptions` total to the céntimo (the
+   * server re-prices authoritatively from the option ids at pay time). Memoised in {@link #total}.
+   */
   get total(): Decimal {
-    return this.#pricedOrder.total;
+    if (this.#total === null) {
+      this.#total = sumDecimals(this.#lines.map((line) => lineGross(line)));
+    }
+    return this.#total;
   }
 
-  /** The previewed VAT bands (one per rate present in the basket), priced by the server's `priceBasket`. */
+  /**
+   * The previewed VAT bands (one per rate present in the basket), priced by the server's `priceBasket`.
+   * DISH-ONLY: `priceBasket` does not see selected options, so these bands cover the dishes' bases/cuotas
+   * and NOT the option deltas. That is deliberate and currently invisible — no basket surface renders
+   * this preview (the only VAT breakdown shown to the customer is the FILED desglose on `till-ticket-view`,
+   * read back from the fiscal record). If a client-side VAT preview is ever added over a basket that can
+   * carry modifiers, this must move to `priceBasketWithOptions` (which needs each option's `vatClass`,
+   * not carried on `SelectedLineOption` today) so the bands reconcile with {@link total}.
+   */
   get vatBreakdown(): Priced["vatBreakdown"] {
     return this.#pricedOrder.vatBreakdown;
   }
 
-  /** Append a line and notify. `quantity` is a count for `each` products, a kg string for `weight`. */
-  addProduct(product: TillProduct, quantity: string): void {
-    this.#lines.push({ product, quantity });
+  /** Drop the memoised {@link #priced}/{@link #total} so the next read recomputes them. Every mutation
+   * below (add/remove/clear/load) changes `#lines`, so every one of them invalidates both. */
+  #invalidatePricing(): void {
     this.#priced = null;
+    this.#total = null;
+  }
+
+  /**
+   * Append a line and notify. `quantity` is a count for `each` products, a kg string for `weight`.
+   * `options` (ordering modifiers, Task 9) are the modifiers selected on the line; OMITTED — the common
+   * tap, and the vast majority — the line carries no `options` key at all, so a no-modifier add is
+   * byte-identical to before (the picker, Task 10, is the only caller that passes them).
+   */
+  addProduct(product: TillProduct, quantity: string, options?: SelectedLineOption[]): void {
+    const line: OrderLine = { product, quantity };
+    if (options !== undefined) {
+      line.options = options;
+    }
+    this.#lines.push(line);
+    this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");
   }
@@ -172,7 +244,7 @@ export class WorkingOrderStore {
       return;
     }
     this.#lines.splice(index, 1);
-    this.#priced = null;
+    this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");
   }
@@ -186,7 +258,7 @@ export class WorkingOrderStore {
     this.#lines.length = 0;
     this.#id = crypto.randomUUID();
     this.#label = undefined;
-    this.#priced = null;
+    this.#invalidatePricing();
     this.#persisted = false;
     this.#dirty = false;
     this.emit("changed");
@@ -204,7 +276,7 @@ export class WorkingOrderStore {
     this.#lines.length = 0;
     this.#lines.push(...lines);
     this.#label = label;
-    this.#priced = null;
+    this.#invalidatePricing();
     this.#persisted = true;
     // A just-retrieved basket MATCHES the server's stored composition, so it starts clean — the pay
     // flow re-syncs it only once the operator edits it (see {@link #dirty}).

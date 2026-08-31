@@ -13,9 +13,12 @@ const result: TillSaleResult = {
     { rate: "10.00", base: "5.82", tax: "0.58" },
   ],
   // The FILED line list the receipt renders (server's `TillSaleResult.lines`), not a client basket.
+  // "Jamón" carries a selected option (ordering modifiers, Task 14) — the indented `.option` row is
+  // swept here for both themes alongside the plain "Café" line.
   lines: [
     { descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" },
-    { descriptions: { "es-ES": "Jamón" }, quantity: "0.32", gross: "6.40" },
+    { descriptions: { "es-ES": "Jamón" }, quantity: "0.32", gross: "6.40", parentLineNo: null },
+    { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 2 },
   ],
   change: "0.60",
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1",

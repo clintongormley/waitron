@@ -4,7 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { productName } from "./product-name.js";
-import { lineGross, quantityLabel } from "../state/order-line.js";
+import { descriptionFor } from "./dish-format.js";
+import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
@@ -50,6 +51,23 @@ export class TillBasket extends LitElement {
       .line-total {
         font-variant-numeric: tabular-nums;
       }
+
+      /* A selected option (ordering modifiers, Task 8) — indented beneath its dish, name left and
+         delta right, with no quantity column and no remove control (a child is not independently
+         deletable; removing the dish removes it). */
+      .option {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: var(--wt-space-3);
+        padding: var(--wt-space-1) 0;
+        padding-left: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+      }
+
+      .option-total {
+        font-variant-numeric: tabular-nums;
+      }
     `,
   ];
 
@@ -74,7 +92,7 @@ export class TillBasket extends LitElement {
           <div class="line">
             <span class="name">${productName(line.product)}</span>
             <span class="qty">${quantityLabel(line)}</span>
-            <span class="line-total">${formatMoney(lineGross(line))}</span>
+            <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
               variant="ghost"
               size="md"
@@ -84,6 +102,17 @@ export class TillBasket extends LitElement {
               <span aria-hidden="true">×</span>
             </wt-button>
           </div>
+          ${(line.options ?? []).map(
+            // Each selected modifier on its own indented row — the option's name and its delta (0,00 for
+            // a free option). No remove control: a child is removed only by removing its dish above,
+            // which drops the whole line (options and all).
+            (option) => html`
+              <div class="option">
+                <span class="name">${descriptionFor(option.name, "")}</span>
+                <span class="option-total">${formatMoney(optionGross(line, option))}</span>
+              </div>
+            `,
+          )}
         `,
       )}
     `;

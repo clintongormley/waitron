@@ -29,6 +29,7 @@ import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedMedia } from "./seed-media.js";
+import { seedOptions } from "./seed-options.js";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
@@ -71,6 +72,7 @@ export async function seedDemoRestaurant(
   const products = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const { productsByImage } = await seedCatalogues(tx, { locationId, locale });
+    await seedOptions(tx, { productsByImage, locale });
     await seedFloor(tx, { tenantId, locationId, locale });
     await seedStaff(tx);
     await seedMedia(tx, { mediaDir, productsByImage });
@@ -79,12 +81,15 @@ export async function seedDemoRestaurant(
 
   // AFTER the tx commits: seedSales opens its own per-sale `withTenant`, so it must see the committed
   // catalogue. It maps the available products onto the fields the generator needs (id/descriptions/
-  // gross unitPrice/vatClass); the rest of `AvailableProduct` is unused here.
+  // gross unitPrice/vatClass/optionGroups); the rest of `AvailableProduct` is unused here.
+  // `optionGroups` carries straight through — `listAvailableProducts` already resolved it from the
+  // rows `seedOptions` just wrote, so a product with none reads back `[]` and the generator skips it.
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
     id: p.id,
     descriptions: p.descriptions,
     unitPrice: p.unitPrice,
     vatClass: p.vatClass,
+    optionGroups: p.optionGroups,
   }));
 
   await seedSales(db, {

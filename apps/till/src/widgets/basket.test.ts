@@ -5,6 +5,7 @@ import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillBasket } from "./basket.js";
 import type { TillProduct } from "../api/client.js";
+import type { SelectedLineOption } from "../state/working-order.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -83,6 +84,75 @@ describe("till-basket", () => {
     await el.updateComplete;
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.product).toBe(jamon);
+  });
+
+  it("groups a line's options under the dish — dish at its own price, options indented at their delta, no per-option remove", async () => {
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+    };
+    const extraCheese: SelectedLineOption = {
+      optionGroupItemId: "opt-cheese",
+      name: { es: "Extra queso" },
+      priceDelta: "0.50",
+    };
+    const noOnion: SelectedLineOption = {
+      optionGroupItemId: "opt-noonion",
+      name: { es: "Sin cebolla" },
+      priceDelta: "0.00", // a FREE option
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [extraCheese, noOnion]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    // One dish row and two indented option rows.
+    const dishRows = el.shadowRoot!.querySelectorAll(".line");
+    const optionRows = el.shadowRoot!.querySelectorAll(".option");
+    expect(dishRows).toHaveLength(1);
+    expect(optionRows).toHaveLength(2);
+
+    // The dish shows its OWN gross (10.00 × 1), never the dish+options running total (10.50).
+    expect(dishRows[0]!.textContent).toContain("Hamburguesa");
+    expect(dishRows[0]!.textContent).toContain(formatMoney("10.00"));
+
+    // Each option is indented under the dish and shows its delta; the free one shows 0.00.
+    expect(optionRows[0]!.textContent).toContain("Extra queso");
+    expect(optionRows[0]!.textContent).toContain(formatMoney("0.50"));
+    expect(optionRows[1]!.textContent).toContain("Sin cebolla");
+    expect(optionRows[1]!.textContent).toContain(formatMoney("0.00"));
+
+    // A child option is NOT independently deletable: only the dish carries a remove control.
+    expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(1);
+  });
+
+  it("removing the parent dish removes its options with it", async () => {
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+    };
+    const extraCheese: SelectedLineOption = {
+      optionGroupItemId: "opt-cheese",
+      name: { es: "Extra queso" },
+      priceDelta: "0.50",
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [extraCheese]);
+    store.addProduct(cafe, "1"); // a second, plain line
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(1);
+
+    // Remove the dish that carries the option (the first remove control).
+    el.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")[0]!.click();
+    await el.updateComplete;
+
+    // The whole line — dish and its option — is gone; only the plain café line remains.
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toBe(cafe);
+    expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(0);
   });
 
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {

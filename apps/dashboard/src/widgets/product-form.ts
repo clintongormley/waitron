@@ -19,6 +19,7 @@ import type {
   AllergenEntry,
   CategorySummary,
   Course,
+  OptionGroup,
   PricingUnit,
   Product,
   ProductPatch,
@@ -44,6 +45,10 @@ const PRICING_UNITS: readonly PricingUnit[] = ["each", "weight"];
  * create, so a product created INACTIVE is one atomic request (`createProduct` accepts `active`),
  * never a create-then-patch. `{}` is a REVIEWED-NONE declaration, distinct from PENDING, and IS sent.
  */
+// `optionGroupIds` (Task 12) is ALWAYS present on this detail (never omitted, unlike `allergens`/
+// `image`) — the attach section's ordered pick list is authoritative the moment the form renders it,
+// so an untouched picker still sends `[]` rather than leaving the key out (the same shape as the PATCH
+// below keeps one mental model for both modes).
 export interface CreateProductDetail {
   catalogueId: string;
   categoryId: string | null;
@@ -54,6 +59,7 @@ export interface CreateProductDetail {
   allergens?: Record<string, AllergenEntry>;
   image?: string;
   active: boolean;
+  optionGroupIds: string[];
 }
 
 /** The `update-product` event detail: the product id + a patch of its mutable slice (`ProductPatch`). */
@@ -108,6 +114,37 @@ export class ProductForm extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .option-groups {
+        margin-bottom: var(--wt-space-4);
+      }
+      .option-groups-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-3);
+      }
+      .option-group-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .option-group-name {
+        color: var(--wt-color-text);
+        flex: 1;
+      }
+      .option-group-controls {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
+      .option-group-pick {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -127,6 +164,21 @@ export class ProductForm extends LitElement {
   /** The venue's active kitchen courses (from `DashboardApi.listCourses`), the options the EDIT-MODE
    * product-course `<select>` offers (KDS-2). Empty by default; the screen assigns it. */
   @property({ attribute: false }) courses: Course[] = [];
+
+  /** Every reusable option group (from `DashboardApi.listOptionGroups`), the attach section's picker
+   * source (Task 12). Rendered in BOTH create and edit mode — unlike the station/course overrides, the
+   * server accepts `optionGroupIds` on the create route too. Empty by default; the screen assigns it. */
+  @property({ attribute: false }) optionGroups: OptionGroup[] = [];
+
+  /**
+   * The product's CURRENTLY-attached option group ids, in order (Task 12's read-back,
+   * `DashboardApi.listProductOptionGroupIds`) — seeds the attach section's picked-and-ordered list.
+   * Empty for a create (nothing to attach yet). Seeded on `product`/`open` like every other field, but
+   * ALSO independently on its own change (see {@link willUpdate}): the screen's read-back is an ASYNC
+   * call kicked off when the edit form opens, so this prop typically arrives on a LATER render than the
+   * one that opens the form, and the attach list must pick it up then rather than only on open.
+   */
+  @property({ attribute: false }) attachedGroupIds: string[] = [];
 
   /** The locales a description field is rendered for; default `["es"]` (tenant-locale seeding deferred). */
   @property({ attribute: false }) locales: readonly string[] = ["es"];
@@ -153,6 +205,13 @@ export class ProductForm extends LitElement {
   @state() private seedAllergens: AllergenDeclaration = null;
   @state() private image: string | null = null;
   @state() private validationError: string | null = null;
+  // The attach section's ordered pick list (Task 12) — seeded from `attachedGroupIds`, then mutated by
+  // the add/move/remove controls. Kept SEPARATE from the prop so an operator's reordering survives an
+  // unrelated re-render, exactly as `allergens` is kept separate from `seedAllergens` above.
+  @state() private selectedGroupIds: string[] = [];
+  // The attach picker's current choice; reconciled against the still-available groups in
+  // `#availableGroups`/`#effectiveGroupChoice` (the `layout-screen.ts` add-picker pattern).
+  @state() private addGroupChoice = "";
 
   /**
    * Reseed every field from `product` on an open or a product change. Runs before render, so the
@@ -163,20 +222,38 @@ export class ProductForm extends LitElement {
    * allergens into the manual overlay. Seeded into BOTH the live value (`allergens`, what a save
    * emits) and the picker's `declaration` seed (`seedAllergens`); the picker does not emit on seed,
    * so the form must seed its own live copy too, or an untouched edit would re-save the wrong value.
+   *
+   * The attach section's `selectedGroupIds` is reseeded from `attachedGroupIds` under a SEPARATE,
+   * WIDER condition (also on `attachedGroupIds` changing alone) — deliberately not folded into the
+   * guard above. The screen's read-back (`listProductOptionGroupIds`) is an ASYNC call kicked off when
+   * an edit form opens, so `attachedGroupIds` typically arrives on a LATER render than the one that sets
+   * `product`/`open`; if seeding were gated only on those two, that later arrival would never reach the
+   * attach list. Were `attachedGroupIds` folded into the FIRST condition instead, its every later change
+   * would re-trigger a full reseed of every other field too — discarding whatever the operator had
+   * typed in the meantime, the exact bug `recipe-editor.ts`'s `willUpdate` comment warns against.
    */
   override willUpdate(changed: PropertyValues): void {
-    if (!changed.has("product") && !(changed.has("open") && this.open)) return;
-    const p = this.product;
-    this.descriptions = { ...(p?.descriptions ?? {}) };
-    this.unitPrice = p?.unitPrice ?? "";
-    this.vatClass = p?.vatClass ?? "general";
-    this.pricingUnit = p?.pricingUnit ?? "each";
-    this.categoryId = p?.categoryId ?? null;
-    this.active = p?.active ?? true;
-    this.allergens = p?.manualAllergens ?? null;
-    this.seedAllergens = p?.manualAllergens ?? null;
-    this.image = p?.image ?? null;
-    this.validationError = null;
+    if (changed.has("product") || (changed.has("open") && this.open)) {
+      const p = this.product;
+      this.descriptions = { ...(p?.descriptions ?? {}) };
+      this.unitPrice = p?.unitPrice ?? "";
+      this.vatClass = p?.vatClass ?? "general";
+      this.pricingUnit = p?.pricingUnit ?? "each";
+      this.categoryId = p?.categoryId ?? null;
+      this.active = p?.active ?? true;
+      this.allergens = p?.manualAllergens ?? null;
+      this.seedAllergens = p?.manualAllergens ?? null;
+      this.image = p?.image ?? null;
+      this.validationError = null;
+    }
+    if (
+      changed.has("attachedGroupIds") ||
+      changed.has("product") ||
+      (changed.has("open") && this.open)
+    ) {
+      this.selectedGroupIds = [...this.attachedGroupIds];
+      this.addGroupChoice = "";
+    }
   }
 
   #onDescriptionChange(event: CustomEvent<{ value: string }>, locale: string): void {
@@ -266,6 +343,57 @@ export class ProductForm extends LitElement {
     this.image = event.detail.image;
   }
 
+  // ── Option-group attach section (Task 12) ─────────────────────────────────────────────────────
+  // Pick + ORDER which reusable option groups apply, mirroring `layout-screen.ts`'s widget-row
+  // add/move/remove shape: an ordered list of picked rows (↑/↓/Remove) plus a picker offering only the
+  // groups not yet picked. Unlike the layout screen this state lives on the FORM (not a screen), because
+  // the picked set is part of the SAME create/update body the confirm button sends — there is no
+  // separate "save the attach set" route to call immediately, the way `set-product-station` is.
+
+  /** The groups not yet in `selectedGroupIds` — the picker's option list, in `optionGroups` order. */
+  #availableGroups(): OptionGroup[] {
+    return this.optionGroups.filter((g) => !this.selectedGroupIds.includes(g.id));
+  }
+
+  /** The picker's effective selection: the current `addGroupChoice` if still available, else the first
+   * available group (so a never-touched picker still adds a sensible group) — mirrors
+   * `layout-screen.ts`'s `#effectiveChoice`. */
+  #effectiveGroupChoice(available: OptionGroup[]): string {
+    if (this.addGroupChoice !== "" && available.some((g) => g.id === this.addGroupChoice)) {
+      return this.addGroupChoice;
+    }
+    return available[0]?.id ?? "";
+  }
+
+  #onAddGroupChoiceChange(event: Event): void {
+    event.stopPropagation();
+    this.addGroupChoice = (event.target as HTMLSelectElement).value;
+  }
+
+  /** Append the picked group to the end of the attach list. */
+  #addGroup(event: Event): void {
+    event.stopPropagation();
+    const id = this.#effectiveGroupChoice(this.#availableGroups());
+    if (id === "") return;
+    this.selectedGroupIds = [...this.selectedGroupIds, id];
+    this.addGroupChoice = "";
+  }
+
+  /** Swap row `index` with its neighbour `delta` away (−1 up, +1 down). A move off either end is a
+   * no-op — those buttons render disabled, this is the belt-and-braces guard (`layout-screen.ts`'s
+   * `#move`). */
+  #moveGroup(index: number, delta: number): void {
+    const target = index + delta;
+    if (target < 0 || target >= this.selectedGroupIds.length) return;
+    const ids = [...this.selectedGroupIds];
+    [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+    this.selectedGroupIds = ids;
+  }
+
+  #removeGroup(index: number): void {
+    this.selectedGroupIds = this.selectedGroupIds.filter((_, i) => i !== index);
+  }
+
   /** The description map to emit: every locale whose value is non-empty (trimmed), value kept as typed. */
   #buildDescriptions(): Record<string, string> {
     const out: Record<string, string> = {};
@@ -304,6 +432,7 @@ export class ProductForm extends LitElement {
         allergens: this.allergens,
         image: this.image,
         active: this.active,
+        optionGroupIds: [...this.selectedGroupIds],
       };
       this.dispatchEvent(
         new CustomEvent<UpdateProductDetail>("update-product", {
@@ -323,6 +452,7 @@ export class ProductForm extends LitElement {
       vatClass: this.vatClass,
       pricingUnit: this.pricingUnit,
       active: this.active,
+      optionGroupIds: [...this.selectedGroupIds],
     };
     if (this.allergens !== null) body.allergens = this.allergens;
     if (this.image !== null) body.image = this.image;
@@ -342,6 +472,95 @@ export class ProductForm extends LitElement {
    */
   #onClose(): void {
     this.open = false;
+  }
+
+  /** A group's PRIMARY-locale display name (`locales[0]`), falling back to any locale present in
+   * `name`, falling back to the group's own id if `name` is somehow empty. Shared by the attach
+   * section's pick list row and the picker `<option>` so the two never drift. */
+  #groupLabel(group: OptionGroup): string {
+    return group.name[this.locales[0]!] ?? Object.values(group.name)[0] ?? group.id;
+  }
+
+  /** One row of the attach section's ordered pick list: the group's name, ↑/↓ (disabled at the ends,
+   * the `layout-screen.ts` belt-and-braces guard) and Remove. Falls back to the bare id if `optionGroups`
+   * has not (yet) loaded the name for a seeded id — the read-back can resolve before the group list does. */
+  #renderOptionGroupRow(id: string, index: number, total: number) {
+    const group = this.optionGroups.find((g) => g.id === id);
+    const name = group ? this.#groupLabel(group) : id;
+    return html`
+      <li class="option-group-row" data-test=${`option-group-attached-${id}`}>
+        <span class="option-group-name">${name}</span>
+        <div class="option-group-controls">
+          <wt-button
+            size="sm"
+            aria-label=${`${t("action.move_up")} ${name}`}
+            data-test=${`option-group-up-${id}`}
+            ?disabled=${index === 0}
+            @click=${() => this.#moveGroup(index, -1)}
+            >↑</wt-button
+          >
+          <wt-button
+            size="sm"
+            aria-label=${`${t("action.move_down")} ${name}`}
+            data-test=${`option-group-down-${id}`}
+            ?disabled=${index === total - 1}
+            @click=${() => this.#moveGroup(index, 1)}
+            >↓</wt-button
+          >
+          <wt-button
+            size="sm"
+            variant="danger"
+            data-test=${`option-group-remove-${id}`}
+            @click=${() => this.#removeGroup(index)}
+            >${t("action.remove")}</wt-button
+          >
+        </div>
+      </li>
+    `;
+  }
+
+  /** The whole attach section: the ordered pick list plus the picker that adds to it. Renders in BOTH
+   * create and edit mode (Task 12 — unlike the station/course overrides above, `optionGroupIds` is
+   * accepted on create too). */
+  #renderOptionGroups() {
+    const available = this.#availableGroups();
+    const choice = this.#effectiveGroupChoice(available);
+    return html`
+      <section class="option-groups">
+        <p class="field">${t("product.option_groups")}</p>
+        <ol class="option-groups-list">
+          ${this.selectedGroupIds.map((id, index) =>
+            this.#renderOptionGroupRow(id, index, this.selectedGroupIds.length),
+          )}
+        </ol>
+        ${
+          available.length > 0
+            ? html`<div class="option-group-pick">
+                <label class="field"
+                  >${t("product.option_groups_pick")}
+                  <select
+                    data-test="option-group-pick"
+                    @change=${(e: Event) => this.#onAddGroupChoiceChange(e)}
+                  >
+                    ${available.map(
+                      (g) =>
+                        html`<option value=${g.id} .selected=${g.id === choice}>
+                          ${this.#groupLabel(g)}
+                        </option>`,
+                    )}
+                  </select>
+                </label>
+                <wt-button
+                  variant="secondary"
+                  data-test="option-group-add"
+                  @click=${(e: Event) => this.#addGroup(e)}
+                  >${t("product.option_groups_add")}</wt-button
+                >
+              </div>`
+            : nothing
+        }
+      </section>
+    `;
   }
 
   override render() {
@@ -445,6 +664,7 @@ export class ProductForm extends LitElement {
           .checked=${this.active}
           @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onActiveChange(e)}
         ></wt-switch>
+        ${this.#renderOptionGroups()}
         <dashboard-allergen-picker
           data-test="allergens"
           .declaration=${this.seedAllergens}

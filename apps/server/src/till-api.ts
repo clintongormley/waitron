@@ -258,6 +258,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // (un-shared) forbids the un-join, the same 409 shape `table.not_joined`/`table.occupied` use. Thrown by
   // `unjoinTable`'s with-items branch before it mints anything.
   "table.not_shared": 409,
+  // A transfer that would separate a modifier from its dish — a child line named on its own, or a
+  // partial split of a dish that carries modifiers (ordering modifiers). A malformed request regardless
+  // of any tab's STATE, so a 400, the same shape the other `tab.transfer_*` request-shape faults carry.
+  "tab.transfer_modifier_line": 400,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
@@ -1417,7 +1421,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
       // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
       const body = await c.req.json<{
-        lines: { productId: string; quantity: string; courseId?: string | null }[];
+        // A round line MAY carry selected modifier `options` (ordering modifiers) — threaded through
+        // `addTabRound` → `priceOrderLines`, which expands each into a parent + child rows. Optional, so
+        // a plain `{productId, quantity}` round is unchanged.
+        lines: {
+          productId: string;
+          quantity: string;
+          courseId?: string | null;
+          options?: { optionGroupItemId: string }[];
+        }[];
       }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

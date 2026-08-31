@@ -223,6 +223,55 @@ describe("till-expo-screen", () => {
     expect(item.textContent).toContain(t("station.state.queued")); // the kitchen state
   });
 
+  describe("ordering modifiers (Task 14): selected options as indented sub-text under the item", () => {
+    // The wire shape `listExpoQueue` already returns (Task 7) — a fired dish with TWO selected options.
+    const orderWithModifiers: ExpoOrder = {
+      orderId: "wo-9",
+      orderNumber: 9,
+      openedMinutes: 1,
+      courses: [
+        {
+          courseId: null,
+          courseName: null,
+          displayOrder: null,
+          fired: true,
+          away: false,
+          items: [
+            {
+              id: "ti-9",
+              name: { "es-ES": "Cortado" },
+              qty: "1.000",
+              stationName: "Cocina",
+              state: "queued",
+              firedAt: FIRED,
+              awayAt: null,
+              modifiers: [
+                { descriptions: { "es-ES": "Grande" } },
+                { descriptions: { "es-ES": "Leche avena" } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    it("renders the dish then its two options as indented '+ name' sub-text", async () => {
+      const el = await mount({ api: stubApi([orderWithModifiers]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-9"]')!;
+      expect(item.textContent).toContain("1× Cortado");
+      expect(item.textContent).toContain("+ Grande");
+      expect(item.textContent).toContain("+ Leche avena");
+      // The dish precedes its modifiers in DOM order.
+      const html = item.innerHTML;
+      expect(html.indexOf("Cortado")).toBeLessThan(html.indexOf("Grande"));
+    });
+
+    it("an item with no modifiers renders flat, with no modifiers sub-text at all (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries `modifiers`
+      expect(el.shadowRoot!.querySelectorAll(".item-modifiers")).toHaveLength(0);
+    });
+  });
+
   // --- Per-course lever by state -------------------------------------------------------------
 
   it("a HELD course under fire_control='expo' shows the Fire lever", async () => {

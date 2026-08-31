@@ -5,7 +5,10 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  optionGroupItems,
+  optionGroups,
   pgErrorCode,
+  productOptionGroups,
   ticketItems,
   withTenant,
   workingOrderLines,
@@ -49,6 +52,7 @@ import {
   placeOrder,
   sendToPrep,
   updateHeldOrder,
+  voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import {
@@ -842,7 +846,7 @@ async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
 async function placeOrderWith(
   tx: Transaction,
   cfg: TillConfig,
-  lines: { productId: string; quantity: string }[],
+  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
   await createOpenOrder(tx, cfg, id, lines, null);
@@ -851,6 +855,7 @@ async function placeOrderWith(
       id: workingOrderLines.id,
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
+      parentLineId: workingOrderLines.parentLineId,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -859,11 +864,45 @@ async function placeOrderWith(
   return { id };
 }
 
+/** Attach a fresh single-item option group to `productId` and return the option-item id — the shape a
+ *  line's `options: [{ optionGroupItemId }]` selects, for the modifier sub-item tests. */
+async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+  const [group] = await tx
+    .insert(optionGroups)
+    .values({
+      tenantId: sql`current_tenant_id()`,
+      name: { [LOCALE]: `${name} group` },
+      minSelect: 0,
+      maxSelect: 1,
+      required: false,
+      sort: 0,
+    })
+    .returning({ id: optionGroups.id });
+  const [item] = await tx
+    .insert(optionGroupItems)
+    .values({
+      tenantId: sql`current_tenant_id()`,
+      groupId: group!.id,
+      name: { [LOCALE]: name },
+      priceDelta: "0.50",
+      vatClass: "reduced",
+      sort: 0,
+    })
+    .returning({ id: optionGroupItems.id });
+  await tx.insert(productOptionGroups).values({
+    tenantId: sql`current_tenant_id()`,
+    productId,
+    groupId: group!.id,
+    sort: 0,
+  });
+  return item!.id;
+}
+
 /** The order's ticket items joined back to each line's product, for asserting where each line routed. */
 async function ticketItemsFor(
   tx: Transaction,
   orderId: string,
-): Promise<{ productId: string; stationId: string; state: string }[]> {
+): Promise<{ productId: string | null; stationId: string; state: string }[]> {
   return tx
     .select({
       productId: workingOrderLines.productId,
@@ -882,7 +921,7 @@ async function ticketItemsFor(
 }
 
 const byProduct = (
-  items: { productId: string; stationId: string; state: string }[],
+  items: { productId: string | null; stationId: string; state: string }[],
   productId: string,
 ) => items.find((i) => i.productId === productId)!;
 
@@ -995,6 +1034,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
             id: workingOrderLines.id,
             productId: workingOrderLines.productId,
             courseId: workingOrderLines.courseId,
+            parentLineId: workingOrderLines.parentLineId,
           })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, orderId));
@@ -1263,6 +1303,42 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       });
     });
   });
+
+  it("attaches a parent's selected options as modifier sub-items on listStationQueue and listExpoQueue", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      // Café with TWO selected options — each a child modifier line, never its own ticket item.
+      const grande = await addOption(tx, cafeId, "Grande");
+      const avena = await addOption(tx, cafeId, "Leche avena");
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+        },
+      ]);
+
+      // The station queue: ONE item (the parent dish), carrying both options as modifier sub-items, in
+      // selection (line_no) order — localised client-side via each modifier's descriptions map.
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.orderId).toBe(orderId);
+      expect(group!.items).toHaveLength(1);
+      expect(group!.items[0]!.modifiers).toEqual([
+        { descriptions: { [LOCALE]: "Grande" } },
+        { descriptions: { [LOCALE]: "Leche avena" } },
+      ]);
+
+      // The expo queue attaches the same modifier sub-items to its item.
+      const expo = await listExpoQueue(tx, cfg);
+      const expoItem = expo[0]!.courses[0]!.items[0]!;
+      expect(expoItem.modifiers).toEqual([
+        { descriptions: { [LOCALE]: "Grande" } },
+        { descriptions: { [LOCALE]: "Leche avena" } },
+      ]);
+    });
+  });
 });
 
 // KDS-2 Task 4 — hold-and-fire. `fireLines` now snapshots each line's `course_id` and decides
@@ -1284,7 +1360,7 @@ async function courseItemsFor(
 ): Promise<
   {
     id: string;
-    productId: string;
+    productId: string | null;
     courseId: string | null;
     firedAt: string | null;
     // KDS-3: the pass's dispatch marker (`null` = not away), read by the expo-verb tests.
@@ -1312,7 +1388,7 @@ async function courseItemsFor(
     .where(eq(ticketItems.workingOrderId, orderId));
 }
 
-const byLine = <T extends { productId: string }>(items: T[], productId: string): T =>
+const byLine = <T extends { productId: string | null }>(items: T[], productId: string): T =>
   items.find((i) => i.productId === productId)!;
 
 describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance guard)", () => {
@@ -1847,6 +1923,177 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 // paths are covered by the SAME code. PGlite: plain SQL + the tenant-consistent FK, no privilege or
 // concurrency dimension.
 // ---------------------------------------------------------------------------------------------------
+describe("voidTabLine modifier cascade (FIX 2)", () => {
+  /** Attach a maxSelect≥2 option group to `productId`, returning the first item's id. A group that
+   *  ACCEPTS two picks, so a doubled selection is caught by the dedup (FIX 3), never by max_select. */
+  async function addMultiOption(tx: Transaction, productId: string, name: string): Promise<string> {
+    const [group] = await tx
+      .insert(optionGroups)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        name: { [LOCALE]: `${name} group` },
+        minSelect: 0,
+        maxSelect: 2,
+        required: false,
+        sort: 0,
+      })
+      .returning({ id: optionGroups.id });
+    const [item] = await tx
+      .insert(optionGroupItems)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: group!.id,
+        name: { [LOCALE]: name },
+        priceDelta: "0.50",
+        vatClass: "reduced",
+        sort: 0,
+      })
+      .returning({ id: optionGroupItems.id });
+    await tx.insert(productOptionGroups).values({
+      tenantId: sql`current_tenant_id()`,
+      productId,
+      groupId: group!.id,
+      sort: 0,
+    });
+    return item!.id;
+  }
+
+  /** Open an OPEN order with modifier lines and point a fresh table at it → a real tab (`lockOpenTab`
+   *  needs the `dining_tables.tab_id` back-pointer). Skips firing, so no station is required. */
+  async function openModifierTab(
+    tx: Transaction,
+    cfg: TillConfig,
+    tableId: string,
+    lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+  ): Promise<string> {
+    const id = randomUUID();
+    await createOpenOrder(tx, cfg, id, lines, null);
+    await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
+    return id;
+  }
+
+  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+    const [group] = await tx
+      .insert(optionGroups)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        name: { [LOCALE]: `${name} group` },
+        minSelect: 0,
+        maxSelect: 1,
+        required: false,
+        sort: 0,
+      })
+      .returning({ id: optionGroups.id });
+    const [item] = await tx
+      .insert(optionGroupItems)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: group!.id,
+        name: { [LOCALE]: name },
+        priceDelta: "0.50",
+        vatClass: "reduced",
+        sort: 0,
+      })
+      .returning({ id: optionGroupItems.id });
+    await tx.insert(productOptionGroups).values({
+      tenantId: sql`current_tenant_id()`,
+      productId,
+      groupId: group!.id,
+      sort: 0,
+    });
+    return item!.id;
+  }
+
+  it("voiding a PARENT dish removes its modifier children too (no orphan FK 23503)", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const bacon = await addOption(tx, cafeId, "Bacon");
+      const tableId = await makeTable(tx, cfg);
+      // line 1 = café (parent), line 2 = bacon (child), line 3 = agua (plain).
+      const tabId = await openModifierTab(tx, cfg, tableId, [
+        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+        { productId: aguaId, quantity: "1" },
+      ]);
+      await voidTabLine(tx, cfg, tabId, 1);
+      const remaining = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      // Parent (1) AND its child (2) are gone; only the plain agua line (3) survives.
+      expect(remaining.map((r) => r.lineNo)).toEqual([3]);
+      expect(remaining[0]!.productId).toBe(aguaId);
+    });
+  });
+
+  it("voiding a CHILD modifier line removes only that line (its dish stays)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const bacon = await addOption(tx, cafeId, "Bacon");
+      const tableId = await makeTable(tx, cfg);
+      // line 1 = café (parent), line 2 = bacon (child).
+      const tabId = await openModifierTab(tx, cfg, tableId, [
+        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+      ]);
+      await voidTabLine(tx, cfg, tabId, 2);
+      const remaining = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          productId: workingOrderLines.productId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      // Only the child left; the dish is untouched.
+      expect(remaining.map((r) => r.lineNo)).toEqual([1]);
+      expect(remaining[0]!.productId).toBe(cafeId);
+    });
+  });
+
+  it("collapses a repeated optionGroupItemId in one line to a SINGLE child line (FIX 3, no overcharge)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2 group
+      const id = randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [
+          {
+            productId: cafeId,
+            quantity: "1",
+            // The SAME option named twice on a multi-select group — reachable via a crafted client.
+            options: [{ optionGroupItemId: bacon }, { optionGroupItemId: bacon }],
+          },
+        ],
+        null,
+      );
+      const lines = await tx
+        .select({
+          lineNo: workingOrderLines.lineNo,
+          parentLineId: workingOrderLines.parentLineId,
+          optionGroupItemId: workingOrderLines.optionGroupItemId,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      // ONE parent + ONE child — the duplicate collapses (not two identical children double-charged).
+      expect(lines).toHaveLength(2);
+      expect(lines[0]!.parentLineId).toBeNull();
+      expect(lines.filter((l) => l.parentLineId !== null)).toHaveLength(1);
+      expect(lines[1]!.optionGroupItemId).toBe(bacon);
+    });
+  });
+});
+
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: TillConfig): Promise<string> {

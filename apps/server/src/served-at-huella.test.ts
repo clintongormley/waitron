@@ -430,6 +430,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         courseId: workingOrderLines.courseId,
+        parentLineId: workingOrderLines.parentLineId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))

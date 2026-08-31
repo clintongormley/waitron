@@ -20,17 +20,30 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
+  createOptionGroup,
+  createOptionGroupItem,
   createProduct,
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
+  listOptionGroupItems,
+  listOptionGroups,
+  listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
+  setProductOptionGroups,
+  updateOptionGroup,
+  updateOptionGroupItem,
   updateProduct,
   validateImageBytes,
+  type CreateOptionGroupInput,
+  type CreateOptionGroupItemInput,
   type ProductAllergens,
+  type UpdateOptionGroupInput,
+  type UpdateOptionGroupItemInput,
   type UpdateProductInput,
+  type VatClass,
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -94,6 +107,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "media.missing": 400,
   "media.unsupported_type": 415,
   "media.too_large": 413,
+  // An invalid option-group AUTHORING config (Task 11): the select bounds or the required⇒min rule the
+  // DB CHECKs enforce, surfaced by `createOptionGroup`/`updateOptionGroup` as a clean 400 before the
+  // write rather than the opaque 500 the CHECK would raise. The `?? 400` default already covers it; it
+  // is listed explicitly as the house style requires.
+  "options.group_invalid": 400,
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -141,6 +159,69 @@ async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Pro
   if (!(await catalogueExists(tx, catalogueId))) {
     throw new AppError("catalogue.not_found", { catalogueId });
   }
+}
+
+/**
+ * Screen an OPTIONAL integer request field (option-group `minSelect`/`maxSelect`/`sort`), returning it.
+ * Absent stays `undefined` (a no-op — the create route defaults it, the patch route leaves it
+ * untouched); a PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid`
+ * naming the FIELD (never the value). The `typeof` screen is first so a non-number is REJECTED rather
+ * than coerced, and the int4 bound keeps an out-of-range value off the `integer` column (a `22003`
+ * opaque 500). The DOMAIN relationship between min/max (and the required⇒min rule) is NOT checked here —
+ * that is `createOptionGroup`/`updateOptionGroup`'s `options.group_invalid`; this is a shape screen only.
+ */
+function parseOptionalInteger(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < -2_147_483_648 ||
+    value > 2_147_483_647
+  ) {
+    throw new AppError("management.request_invalid", { field });
+  }
+  return value;
+}
+
+/**
+ * Screen an OPTIONAL `vatClass` request field for an option item, returning `string | null | undefined`.
+ * `null` means "inherit the parent dish's rate" (a legitimate value, the column default); a present
+ * string flows to the DB (its membership is the `option_group_items` CHECK's job, the same typeof-only
+ * posture the product `vatClass` screen takes); anything else is `management.request_invalid`.
+ */
+function parseOptionalVatClass(value: unknown): VatClass | null | undefined {
+  if (value === undefined) return undefined;
+  if (value !== null && typeof value !== "string") {
+    throw new AppError("management.request_invalid", { field: "vatClass" });
+  }
+  return value as VatClass | null;
+}
+
+/**
+ * Screen an OPTIONAL ordered `optionGroupIds` attach list on the product POST/PATCH body, returning it.
+ * Absent stays `undefined` (the attach set is left untouched); present must be an ARRAY of uuid-shaped
+ * STRINGS — a non-array or a non-string element is `management.request_invalid` naming the field, and a
+ * string that is not uuid-shaped is `shared.invalid_id` (as `requireUuidParam`, so a malformed id never
+ * reaches the `uuid` column → `22P02` → opaque 500). Existence + tenant-consistency of each id is the
+ * `product_option_groups` FK's job, not this shape screen's.
+ *
+ * DUPLICATES are collapsed here, first-occurrence order preserved: two copies of one id would otherwise
+ * both reach `setProductOptionGroups`' insert and collide on the `(product_id, group_id)` PK → an opaque
+ * 500. A repeated attach carries no meaning (the list is a set of groups in display order), so the second
+ * copy is dropped rather than rejected.
+ */
+function parseOptionGroupIds(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new AppError("management.request_invalid", { field: "optionGroupIds" });
+  }
+  for (const id of value) {
+    if (typeof id !== "string") {
+      throw new AppError("management.request_invalid", { field: "optionGroupIds" });
+    }
+    if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "OptionGroupId", value: id });
+  }
+  return [...new Set(value as string[])];
 }
 
 /**
@@ -315,6 +396,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         allergens?: unknown;
         image?: unknown;
         active?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
@@ -340,6 +422,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw new AppError("management.request_invalid", { field: "active" });
       }
+      // The optional ordered attach set (Task 11): screened here (array of uuid-shaped strings) and
+      // applied in the SAME transaction as the create, so a product and its option groups land atomically.
+      const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
@@ -351,7 +436,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
-      const created = await gated(sessionId, (tx) => createProduct(tx, input));
+      const created = await gated(sessionId, async (tx) => {
+        const product = await createProduct(tx, input);
+        if (optionGroupIds !== undefined) {
+          await setProductOptionGroups(tx, product.id, optionGroupIds);
+        }
+        return product;
+      });
       return c.json(created, 201);
     }),
   );
@@ -374,6 +465,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         allergens?: unknown;
         image?: unknown;
         active?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       const patch: UpdateProductInput = {};
       if (body.descriptions !== undefined) {
@@ -421,7 +513,219 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;
       }
-      await gated(sessionId, (tx) => updateProduct(tx, productId, patch));
+      // The optional ordered attach set (Task 11): a full replace when present, applied in the SAME
+      // transaction as the field update. Absent leaves the product's attached groups untouched; `[]`
+      // detaches them all. An empty `patch` alongside a present `optionGroupIds` is fine — `updateProduct`
+      // always bumps `updatedAt`, so its `.set()` is never empty.
+      const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
+      await gated(sessionId, async (tx) => {
+        await updateProduct(tx, productId, patch);
+        if (optionGroupIds !== undefined) {
+          await setProductOptionGroups(tx, productId, optionGroupIds);
+        }
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Product ↔ option-group attach read-back ──────────────────────────────────────────────────────
+  // The ids of the option groups attached to a product, in per-attachment `sort` order — the read-back
+  // Task 12's product form uses to show which groups are attached and in what order (it cross-references
+  // GET /management-api/option-groups for the names). The attach itself is carried on the product
+  // POST/PATCH body above; this is the read half. `:id` screened as a uuid (→ shared.invalid_id).
+  app.get("/management-api/products/:id/option-groups", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const productId = requireUuidParam(c.req.param("id"), "ProductId");
+      const ids = await gated(sessionId, (tx) => listProductOptionGroupIds(tx, productId));
+      return c.json(ids);
+    }),
+  );
+
+  // ── Option groups (reusable modifier groups) ─────────────────────────────────────────────────────
+  // CRUD the tenant's reusable `option_groups`. Every route is gated exactly like the catalogue/product
+  // routes above — `requireManagementSession` first (401), then `gated` runs the op under withTenant +
+  // asAppUser + `authorizeManager(person.manage)` (403). Body-shape screens mirror the product routes;
+  // the DOMAIN select-bound invariant is `createOptionGroup`/`updateOptionGroup`'s `options.group_invalid`.
+  app.get("/management-api/option-groups", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) => listOptionGroups(tx));
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/option-groups", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{
+        name?: unknown;
+        minSelect?: unknown;
+        maxSelect?: unknown;
+        required?: unknown;
+        sort?: unknown;
+        active?: unknown;
+      }>(c);
+      if (!isPlainObject(body.name)) {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      const minSelect = parseOptionalInteger(body.minSelect, "minSelect");
+      const maxSelect = parseOptionalInteger(body.maxSelect, "maxSelect");
+      const sort = parseOptionalInteger(body.sort, "sort");
+      if (body.required !== undefined && typeof body.required !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "required" });
+      }
+      if (body.active !== undefined && typeof body.active !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "active" });
+      }
+      const input: CreateOptionGroupInput = {
+        name: body.name as Record<string, string>,
+        ...(minSelect === undefined ? {} : { minSelect }),
+        ...(maxSelect === undefined ? {} : { maxSelect }),
+        ...(body.required === undefined ? {} : { required: body.required }),
+        ...(sort === undefined ? {} : { sort }),
+        ...(body.active === undefined ? {} : { active: body.active }),
+      };
+      const created = await gated(sessionId, (tx) => createOptionGroup(tx, input));
+      return c.json(created, 201);
+    }),
+  );
+
+  app.patch("/management-api/option-groups/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
+      const body = await readJsonBody<{
+        name?: unknown;
+        minSelect?: unknown;
+        maxSelect?: unknown;
+        required?: unknown;
+        sort?: unknown;
+        active?: unknown;
+      }>(c);
+      const patch: UpdateOptionGroupInput = {};
+      if (body.name !== undefined) {
+        if (!isPlainObject(body.name)) {
+          throw new AppError("management.request_invalid", { field: "name" });
+        }
+        patch.name = body.name as Record<string, string>;
+      }
+      const minSelect = parseOptionalInteger(body.minSelect, "minSelect");
+      if (minSelect !== undefined) patch.minSelect = minSelect;
+      const maxSelect = parseOptionalInteger(body.maxSelect, "maxSelect");
+      if (maxSelect !== undefined) patch.maxSelect = maxSelect;
+      const sort = parseOptionalInteger(body.sort, "sort");
+      if (sort !== undefined) patch.sort = sort;
+      if (body.required !== undefined) {
+        if (typeof body.required !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "required" });
+        }
+        patch.required = body.required;
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "active" });
+        }
+        patch.active = body.active;
+      }
+      // A patch with no mutable field is a 204 no-op: `updateOptionGroup` guards its own empty `.set()`
+      // is never reached (it read-merges then updates), but skipping the tenant transaction entirely
+      // when nothing changed matches the sibling status/zone PATCH shape. An out-of-uuid/missing id is a
+      // silent no-op inside `updateOptionGroup` (the updateProduct posture).
+      if (Object.keys(patch).length === 0) return c.body(null, 204);
+      await gated(sessionId, (tx) => updateOptionGroup(tx, groupId, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Option group items (choices within a group) ──────────────────────────────────────────────────
+  app.get("/management-api/option-groups/:id/items", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
+      const rows = await gated(sessionId, (tx) => listOptionGroupItems(tx, groupId));
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/option-groups/:id/items", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
+      const body = await readJsonBody<{
+        name?: unknown;
+        priceDelta?: unknown;
+        vatClass?: unknown;
+        sort?: unknown;
+        active?: unknown;
+      }>(c);
+      if (!isPlainObject(body.name)) {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      if (body.priceDelta !== undefined && typeof body.priceDelta !== "string") {
+        throw new AppError("management.request_invalid", { field: "priceDelta" });
+      }
+      const vatClass = parseOptionalVatClass(body.vatClass);
+      const sort = parseOptionalInteger(body.sort, "sort");
+      if (body.active !== undefined && typeof body.active !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "active" });
+      }
+      const input: CreateOptionGroupItemInput = {
+        name: body.name as Record<string, string>,
+        ...(body.priceDelta === undefined ? {} : { priceDelta: body.priceDelta }),
+        ...(vatClass === undefined ? {} : { vatClass }),
+        ...(sort === undefined ? {} : { sort }),
+        ...(body.active === undefined ? {} : { active: body.active }),
+      };
+      // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
+      // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
+      // for a foreign id, the same posture the product routes take on a foreign catalogueId.
+      const created = await gated(sessionId, (tx) => createOptionGroupItem(tx, groupId, input));
+      return c.json(created, 201);
+    }),
+  );
+
+  app.patch("/management-api/option-groups/:groupId/items/:itemId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      // Both ids screened for shape (→ shared.invalid_id). `groupId` scopes the item to its group in the
+      // URL for the editor's benefit; the item's own id is the update key (items are tenant-unique).
+      requireUuidParam(c.req.param("groupId"), "OptionGroupId");
+      const itemId = requireUuidParam(c.req.param("itemId"), "OptionGroupItemId");
+      const body = await readJsonBody<{
+        name?: unknown;
+        priceDelta?: unknown;
+        vatClass?: unknown;
+        sort?: unknown;
+        active?: unknown;
+      }>(c);
+      const patch: UpdateOptionGroupItemInput = {};
+      if (body.name !== undefined) {
+        if (!isPlainObject(body.name)) {
+          throw new AppError("management.request_invalid", { field: "name" });
+        }
+        patch.name = body.name as Record<string, string>;
+      }
+      if (body.priceDelta !== undefined) {
+        if (typeof body.priceDelta !== "string") {
+          throw new AppError("management.request_invalid", { field: "priceDelta" });
+        }
+        patch.priceDelta = body.priceDelta;
+      }
+      const vatClass = parseOptionalVatClass(body.vatClass);
+      if (body.vatClass !== undefined) patch.vatClass = vatClass;
+      const sort = parseOptionalInteger(body.sort, "sort");
+      if (sort !== undefined) patch.sort = sort;
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "active" });
+        }
+        patch.active = body.active;
+      }
+      // No mutable field → 204 no-op, sidestepping updateOptionGroupItem's empty `.set()` (which Drizzle
+      // rejects). A well-formed-but-missing item id is a silent no-op (the updateProduct posture).
+      if (Object.keys(patch).length === 0) return c.body(null, 204);
+      await gated(sessionId, (tx) => updateOptionGroupItem(tx, itemId, patch));
       return c.body(null, 204);
     }),
   );

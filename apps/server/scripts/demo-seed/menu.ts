@@ -64,6 +64,107 @@ export interface SeedCatalogue {
   categories: SeedCategory[];
 }
 
+// ── Ordering modifiers (Phase 4, Task 13) ──────────────────────────────────────────────────────────
+// Demo `option_groups`/`option_group_items` content, authored bare-locale like everything else in this
+// file. Attached (by `seed-options.ts`, via `seedCatalogues`' image→productId map) to exactly two
+// EACH-priced products below — the sale path rejects options on a `weight` product
+// (`options.unsupported_product`, apps/server/src/working-order.ts) — so both this seed's targets are
+// each-priced by construction: "Coffee" (image `cafe-solo.png`) and "Sirloin in whisky sauce"
+// (image `solomillo.png`), the closest analogues on this Spanish menu to a size/milk coffee order and a
+// cooked-to-order dish with extras. `vatClass: null` on every item below means INHERIT the dish's own
+// rate — a milk splash or a steak topping follows the same VAT treatment as the dish it rides on.
+
+/** One selectable choice within a demo option group — both-locale name, its GROSS price delta added to
+ * the dish's own price, and its VAT class override (`null` = inherit the dish's rate). */
+export interface SeedOptionItem {
+  name: Record<SeedLocale, string>;
+  priceDelta: string;
+  vatClass: VatClass | null;
+}
+
+/** A demo option group: both-locale name, its select bounds, and its items — the same shape
+ * `createOptionGroup`/`createOptionGroupItem` (`@waitron/catalogue`) take, narrowed to one locale at
+ * creation time exactly as `seedCatalogues` narrows `SeedProduct.descriptions`. */
+export interface SeedOptionGroup {
+  name: Record<SeedLocale, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  items: SeedOptionItem[];
+}
+
+/** One product's attached option groups, keyed by the SAME unique `image` basename every product in
+ * this file carries — `seedOptions` resolves it through `seedCatalogues`'s `productsByImage` map, the
+ * same join key `seedMedia` uses. */
+export interface SeedProductOptions {
+  productImage: string;
+  groups: SeedOptionGroup[];
+}
+
+export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
+  {
+    productImage: "cafe-solo.png",
+    groups: [
+      {
+        name: { en: "Size", es: "Tamaño" },
+        minSelect: 1,
+        maxSelect: 1,
+        required: true,
+        items: [
+          { name: { en: "Small", es: "Pequeño" }, priceDelta: "0.00", vatClass: null },
+          { name: { en: "Large", es: "Grande" }, priceDelta: "0.50", vatClass: null },
+        ],
+      },
+      {
+        name: { en: "Milk", es: "Leche" },
+        minSelect: 1,
+        maxSelect: 1,
+        required: true,
+        items: [
+          { name: { en: "Whole milk", es: "Leche entera" }, priceDelta: "0.00", vatClass: null },
+          { name: { en: "Oat milk", es: "Leche de avena" }, priceDelta: "0.40", vatClass: null },
+          {
+            name: { en: "Semi-skimmed milk", es: "Leche semidesnatada" },
+            priceDelta: "0.00",
+            vatClass: null,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    productImage: "solomillo.png",
+    groups: [
+      {
+        name: { en: "Extras", es: "Extras" },
+        minSelect: 0,
+        maxSelect: 3,
+        required: false,
+        items: [
+          { name: { en: "Fried egg", es: "Huevo frito" }, priceDelta: "1.00", vatClass: null },
+          { name: { en: "Bacon", es: "Bacon" }, priceDelta: "1.50", vatClass: null },
+          {
+            name: { en: "Blue cheese sauce", es: "Salsa de queso azul" },
+            priceDelta: "1.00",
+            vatClass: null,
+          },
+        ],
+      },
+      {
+        name: { en: "Cooking", es: "Punto de la carne" },
+        minSelect: 1,
+        maxSelect: 1,
+        required: true,
+        items: [
+          { name: { en: "Rare", es: "Poco hecho" }, priceDelta: "0.00", vatClass: null },
+          { name: { en: "Medium", es: "Al punto" }, priceDelta: "0.00", vatClass: null },
+          { name: { en: "Well done", es: "Muy hecho" }, priceDelta: "0.00", vatClass: null },
+        ],
+      },
+    ],
+  },
+];
+
 export const CASA_DELGADO: SeedCatalogue = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   categories: [
@@ -396,7 +497,7 @@ export const CASA_DELGADO: SeedCatalogue = {
           image: "refresco-cola.png",
         },
         {
-          descriptions: { en: "Black coffee", es: "Café solo" },
+          descriptions: { en: "Coffee", es: "Café" },
           pricingUnit: "each",
           unitPrice: "1.60",
           vatClass: "general",

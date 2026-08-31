@@ -105,6 +105,33 @@ const coursedGroups: StationQueueGroup[] = [
   },
 ];
 
+// A dish with two selected options (ordering modifiers, Task 14) — the indented "+ name" sub-text is
+// non-interactive plain text under the same tappable line, so it must not introduce any new violation.
+const modifierGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-mod",
+    orderNumber: 9,
+    label: null,
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "placed",
+    items: [
+      {
+        id: "ti-mod",
+        workingOrderLineId: "wol-mod",
+        state: "queued",
+        descriptions: { "es-ES": "Cortado" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        modifiers: [
+          { descriptions: { "es-ES": "Grande" } },
+          { descriptions: { "es-ES": "Leche avena" } },
+        ],
+      },
+    ],
+  },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -148,6 +175,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: coursedGroups, stationId: "st-1", view: "rail", fireControl: "kitchen" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("a dish with selected options (ordering modifiers, indented sub-text) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: modifierGroups, stationId: "st-1", view: "rail" },
       theme,
     );
     await expectNoA11yViolations(host);

@@ -161,11 +161,14 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* An item row — the dish, its station, and its kitchen state. A non-interactive box (the pass acts
-         per COURSE, not per item), themed like the station display's line cell. */
+         per COURSE, not per item), themed like the station display's line cell. Column layout so the dish
+         row (.item-main) can carry an indented modifiers list beneath it (ordering modifiers, Task 14); a
+         modifier-free item has none, so it renders exactly as the single-row box did before. */
       .item {
         display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--wt-space-1);
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -173,6 +176,24 @@ export class TillExpoScreen extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
+      }
+
+      /* The dish row: name, station and state — the SAME row .item rendered as its whole content before
+         Task 14 added the modifiers list beneath it. */
+      .item-main {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      /* The dish's selected options (ordering modifiers, Task 14), indented beneath it — matching the
+         kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). */
+      .item-modifiers {
+        display: flex;
+        flex-direction: column;
+        padding-left: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .item.state-queued {
@@ -406,14 +427,32 @@ export class TillExpoScreen extends LitElement {
     </div>`;
   }
 
-  /** An item row: the dish (`qty× name`), its STATION (the cross-station label), and its kitchen state.
+  /** An item row: the dish (`qty× name`), its STATION (the cross-station label), its kitchen state, and
+   *  — beneath, indented (ordering modifiers, Task 14) — its selected options as `+ <name>` sub-text.
    *  Greyed when HELD (its course unfired) — a non-interactive box (the pass acts per course). */
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
-      <span class="item-name">${trimQuantity(item.qty)}× ${descriptionFor(item.name, "")}</span>
-      <span class="item-station">${item.stationName}</span>
-      <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
+      <span class="item-main">
+        <span class="item-name">${trimQuantity(item.qty)}× ${descriptionFor(item.name, "")}</span>
+        <span class="item-station">${item.stationName}</span>
+        <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
+      </span>
+      ${this.#modifiers(item)}
+    </span>`;
+  }
+
+  /** The dish's selected options (ordering modifiers, Task 14) as indented `+ <name>` sub-text beneath
+   *  the item row — the same rendering the per-station display uses. `nothing` for a plain dish (no
+   *  `modifiers`, or an empty array), so a modifier-free item renders identically to before this task. */
+  #modifiers(item: ExpoItem): TemplateResult | typeof nothing {
+    const modifiers = item.modifiers ?? [];
+    if (modifiers.length === 0) return nothing;
+    return html`<span class="item-modifiers">
+      ${modifiers.map(
+        (modifier) =>
+          html`<span class="modifier">+ ${descriptionFor(modifier.descriptions, "")}</span>`,
+      )}
     </span>`;
   }
 

@@ -2237,3 +2237,164 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     );
   });
 });
+
+describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
+  // The seven verbs the option-group manager + the product form's attach section drive (the
+  // catalogue-api.ts option-group routes, person.manage-gated like the rest of catalogue management).
+  // GET decodes the list, POST returns the created row (201), PATCH resolves undefined on an empty 204.
+  // Paths/bodies asserted against apps/server/src/catalogue-api.ts.
+
+  it("listOptionGroups GETs /management-api/option-groups with credentials", async () => {
+    const rows = [
+      {
+        id: "og1",
+        name: { es: "Tamaño" },
+        minSelect: 1,
+        maxSelect: 1,
+        required: true,
+        sort: 0,
+        active: true,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listOptionGroups()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createOptionGroup POSTs the input body and returns the created group (201)", async () => {
+    const input = { name: { es: "Tamaño" }, minSelect: 1, maxSelect: 1, required: true };
+    const created = { id: "og1", ...input, sort: 0, active: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createOptionGroup(input)).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updateOptionGroup PATCHes the addressed group's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateOptionGroup("og1", { minSelect: 0, required: false }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups/og1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ minSelect: 0, required: false }),
+    });
+  });
+
+  it("listOptionGroupItems GETs the addressed group's items with credentials", async () => {
+    const rows = [
+      {
+        id: "oi1",
+        groupId: "og1",
+        name: { es: "Pequeño" },
+        priceDelta: "0.00",
+        vatClass: null,
+        sort: 0,
+        active: true,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listOptionGroupItems("og1")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups/og1/items", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createOptionGroupItem POSTs the input body to the group's items route and returns the created item (201)", async () => {
+    const input = { name: { es: "Grande" }, priceDelta: "1.50", vatClass: "reduced" as const };
+    const created = { id: "oi2", groupId: "og1", ...input, sort: 0, active: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createOptionGroupItem("og1", input)).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups/og1/items", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updateOptionGroupItem PATCHes the addressed item's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateOptionGroupItem("og1", "oi1", { priceDelta: "2.00", vatClass: null }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/option-groups/og1/items/oi1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ priceDelta: "2.00", vatClass: null }),
+    });
+  });
+
+  it("listProductOptionGroupIds GETs the product's attach read-back with credentials", async () => {
+    const ids = ["og2", "og1"];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(ids));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listProductOptionGroupIds("p1")).toEqual(ids);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/option-groups", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createOptionGroup rejects with { code } on a non-2xx (inconsistent select bounds)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "options.group_invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createOptionGroup({ name: {}, minSelect: 2, maxSelect: 1 })).rejects.toEqual({
+      code: "options.group_invalid",
+    });
+  });
+
+  it("createProduct carries an optionGroupIds attach list straight through in the body", async () => {
+    const input = {
+      catalogueId: "c1",
+      categoryId: null,
+      descriptions: { es: "Bocadillo" },
+      pricingUnit: "each" as const,
+      unitPrice: "4.00",
+      vatClass: "general" as const,
+      active: true,
+      optionGroupIds: ["og2", "og1"],
+    };
+    const created = { id: "p9", ...input };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createProduct(input)).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updateProduct carries an optionGroupIds attach list straight through in the patch", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateProduct("p1", { optionGroupIds: ["og1"] })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ optionGroupIds: ["og1"] }),
+    });
+  });
+});

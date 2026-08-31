@@ -4,6 +4,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
+  optionGroupItems,
+  optionGroups,
+  productOptionGroups,
+  ticketItems,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -135,6 +139,7 @@ async function seedFiredDelivery(
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         courseId: workingOrderLines.courseId,
+        parentLineId: workingOrderLines.parentLineId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
@@ -258,6 +263,78 @@ describe("addTabRound (append-only, no re-price)", () => {
       { lineNo: 2, gross: "1.50" },
       { lineNo: 3, gross: "9.99" },
     ]);
+  });
+
+  it("appends a round with modifiers as parent + child lines, firing ONLY the parent", async () => {
+    // Ordering modifiers (Task 6) on the tab round-send path: a round line carrying `options` expands
+    // into a parent dish line plus one child line per option, and only the PARENT is fired to the
+    // kitchen (a modifier is part of its dish, not its own ticket item).
+    const { cfg, cafeId, tableId } = await setupVenue();
+    // Attach an "Extras" group with one active +0.50 item to the café.
+    const baconId = await asApp(cfg, async (tx) => {
+      const [group] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { [LOCALE]: "Extras" },
+          minSelect: 0,
+          maxSelect: 2,
+          required: false,
+          sort: 0,
+        })
+        .returning({ id: optionGroups.id });
+      const [bacon] = await tx
+        .insert(optionGroupItems)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          groupId: group!.id,
+          name: { [LOCALE]: "Bacon" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          sort: 0,
+        })
+        .returning({ id: optionGroupItems.id });
+      await tx.insert(productOptionGroups).values({
+        tenantId: sql`current_tenant_id()`,
+        productId: cafeId,
+        groupId: group!.id,
+        sort: 0,
+      });
+      return bacon!.id;
+    });
+
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+      ]),
+    );
+
+    const lines = await db
+      .select({
+        lineNo: workingOrderLines.lineNo,
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        parentLineId: workingOrderLines.parentLineId,
+        optionGroupItemId: workingOrderLines.optionGroupItemId,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(2);
+    const [parent, child] = lines;
+    expect(parent!.productId).toBe(cafeId);
+    expect(parent!.parentLineId).toBeNull();
+    expect(child!.productId).toBeNull();
+    expect(child!.parentLineId).toBe(parent!.id);
+    expect(child!.optionGroupItemId).toBe(baconId);
+
+    // Exactly ONE ticket item — the parent dish; the child modifier was filtered out of the fire.
+    const fired = await db
+      .select({ workingOrderLineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, tabId));
+    expect(fired).toEqual([{ workingOrderLineId: parent!.id }]);
   });
 
   it("refuses a round on a settled tab, a walk-up (not a tab), and an absent id (tab.not_open)", async () => {
@@ -660,7 +737,7 @@ async function addTabRoundWith(
   cfg: TillConfig,
   tabId: string,
   lines: RoundLine[],
-): Promise<{ productId: string; courseId: string | null }[]> {
+): Promise<{ productId: string | null; courseId: string | null }[]> {
   await addTabRound(tx, cfg, tabId, lines);
   return tx
     .select({ productId: workingOrderLines.productId, courseId: workingOrderLines.courseId })
@@ -668,7 +745,7 @@ async function addTabRoundWith(
     .where(eq(workingOrderLines.workingOrderId, tabId));
 }
 function lineCourse(
-  rows: { productId: string; courseId: string | null }[],
+  rows: { productId: string | null; courseId: string | null }[],
   productId: string,
 ): string | null {
   return rows.find((r) => r.productId === productId)!.courseId;

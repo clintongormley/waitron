@@ -142,6 +142,25 @@ describe("till-tender-pay", () => {
     expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("gates the cash tender against the options-aware total, not the dish-only price", async () => {
+    // A café ×2 (3.00) with a +0.50/dish oat-milk option → options-aware total (1.50 + 0.50) × 2 = 4.00.
+    // The Confirm gate reads `store.total`, so it must demand 4.00, not the dish-only 3.00 `priceBasket`
+    // would report — otherwise a short 3.00 tender would settle a 4.00 order.
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2", [
+      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
+    ]);
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".pay");
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("4.00")); // the cash screen shows the full total
+    await type(el, "3"); // 3.00 covers the dish-only price but is SHORT of the 4.00 total
+    expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(true);
+    await press(el, "backspace");
+    await type(el, "4"); // exactly the options-aware total
+    expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
+  });
+
   it("emits confirm-payment with the full operator-entered tendered amount", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00

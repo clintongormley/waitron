@@ -106,8 +106,9 @@ describe("seedDemoRestaurant", () => {
   it("runs every sub-seed: both menus, the floor, the staff, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 
-    // A small horizon so the back-dated sales are cheap but non-empty.
-    await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 2 });
+    // A horizon long enough that the deterministic sales LCG (seeded fixed, not by `days`) is all but
+    // certain to draw the coffee/steak at least once each — see the modifier assertions below.
+    await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 7 });
 
     const read = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
@@ -122,14 +123,29 @@ describe("seedDemoRestaurant", () => {
       const { rows: saleRows } = await tx.execute<{ n: number }>(
         sql`select count(*)::int as n from sales`,
       );
+      const { rows: modifierLineRows } = await tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from sale_lines where parent_line_id is not null`,
+      );
       return {
         menus,
         products,
         tables: tableRows[0]!.n,
         staff: staffRows[0]!.n,
         sales: saleRows[0]!.n,
+        modifierLines: modifierLineRows[0]!.n,
       };
     });
+
+    // Ordering modifiers (Phase 4, Task 13): the coffee carries Size + Milk, the steak carries
+    // Extras + Cooking, and the back-dated sales generator actually rang at least one of them with a
+    // selection — the whole point of seeding modifiers into the demo.
+    const coffee = read.products.find((p) => p.descriptions[LOCALE] === "Coffee");
+    const steak = read.products.find((p) => p.descriptions[LOCALE] === "Sirloin in whisky sauce");
+    expect(coffee).toBeDefined();
+    expect(steak).toBeDefined();
+    expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual(["Milk", "Size"]);
+    expect(steak!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual(["Cooking", "Extras"]);
+    expect(read.modifierLines).toBeGreaterThan(0);
 
     // Catalogues: both demo menus were seeded (seedCatalogues).
     expect(read.menus.map((m) => m.name).sort()).toEqual(["Casa Delgado", "Menú del Día"]);

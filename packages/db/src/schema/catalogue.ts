@@ -3,10 +3,13 @@ import {
   bigint,
   boolean,
   check,
+  foreignKey,
   index,
+  integer,
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -138,5 +141,100 @@ export const products = pgTable(
       "products_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
     ),
+  ],
+).enableRLS();
+
+/** A reusable, named group of choices ("Size", "Extras") that attaches to many products via
+ * `product_option_groups`. `min_select`/`max_select` bound how many items a diner may pick;
+ * `required` forces at least one. `name` is a locale→string map. Deactivate via `active`, never
+ * delete a group that historical order/sale-line snapshots may reference by copied value. */
+export const optionGroups = pgTable(
+  "option_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    name: jsonb("name").$type<Record<string, string>>().notNull(),
+    minSelect: integer("min_select").notNull().default(0),
+    maxSelect: integer("max_select").notNull().default(1),
+    required: boolean("required").notNull().default(false),
+    sort: integer("sort").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => [
+    index("option_groups_tenant_id_idx").on(t.tenantId),
+    // Composite target so the tenant-scoped children (option_group_items, product_option_groups) can
+    // carry a tenant-consistent (tenant_id, group_id) FK — the same role products_tenant_id_key plays.
+    // `id` alone is already unique (it is the PK); this adds the composite so the FK is
+    // tenant-consistent rather than merely referential.
+    unique("option_groups_tenant_id_key").on(t.tenantId, t.id),
+    // min_select >= 0 and max_select >= min_select. Design §3 invariant, enforced in the DB.
+    check("option_groups_select_ck", sql`${t.maxSelect} >= ${t.minSelect} and ${t.minSelect} >= 0`),
+    // required implies at least one selection. Design §3 invariant.
+    check("option_groups_required_ck", sql`${t.required} = false or ${t.minSelect} >= 1`),
+  ],
+).enableRLS();
+
+/** The individual choices within an `option_groups` row. `price_delta` is GROSS (VAT-inclusive) and
+ * added to the parent dish's price when the item is chosen. `vat_class` NULL means "inherit the
+ * parent dish's rate at add time"; a non-null value matches `products.vat_class`. Deactivate via
+ * `active`. The (tenant_id, group_id) FK is tenant-consistent and cascades on group delete. */
+export const optionGroupItems = pgTable(
+  "option_group_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    groupId: uuid("group_id").notNull(),
+    name: jsonb("name").$type<Record<string, string>>().notNull(),
+    priceDelta: numeric("price_delta", { precision: 12, scale: 2 }).notNull().default("0"),
+    vatClass: text("vat_class"),
+    sort: integer("sort").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => [
+    index("option_group_items_group_idx").on(t.groupId),
+    unique("option_group_items_tenant_id_key").on(t.tenantId, t.id),
+    // Tenant-consistent FK: an item cannot reference a group belonging to another tenant. Cascades so
+    // deleting a group removes its items. NULL vat_class = inherit; a non-null must match products'.
+    foreignKey({
+      columns: [t.tenantId, t.groupId],
+      foreignColumns: [optionGroups.tenantId, optionGroups.id],
+      name: "option_group_items_group_fk",
+    }).onDelete("cascade"),
+  ],
+).enableRLS();
+
+/** The many-to-many attaching reusable `option_groups` to `products` — one group serves many dishes.
+ * `sort` orders the groups within a product's modifier UI. Both FKs are tenant-consistent and cascade,
+ * so detaching happens by deleting the link row (never by deleting the shared group). */
+export const productOptionGroups = pgTable(
+  "product_option_groups",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    productId: uuid("product_id").notNull(),
+    groupId: uuid("group_id").notNull(),
+    sort: integer("sort").notNull().default(0),
+  },
+  (t) => [
+    // Tenant-first named PK, matching the other tenant-scoped join tables (station_printers,
+    // location_catalogues): a consistent tenant-scoped identity key. `(product_id, group_id)` is
+    // already unique (both are tenant-owned uuids and the composite FKs below keep them
+    // tenant-consistent), so `tenant_id` adds no new uniqueness — it makes the key shape uniform.
+    primaryKey({ columns: [t.tenantId, t.productId, t.groupId], name: "product_option_groups_pk" }),
+    foreignKey({
+      columns: [t.tenantId, t.productId],
+      foreignColumns: [products.tenantId, products.id],
+      name: "product_option_groups_product_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.tenantId, t.groupId],
+      foreignColumns: [optionGroups.tenantId, optionGroups.id],
+      name: "product_option_groups_group_fk",
+    }).onDelete("cascade"),
   ],
 ).enableRLS();

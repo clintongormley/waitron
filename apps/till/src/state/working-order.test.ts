@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
-import type { OrderLine } from "./working-order.js";
+import { lineGross } from "./order-line.js";
+import type { OrderLine, SelectedLineOption } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
 
 // A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
@@ -292,5 +293,59 @@ describe("WorkingOrderStore", () => {
     s.addProduct(cafe, "1");
     s.clear(); // a fresh empty basket is clean
     expect(s.dirty).toBe(false);
+  });
+
+  // Ordering modifiers (Task 9): a basket line MAY carry selected option modifiers, and the client's
+  // DISPLAY-ONLY running line price adds their deltas (the server re-prices from the ids authoritatively).
+  describe("selected options on a basket line", () => {
+    // A +0.50 gross modifier, its name snapshotted so the basket can render it (Task 8) without a re-lookup.
+    const oatMilk: SelectedLineOption = {
+      optionGroupItemId: "opt-oat",
+      name: { es: "Leche de avena" },
+      priceDelta: "0.50",
+    };
+
+    it("addProduct stores the options on the line and totals their deltas into the running line price", () => {
+      const s = new WorkingOrderStore();
+      const cortado: TillProduct = { ...cafe, id: "cortado", unitPrice: "2.50" };
+      s.addProduct(cortado, "1", [oatMilk]);
+      expect(s.lines).toHaveLength(1);
+      expect(s.lines[0]?.options).toEqual([oatMilk]);
+      // The brief's worked example: dish 2.50 + option 0.50 → 3.00.
+      expect(lineGross(s.lines[0]!)).toBe("3.00");
+      expect(s.dirty).toBe(true); // an add is a line edit
+    });
+
+    it("multiplies the dish gross and every option delta by the line quantity", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "2", [oatMilk]); // (1.50 + 0.50) × 2 = 4.00
+      expect(lineGross(s.lines[0]!)).toBe("4.00");
+    });
+
+    it("the grand total includes the option deltas — a +0.50 option lifts it by 0.50", () => {
+      const withOption = new WorkingOrderStore();
+      withOption.addProduct(cafe, "1", [oatMilk]); // dish 1.50 + option 0.50
+      const without = new WorkingOrderStore();
+      without.addProduct(cafe, "1"); // dish 1.50 only
+      expect(without.total).toBe("1.50");
+      // priceBasket ignores options, so before this fix the aggregate stayed 1.50; it must now be 2.00,
+      // or the readout AND the cash-tender sufficiency gate (which read store.total) are short.
+      expect(withOption.total).toBe("2.00");
+    });
+
+    it("the options-aware total multiplies each delta by the line quantity", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "2", [oatMilk]); // (1.50 + 0.50) × 2 = 4.00
+      expect(s.total).toBe("4.00");
+    });
+
+    it("with no options the line is unchanged — no options key, price identical to before", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "2");
+      // The strict toEqual pins that a no-options add carries NO options key (regression-safe).
+      expect(s.lines[0]).toEqual({ product: cafe, quantity: "2" });
+      expect(s.lines[0]?.options).toBeUndefined();
+      expect(lineGross(s.lines[0]!)).toBe("3.00"); // 1.50 × 2, exactly as before
+    });
   });
 });

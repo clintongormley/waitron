@@ -1,6 +1,17 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
-import { catalogues, categories, locationCatalogues, locations, products } from "@waitron/db";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
+import {
+  catalogues,
+  categories,
+  locationCatalogues,
+  locations,
+  optionGroupItems,
+  optionGroups,
+  productOptionGroups,
+  products,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import "./errors.js"; // load the code registry for `options.group_invalid` thrown below
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
@@ -87,6 +98,34 @@ export interface UpdateProductInput {
 }
 
 /**
+ * One selectable choice within a {@link ResolvedOptionGroup} (an active `option_group_items` row).
+ * `priceDelta` is the GROSS (VAT-inclusive) numeric column carried as a string, like `unitPrice`.
+ * `vatClass` is `null` when the item INHERITS the parent dish's rate (`option_group_items.vat_class`
+ * NULL); a non-null value overrides it. Later tasks price a selection against these.
+ */
+export interface ResolvedOptionItem {
+  id: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  vatClass: VatClass | null;
+}
+
+/**
+ * An active `option_groups` row attached to a product, with its active items resolved and sorted.
+ * `minSelect`/`maxSelect` bound how many items a diner may pick and `required` forces at least one;
+ * later tasks validate a selection against these. `items` is in `option_group_items.sort` order and
+ * excludes inactive items; an active group with no active items resolves to `items: []`.
+ */
+export interface ResolvedOptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  items: ResolvedOptionItem[];
+}
+
+/**
  * A product the till can sell at a location, shaped so it is structurally assignable to
  * {@link PriceableProduct} — Task 6 feeds `listAvailableProducts(...)` rows straight into
  * `priceBasket`. `category` is the resolved category NAME (left-joined), or null.
@@ -112,6 +151,10 @@ export interface AvailableProduct {
   /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
    * beyond `PriceableProduct` and ignored by priceBasket. */
   catalogueName: string;
+  /** The product's attached ACTIVE option groups (Task 1 tables), each with its active items in sort
+   * order — `[]` when the product has none. Beyond `PriceableProduct` and ignored by priceBasket;
+   * later tasks price + validate a diner's selection against these. */
+  optionGroups: ResolvedOptionGroup[];
 }
 
 const CATALOGUE_COLUMNS = {
@@ -545,6 +588,82 @@ export async function listAvailableProducts(
       ),
     )
     .orderBy(catalogues.name, products.createdAt, products.id);
+
+  // Attached option groups + items in ONE extra round trip (a grouped read, mirroring how the base
+  // product read batches rather than issuing a query per product). Join
+  // product_option_groups → option_groups → option_group_items across ALL the products just read,
+  // keeping only ACTIVE groups (WHERE) and ACTIVE items (in the LEFT JOIN's ON, so an active group
+  // with no active items still surfaces with `items: []` rather than being dropped). Groups are
+  // ordered by the PER-ATTACHMENT `product_option_groups.sort` — the same reusable group can sit in a
+  // different position on different products (schema comment, catalogue.ts), which the group's own
+  // `option_groups.sort` cannot express — then item `sort`, with the ids as stable tiebreakers, so
+  // first-seen order below IS sort order. Assembly groups the flat rows in JS: a product may attach
+  // several groups, each several items, so the join fans out and is re-nested by (productId → groupId).
+  const productIds = rows.map((row) => row.id);
+  const groupsByProduct = new Map<string, ResolvedOptionGroup[]>();
+  if (productIds.length > 0) {
+    const optionRows = await tx
+      .select({
+        productId: productOptionGroups.productId,
+        groupId: optionGroups.id,
+        groupName: optionGroups.name,
+        minSelect: optionGroups.minSelect,
+        maxSelect: optionGroups.maxSelect,
+        required: optionGroups.required,
+        itemId: optionGroupItems.id,
+        itemName: optionGroupItems.name,
+        priceDelta: optionGroupItems.priceDelta,
+        vatClass: optionGroupItems.vatClass,
+      })
+      .from(productOptionGroups)
+      .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
+      .leftJoin(
+        optionGroupItems,
+        and(eq(optionGroupItems.groupId, optionGroups.id), eq(optionGroupItems.active, true)),
+      )
+      .where(and(inArray(productOptionGroups.productId, productIds), eq(optionGroups.active, true)))
+      .orderBy(
+        productOptionGroups.sort,
+        optionGroups.sort,
+        optionGroups.id,
+        optionGroupItems.sort,
+        optionGroupItems.id,
+      );
+    // Per product, keep a groupId→group index (insertion order = sort order) so repeated item rows
+    // for one group append to the same `items` array.
+    const seen = new Map<string, Map<string, ResolvedOptionGroup>>();
+    for (const r of optionRows) {
+      let byGroup = seen.get(r.productId);
+      if (byGroup === undefined) {
+        byGroup = new Map();
+        seen.set(r.productId, byGroup);
+        groupsByProduct.set(r.productId, []);
+      }
+      let group = byGroup.get(r.groupId);
+      if (group === undefined) {
+        group = {
+          id: r.groupId,
+          name: r.groupName,
+          minSelect: r.minSelect,
+          maxSelect: r.maxSelect,
+          required: r.required,
+          items: [],
+        };
+        byGroup.set(r.groupId, group);
+        groupsByProduct.get(r.productId)!.push(group);
+      }
+      // Null on the LEFT JOIN's item side = an active group with no active items: keep the empty group.
+      if (r.itemId !== null) {
+        group.items.push({
+          id: r.itemId,
+          name: r.itemName!,
+          priceDelta: r.priceDelta!,
+          vatClass: r.vatClass as VatClass | null,
+        });
+      }
+    }
+  }
+
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
     id: row.id,
@@ -557,6 +676,258 @@ export async function listAvailableProducts(
     courseId: row.courseId,
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
+    optionGroups: groupsByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };
+}
+
+// ── Option group + item authoring (ordering modifiers, Task 11) ──────────────────────────────────
+// The dashboard's modifier-authoring surface: CRUD the reusable `option_groups` and their
+// `option_group_items`, and attach an ordered set of groups to a product (`product_option_groups`).
+// The sale-time READ lives above (`listAvailableProducts`); these are the WRITES that build what it
+// reads. Every function runs under the caller's tenant context (withTenant + asAppUser), so
+// `current_tenant_id()` scopes each write and RLS filters each read — the same posture as the
+// catalogue/category/product ops above.
+
+/** A reusable `option_groups` row for the authoring editor (the whole row — active AND inactive, unlike
+ * the sale-time {@link ResolvedOptionGroup}, which is active-only and carries resolved items). */
+export interface OptionGroup {
+  id: string;
+  name: Record<string, string>;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  sort: number;
+  active: boolean;
+}
+
+/** One `option_group_items` row for the authoring editor. `priceDelta` is the GROSS numeric column
+ * carried as a string (like `unitPrice`); `vatClass` is null when the item INHERITS the parent dish's
+ * rate. Unlike the sale-time {@link ResolvedOptionItem}, this carries `sort`/`active` for editing. */
+export interface OptionGroupItem {
+  id: string;
+  groupId: string;
+  name: Record<string, string>;
+  priceDelta: string;
+  vatClass: VatClass | null;
+  sort: number;
+  active: boolean;
+}
+
+export interface CreateOptionGroupInput {
+  name: Record<string, string>;
+  /** Omitted defaults mirror the `option_groups` column defaults: min 0, max 1, required false, sort
+   * 0, active true. */
+  minSelect?: number;
+  maxSelect?: number;
+  required?: boolean;
+  sort?: number;
+  active?: boolean;
+}
+
+/** The mutable slice of an option group; absent keys are left unchanged. The select-bound invariant is
+ * checked against the MERGE of this patch onto the stored row, so a partial patch that would violate it
+ * (e.g. lowering `maxSelect` below the stored `minSelect`) is refused. */
+export interface UpdateOptionGroupInput {
+  name?: Record<string, string>;
+  minSelect?: number;
+  maxSelect?: number;
+  required?: boolean;
+  sort?: number;
+  active?: boolean;
+}
+
+export interface CreateOptionGroupItemInput {
+  name: Record<string, string>;
+  /** Omitted defaults mirror the column defaults: priceDelta "0", vatClass null (inherit), sort 0,
+   * active true. */
+  priceDelta?: string;
+  vatClass?: VatClass | null;
+  sort?: number;
+  active?: boolean;
+}
+
+export interface UpdateOptionGroupItemInput {
+  name?: Record<string, string>;
+  priceDelta?: string;
+  vatClass?: VatClass | null;
+  sort?: number;
+  active?: boolean;
+}
+
+const OPTION_GROUP_COLUMNS = {
+  id: optionGroups.id,
+  name: optionGroups.name,
+  minSelect: optionGroups.minSelect,
+  maxSelect: optionGroups.maxSelect,
+  required: optionGroups.required,
+  sort: optionGroups.sort,
+  active: optionGroups.active,
+};
+
+const OPTION_GROUP_ITEM_COLUMNS = {
+  id: optionGroupItems.id,
+  groupId: optionGroupItems.groupId,
+  name: optionGroupItems.name,
+  priceDelta: optionGroupItems.priceDelta,
+  vatClass: optionGroupItems.vatClass,
+  sort: optionGroupItems.sort,
+  active: optionGroupItems.active,
+};
+
+/**
+ * Enforce the `option_groups` invariants BEFORE the write, so an invalid config is a clean
+ * `options.group_invalid` (400) rather than the opaque 500 the DB CHECK constraints
+ * (`option_groups_select_ck` / `option_groups_required_ck`) would raise as a backstop. These are the
+ * SAME two rules the CHECKs encode: `max_select >= min_select >= 0`, and `required ⇒ min_select >= 1`.
+ * `reason` is the stable code the sale-time `options.selection_invalid` also uses.
+ */
+function validateOptionGroupBounds(minSelect: number, maxSelect: number, required: boolean): void {
+  if (minSelect < 0 || maxSelect < minSelect) {
+    throw new AppError("options.group_invalid", { reason: "select_bounds" });
+  }
+  if (required && minSelect < 1) {
+    throw new AppError("options.group_invalid", { reason: "required_without_min" });
+  }
+}
+
+export async function createOptionGroup(
+  tx: Transaction,
+  input: CreateOptionGroupInput,
+): Promise<OptionGroup> {
+  // Resolve the column defaults HERE so the invariant is validated against the values that will land
+  // (the DB defaults are min 0, max 1, required false).
+  const minSelect = input.minSelect ?? 0;
+  const maxSelect = input.maxSelect ?? 1;
+  const required = input.required ?? false;
+  validateOptionGroupBounds(minSelect, maxSelect, required);
+  const [row] = await tx
+    .insert(optionGroups)
+    .values({
+      tenantId: CURRENT_TENANT,
+      name: input.name,
+      minSelect,
+      maxSelect,
+      required,
+      ...(input.sort === undefined ? {} : { sort: input.sort }),
+      ...(input.active === undefined ? {} : { active: input.active }),
+    })
+    .returning(OPTION_GROUP_COLUMNS);
+  return row!;
+}
+
+/** Every option group of the tenant (active AND inactive), for the authoring editor. Ordered by `sort`
+ * then `id` so the editor list is stable. */
+export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> {
+  return tx
+    .select(OPTION_GROUP_COLUMNS)
+    .from(optionGroups)
+    .orderBy(asc(optionGroups.sort), asc(optionGroups.id));
+}
+
+export async function updateOptionGroup(
+  tx: Transaction,
+  id: string,
+  patch: UpdateOptionGroupInput,
+): Promise<void> {
+  // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
+  // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
+  // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
+  // not against defaults. A well-formed id that names no row is a silent no-op — the same posture
+  // `updateProduct` takes — so a missing row skips both the validation and the (zero-row) UPDATE.
+  const [current] = await tx
+    .select({
+      minSelect: optionGroups.minSelect,
+      maxSelect: optionGroups.maxSelect,
+      required: optionGroups.required,
+    })
+    .from(optionGroups)
+    .where(eq(optionGroups.id, id));
+  if (current === undefined) return;
+  validateOptionGroupBounds(
+    patch.minSelect ?? current.minSelect,
+    patch.maxSelect ?? current.maxSelect,
+    patch.required ?? current.required,
+  );
+  await tx.update(optionGroups).set(patch).where(eq(optionGroups.id, id));
+}
+
+export async function createOptionGroupItem(
+  tx: Transaction,
+  groupId: string,
+  input: CreateOptionGroupItemInput,
+): Promise<OptionGroupItem> {
+  const [row] = await tx
+    .insert(optionGroupItems)
+    .values({
+      tenantId: CURRENT_TENANT,
+      groupId,
+      name: input.name,
+      ...(input.priceDelta === undefined ? {} : { priceDelta: input.priceDelta }),
+      ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
+      ...(input.sort === undefined ? {} : { sort: input.sort }),
+      ...(input.active === undefined ? {} : { active: input.active }),
+    })
+    .returning(OPTION_GROUP_ITEM_COLUMNS);
+  return { ...row!, vatClass: row!.vatClass as VatClass | null };
+}
+
+/** A group's items (active AND inactive), for the authoring editor. Ordered by `sort` then `id`. */
+export async function listOptionGroupItems(
+  tx: Transaction,
+  groupId: string,
+): Promise<OptionGroupItem[]> {
+  const rows = await tx
+    .select(OPTION_GROUP_ITEM_COLUMNS)
+    .from(optionGroupItems)
+    .where(eq(optionGroupItems.groupId, groupId))
+    .orderBy(asc(optionGroupItems.sort), asc(optionGroupItems.id));
+  return rows.map((r) => ({ ...r, vatClass: r.vatClass as VatClass | null }));
+}
+
+export async function updateOptionGroupItem(
+  tx: Transaction,
+  itemId: string,
+  patch: UpdateOptionGroupItemInput,
+): Promise<void> {
+  await tx.update(optionGroupItems).set(patch).where(eq(optionGroupItems.id, itemId));
+}
+
+/**
+ * Replace a product's attached option groups with `groupIds`, IN ORDER — a full replace, not a merge.
+ * Every existing `product_option_groups` row for the product is deleted, then one row per id is
+ * inserted with `sort` = its index, so the list's order becomes the per-attachment display order the
+ * till read (`listAvailableProducts`) sorts by. An empty list detaches everything. Runs in the caller's
+ * tenant transaction, so `current_tenant_id()` scopes both the delete and the inserts, and the
+ * tenant-consistent (tenant_id, group_id) FK refuses a group that is not this tenant's.
+ */
+export async function setProductOptionGroups(
+  tx: Transaction,
+  productId: string,
+  groupIds: string[],
+): Promise<void> {
+  await tx.delete(productOptionGroups).where(eq(productOptionGroups.productId, productId));
+  if (groupIds.length === 0) return;
+  await tx.insert(productOptionGroups).values(
+    groupIds.map((groupId, index) => ({
+      tenantId: CURRENT_TENANT,
+      productId,
+      groupId,
+      sort: index,
+    })),
+  );
+}
+
+/** The option group ids attached to a product, in per-attachment `sort` order — the read-back the
+ * product form (Task 12) uses to show which groups are attached and in what order. */
+export async function listProductOptionGroupIds(
+  tx: Transaction,
+  productId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ groupId: productOptionGroups.groupId })
+    .from(productOptionGroups)
+    .where(eq(productOptionGroups.productId, productId))
+    .orderBy(asc(productOptionGroups.sort), asc(productOptionGroups.groupId));
+  return rows.map((r) => r.groupId);
 }

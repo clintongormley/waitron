@@ -19,6 +19,7 @@ import "../widgets/tender-pay.js";
 // The multi-menu switcher shown above the round grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
 import type {
+  RoundLine,
   TabLine,
   TableServiceStatus,
   TableState,
@@ -445,14 +446,24 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Emit the current round's picked lines — each with its course OVERRIDE when the waiter picked one
-   * (KDS-2 §5b) — and clear the round bar for the next round. An unoverridden line OMITS `courseId`, so
-   * the server applies the product's default course (`<override> ?? product.course_id`). */
+   * (KDS-2 §5b) and its selected modifiers when the picker chose any (ordering modifiers, Task 9) — and
+   * clear the round bar for the next round. An unoverridden line OMITS `courseId`, so the server applies
+   * the product's default course (`<override> ?? product.course_id`); a plain line OMITS `options` (never
+   * `[]`), which the server reads as no modifiers. `options` carry only the `optionGroupItemId`s — the
+   * server re-resolves each option's price, VAT and name authoritatively. */
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {
+      const roundLine: RoundLine = { productId: line.product.id, quantity: line.quantity };
       const courseId = this.#roundCourses.get(line);
-      return courseId === undefined
-        ? { productId: line.product.id, quantity: line.quantity }
-        : { productId: line.product.id, quantity: line.quantity, courseId };
+      if (courseId !== undefined) {
+        roundLine.courseId = courseId;
+      }
+      if (line.options !== undefined && line.options.length > 0) {
+        roundLine.options = line.options.map((option) => ({
+          optionGroupItemId: option.optionGroupItemId,
+        }));
+      }
+      return roundLine;
     });
     this.dispatchEvent(
       new CustomEvent("send-round", { detail: { lines }, bubbles: true, composed: true }),

@@ -108,6 +108,39 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.textContent).not.toContain("Jamón");
   });
 
+  it("groups a filed dish's option lines under it — dish at its price, options indented at their delta (ordering modifiers, Task 14)", async () => {
+    // A filed sale carrying ordering modifiers: the dish is a PARENT line (`parentLineNo` absent/null)
+    // and each selected option is a CHILD line (`parentLineNo` = the dish's `lineNo`) — the same shape
+    // `formatReceipt`'s `groupByParent` groups on the printed paper (`apps/server/src/receipt-ticket.ts`).
+    // A PAID option (+0.50) and a FREE option (0.00), both children of the dish (lineNo 1).
+    const { el } = await mount({
+      lines: [
+        {
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "1",
+          gross: "10.00",
+          parentLineNo: null,
+        },
+        { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 1 },
+        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "1", gross: "0.00", parentLineNo: 1 },
+      ],
+    });
+    const rows = el.shadowRoot!.querySelectorAll(".line");
+    expect(rows).toHaveLength(3);
+    // The dish renders as a normal goods row: name, quantity, its OWN gross.
+    expect(rows[0]!.textContent).toContain("Hamburguesa");
+    expect(rows[0]!.classList.contains("option")).toBe(false);
+    expect(norm(rows[0]!.textContent!)).toContain("10,00 €");
+    // Each option renders INDENTED beneath the dish (carrying `.option`) at its delta — the free option
+    // shows 0,00 €, never omitted.
+    expect(rows[1]!.classList.contains("option")).toBe(true);
+    expect(rows[1]!.textContent).toContain("Extra queso");
+    expect(norm(rows[1]!.textContent!)).toContain("0,50 €");
+    expect(rows[2]!.classList.contains("option")).toBe(true);
+    expect(rows[2]!.textContent).toContain("Sin cebolla");
+    expect(norm(rows[2]!.textContent!)).toContain("0,00 €");
+  });
+
   it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {
     const { el } = await mount();
     const t = text(el);

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, asAppUser, incidents, sales, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
@@ -278,5 +278,96 @@ describe("the write path against the real Veri*Factu backend", () => {
     expect(await pg.db.select().from(incidents).where(eq(incidents.tillId, tillId))).toHaveLength(
       0,
     );
+  });
+});
+
+describe("parent_line_id is not part of the huella", () => {
+  // The parent_line_id counterpart of verify.test.ts's "entorno is not part of the huella" — the
+  // §5 invariant "never put our own metadata into a hash", applied to Task 5's self-link. A filed
+  // MODIFIER child line carries `sale_lines.parent_line_id`, presentation/reporting metadata that
+  // is NEVER hashed: `backend.recordSale` receives only `total` + `vatBreakdown`, never the
+  // individual `sale_lines`, so `parent_line_id` cannot reach `computeHuella`'s input at all.
+  //
+  // Two sales built from IDENTICAL input, differing ONLY in whether one child line names a parent,
+  // must therefore produce the same huella. Getting two BYTE-IDENTICAL huellas is the hard part:
+  // two COMMITTED altas under one obligado can never share a NumSerieFactura (registros_identidad_uq
+  // on tenant + IDEmisorFactura + NumSerieFactura + fecha + tipo), and NumSerieFactura is itself a
+  // huella input; two under different obligados differ by NIF, also a huella input. So each sale is
+  // recorded, its stored huella read back INSIDE its transaction, and the transaction then ROLLED
+  // BACK — which reverts `invoice_series.next_number` and the `cadenas` head, so the next sale
+  // re-allocates the identical `A/1` against the same still-empty chain, same tenant, same NIF,
+  // same fixed clock. Every huella input is then equal across the two except the one under test:
+  // one child line's parentLineNo, which stays in `sale_lines` and never travels to the backend.
+  const ROLLBACK = new Error("rollback: huella captured");
+
+  async function huellaFor(parentLineNo: number | null): Promise<string> {
+    let huella: string | undefined;
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({
+          tenantId,
+          tillId,
+          nodeId,
+          seriesId,
+          // Identical two-line basket in both variants — the SAME total (14.41) and the SAME
+          // per-rate breakdown reach the backend either way. Only `parentLineNo` on the child
+          // line differs between the two calls.
+          lines: [
+            {
+              lineNo: 1,
+              descriptions: { "es-ES": "Hamburguesa" },
+              quantity: "2",
+              unitPrice: "5.00",
+              vatRate: "21.00",
+              lineTotal: "10.00",
+            },
+            {
+              lineNo: 2,
+              descriptions: { "es-ES": "Extra de queso" },
+              quantity: "1",
+              unitPrice: "2.10",
+              vatRate: "10.00",
+              lineTotal: "2.10",
+              parentLineNo,
+            },
+          ],
+        }),
+      );
+
+      const { rows } = await tx.execute<{ huella: string }>(
+        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+      );
+      huella = rows[0]!.huella;
+
+      // Self-contained guard, mirroring verify.test.ts's own: without it, a regression that stopped
+      // `recordSale` writing `parent_line_id` at all would leave BOTH huellas equal for the wrong
+      // reason and this test would still pass. When a parent IS named, assert the child line
+      // actually stored a non-null `parent_line_id` pointing at the dish line's generated id — the
+      // very column proven excluded from the huella. Read HERE, inside the transaction, because the
+      // rollback below erases the rows.
+      if (parentLineNo !== null) {
+        const lines = await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+        const dish = lines.find((l) => l.lineNo === 1)!;
+        const modifier = lines.find((l) => l.lineNo === 2)!;
+        expect(dish.parentLineId).toBeNull();
+        expect(modifier.parentLineId).toBe(dish.id);
+      }
+
+      // Roll the whole sale back so the next call re-allocates the identical NumSerieFactura against
+      // the same empty chain — see the block comment above.
+      throw ROLLBACK;
+    }).catch((error) => {
+      if (error !== ROLLBACK) throw error;
+    });
+    return huella!;
+  }
+
+  it("hashes identically whether or not a child line names its parent", async () => {
+    const withParent = await huellaFor(1);
+    const withoutParent = await huellaFor(null);
+    expect(withParent).toBe(withoutParent);
   });
 });

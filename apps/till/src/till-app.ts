@@ -29,6 +29,8 @@ import type {
   HeldOrderSummary,
   OrderFlow,
   PayOutcome,
+  RoundLine,
+  SaleLine,
   Station,
   StationQueueGroup,
   StaffMember,
@@ -793,15 +795,22 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Maps the current basket to the `{ productId, quantity }` line shape every server call takes
-   * (`parkOrder`, `updateWorkingOrder`, `placeOrder`, `recordSale`, `pay`) — never a price, since the
-   * server always re-prices. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty`,
+  /** Maps the current basket to the {@link SaleLine} shape every server call takes (`parkOrder`,
+   * `updateWorkingOrder`, `placeOrder`, `recordSale`, `pay`) — never a price, since the server always
+   * re-prices. A line with selected modifiers (ordering modifiers, Task 9) carries its `options` as the
+   * bare `optionGroupItemId`s the server re-resolves; a plain line OMITS `options` (never `[]`) so a
+   * no-modifier sale is byte-identical to before. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty`,
    * `#onConfirmPayment` and `#onCollectCard`. */
-  #currentSaleLines(): { productId: string; quantity: string }[] {
-    return this.#store.lines.map((line) => ({
-      productId: line.product.id,
-      quantity: line.quantity,
-    }));
+  #currentSaleLines(): SaleLine[] {
+    return this.#store.lines.map((line) => {
+      const saleLine: SaleLine = { productId: line.product.id, quantity: line.quantity };
+      if (line.options !== undefined && line.options.length > 0) {
+        saleLine.options = line.options.map((option) => ({
+          optionGroupItemId: option.optionGroupItemId,
+        }));
+      }
+      return saleLine;
+    });
   }
 
   /**
@@ -1371,12 +1380,11 @@ export class TillApp extends LitElement {
   }
 
   /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. Each line MAY
-   * carry a `courseId` OVERRIDE the tab screen's course picker set (KDS-2 §5b), forwarded verbatim to
-   * `addTabRound`. A failed append is non-fatal — surface a banner, leave the tab as it was. */
+   * carry a `courseId` OVERRIDE the tab screen's course picker set (KDS-2 §5b) and its selected modifier
+   * `options` (ordering modifiers, Task 9), both forwarded verbatim to `addTabRound`. A failed append is
+   * non-fatal — surface a banner, leave the tab as it was. */
   async #onSendRound(event: Event): Promise<void> {
-    const { lines } = (
-      event as CustomEvent<{ lines: { productId: string; quantity: string; courseId?: string }[] }>
-    ).detail;
+    const { lines } = (event as CustomEvent<{ lines: RoundLine[] }>).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {

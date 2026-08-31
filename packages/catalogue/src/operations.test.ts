@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  optionGroupItems,
+  optionGroups,
+  productOptionGroups,
+  withTenant,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
@@ -13,6 +20,8 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
+  createOptionGroup,
+  createOptionGroupItem,
   createProduct,
   deactivateCatalogue,
   deactivateProduct,
@@ -21,13 +30,20 @@ import {
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
+  listOptionGroupItems,
+  listOptionGroups,
+  listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   renameCatalogue,
   renameCategory,
+  setProductOptionGroups,
+  updateOptionGroup,
+  updateOptionGroupItem,
   updateProduct,
 } from "./operations.js";
+import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
 import { seedCatalogueFixture, seedVenue } from "../test/fixtures.js";
 
@@ -326,6 +342,167 @@ describe("catalogue operations", () => {
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = (await listAvailableProducts(tx, locationId)).products;
       expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
+    });
+  });
+
+  it("listAvailableProducts loads a product's active option groups & items, sorted", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const burger = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "burger" },
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      });
+      // A second product with NO attached groups — must come back with optionGroups: [].
+      const water = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "water" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+
+      // Active group "Extras" attached to the burger, with two active items (a free one and a +0.50
+      // one) plus an inactive item that must be excluded. Items are inserted out of sort order to
+      // prove the read sorts, not the insert order.
+      //
+      // The group's OWN `option_groups.sort` (1 here) is set to DISAGREE with its per-attachment
+      // `product_option_groups.sort` (0, below): group order within a product is driven by the
+      // per-attachment column, so this fixture would produce ["Sauces", "Extras"] if the read ever
+      // reverted to `option_groups.sort`, and the assertion below fails in that case.
+      const [extras] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { en: "Extras" },
+          minSelect: 0,
+          maxSelect: 2,
+          required: false,
+          sort: 1,
+          active: true,
+        })
+        .returning({ id: optionGroups.id });
+      await tx.insert(optionGroupItems).values([
+        {
+          tenantId: sql`current_tenant_id()`,
+          groupId: extras!.id,
+          name: { en: "Bacon" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          sort: 1,
+          active: true,
+        },
+        {
+          tenantId: sql`current_tenant_id()`,
+          groupId: extras!.id,
+          name: { en: "Lettuce" },
+          priceDelta: "0",
+          vatClass: null,
+          sort: 0,
+          active: true,
+        },
+        {
+          tenantId: sql`current_tenant_id()`,
+          groupId: extras!.id,
+          name: { en: "Gold leaf" },
+          priceDelta: "5.00",
+          vatClass: null,
+          sort: 2,
+          active: false,
+        },
+      ]);
+
+      // An INACTIVE group also attached to the burger — must be excluded entirely.
+      const [retired] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { en: "Retired" },
+          sort: 1,
+          active: false,
+        })
+        .returning({ id: optionGroups.id });
+      await tx.insert(optionGroupItems).values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: retired!.id,
+        name: { en: "Old" },
+        priceDelta: "1.00",
+        vatClass: null,
+        sort: 0,
+        active: true,
+      });
+
+      // An ACTIVE group whose only item is INACTIVE — the group survives (active), but with no
+      // selectable items it must resolve to `items: []` rather than being dropped. Its own
+      // `option_groups.sort` (0) DISAGREES with its per-attachment sort (1, below): by the
+      // per-attachment column it sorts AFTER "Extras"; by `option_groups.sort` it would sort BEFORE.
+      const [sauces] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { en: "Sauces" },
+          sort: 0,
+          active: true,
+        })
+        .returning({ id: optionGroups.id });
+      await tx.insert(optionGroupItems).values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: sauces!.id,
+        name: { en: "Discontinued ketchup" },
+        priceDelta: "0",
+        vatClass: null,
+        sort: 0,
+        active: false,
+      });
+
+      // Per-attachment sort drives group order within the product: Extras (0) before Sauces (1).
+      // These DISAGREE with the groups' own `option_groups.sort` (Extras 1, Sauces 0), so the
+      // expected order below can only be produced by `product_option_groups.sort`. Retired (2) is
+      // inactive and excluded regardless.
+      await tx.insert(productOptionGroups).values([
+        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: extras!.id, sort: 0 },
+        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: retired!.id, sort: 2 },
+        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: sauces!.id, sort: 1 },
+      ]);
+
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const { products } = await listAvailableProducts(tx, locationId);
+
+      const burgerRow = products.find((p) => p.id === burger.id)!;
+      const waterRow = products.find((p) => p.id === water.id)!;
+
+      // The inactive group is gone; the active "Extras" and empty-but-active "Sauces" remain, in
+      // group sort order.
+      expect(burgerRow.optionGroups.map((g) => g.name.en)).toEqual(["Extras", "Sauces"]);
+      // The active group with no active items surfaces with an empty item list, not dropped.
+      expect(burgerRow.optionGroups[1]!.items).toEqual([]);
+      const group = burgerRow.optionGroups[0]!;
+      expect(group.id).toBe(extras!.id);
+      expect(group.name).toEqual({ en: "Extras" });
+      expect(group.minSelect).toBe(0);
+      expect(group.maxSelect).toBe(2);
+      expect(group.required).toBe(false);
+
+      // Active items only, in sort order (Lettuce sort 0 then Bacon sort 1); Gold leaf excluded.
+      expect(group.items.map((i) => i.name.en)).toEqual(["Lettuce", "Bacon"]);
+      expect(group.items[0]).toEqual({
+        id: group.items[0]!.id,
+        name: { en: "Lettuce" },
+        priceDelta: "0.00",
+        vatClass: null,
+      });
+      expect(group.items[1]).toMatchObject({
+        name: { en: "Bacon" },
+        priceDelta: "0.50",
+        vatClass: "reduced",
+      });
+
+      // A product with nothing attached comes back with an empty array, not undefined.
+      expect(waterRow.optionGroups).toEqual([]);
     });
   });
 
@@ -774,7 +951,171 @@ describe("catalogue operations", () => {
       courseId: null,
       catalogueId: "00000000-0000-0000-0000-000000000001",
       catalogueName: "Deli",
+      optionGroups: [],
     };
     expect(widen(sample).unitPrice).toBe("1.50");
+  });
+
+  // ── Option group + item authoring (Task 11) ────────────────────────────────────────────────────
+  describe("option group authoring", () => {
+    it("createOptionGroup applies column defaults and validates the select-bound invariant", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Size" } });
+        expect(g).toMatchObject({
+          name: { en: "Size" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          sort: 0,
+          active: true,
+        });
+        expect(g.id).toMatch(/^[0-9a-f-]{36}$/);
+
+        // max < min → options.group_invalid / select_bounds.
+        await expect(
+          createOptionGroup(tx, { name: { en: "bad" }, minSelect: 3, maxSelect: 1 }),
+        ).rejects.toMatchObject({
+          code: "options.group_invalid",
+          params: { reason: "select_bounds" },
+        });
+        // negative min → select_bounds.
+        await expect(
+          createOptionGroup(tx, { name: { en: "bad" }, minSelect: -1 }),
+        ).rejects.toBeInstanceOf(AppError);
+        // required with min 0 → required_without_min.
+        await expect(
+          createOptionGroup(tx, { name: { en: "bad" }, required: true, minSelect: 0 }),
+        ).rejects.toMatchObject({
+          code: "options.group_invalid",
+          params: { reason: "required_without_min" },
+        });
+      });
+    });
+
+    it("createOptionGroup honours explicit sort/active and lists groups by sort then id", async () => {
+      await asTenant(async (tx) => {
+        const b = await createOptionGroup(tx, { name: { en: "B" }, sort: 2, active: false });
+        const a = await createOptionGroup(tx, { name: { en: "A" }, sort: 1 });
+        expect(b.active).toBe(false);
+        const list = await listOptionGroups(tx);
+        expect(list.map((g) => g.id)).toEqual([a.id, b.id]); // sort 1 before sort 2
+      });
+    });
+
+    it("updateOptionGroup merges the patch onto the stored row for the bounds check", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, {
+          name: { en: "x" },
+          minSelect: 2,
+          maxSelect: 3,
+        });
+        // Lowering only maxSelect to 1 must be caught against the STORED min (2), not a default.
+        await expect(updateOptionGroup(tx, g.id, { maxSelect: 1 })).rejects.toMatchObject({
+          code: "options.group_invalid",
+          params: { reason: "select_bounds" },
+        });
+        // required:true against the stored min 2 is fine (2 >= 1); the write lands.
+        await updateOptionGroup(tx, g.id, {
+          required: true,
+          name: { en: "y" },
+          sort: 5,
+          active: false,
+        });
+        const [after] = await listOptionGroups(tx);
+        expect(after).toMatchObject({ required: true, name: { en: "y" }, sort: 5, active: false });
+      });
+    });
+
+    it("updateOptionGroup on a well-formed but missing id is a silent no-op", async () => {
+      await asTenant(async (tx) => {
+        await expect(
+          updateOptionGroup(tx, "00000000-0000-0000-0000-000000000000", { sort: 1 }),
+        ).resolves.toBeUndefined();
+        expect(await listOptionGroups(tx)).toEqual([]);
+      });
+    });
+
+    it("createOptionGroupItem applies defaults, honours overrides, and lists items by sort then id", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Sauces" } });
+        const def = await createOptionGroupItem(tx, g.id, { name: { en: "Aioli" } });
+        expect(def).toMatchObject({
+          groupId: g.id,
+          name: { en: "Aioli" },
+          priceDelta: "0.00",
+          vatClass: null,
+          sort: 0,
+          active: true,
+        });
+        const big = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Extra" },
+          priceDelta: "1.50",
+          vatClass: "reduced",
+          sort: 1,
+          active: false,
+        });
+        expect(big).toMatchObject({
+          priceDelta: "1.50",
+          vatClass: "reduced",
+          sort: 1,
+          active: false,
+        });
+        const items = await listOptionGroupItems(tx, g.id);
+        expect(items.map((i) => i.id)).toEqual([def.id, big.id]); // sort 0 before sort 1
+      });
+    });
+
+    it("updateOptionGroupItem writes the named fields", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, g.id, { name: { en: "before" } });
+        await updateOptionGroupItem(tx, item.id, {
+          name: { en: "after" },
+          priceDelta: "2.00",
+          vatClass: null,
+          sort: 3,
+          active: false,
+        });
+        const [row] = await listOptionGroupItems(tx, g.id);
+        expect(row).toMatchObject({
+          name: { en: "after" },
+          priceDelta: "2.00",
+          vatClass: null,
+          sort: 3,
+          active: false,
+        });
+      });
+    });
+
+    it("setProductOptionGroups is a full ordered replace; listProductOptionGroupIds reads it back", async () => {
+      await asTenant(async (tx) => {
+        const cat = await createCatalogue(tx, { name: "Menu" });
+        const product = await createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "steak" },
+          pricingUnit: "each",
+          unitPrice: "18.00",
+          vatClass: "general",
+        });
+        const g1 = await createOptionGroup(tx, { name: { en: "A" } });
+        const g2 = await createOptionGroup(tx, { name: { en: "B" } });
+
+        // No attach yet.
+        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
+
+        // Attach [g1, g2] — order preserved via the per-attachment sort.
+        await setProductOptionGroups(tx, product.id, [g1.id, g2.id]);
+        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g1.id, g2.id]);
+
+        // Replace with [g2] — g1 detaches.
+        await setProductOptionGroups(tx, product.id, [g2.id]);
+        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g2.id]);
+
+        // Empty list detaches everything.
+        await setProductOptionGroups(tx, product.id, []);
+        expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
+      });
+    });
   });
 });
