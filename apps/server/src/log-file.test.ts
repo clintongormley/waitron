@@ -51,6 +51,16 @@ describe("rotating file sink", () => {
     expect(errors.length).toBeGreaterThanOrEqual(1); // reported once
   });
 
+  it("never throws even when onError itself throws", () => {
+    const sink = createRotatingFileSink(
+      { dir: "/nonexistent/definitely/not/writable", maxBytes: 10, maxFiles: 2 },
+      () => {
+        throw new Error("onError blew up");
+      },
+    );
+    expect(() => sink("x\n")).not.toThrow();
+  });
+
   it("tee fans a line to every sink", () => {
     const a: string[] = [];
     const b: string[] = [];

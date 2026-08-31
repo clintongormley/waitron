@@ -21,6 +21,7 @@ export function createRotatingFileSink(
   const fileName = opts.fileName ?? "waitron.log";
   const current = join(opts.dir, fileName);
   let degraded = false;
+  let dirEnsured = false;
   const sizeOf = (p: string): number => {
     try {
       return statSync(p).size;
@@ -43,13 +44,20 @@ export function createRotatingFileSink(
   return (line) => {
     if (degraded) return;
     try {
-      mkdirSync(opts.dir, { recursive: true });
-      if (sizeOf(current) > 0 && sizeOf(current) + Buffer.byteLength(line) > opts.maxBytes)
-        rotate();
+      if (!dirEnsured) {
+        mkdirSync(opts.dir, { recursive: true });
+        dirEnsured = true;
+      }
+      const size = sizeOf(current);
+      if (size > 0 && size + Buffer.byteLength(line) > opts.maxBytes) rotate();
       appendFileSync(current, line);
     } catch (e) {
       degraded = true;
-      onError(e);
+      try {
+        onError(e);
+      } catch {
+        /* nothing else to do — logging must never throw into a request path */
+      }
     }
   };
 }
