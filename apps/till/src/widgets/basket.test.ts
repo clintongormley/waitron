@@ -525,6 +525,31 @@ describe("till-basket", () => {
     expect(diet!.querySelector("[data-diet-contains='meat']")).not.toBeNull();
   });
 
+  it("shows the 'not reviewed' note when an override resolves vegan but vegetarian is still unknown (Copilot)", async () => {
+    // A pending (unreviewed) derivation with a staff override that resolves ONLY vegan
+    // (`{ vegan: "no" }`) leaves vegetarian derived-unknown. Checking `diet.vegan === "unknown"`
+    // alone would miss this — vegan already reads "no" — and with no positives/contains the row
+    // would render nothing at all, silently dropping the "not reviewed" note vegetarian still needs.
+    const mystery: TillProduct = {
+      ...cafe,
+      id: "mystery-partial-override",
+      descriptions: { es: "Plato del día" },
+      dietDerivation: { origins: [], pending: true },
+      dietOverride: { vegan: "no" },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(mystery, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
+    expect(diet).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(diet!.textContent).toMatch(/review|revisi/i);
+    // Still no positive claim — the resolved "no" and the still-unknown vegetarian both stay silent.
+    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+    expect(diet!.querySelector("[data-diet='vegetarian']")).toBeNull();
+  });
+
   it("renders NO diet row for a reviewed dish that is neither vegan/vegetarian nor tagged (nothing to assert)", async () => {
     const gelatin: TillProduct = {
       ...cafe,

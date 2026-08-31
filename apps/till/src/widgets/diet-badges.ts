@@ -15,9 +15,12 @@ import type { DietProfile } from "../api/client.js";
  *    badge: the absence of a badge is not a claim, so an unreviewed or non-vegan dish never shows one.
  *  - a "contains meat"/"contains fish" chip for each entry in `contains`, which the derivation asserts
  *    from KNOWN ingredient presence (spec §3.1) — shown regardless of the pending state.
- *  - a NEUTRAL "not reviewed" note whenever the derivation is pending (`vegan === "unknown"`, the
- *    cautious default for a dish whose recipe was never reviewed). This is the ONLY thing a pending
- *    profile says about vegan/vegetarian — never a positive claim (§2, the food-safety invariant).
+ *  - a NEUTRAL "not reviewed" note whenever EITHER derived label is pending (`vegan === "unknown" ||
+ *    vegetarian === "unknown"`) — checking `vegan` alone under-reports: a staff override can resolve
+ *    `vegan` (e.g. force it to `"no"`) while leaving `vegetarian` unreviewed, and the two are
+ *    independent labels. This is the ONLY thing a pending profile says about vegan/vegetarian — never
+ *    a positive claim (§2, the food-safety invariant). halal/kosher are explicit staff assertions, not
+ *    derived, so they never factor into pending.
  *
  * Returns `nothing` when there is nothing to say — no positive claim, no contains-tag, not pending — so
  * a plain reviewed-but-unremarkable dish (e.g. contains dairy, not vegan, nothing tagged) renders no
@@ -36,7 +39,7 @@ export function dietBadges(
 ): TemplateResult | typeof nothing {
   if (!diet) return nothing;
   const tr = (key: Parameters<typeof t>[0]): string => t(key, locale);
-  const pending = diet.vegan === "unknown";
+  const pending = diet.vegan === "unknown" || diet.vegetarian === "unknown";
   const positives: { key: string; label: string }[] = [];
   if (diet.vegan === "yes") positives.push({ key: "vegan", label: tr("diet.vegan") });
   if (diet.vegetarian === "yes")
