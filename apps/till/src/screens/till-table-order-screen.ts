@@ -459,9 +459,18 @@ export class TillTableOrderScreen extends LitElement {
         roundLine.courseId = courseId;
       }
       if (line.options !== undefined && line.options.length > 0) {
-        roundLine.options = line.options.map((option) => ({
-          optionGroupItemId: option.optionGroupItemId,
-        }));
+        roundLine.options = line.options.map((option) => {
+          // The bare id, plus the per-option quantity ONLY when it exceeds 1 (per-option quantity,
+          // feature A): the server prices and re-validates the count. Omitted at 1/absent so a plain
+          // modifier's wire stays byte-identical to before.
+          const wireOption: { optionGroupItemId: string; quantity?: number } = {
+            optionGroupItemId: option.optionGroupItemId,
+          };
+          if (option.quantity !== undefined && option.quantity > 1) {
+            wireOption.quantity = option.quantity;
+          }
+          return wireOption;
+        });
       }
       return roundLine;
     });

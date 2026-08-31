@@ -112,6 +112,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // write rather than the opaque 500 the CHECK would raise. The `?? 400` default already covers it; it
   // is listed explicitly as the house style requires.
   "options.group_invalid": 400,
+  // An invalid option-ITEM per-option-quantity config (max_quantity < 1 / non-integer), surfaced by
+  // `createOptionGroupItem`/`updateOptionGroupItem` as a clean 400 before the write rather than the
+  // opaque 500 the `option_group_items_qty_ck` CHECK would raise. Listed explicitly as the house style
+  // requires; the `?? 400` default already covers it.
+  "options.item_invalid": 400,
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -658,6 +663,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         vatClass?: unknown;
         sort?: unknown;
         active?: unknown;
+        maxQuantity?: unknown;
       }>(c);
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
@@ -667,6 +673,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const vatClass = parseOptionalVatClass(body.vatClass);
       const sort = parseOptionalInteger(body.sort, "sort");
+      // Shape screen only (integer, int4 range); the DOMAIN `max_quantity >= 1` rule is
+      // `createOptionGroupItem`'s `options.item_invalid`, the same split min/max/sort take.
+      const maxQuantity = parseOptionalInteger(body.maxQuantity, "maxQuantity");
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw new AppError("management.request_invalid", { field: "active" });
       }
@@ -676,6 +685,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(vatClass === undefined ? {} : { vatClass }),
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
+        ...(maxQuantity === undefined ? {} : { maxQuantity }),
       };
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
@@ -698,6 +708,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         vatClass?: unknown;
         sort?: unknown;
         active?: unknown;
+        maxQuantity?: unknown;
       }>(c);
       const patch: UpdateOptionGroupItemInput = {};
       if (body.name !== undefined) {
@@ -716,6 +727,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.vatClass !== undefined) patch.vatClass = vatClass;
       const sort = parseOptionalInteger(body.sort, "sort");
       if (sort !== undefined) patch.sort = sort;
+      const maxQuantity = parseOptionalInteger(body.maxQuantity, "maxQuantity");
+      if (maxQuantity !== undefined) patch.maxQuantity = maxQuantity;
       if (body.active !== undefined) {
         if (typeof body.active !== "boolean") {
           throw new AppError("management.request_invalid", { field: "active" });

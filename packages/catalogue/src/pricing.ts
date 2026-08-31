@@ -222,6 +222,11 @@ export interface SelectedOption {
   priceDelta: string;
   /** The option's own VAT class when it OVERRIDES the dish's, or `null` to INHERIT the dish's rate. */
   vatClass: VatClass | null;
+  /** How many of THIS option, per dish (the per-option count, author-capped by
+   * `option_group_items.max_quantity`). ABSENT means 1 — a no-per-option-count option, whose child
+   * line is byte-identical to before this field existed. The child is priced at
+   * `dishQuantity × quantity`, so a dish ×3 carrying an option ×2 prices the option 6 times. */
+  quantity?: number;
 }
 
 /** A basket line that carries the dish plus the modifiers selected on it. */
@@ -238,8 +243,10 @@ export interface BasketItemWithOptions {
  * PARENT dish row followed by its CHILD option rows, IN ORDER, so `priceRows` numbers the parent
  * before its children and each child's `parentLineNo` names the dish above it. A child is just
  * another priced row through the ONE arithmetic core — its gross unit is the option's `priceDelta`,
- * its quantity the DISH's quantity, its rate the option's `vatClass` override or (when `null`) the
- * dish's own rate, its descriptions the option's `name`, and its category the parent's snapshot — so
+ * its quantity the DISH's quantity times the option's own per-option count (`opt.quantity ?? 1`, so
+ * a dish ×3 with an option ×2 prices the option 6 times), its rate the option's `vatClass` override
+ * or (when `null`) the dish's own rate, its descriptions the option's `name`, and its category the
+ * parent's snapshot — so
  * the difference-method desglose and `total` include the option amounts with no separate arithmetic.
  * With every item's `options` empty this is line-for-line identical to `priceBasket`.
  */
@@ -262,7 +269,11 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       rows.push({
         // `priceDelta` is a plain `string` on `SelectedOption`; `decimal()` validates it here.
         grossUnit: decimal(opt.priceDelta),
-        quantity: item.quantity, // qty follows the dish
+        // The child is priced PER DISH: the dish quantity times the option's own per-option count.
+        // `opt.quantity ?? 1` keeps a no-count option (the common case) multiplying by exactly 1 —
+        // and `multiplyDecimal` by "1" returns the dish literal unchanged, so that path stays
+        // byte-identical. Exact BigInt arithmetic via the shared Decimal helper, never JS floats.
+        quantity: multiplyDecimal(decimal(item.quantity), decimal(String(opt.quantity ?? 1))),
         rate:
           opt.vatClass === null
             ? resolveVatRate(item.product.vatClass)

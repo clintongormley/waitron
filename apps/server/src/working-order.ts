@@ -116,12 +116,14 @@ async function priceOrderLines(
   // `optionGroupItemId` chosen from one of the product's attached ACTIVE option groups. The server
   // resolves + validates every selection against the product's own `optionGroups` (the SAME read below
   // returns — no extra query), then expands the line into a PARENT dish row plus one CHILD row per
-  // option. Absent/empty `options` = a plain single line, unchanged from before.
+  // option. Absent/empty `options` = a plain single line, unchanged from before. Per-option quantity:
+  // an option MAY carry `quantity` (a small positive integer, absent = 1) — the count of THIS option
+  // per dish, capped by the item's `max_quantity`; the child is priced at `dishQty × optionQty`.
   lines: {
     productId: string;
     quantity: string;
     courseId?: string | null;
-    options?: { optionGroupItemId: string }[];
+    options?: { optionGroupItemId: string; quantity?: number }[];
   }[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   if (lines.length === 0) {
@@ -177,6 +179,7 @@ async function priceOrderLines(
       name: Record<string, string>;
       priceDelta: string;
       vatClass: (typeof product.optionGroups)[number]["items"][number]["vatClass"];
+      quantity: number;
     }[] = [];
     if (product.pricingUnit === "each") {
       let itemById = itemByIdByProduct.get(product.id);
@@ -188,47 +191,65 @@ async function priceOrderLines(
         );
         itemByIdByProduct.set(product.id, itemById);
       }
-      // FIX 3 (overcharge): dedupe the SAME `optionGroupItemId` within this one line before resolving —
-      // a repeat is meaningless (there is no per-option quantity this slice), and without this a crafted
-      // request naming an id twice on a multi-select group would resolve, price and FILE two identical
-      // child lines, doubling the option's price and duplicating its kitchen line. The client is never
-      // the gate. Silently collapse to one, matching the attach path's `Set`-dedupe
-      // (`parseOptionGroupIds`, catalogue-api.ts). Deduped BEFORE the per-group tally, so the min/max/
-      // required checks below count DISTINCT selections — a doubled pick can no longer trip `above_max`.
-      const seenOptionIds = new Set<string>();
-      const dedupedOptions = selected.filter((sel) => {
-        if (seenOptionIds.has(sel.optionGroupItemId)) {
-          return false;
+      // Per-option quantity: SUM each wire entry's `quantity` (absent = 1) per `optionGroupItemId`
+      // instead of collapse-deduping. A crafted request naming the same id twice now SUMS to that
+      // combined count — the summed value is then validated (`1 ≤ qty ≤ max_quantity`), so a doubled
+      // pick beyond the item's cap is still refused (the anti-overcharge intent FIX 3 protected), and a
+      // legitimate ×N goes through. `firstSeenOrder` preserves the wire's first-seen order so the child
+      // rows keep a stable order. The client is never the gate.
+      const qtyById = new Map<string, number>();
+      const firstSeenOrder: string[] = [];
+      for (const sel of selected) {
+        if (!qtyById.has(sel.optionGroupItemId)) {
+          firstSeenOrder.push(sel.optionGroupItemId);
         }
-        seenOptionIds.add(sel.optionGroupItemId);
-        return true;
-      });
-      const countByGroup = new Map<string, number>();
-      for (const sel of dedupedOptions) {
-        const found = itemById.get(sel.optionGroupItemId);
+        qtyById.set(
+          sel.optionGroupItemId,
+          (qtyById.get(sel.optionGroupItemId) ?? 0) + (sel.quantity ?? 1),
+        );
+      }
+      // The per-group TALLY is the SUM of quantities (not the distinct-item count): a per-option
+      // quantity COUNTS toward `max_select` (product decision). Applied consistently to required /
+      // min_select / max_select below.
+      const tallyByGroup = new Map<string, number>();
+      for (const optionGroupItemId of firstSeenOrder) {
+        const found = itemById.get(optionGroupItemId);
         if (found === undefined) {
           throw new AppError("option.not_found", {
-            optionGroupItemId: sel.optionGroupItemId,
+            optionGroupItemId,
             productId: line.productId,
           });
         }
-        countByGroup.set(found.groupId, (countByGroup.get(found.groupId) ?? 0) + 1);
+        const qty = qtyById.get(optionGroupItemId)!;
+        // The summed per-option quantity must be an INTEGER within `1..max_quantity`. A 0/negative/
+        // fractional wire value, or a duplicate summing past the cap, is a crafted request the client
+        // should have caught — refuse it loud (`quantity_invalid`), the client is never the gate.
+        if (!Number.isInteger(qty) || qty < 1 || qty > found.item.maxQuantity) {
+          throw new AppError("options.selection_invalid", {
+            productId: line.productId,
+            groupId: found.groupId,
+            reason: "quantity_invalid",
+          });
+        }
+        tallyByGroup.set(found.groupId, (tallyByGroup.get(found.groupId) ?? 0) + qty);
         selectedOptions.push({
           id: found.item.id,
           name: found.item.name,
           priceDelta: found.item.priceDelta,
           vatClass: found.item.vatClass,
+          quantity: qty,
         });
       }
-      // Validate the selection per group. An EMPTY group (`items: []`, an authoring bug) carries no
-      // satisfiable constraint, so it is SKIPPED rather than deadlocking a legitimate sale — nothing may
-      // block a sale on a mis-authored group (CLAUDE.md §5). `required` (⟹ `min_select ≥ 1` by the
-      // DB `option_groups_required_ck`) is reported distinctly from a bare `min_select`.
+      // Validate the selection per group over the SUMMED tally. An EMPTY group (`items: []`, an
+      // authoring bug) carries no satisfiable constraint, so it is SKIPPED rather than deadlocking a
+      // legitimate sale — nothing may block a sale on a mis-authored group (CLAUDE.md §5). `required`
+      // (⟹ `min_select ≥ 1` by the DB `option_groups_required_ck`) is reported distinctly from a bare
+      // `min_select`.
       for (const group of product.optionGroups) {
         if (group.items.length === 0) {
           continue;
         }
-        const count = countByGroup.get(group.id) ?? 0;
+        const count = tallyByGroup.get(group.id) ?? 0;
         if (group.required && count === 0) {
           throw new AppError("options.selection_invalid", {
             productId: line.productId,
@@ -260,6 +281,9 @@ async function priceOrderLines(
         name: option.name,
         priceDelta: option.priceDelta,
         vatClass: option.vatClass,
+        // The per-option count threads into `priceBasketWithOptions`, which prices the child at
+        // `dishQuantity × quantity` and stores that COMBINED quantity on the child line.
+        quantity: option.quantity,
       })),
     });
     // The parent row's course is the ring-time resolver `<override> ?? product.course_id` (§2b); a
@@ -557,7 +581,11 @@ export async function createOpenOrder(
   // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
   // which validates them and expands the line into a parent dish row + child option rows. A walk-up
   // counter sale threads them here; park/openTab pass a plain `{productId, quantity}` line (no options).
-  lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+  lines: {
+    productId: string;
+    quantity: string;
+    options?: { optionGroupItemId: string; quantity?: number }[];
+  }[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
   // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
@@ -1182,7 +1210,7 @@ export async function addTabRound(
     productId: string;
     quantity: string;
     courseId?: string | null;
-    options?: { optionGroupItemId: string }[];
+    options?: { optionGroupItemId: string; quantity?: number }[];
   }[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);

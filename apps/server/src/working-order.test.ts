@@ -2042,8 +2042,9 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 // concurrency dimension.
 // ---------------------------------------------------------------------------------------------------
 describe("voidTabLine modifier cascade (FIX 2)", () => {
-  /** Attach a maxSelect≥2 option group to `productId`, returning the first item's id. A group that
-   *  ACCEPTS two picks, so a doubled selection is caught by the dedup (FIX 3), never by max_select. */
+  /** Attach a maxSelect≥2 option group whose item allows ×2 to `productId`, returning the first item's
+   *  id. A group that ACCEPTS a tally of two AND an item cap of two, so a doubled selection now SUMS to
+   *  a per-option quantity of 2 (per-option quantity) rather than being dropped, and is valid. */
   async function addMultiOption(tx: Transaction, productId: string, name: string): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
@@ -2064,6 +2065,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
         name: { [LOCALE]: name },
         priceDelta: "0.50",
         vatClass: "reduced",
+        maxQuantity: 2,
         sort: 0,
       })
       .returning({ id: optionGroupItems.id });
@@ -2174,11 +2176,11 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     });
   });
 
-  it("collapses a repeated optionGroupItemId in one line to a SINGLE child line (FIX 3, no overcharge)", async () => {
+  it("SUMS a repeated optionGroupItemId in one line into ONE child at the summed quantity (per-option quantity)", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2 group
+      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
       const id = randomUUID();
       await createOpenOrder(
         tx,
@@ -2189,6 +2191,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
             productId: cafeId,
             quantity: "1",
             // The SAME option named twice on a multi-select group — reachable via a crafted client.
+            // Each entry contributes 1, so the summed per-option quantity is 2 (NOT silently dropped).
             options: [{ optionGroupItemId: bacon }, { optionGroupItemId: bacon }],
           },
         ],
@@ -2199,15 +2202,354 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
           lineNo: workingOrderLines.lineNo,
           parentLineId: workingOrderLines.parentLineId,
           optionGroupItemId: workingOrderLines.optionGroupItemId,
+          quantity: workingOrderLines.quantity,
+          lineTotal: workingOrderLines.lineTotal,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
-      // ONE parent + ONE child — the duplicate collapses (not two identical children double-charged).
+      // ONE parent + ONE child — the duplicate SUMS to quantity 2, not two identical children and not
+      // one dropped: the child is priced/persisted as 2 (dish ×1 × option ×2), 0.50 × 2 = 1.00 gross.
       expect(lines).toHaveLength(2);
       expect(lines[0]!.parentLineId).toBeNull();
       expect(lines.filter((l) => l.parentLineId !== null)).toHaveLength(1);
       expect(lines[1]!.optionGroupItemId).toBe(bacon);
+      expect(lines[1]!.quantity).toBe("2.000");
+      expect(lines[1]!.lineTotal).toBe("1.00");
+    });
+  });
+});
+
+describe("priceOrderLines per-option quantity (resolve loop)", () => {
+  /** Attach an option group to `productId` with a configurable per-group max_select and per-item
+   *  max_quantity; returns the single item's id. `priceDelta` is 0.50 reduced, like the other helpers. */
+  async function addQtyOption(
+    tx: Transaction,
+    productId: string,
+    name: string,
+    opts: {
+      minSelect?: number;
+      maxSelect?: number;
+      required?: boolean;
+      maxQuantity?: number;
+    } = {},
+  ): Promise<string> {
+    const [group] = await tx
+      .insert(optionGroups)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        name: { [LOCALE]: `${name} group` },
+        minSelect: opts.minSelect ?? 0,
+        maxSelect: opts.maxSelect ?? 1,
+        required: opts.required ?? false,
+        sort: 0,
+      })
+      .returning({ id: optionGroups.id });
+    const [item] = await tx
+      .insert(optionGroupItems)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: group!.id,
+        name: { [LOCALE]: name },
+        priceDelta: "0.50",
+        vatClass: "reduced",
+        maxQuantity: opts.maxQuantity ?? 1,
+        sort: 0,
+      })
+      .returning({ id: optionGroupItems.id });
+    await tx.insert(productOptionGroups).values({
+      tenantId: sql`current_tenant_id()`,
+      productId,
+      groupId: group!.id,
+      sort: 0,
+    });
+    return item!.id;
+  }
+
+  /** Attach a group with TWO items (each priceDelta 0.50), configurable max_select/max_quantity;
+   *  returns both item ids. For the max_select-tally cases with distinct picks. */
+  async function addTwoItemGroup(
+    tx: Transaction,
+    productId: string,
+    opts: { maxSelect?: number; maxQuantity?: number } = {},
+  ): Promise<[string, string]> {
+    const [group] = await tx
+      .insert(optionGroups)
+      .values({
+        tenantId: sql`current_tenant_id()`,
+        name: { [LOCALE]: "Extras group" },
+        minSelect: 0,
+        maxSelect: opts.maxSelect ?? 2,
+        required: false,
+        sort: 0,
+      })
+      .returning({ id: optionGroups.id });
+    const rows = await tx
+      .insert(optionGroupItems)
+      .values([
+        {
+          tenantId: sql`current_tenant_id()`,
+          groupId: group!.id,
+          name: { [LOCALE]: "Uno" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          maxQuantity: opts.maxQuantity ?? 1,
+          sort: 0,
+        },
+        {
+          tenantId: sql`current_tenant_id()`,
+          groupId: group!.id,
+          name: { [LOCALE]: "Dos" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          maxQuantity: opts.maxQuantity ?? 1,
+          sort: 1,
+        },
+      ])
+      .returning({ id: optionGroupItems.id });
+    await tx.insert(productOptionGroups).values({
+      tenantId: sql`current_tenant_id()`,
+      productId,
+      groupId: group!.id,
+      sort: 0,
+    });
+    return [rows[0]!.id, rows[1]!.id];
+  }
+
+  it("prices & persists an option ×2 on a dish ×3 as a child of combined quantity 6, dish unchanged", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      const id = randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [{ productId: cafeId, quantity: "3", options: [{ optionGroupItemId: shot, quantity: 2 }] }],
+        null,
+      );
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          quantity: workingOrderLines.quantity,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(2);
+      // Parent dish row is UNCHANGED: its product, no option link, quantity still 3.
+      expect(lines[0]).toMatchObject({
+        productId: cafeId,
+        parentLineId: null,
+        optionGroupItemId: null,
+        quantity: "3.000",
+      });
+      // Child option row: combined 3 × 2 = 6, per-unit gross the bare delta 0.50, total 0.50 × 6 = 3.00.
+      expect(lines[1]!.parentLineId).toBe(lines[0]!.id);
+      expect(lines[1]!.optionGroupItemId).toBe(shot);
+      expect(lines[1]!.quantity).toBe("6.000");
+      expect(lines[1]!.unitPriceGross).toBe("0.50");
+      expect(lines[1]!.lineTotal).toBe("3.00");
+    });
+  });
+
+  it("rejects a per-option quantity above the item's max_quantity with quantity_invalid", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      // Cap 2, but max_select 5 so a tally of 3 does NOT trip above_max first — the quantity cap is what
+      // must reject it.
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 2 });
+      await expect(
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              options: [{ optionGroupItemId: shot, quantity: 3 }],
+            },
+          ],
+          null,
+        ),
+      ).rejects.toMatchObject({
+        code: "options.selection_invalid",
+        params: { productId: cafeId, reason: "quantity_invalid" },
+      });
+    });
+  });
+
+  it("rejects a per-option quantity of 0 with quantity_invalid", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      await expect(
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              options: [{ optionGroupItemId: shot, quantity: 0 }],
+            },
+          ],
+          null,
+        ),
+      ).rejects.toMatchObject({
+        code: "options.selection_invalid",
+        params: { productId: cafeId, reason: "quantity_invalid" },
+      });
+    });
+  });
+
+  it("rejects a non-integer per-option quantity with quantity_invalid", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      await expect(
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              options: [{ optionGroupItemId: shot, quantity: 1.5 }],
+            },
+          ],
+          null,
+        ),
+      ).rejects.toMatchObject({
+        code: "options.selection_invalid",
+        params: { productId: cafeId, reason: "quantity_invalid" },
+      });
+    });
+  });
+
+  it("counts the per-option quantity toward max_select: one item ×3 in a max_select 2 group is above_max", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      // max_quantity 5 so the ×3 passes the per-option cap; the group's max_select 2 is what the summed
+      // tally (3) must exceed — proving the tally is the SUM of quantities, not the distinct-item count.
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 2, maxQuantity: 5 });
+      await expect(
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              options: [{ optionGroupItemId: shot, quantity: 3 }],
+            },
+          ],
+          null,
+        ),
+      ).rejects.toMatchObject({
+        code: "options.selection_invalid",
+        params: { productId: cafeId, reason: "above_max" },
+      });
+    });
+  });
+
+  it("two distinct items ×1 each fit max_select 2, but one taken ×2 tips the summed tally to above_max", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const [uno, dos] = await addTwoItemGroup(tx, cafeId, { maxSelect: 2, maxQuantity: 5 });
+      // one ×1 + one ×1 → tally 2 ≤ max_select 2 → OK (two child lines).
+      const okId = randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        okId,
+        [
+          {
+            productId: cafeId,
+            quantity: "1",
+            options: [
+              { optionGroupItemId: uno, quantity: 1 },
+              { optionGroupItemId: dos, quantity: 1 },
+            ],
+          },
+        ],
+        null,
+      );
+      const okLines = await tx
+        .select({ parentLineId: workingOrderLines.parentLineId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, okId));
+      expect(okLines.filter((l) => l.parentLineId !== null)).toHaveLength(2);
+
+      // same two items, but uno ×2 → tally 2 + 1 = 3 > max_select 2 → above_max.
+      await expect(
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              options: [
+                { optionGroupItemId: uno, quantity: 2 },
+                { optionGroupItemId: dos, quantity: 1 },
+              ],
+            },
+          ],
+          null,
+        ),
+      ).rejects.toMatchObject({
+        code: "options.selection_invalid",
+        params: { productId: cafeId, reason: "above_max" },
+      });
+    });
+  });
+
+  it("omitting quantity behaves exactly as ×1 (regression guard)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 1, maxQuantity: 1 });
+      const id = randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        // No `quantity` on the option — the common case; must behave as ×1.
+        [{ productId: cafeId, quantity: "2", options: [{ optionGroupItemId: shot }] }],
+        null,
+      );
+      const lines = await tx
+        .select({
+          parentLineId: workingOrderLines.parentLineId,
+          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          quantity: workingOrderLines.quantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(2);
+      // Child combined = dish ×2 × option ×1 = 2; 0.50 × 2 = 1.00 — identical to a plain single option.
+      expect(lines[1]!.optionGroupItemId).toBe(shot);
+      expect(lines[1]!.quantity).toBe("2.000");
+      expect(lines[1]!.lineTotal).toBe("1.00");
     });
   });
 });

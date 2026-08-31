@@ -45,6 +45,15 @@ export const en = {
   "label.tendered": "Tendered",
   // Basket
   "basket.empty": "Basket is empty",
+  // Dish-line quantity stepper: the accessible names of a basket line's −/+ count controls. Combined
+  // with the product's own name at render, e.g. "Increase Café". Distinct from the modifier-picker
+  // stepper (`modifier.*`) — this counts DISHES on a basket line, that counts a modifier per dish.
+  "basket.increase": "Increase",
+  "basket.decrease": "Decrease",
+  // Modifier picker per-option-quantity stepper (ordering modifiers): the accessible names of the −/+
+  // step controls. Combined with the option's own name at render, e.g. "Increase Extra shot".
+  "modifier.increase": "Increase",
+  "modifier.decrease": "Decrease",
   // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
@@ -350,6 +359,10 @@ export const es: Record<StringKey, string> = {
   "label.total": "Total",
   "label.tendered": "Entregado",
   "basket.empty": "La cesta está vacía",
+  "basket.increase": "Aumentar",
+  "basket.decrease": "Disminuir",
+  "modifier.increase": "Aumentar",
+  "modifier.decrease": "Disminuir",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",
   "login.loading": "Cargando…",

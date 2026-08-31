@@ -274,9 +274,12 @@ declare module "@waitron/shared" {
      * `maxSelect`. The server validates the whole selection per group against the product's resolved
      * `optionGroups` and refuses a basket the client should have caught — the client is never the gate.
      * `reason` is a stable CODE, never prose: `"required"` (a required group, nothing selected),
-     * `"below_min"` (fewer than `minSelect`), or `"above_max"` (more than `maxSelect`); a translator
-     * renders it. An EMPTY group (`items: []`, an authoring bug) carries no constraint and is skipped,
-     * never a source of this — nothing may block a sale on a mis-authored group (CLAUDE.md §5).
+     * `"below_min"` (fewer than `minSelect`), `"above_max"` (more than `maxSelect` — the per-group
+     * tally SUMS each option's per-option quantity, so a single option taken ×N counts N toward it), or
+     * `"quantity_invalid"` (an option's per-option quantity, summed across any duplicate ids on the
+     * wire, is not an integer in `1..max_quantity` — the per-option cap `option_group_items.max_quantity`);
+     * a translator renders it. An EMPTY group (`items: []`, an authoring bug) carries no constraint and
+     * is skipped, never a source of this — nothing may block a sale on a mis-authored group (CLAUDE.md §5).
      *
      * `productId` and `groupId` are caller-/catalogue-supplied uuids the till already holds, not
      * secrets; the offending count is NOT carried (the no-leak discipline this file keeps — echo names

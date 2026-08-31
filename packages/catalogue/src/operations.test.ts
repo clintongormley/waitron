@@ -494,6 +494,8 @@ describe("catalogue operations", () => {
         name: { en: "Lettuce" },
         priceDelta: "0.00",
         vatClass: null,
+        // Inserted without an explicit cap → the NOT-NULL default 1 (per-option quantity).
+        maxQuantity: 1,
       });
       expect(group.items[1]).toMatchObject({
         name: { en: "Bacon" },
@@ -1046,6 +1048,7 @@ describe("catalogue operations", () => {
           vatClass: null,
           sort: 0,
           active: true,
+          maxQuantity: 1, // default: no per-option quantity
         });
         const big = await createOptionGroupItem(tx, g.id, {
           name: { en: "Extra" },
@@ -1053,15 +1056,37 @@ describe("catalogue operations", () => {
           vatClass: "reduced",
           sort: 1,
           active: false,
+          maxQuantity: 3,
         });
         expect(big).toMatchObject({
           priceDelta: "1.50",
           vatClass: "reduced",
           sort: 1,
           active: false,
+          maxQuantity: 3,
         });
         const items = await listOptionGroupItems(tx, g.id);
         expect(items.map((i) => i.id)).toEqual([def.id, big.id]); // sort 0 before sort 1
+        // list returns maxQuantity for every item
+        expect(items.map((i) => i.maxQuantity)).toEqual([1, 3]);
+      });
+    });
+
+    it("createOptionGroupItem rejects a maxQuantity below 1 or non-integer with options.item_invalid", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Sauces" } });
+        await expect(
+          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, maxQuantity: 0 }),
+        ).rejects.toMatchObject({
+          code: "options.item_invalid",
+          params: { reason: "max_quantity" },
+        });
+        await expect(
+          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, maxQuantity: 1.5 }),
+        ).rejects.toMatchObject({
+          code: "options.item_invalid",
+          params: { reason: "max_quantity" },
+        });
       });
     });
 
@@ -1075,6 +1100,7 @@ describe("catalogue operations", () => {
           vatClass: null,
           sort: 3,
           active: false,
+          maxQuantity: 4,
         });
         const [row] = await listOptionGroupItems(tx, g.id);
         expect(row).toMatchObject({
@@ -1083,6 +1109,22 @@ describe("catalogue operations", () => {
           vatClass: null,
           sort: 3,
           active: false,
+          maxQuantity: 4,
+        });
+      });
+    });
+
+    it("updateOptionGroupItem leaves maxQuantity unchanged when omitted and re-validates when set", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, g.id, { name: { en: "a" }, maxQuantity: 5 });
+        // A patch that omits maxQuantity leaves the stored 5 intact.
+        await updateOptionGroupItem(tx, item.id, { priceDelta: "1.00" });
+        expect((await listOptionGroupItems(tx, g.id))[0]).toMatchObject({ maxQuantity: 5 });
+        // A patch that sets an invalid maxQuantity re-validates → options.item_invalid.
+        await expect(updateOptionGroupItem(tx, item.id, { maxQuantity: 0 })).rejects.toMatchObject({
+          code: "options.item_invalid",
+          params: { reason: "max_quantity" },
         });
       });
     });

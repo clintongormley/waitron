@@ -102,6 +102,14 @@ const LABEL = {
 const LEGEND = "VERI*FACTU";
 
 /**
+ * The multiplication sign prefixed to a per-dish option-quantity badge (`×2`). Chosen to match the
+ * receipt's own convention: the ticket already emits a non-ASCII glyph (€, 0xAC) through the ESC/POS
+ * builder's Latin-1 encoding, and `×` (U+00D7) is likewise a single Latin-1 byte (0xD7), so it survives
+ * the same encode/decode round-trip cleanly. `receipt-ticket.test.ts` pins the rendered badge.
+ */
+const QTY_BADGE = "×";
+
+/**
  * The receipt's character column width, in monospace cells — the common 80mm / Font-A width the deli's
  * `ReceiptPrinter` targets. {@link twoColumn} right-aligns values within it. This is a COSMETIC hint
  * only: exact fit is verified manually on the real printer (design §5), so a label + value that overrun
@@ -250,11 +258,21 @@ export function formatReceipt({
       ),
     );
     for (const option of options) {
-      // Indented, and WITHOUT the quantity prefix — an option is priced per dish, so its own count is
-      // the dish's and repeating it reads as noise. The gross is the delta this option added.
-      b.line(
-        twoColumn(`  ${lineName(option.descriptions, locale)}`, formatMoney(option.gross, locale)),
-      );
+      // Indented, and WITHOUT a leading quantity prefix — an option is priced per dish, so repeating the
+      // dish's own count as a prefix reads as noise. The gross is the delta this option added.
+      //
+      // Per-option quantity (landed feature): a modifier MAY be taken more than once per dish. The child
+      // line's filed `quantity` is the COMBINED count = parentDishQuantity × perOptionQuantity, so the
+      // PER-DISH count is `option.quantity ÷ dish.quantity` — an exact integer, since options attach only
+      // to `each` products (integer dish counts) and the child was priced from an integer per-option
+      // count. We APPEND a "×N" badge to the option's NAME only when that per-dish count exceeds 1; the
+      // overwhelmingly common case of one-per-dish (INCLUDING a plain modifier on a multi-quantity dish,
+      // where dish and child quantity are equal → 1) shows no badge and is byte-identical to before. The
+      // gross is left as the filed delta, unchanged by the badge.
+      const perDish = Math.round(Number(option.quantity) / Number(dish.quantity));
+      const name = lineName(option.descriptions, locale);
+      const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+      b.line(twoColumn(label, formatMoney(option.gross, locale)));
     }
   }
   b.line();

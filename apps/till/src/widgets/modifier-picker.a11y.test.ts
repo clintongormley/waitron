@@ -26,12 +26,14 @@ const burger: TillProduct = {
           name: { en: "Rare", es: "Poco hecha" },
           priceDelta: "0.00",
           vatClass: null,
+          maxQuantity: 1,
         },
         {
           id: "i-medium",
           name: { en: "Medium", es: "Al punto" },
           priceDelta: "0.00",
           vatClass: null,
+          maxQuantity: 1,
         },
       ],
     },
@@ -39,11 +41,31 @@ const burger: TillProduct = {
       id: "g-extras",
       name: { en: "Extras", es: "Extras" },
       minSelect: 0,
-      maxSelect: 2,
+      maxSelect: 3,
       required: false,
       items: [
-        { id: "i-cheese", name: { en: "Cheese", es: "Queso" }, priceDelta: "1.00", vatClass: null },
-        { id: "i-bacon", name: { en: "Bacon", es: "Bacon" }, priceDelta: "1.50", vatClass: null },
+        {
+          id: "i-cheese",
+          name: { en: "Cheese", es: "Queso" },
+          priceDelta: "1.00",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+        {
+          id: "i-bacon",
+          name: { en: "Bacon", es: "Bacon" },
+          priceDelta: "1.50",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+        // A per-option-quantity item (maxQuantity 2) so the sweep also covers the stepper controls.
+        {
+          id: "i-shot",
+          name: { en: "Extra shot", es: "Café extra" },
+          priceDelta: "0.60",
+          vatClass: null,
+          maxQuantity: 2,
+        },
       ],
     },
   ],
@@ -72,6 +94,20 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
     el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
     el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
     el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-bacon")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a per-option-quantity stepper stepped up (labelled controls)", async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      { product: burger },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
+    // Step the "extra shot" up once so the stepper (and its accessible labels) is on screen.
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-i-shot-inc"]')!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });

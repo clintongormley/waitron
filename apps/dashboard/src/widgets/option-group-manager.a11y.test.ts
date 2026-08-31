@@ -33,6 +33,7 @@ const items: OptionGroupItem[] = [
     vatClass: null,
     sort: 0,
     active: true,
+    maxQuantity: 1,
   },
 ];
 

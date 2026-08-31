@@ -149,6 +149,14 @@ export interface TillOptionItem {
   name: Record<string, string>;
   priceDelta: string;
   vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
+  /**
+   * The AUTHORED cap on how many times this option may be taken per dish (catalogue's
+   * `option_group_items.max_quantity`, per-option quantity). `1` = a plain single choice (no
+   * stepper); `> 1` lets the modifier picker offer a `− N +` stepper (bounded also by the group's
+   * `maxSelect`). Always sent by `GET /api/products` — the resolved product shape carries it. The
+   * client uses it only to bound the stepper UX; the server re-validates the count authoritatively.
+   */
+  maxQuantity: number;
 }
 
 /**
@@ -239,14 +247,18 @@ export interface ProductCatalogue {
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
  * `options` (ordering modifiers) are the selected modifiers on the line, each naming an
  * `optionGroupItemId` the server resolves AUTHORITATIVELY (price, VAT, name) and files as a child line
- * under this dish. ABSENT for a plain line — never `[]` — so a no-modifier sale is byte-identical to
- * before. The server (`POST /api/sales`, `addTabRound`) reads `options ?? []`; a `weight` line carrying
- * options is refused server-side. The client sends only the ids: the running line price is DISPLAY-ONLY.
+ * under this dish, plus an OPTIONAL `quantity` — how many times that option is taken per dish
+ * (per-option quantity). `quantity` is ABSENT when it is 1, so a plain modifier's wire is
+ * byte-identical to before; when present it is a small positive integer the server re-prices and
+ * re-validates against the option's authored `max_quantity`. `options` itself is ABSENT for a plain
+ * line — never `[]` — so a no-modifier sale is byte-identical to before. The server (`POST /api/sales`,
+ * `addTabRound`) reads `options ?? []`; a `weight` line carrying options is refused server-side. The
+ * client sends only the id (and the count when > 1): the running line price is DISPLAY-ONLY.
  */
 export interface SaleLine {
   productId: string;
   quantity: string;
-  options?: { optionGroupItemId: string }[];
+  options?: { optionGroupItemId: string; quantity?: number }[];
 }
 
 /**

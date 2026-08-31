@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
@@ -134,6 +135,59 @@ describe("option_group_items under real row-level security", () => {
       return tx.execute(sql`select tenant_id from option_group_items`);
     });
     expect(seenByB.rows).toEqual([]);
+  });
+});
+
+// option_group_items.max_quantity: the AUTHORED per-option cap (design: per-option quantity). Real
+// Postgres, not PGlite, because the receipts are a column DEFAULT and a CHECK constraint — a default
+// is server-side and a check only fires in a real backend. Seeded and inserted as the OWNER (RLS
+// bypassed): this suite proves the default value and the check, not the grant/policy those are the
+// job of the isolation suite above. `describeEachTarget` is unnecessary — the behaviour is not
+// RLS-role-dependent.
+const QTY_TENANT = "55555555-5555-4555-8555-555555555555";
+const qtySuite = useTemplateDb({ template: "core" });
+
+describe("option_group_items.max_quantity default and check constraint", () => {
+  let qtyGroup = "";
+
+  beforeAll(async () => {
+    const admin = qtySuite.admin;
+    await admin.insert(tenants).values({
+      id: QTY_TENANT,
+      country: "ES",
+      taxId: "B44444444",
+      legalName: "Fixture Tenant QTY",
+    });
+    const [group] = await admin
+      .insert(optionGroups)
+      .values({ tenantId: QTY_TENANT, name: { en: "Extras" } })
+      .returning({ id: optionGroups.id });
+    qtyGroup = group!.id;
+  });
+
+  it("defaults max_quantity to 1 when the insert omits it", async () => {
+    // Raw SQL that lists no max_quantity column, so the RED phase fails on `column "max_quantity"
+    // ... does not exist` when the SELECT runs — the real cause — rather than a drizzle mismatch.
+    const [row] = (
+      await qtySuite.admin.execute<{ max_quantity: number }>(sql`
+        insert into option_group_items (tenant_id, group_id, name, price_delta)
+        values (${QTY_TENANT}, ${qtyGroup}, '{"en":"Cheese"}'::jsonb, '0.50')
+        returning max_quantity`)
+    ).rows;
+    expect(row?.max_quantity).toBe(1);
+  });
+
+  it("rejects an insert of max_quantity = 0 with the check constraint", async () => {
+    // The real SQLSTATE and constraint name live on the driver error's `.cause`, not on
+    // DrizzleQueryError's own `Failed query: <sql>` message — so read them with pgErrorCode/
+    // pgErrorMessage rather than matching the wrapper text (which would pass on any thrown error).
+    const error = await captureError(() =>
+      qtySuite.admin.execute(sql`
+        insert into option_group_items (tenant_id, group_id, name, price_delta, max_quantity)
+        values (${QTY_TENANT}, ${qtyGroup}, '{"en":"Bacon"}'::jsonb, '1.00', 0)`),
+    );
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toMatch(/option_group_items_qty_ck/);
   });
 });
 

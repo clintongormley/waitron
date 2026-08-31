@@ -141,6 +141,35 @@ describe("till-ticket-view", () => {
     expect(norm(rows[2]!.textContent!)).toContain("0,00 €");
   });
 
+  it("shows a ×N badge for an option taken more than once per dish, and none for a plain option (per-option quantity)", async () => {
+    // FILED lines carry the COMBINED count on the child (dishQty × optionQty). Here the dish is ×2 and the
+    // "Extra chupito" is taken ×2 per dish → filed child quantity 4, per-dish = 4 / 2 = 2 → "×2". The plain
+    // option's filed child quantity equals the dish quantity (2 / 2 = 1) → no badge. Mirrors the server
+    // receipt's `×` badge (`apps/server/src/receipt-ticket.ts`).
+    const { el } = await mount({
+      lines: [
+        {
+          descriptions: { "es-ES": "Hamburguesa" },
+          quantity: "2",
+          gross: "20.00",
+          parentLineNo: null,
+        },
+        {
+          descriptions: { "es-ES": "Extra chupito" },
+          quantity: "4",
+          gross: "2.00",
+          parentLineNo: 1,
+        },
+        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "2", gross: "0.00", parentLineNo: 1 },
+      ],
+    });
+    const rows = el.shadowRoot!.querySelectorAll(".line");
+    expect(rows[1]!.textContent).toContain("Extra chupito");
+    expect(rows[1]!.textContent).toContain("×2"); // 4 / 2 = 2 → badge
+    expect(rows[2]!.textContent).toContain("Sin cebolla");
+    expect(rows[2]!.textContent).not.toContain("×"); // 2 / 2 = 1 → no badge
+  });
+
   it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {
     const { el } = await mount();
     const t = text(el);

@@ -168,6 +168,7 @@ export async function enqueueKitchenTickets(
     .select({
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
       descriptions: workingOrderLines.descriptions,
     })
     .from(workingOrderLines)
@@ -178,12 +179,25 @@ export async function enqueueKitchenTickets(
       ),
     )
     .orderBy(workingOrderLines.lineNo);
-  // parent line id → its option names in line_no order (the `.orderBy` above fixes the order, and a Map
+  // parent line id → its option strings in line_no order (the `.orderBy` above fixes the order, and a Map
   // append preserves it). `parentLineId` is non-null on every row here (the `inArray` matched it).
+  //
+  // Per-option quantity (landed feature): a modifier taken more than once per dish is filed as a child
+  // line whose `quantity` is the COMBINED count = parentDishQuantity × perOptionQuantity. The PER-DISH
+  // count is `child.quantity ÷ parent.quantity` — an exact integer (options attach only to `each`
+  // products, so both counts are integers). We APPEND an ASCII "xN" suffix to the modifier string only
+  // when that per-dish count exceeds 1, matching `kitchen-ticket.ts`'s own `qty x name` convention
+  // (ASCII "x", so any single-byte printer code page renders it). One-per-dish — the common case, and
+  // any plain modifier — leaves the string `<name>` and prints `  + <name>` exactly as before. Every
+  // child's parent is in `lineById` (its `parentLineId` ∈ the fired `lineIds` the read covered).
   const modifiersByParent = new Map<string, string[]>();
   for (const child of childRows) {
+    const parent = lineById.get(child.parentLineId!)!;
+    const perDish = Math.round(Number(child.quantity) / Number(parent.quantity));
+    const name = ticketName(child.descriptions, cfg.locale);
+    const label = perDish > 1 ? `${name} x${perDish}` : name;
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(ticketName(child.descriptions, cfg.locale));
+    names.push(label);
     modifiersByParent.set(child.parentLineId!, names);
   }
 

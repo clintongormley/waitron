@@ -47,5 +47,19 @@ declare module "@waitron/shared" {
      * 400 by the server's catalogue STATUS map. Never renamed once shipped.
      */
     "options.group_invalid": { reason: string };
+    /**
+     * An option ITEM's AUTHORING config violated one of its DB invariants (per-option quantity): its
+     * `max_quantity` must be an integer >= 1 (1 = no per-option quantity). Thrown by
+     * `createOptionGroupItem` / `updateOptionGroupItem` BEFORE the write, so the dashboard editor gets a
+     * clean 4xx rather than the opaque 500 the `option_group_items_qty_ck` CHECK (catalogue.ts) would
+     * raise as a backstop. `reason` is a stable CODE a translator renders, never prose —
+     * `"max_quantity"` names the offending field, matching the `reason`-code shape of the sibling
+     * group-level `options.group_invalid`. No ids/values: the offending number is request echo, not
+     * carried (the no-leak discipline). `options.*` names the DOMAIN CONCEPT (a menu-option item),
+     * never the throwing package, beside `options.group_invalid` / `options.selection_invalid`. A
+     * CLIENT request fault → mapped to 400 by the server's catalogue STATUS map. Never renamed once
+     * shipped.
+     */
+    "options.item_invalid": { reason: string };
   }
 }

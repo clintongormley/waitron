@@ -46,6 +46,13 @@ const LABEL = {
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
 
+/**
+ * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
+ * receipt (`apps/server/src/receipt-ticket.ts`) and the on-screen basket use, so the badge reads
+ * identically across the filed ticket, the paper receipt and the live basket.
+ */
+const QTY_BADGE = "×";
+
 /** A dish and the option lines filed beneath it — the shape {@link groupByParent} produces. */
 interface LineGroup {
   dish: TillSaleLine;
@@ -352,12 +359,25 @@ export class TillTicketView extends LitElement {
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
               ${group.options.map(
-                (option) => html`
-                  <li class="line option">
-                    <span class="line-name">${lineName(option.descriptions, locale)}</span>
-                    <span class="line-gross">${formatMoney(option.gross, locale)}</span>
-                  </li>
-                `,
+                // Per-option quantity: the FILED child `quantity` is the COMBINED count (dishQty ×
+                // perOptionQty), so the per-dish count is `option.quantity ÷ dish.quantity` — an exact
+                // integer (options attach only to `each` products with integer dish counts). Append a
+                // "×N" badge to the name ONLY when it exceeds 1; the common one-per-dish case (including a
+                // plain modifier on a multi-quantity dish, where child and dish quantity are equal → 1)
+                // shows no badge and is byte-identical to before. Same `×` badge as the printed receipt
+                // (`apps/server/src/receipt-ticket.ts`).
+                (option) => {
+                  const perDish = Math.round(Number(option.quantity) / Number(group.dish.quantity));
+                  const badge = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
+                  return html`
+                    <li class="line option">
+                      <span class="line-name"
+                        >${lineName(option.descriptions, locale)}${badge}</span
+                      >
+                      <span class="line-gross">${formatMoney(option.gross, locale)}</span>
+                    </li>
+                  `;
+                },
               )}
             `,
           )}

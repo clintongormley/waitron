@@ -226,6 +226,8 @@ export interface OptionGroupItem {
   vatClass: VatClass | null;
   sort: number;
   active: boolean;
+  /** The most of this option a diner may take (`max_quantity`); 1 = no per-option quantity. */
+  maxQuantity: number;
 }
 
 /** The `POST /management-api/option-groups` body — mirrors catalogue's `CreateOptionGroupInput`.
@@ -256,24 +258,29 @@ export interface OptionGroupPatch {
 
 /** The `POST /management-api/option-groups/:id/items` body — mirrors catalogue's
  * `CreateOptionGroupItemInput`. `vatClass` omitted (or `null`) inherits the parent dish's rate; the
- * other fields default to the column defaults (priceDelta "0", sort 0, active true). */
+ * other fields default to the column defaults (priceDelta "0", sort 0, active true, maxQuantity 1). A
+ * `maxQuantity` below 1 (or non-integer) rejects `options.item_invalid`. */
 export interface OptionGroupItemInput {
   name: Record<string, string>;
   priceDelta?: string;
   vatClass?: VatClass | null;
   sort?: number;
   active?: boolean;
+  /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
+  maxQuantity?: number;
 }
 
 /** The `PATCH /management-api/option-groups/:groupId/items/:itemId` body — mirrors catalogue's
  * `UpdateOptionGroupItemInput`. Every key is optional (absent = unchanged); `vatClass: null` reverts
- * the item to inheriting the parent dish's rate. */
+ * the item to inheriting the parent dish's rate. A present `maxQuantity` is re-validated (>= 1). */
 export interface OptionGroupItemPatch {
   name?: Record<string, string>;
   priceDelta?: string;
   vatClass?: VatClass | null;
   sort?: number;
   active?: boolean;
+  /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
+  maxQuantity?: number;
 }
 
 // ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────

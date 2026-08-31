@@ -1104,6 +1104,7 @@ describe("mountCatalogueApi — option group items", () => {
       vatClass: string | null;
       sort: number;
       active: boolean;
+      maxQuantity: number;
     };
     expect(item).toMatchObject({
       groupId: g.id,
@@ -1112,6 +1113,7 @@ describe("mountCatalogueApi — option group items", () => {
       vatClass: null,
       sort: 0,
       active: true,
+      maxQuantity: 1, // default: no per-option quantity
     });
 
     const list = await send(app, "GET", `/management-api/option-groups/${g.id}/items`);
@@ -1129,6 +1131,7 @@ describe("mountCatalogueApi — option group items", () => {
         vatClass: "reduced",
         sort: 2,
         active: false,
+        maxQuantity: 3,
       },
     });
     expect(res.status).toBe(201);
@@ -1137,6 +1140,21 @@ describe("mountCatalogueApi — option group items", () => {
       vatClass: "reduced",
       sort: 2,
       active: false,
+      maxQuantity: 3,
+    });
+  });
+
+  it("POST /option-groups/:id/items with maxQuantity < 1 → options.item_invalid 400", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "Salsas" } });
+    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" }, maxQuantity: 0 },
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { reason: string } } },
+    ).toMatchObject({
+      error: { code: "options.item_invalid", params: { reason: "max_quantity" } },
     });
   });
 
@@ -1146,6 +1164,7 @@ describe("mountCatalogueApi — option group items", () => {
     ["vatClass", { name: { es: "x" }, vatClass: 5 }],
     ["sort", { name: { es: "x" }, sort: 1.5 }],
     ["active", { name: { es: "x" }, active: "no" }],
+    ["maxQuantity", { name: { es: "x" }, maxQuantity: 1.5 }],
   ])(
     "POST /items rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
@@ -1177,7 +1196,14 @@ describe("mountCatalogueApi — option group items", () => {
     });
     const itemId = ((await created.json()) as { id: string }).id;
     const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: { name: { es: "después" }, priceDelta: "2.00", vatClass: null, sort: 3, active: false },
+      body: {
+        name: { es: "después" },
+        priceDelta: "2.00",
+        vatClass: null,
+        sort: 3,
+        active: false,
+        maxQuantity: 4,
+      },
     });
     expect(res.status).toBe(204);
     const rows = (await (
@@ -1189,6 +1215,25 @@ describe("mountCatalogueApi — option group items", () => {
       vatClass: null,
       sort: 3,
       active: false,
+      maxQuantity: 4,
+    });
+  });
+
+  it("PATCH /option-groups/:id/items/:itemId with maxQuantity < 1 → options.item_invalid 400", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" }, maxQuantity: 3 },
+    });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
+      body: { maxQuantity: 0 },
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { reason: string } } },
+    ).toMatchObject({
+      error: { code: "options.item_invalid", params: { reason: "max_quantity" } },
     });
   });
 
@@ -1210,6 +1255,7 @@ describe("mountCatalogueApi — option group items", () => {
     ["vatClass", { vatClass: 5 }],
     ["sort", { sort: 1.5 }],
     ["active", { active: "no" }],
+    ["maxQuantity", { maxQuantity: 1.5 }],
   ])(
     "PATCH /items/:itemId rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {

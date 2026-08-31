@@ -45,6 +45,14 @@ export interface SelectedLineOption {
   /** GROSS (VAT-inclusive) price change this option adds, a `numeric(12,2)` literal ("0.50", "0.00" for
    * a free option). DISPLAY-ONLY: {@link lineGross} adds `priceDelta × quantity`; the server re-prices. */
   priceDelta: string;
+  /**
+   * How many times THIS option is taken per dish (per-option quantity), or ABSENT for the common case
+   * of once — kept absent (never `1`) so a plain modifier stays byte-identical to before. DISPLAY-ONLY:
+   * {@link lineGross}/{@link optionGross} multiply the option's `priceDelta` by `dishQuantity ×
+   * (quantity ?? 1)`; the server re-prices and re-validates the count against the option's authored
+   * `max_quantity`. A small positive integer when present.
+   */
+  quantity?: number;
 }
 
 /** One rung-up basket line: a product and how much of it (a count for `each`, a kg string for `weight`). */
@@ -233,6 +241,24 @@ export class WorkingOrderStore {
       line.options = options;
     }
     this.#lines.push(line);
+    this.#invalidatePricing();
+    this.#dirty = true;
+    this.emit("changed");
+  }
+
+  /**
+   * Set how many of the line at `index` the basket holds (dish-line quantity) and notify. `quantity` is
+   * a count for an `each` line (the basket's +/- stepper is the only caller and never touches a `weight`
+   * line). Out-of-range indices are a no-op, exactly like {@link removeLine}. This does NOT merge lines:
+   * each add stays its own line, so stepping one line's count never folds it into an identical sibling.
+   * Re-prices ({@link #invalidatePricing}) and marks the basket {@link #dirty} — a quantity change is a
+   * line edit, so a retrieved order re-syncs before pay, the same as add/remove.
+   */
+  setLineQuantity(index: number, quantity: string): void {
+    if (index < 0 || index >= this.#lines.length) {
+      return;
+    }
+    this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");

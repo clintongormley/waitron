@@ -51,12 +51,14 @@ const burger: TillProduct = {
           name: { en: "Rare", es: "Poco hecha" },
           priceDelta: "0.00",
           vatClass: null,
+          maxQuantity: 1,
         },
         {
           id: "i-medium",
           name: { en: "Medium", es: "Al punto" },
           priceDelta: "0.00",
           vatClass: null,
+          maxQuantity: 1,
         },
       ],
     },
@@ -67,9 +69,110 @@ const burger: TillProduct = {
       maxSelect: 2,
       required: false,
       items: [
-        { id: "i-cheese", name: { en: "Cheese", es: "Queso" }, priceDelta: "1.00", vatClass: null },
-        { id: "i-bacon", name: { en: "Bacon", es: "Bacon" }, priceDelta: "1.50", vatClass: null },
-        { id: "i-egg", name: { en: "Egg", es: "Huevo" }, priceDelta: "0.75", vatClass: null },
+        {
+          id: "i-cheese",
+          name: { en: "Cheese", es: "Queso" },
+          priceDelta: "1.00",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+        {
+          id: "i-bacon",
+          name: { en: "Bacon", es: "Bacon" },
+          priceDelta: "1.50",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+        {
+          id: "i-egg",
+          name: { en: "Egg", es: "Huevo" },
+          priceDelta: "0.75",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+      ],
+    },
+  ],
+};
+
+// A coffee with an OPTIONAL multi-select "extras" group (maxSelect 3) mixing per-option-quantity items:
+// "extra shot" is takeable up to twice (maxQuantity 2 → stepper), "syrup" up to five times (maxQuantity 5,
+// but the group cap of 3 bites first → stepper), and "oat milk" once (maxQuantity 1 → plain checkbox).
+const coffee: TillProduct = {
+  id: "coffee",
+  descriptions: { en: "Coffee", es: "Café" },
+  pricingUnit: "each",
+  unitPrice: "2.00",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+  optionGroups: [
+    {
+      id: "g-extras",
+      name: { en: "Extras", es: "Extras" },
+      minSelect: 0,
+      maxSelect: 3,
+      required: false,
+      items: [
+        {
+          id: "i-shot",
+          name: { en: "Extra shot", es: "Café extra" },
+          priceDelta: "0.60",
+          vatClass: null,
+          maxQuantity: 2,
+        },
+        {
+          id: "i-syrup",
+          name: { en: "Syrup", es: "Sirope" },
+          priceDelta: "0.40",
+          vatClass: null,
+          maxQuantity: 5,
+        },
+        {
+          id: "i-oat",
+          name: { en: "Oat milk", es: "Leche de avena" },
+          priceDelta: "0.50",
+          vatClass: null,
+          maxQuantity: 1,
+        },
+      ],
+    },
+  ],
+};
+
+// A drink whose ONLY group is SINGLE-select (maxSelect 1) yet carries an item authored with maxQuantity > 1.
+// A single-select group caps the group sum at 1, so a quantity > 1 is impossible there — the picker must
+// render RADIOS, never a stepper, regardless of the item's maxQuantity.
+const sizedDrink: TillProduct = {
+  id: "sized",
+  descriptions: { en: "Sized drink", es: "Bebida" },
+  pricingUnit: "each",
+  unitPrice: "3.00",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+  optionGroups: [
+    {
+      id: "g-size",
+      name: { en: "Size", es: "Tamaño" },
+      minSelect: 1,
+      maxSelect: 1,
+      required: true,
+      items: [
+        {
+          id: "i-small",
+          name: { en: "Small", es: "Pequeña" },
+          priceDelta: "0.00",
+          vatClass: null,
+          maxQuantity: 3,
+        },
+        {
+          id: "i-large",
+          name: { en: "Large", es: "Grande" },
+          priceDelta: "0.50",
+          vatClass: null,
+          maxQuantity: 3,
+        },
       ],
     },
   ],
@@ -101,7 +204,13 @@ const soup: TillProduct = {
       maxSelect: 1,
       required: false,
       items: [
-        { id: "i-white", name: { en: "White", es: "Blanco" }, priceDelta: "0.00", vatClass: null },
+        {
+          id: "i-white",
+          name: { en: "White", es: "Blanco" },
+          priceDelta: "0.00",
+          vatClass: null,
+          maxQuantity: 1,
+        },
       ],
     },
   ],
@@ -148,6 +257,46 @@ function tapTile(grid: TillProductGrid, name: string): void {
 /** The Add (confirm) button inside the picker. */
 function addButton(picker: TillModifierPicker): HTMLElement & { disabled: boolean } {
   return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!;
+}
+
+/** The `+` step button for an item, or null when the item has no stepper (plain checkbox/radio). */
+function incButton(
+  picker: TillModifierPicker,
+  itemId: string,
+): (HTMLElement & { disabled: boolean }) | null {
+  return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    `[data-test="opt-${itemId}-inc"]`,
+  );
+}
+
+/** The `−` step button for an item, or null when the item has no stepper. */
+function decButton(
+  picker: TillModifierPicker,
+  itemId: string,
+): (HTMLElement & { disabled: boolean }) | null {
+  return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    `[data-test="opt-${itemId}-dec"]`,
+  );
+}
+
+/** The count readout inside an item's stepper. */
+function stepCount(picker: TillModifierPicker, itemId: string): string | undefined {
+  return picker
+    .shadowRoot!.querySelector<HTMLElement>(`[data-test="opt-${itemId}-count"]`)
+    ?.textContent?.trim();
+}
+
+/** Open the picker over a product via the grid, returning the mounted picker. */
+async function openPicker(product: TillProduct, tile: string, store: WorkingOrderStore) {
+  const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+    products: [product],
+    store,
+  });
+  tapTile(el, tile);
+  await el.updateComplete;
+  const picker = pickerOf(el)!;
+  await picker.updateComplete;
+  return { el, picker };
 }
 
 describe("till-modifier-picker", () => {
@@ -357,5 +506,116 @@ describe("till-modifier-picker", () => {
     await el.updateComplete;
     expect(pickerOf(el)).toBeNull();
     expect(store.lines).toHaveLength(0);
+  });
+
+  describe("per-option quantity (steppers)", () => {
+    it("renders a stepper for a multi-select item with maxQuantity > 1, a plain checkbox otherwise", async () => {
+      const store = new WorkingOrderStore();
+      const { picker } = await openPicker(coffee, "Coffee", store);
+
+      // The maxQuantity>1 items in a multi-select group get a stepper…
+      expect(incButton(picker, "i-shot")).not.toBeNull();
+      expect(decButton(picker, "i-shot")).not.toBeNull();
+      expect(incButton(picker, "i-syrup")).not.toBeNull();
+      // …while the maxQuantity===1 item stays a plain checkbox (no stepper).
+      expect(incButton(picker, "i-oat")).toBeNull();
+      expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.type).toBe(
+        "checkbox",
+      );
+      // Nothing selected yet → the count reads 0 and `−` is disabled.
+      expect(stepCount(picker, "i-shot")).toBe("0");
+      expect(decButton(picker, "i-shot")!.disabled).toBe(true);
+    });
+
+    it("stepping to 2 emits the option with quantity: 2 and reflects the ×2 in the running price", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(coffee, "Coffee", store);
+
+      incButton(picker, "i-shot")!.click();
+      await picker.updateComplete;
+      expect(stepCount(picker, "i-shot")).toBe("1");
+      incButton(picker, "i-shot")!.click();
+      await picker.updateComplete;
+      expect(stepCount(picker, "i-shot")).toBe("2");
+      // At the item's own maxQuantity (2), `+` disables.
+      expect(incButton(picker, "i-shot")!.disabled).toBe(true);
+
+      // Running price = dish 2.00 + shot 0.60 × 2 = 3.20.
+      expect(picker.shadowRoot!.textContent).toContain(formatMoney("3.20"));
+
+      addButton(picker).click();
+      await el.updateComplete;
+      expect(store.lines[0]!.options).toEqual([
+        {
+          optionGroupItemId: "i-shot",
+          name: { en: "Extra shot", es: "Café extra" },
+          priceDelta: "0.60",
+          quantity: 2,
+        },
+      ]);
+    });
+
+    it("a maxQuantity===1 checkbox confirms with NO quantity field (byte-identical wire)", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(coffee, "Coffee", store);
+
+      picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.click();
+      await picker.updateComplete;
+      addButton(picker).click();
+      await el.updateComplete;
+      // toEqual pins the ABSENCE of a `quantity` key on a plain single-choice option.
+      expect(store.lines[0]!.options).toEqual([
+        {
+          optionGroupItemId: "i-oat",
+          name: { en: "Oat milk", es: "Leche de avena" },
+          priceDelta: "0.50",
+        },
+      ]);
+    });
+
+    it("stepping back to 0 deselects the option entirely", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(coffee, "Coffee", store);
+
+      incButton(picker, "i-shot")!.click();
+      await picker.updateComplete;
+      decButton(picker, "i-shot")!.click();
+      await picker.updateComplete;
+      expect(stepCount(picker, "i-shot")).toBe("0");
+      expect(decButton(picker, "i-shot")!.disabled).toBe(true);
+
+      addButton(picker).click();
+      await el.updateComplete;
+      // Nothing selected → no options key at all (the empty-selection collapse).
+      expect(store.lines).toEqual([{ product: coffee, quantity: "1" }]);
+    });
+
+    it("caps the group at maxSelect on the SUMMED quantity — stepping past the allowance is prevented", async () => {
+      const store = new WorkingOrderStore();
+      const { picker } = await openPicker(coffee, "Coffee", store);
+
+      // Step syrup (item maxQuantity 5) up to the GROUP cap of 3.
+      incButton(picker, "i-syrup")!.click();
+      incButton(picker, "i-syrup")!.click();
+      incButton(picker, "i-syrup")!.click();
+      await picker.updateComplete;
+      expect(stepCount(picker, "i-syrup")).toBe("3");
+      // The group sum is now at maxSelect 3, so syrup's `+` disables despite its item cap of 5…
+      expect(incButton(picker, "i-syrup")!.disabled).toBe(true);
+      // …the OTHER stepper's `+` disables too (no allowance left)…
+      expect(incButton(picker, "i-shot")!.disabled).toBe(true);
+      // …and the plain checkbox in the same group disables while unchecked.
+      expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.disabled).toBe(true);
+    });
+
+    it("never renders a stepper in a single-select group, even when the item's maxQuantity > 1", async () => {
+      const store = new WorkingOrderStore();
+      const { picker } = await openPicker(sizedDrink, "Sized drink", store);
+
+      expect(incButton(picker, "i-small")).toBeNull();
+      expect(incButton(picker, "i-large")).toBeNull();
+      const radios = picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+      expect(radios).toHaveLength(2);
+    });
   });
 });

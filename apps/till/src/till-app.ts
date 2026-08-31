@@ -805,9 +805,18 @@ export class TillApp extends LitElement {
     return this.#store.lines.map((line) => {
       const saleLine: SaleLine = { productId: line.product.id, quantity: line.quantity };
       if (line.options !== undefined && line.options.length > 0) {
-        saleLine.options = line.options.map((option) => ({
-          optionGroupItemId: option.optionGroupItemId,
-        }));
+        saleLine.options = line.options.map((option) => {
+          // The wire carries the bare id, plus the per-option quantity ONLY when it exceeds 1 (per-option
+          // quantity, feature A): the server prices and re-validates the count. Omitted at 1/absent so a
+          // plain modifier's wire stays byte-identical to before.
+          const wireOption: { optionGroupItemId: string; quantity?: number } = {
+            optionGroupItemId: option.optionGroupItemId,
+          };
+          if (option.quantity !== undefined && option.quantity > 1) {
+            wireOption.quantity = option.quantity;
+          }
+          return wireOption;
+        });
       }
       return saleLine;
     });

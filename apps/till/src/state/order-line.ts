@@ -2,7 +2,9 @@ import {
   MONEY_SCALE,
   type Decimal,
   addDecimal,
+  decimal,
   grossOf,
+  multiplyDecimal,
   sumDecimals,
   toScale,
 } from "@waitron/shared";
@@ -21,13 +23,17 @@ import type { OrderLine, SelectedLineOption } from "./working-order.js";
  * keeps a rung-up row, the receipt line and the filed total from ever rounding differently.
  *
  * ORDERING MODIFIERS (Task 9): when the line carries selected `options`, each modifier adds
- * `priceDelta × quantity` — the option is priced at the DISH quantity (a modifier is per dish, never
- * counted independently). This is DISPLAY-ONLY: the server re-prices from the option ids
+ * `priceDelta × (dishQuantity × optionQuantity)` — the option is priced at the DISH quantity TIMES its
+ * own per-option quantity (per-option quantity: an "extra shot ×2" is taken twice per dish). The two
+ * integer counts are combined through `multiplyDecimal(decimal(...))` — the SAME BigInt-decimal
+ * arithmetic `grossOf` uses, never a float — before the single `grossOf` multiply and rounding, so a
+ * line whose options omit `quantity` (combined count `dishQuantity × 1`) is byte-identical to before.
+ * This is DISPLAY-ONLY: the server re-prices from the option ids and re-validates the count
  * authoritatively. It mirrors `@waitron/catalogue`'s `priceBasketWithOptions`, which prices the parent
- * dish and every child option as SEPARATE rows through the same `grossOf` arithmetic and sums the
- * rounded per-row grosses — so this ROUNDS EACH component then sums (never one rounding of the summed
- * per-unit price), keeping the preview equal to the server's per-line total to the céntimo. A line with
- * no `options` returns the bare dish gross, byte-identical to before.
+ * dish and every child option as SEPARATE rows through the same `grossOf` arithmetic (child qty =
+ * dishQty × optionQty) and sums the rounded per-row grosses — so this ROUNDS EACH component then sums
+ * (never one rounding of the summed per-unit price), keeping the preview equal to the server's per-line
+ * total to the céntimo. A line with no `options` returns the bare dish gross, byte-identical to before.
  */
 export function lineGross(line: OrderLine): Decimal {
   const dish = dishGross(line);
@@ -35,10 +41,19 @@ export function lineGross(line: OrderLine): Decimal {
   if (options.length === 0) {
     return dish;
   }
-  const optionsGross = sumDecimals(
-    options.map((option) => grossOf(option.priceDelta, line.quantity)),
-  );
+  const optionsGross = sumDecimals(options.map((option) => optionGross(line, option)));
   return toScale(addDecimal(dish, optionsGross), MONEY_SCALE);
+}
+
+/**
+ * The combined count a single option is priced at: the DISH quantity times this option's own
+ * per-option quantity (absent = 1). Built with `multiplyDecimal(decimal(...))` — the exact
+ * BigInt-decimal multiply, no float — so it composes with `grossOf` the same way the server's
+ * `priceBasketWithOptions` computes a child row's `dishQty × optionQty`. An omitted `quantity`
+ * multiplies by "1", leaving the count (and therefore the price) byte-identical to the dish quantity.
+ */
+function combinedOptionQuantity(line: OrderLine, option: SelectedLineOption): Decimal {
+  return multiplyDecimal(decimal(line.quantity), decimal(String(option.quantity ?? 1)));
 }
 
 /**
@@ -52,12 +67,16 @@ export function dishGross(line: OrderLine): Decimal {
 }
 
 /**
- * One selected option's gross contribution on a line — its `priceDelta × the dish quantity` (a
- * modifier is priced per dish, never counted independently), "0.00" for a free option. The basket
- * renders this indented beneath the dish (Task 8); it mirrors the child sale_line's filed gross.
+ * One selected option's gross contribution on a line — its `priceDelta × (dishQuantity ×
+ * optionQuantity)` (per-option quantity: the modifier is priced per dish AND per its own count, so an
+ * "extra shot ×2" on 3 dishes prices six times), "0.00" for a free option. The two integer counts are
+ * combined via {@link combinedOptionQuantity} (exact decimal multiply, no float) before the single
+ * `grossOf`; an option that omits `quantity` prices at the bare dish quantity, byte-identical to
+ * before. The basket renders this indented beneath the dish (Task 8); it mirrors the child sale_line's
+ * filed gross.
  */
 export function optionGross(line: OrderLine, option: SelectedLineOption): Decimal {
-  return grossOf(option.priceDelta, line.quantity);
+  return grossOf(option.priceDelta, combinedOptionQuantity(line, option));
 }
 
 /** How much of a line: `"N kg"` for a weight product, the bare count for an `each` product. */
