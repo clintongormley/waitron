@@ -234,8 +234,10 @@ Contents:
   (`#fetchImpl` is already injectable, so the `#request` choke point is **not**
   edited). It generates a request-id, sets the `x-request-id` request header, masks
   dynamic path segments (`maskPath`), logs `{ event: "api", phase:
-  "start"|"end", method, path, status?, code?, requestId }`, reads back the echoed
-  header, and captures the domain `code` on failure via `res.clone()` (so the real
+  "start"|"end", method, path, status?, code?, error?, requestId }` — logging
+  `api:end` under the **same request-id it minted** for the call (correlation
+  holds because the server reuses that id; it does not read `res.headers`) — and
+  captures the domain `code` on failure via `res.clone()` (so the real
   `#request` still reads the body). **Codes and ids only, never bodies.**
 - **Navigation hook** — apps log a `nav` event on screen change (screen key only).
 
@@ -268,8 +270,9 @@ Kept deliberately small; the richer *Problem reports* triage screen is Slice 3.
 3. The logger filters by threshold and tees the line to stdout + the rotating
    file. (The `http.request` line is `debug`, so it lands only under diagnostic
    mode; an error line from the boundary is `warn`/`error` and always lands.)
-4. Response returns; the instrumented fetch reads the echoed header and logs
-   `api:end` with status + `code?` + `reqId`.
+4. Response returns; the instrumented fetch logs `api:end` under the same `reqId`
+   it minted for the request (not read back from the echoed header), with status
+   + `code?`.
 5. The client trail and the server file now share `reqId`. (Slice 2 will read the
    client `snapshot()` + `LogReader.byRequestIds()` to freeze a bundle.)
 

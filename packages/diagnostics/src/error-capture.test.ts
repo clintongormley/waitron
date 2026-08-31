@@ -73,6 +73,17 @@ describe("installErrorCapture", () => {
     expect(e.fields.code).toBeUndefined();
   });
 
+  it("records name, message and stack from a rejected Error", () => {
+    const log = createDiagnosticsLog();
+    const t = fakeTarget();
+    installErrorCapture(t, log);
+    t.dispatch("unhandledrejection", { reason: new Error("oops") });
+    const e = log.snapshot().at(-1)!;
+    expect(e.fields.name).toBe("Error");
+    expect(e.fields.message).toBe("oops");
+    expect(typeof e.fields.stack).toBe("string");
+  });
+
   it("ignores a non-string code on a rejection reason", () => {
     const log = createDiagnosticsLog();
     const t = fakeTarget();

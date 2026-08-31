@@ -1569,7 +1569,8 @@ export class TillApp extends LitElement {
    *    `handheldMode`, which this gate cannot).
    *
    * The remaining counter-side setters — {@link #onShowStation}, {@link #onShowExpo},
-   * {@link #onShowSchedule} and the payment→`ticket` transitions — assign `this.screen` directly and are
+   * {@link #onShowSchedule} and the payment→`ticket` transitions — route through {@link #setScreen}
+   * (which records the nav trail then assigns `this.screen`) and are
    * NOT gated, because their affordances are emitted only by the counter screen
    * (`till-counter-screen`), which a handheld never reaches: unreachable-by-affordance, not gated.
    * Proven by deletion: drop the guard and a handheld's `back-to-counter` lands it on the counter (the

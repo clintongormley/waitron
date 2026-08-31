@@ -29,15 +29,14 @@ export function installErrorCapture(target: ErrorTarget, log: DiagnosticsLog): v
   });
   target.addEventListener("unhandledrejection", (ev) => {
     try {
-      const reason = (ev as { reason?: unknown })?.reason;
-      const code = codeOf(reason);
-      const name =
-        typeof (reason as { name?: unknown })?.name === "string"
-          ? (reason as { name: string }).name
-          : undefined;
+      const reason = ev as { reason?: { name?: unknown; message?: unknown; stack?: unknown } };
+      const r = reason?.reason;
+      const code = codeOf(r);
       log.record("error", "window.unhandledrejection", {
         ...(code !== undefined ? { code } : {}),
-        ...(name !== undefined ? { name } : {}),
+        ...(typeof r?.name === "string" ? { name: r.name } : {}),
+        ...(typeof r?.message === "string" ? { message: r.message } : {}),
+        ...(typeof r?.stack === "string" ? { stack: r.stack } : {}),
       });
     } catch {
       /* never break the app */
