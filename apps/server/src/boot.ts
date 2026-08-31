@@ -424,16 +424,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // logging (`http.request`, a `debug` line) is dropped by the default `info` threshold until an
   // operator raises it for a bounded window, then auto-reverts in memory (never across a restart).
   const verbosity = createVerbosityController({ defaultLevel: "info", now });
+  const stdoutSink = (line: string) => process.stdout.write(line);
+  // A stdout-only logger for the ONE notice the file sink emits if its directory becomes unwritable —
+  // built through `createLogger` (like `bin.ts`'s exit logger) rather than hand-formatting JSON, so
+  // the line shares the exact envelope every other log line has.
+  const stdoutLog = createLogger(stdoutSink, now);
   // The rotating file sink under `config.logDir`. On ANY IO failure it degrades to a no-op after ONE
   // stdout warn line (`log.file_unavailable`) — the FILE is what failed, so the notice goes to stdout
   // only, and the paired `tee` still writes every line to stdout. Logging never throws into a request
   // path (SALE-SAFETY), so a lost log directory loses the file, not the sale.
   const fileSink = createRotatingFileSink(
     { dir: config.logDir, maxBytes: config.logMaxBytes, maxFiles: config.logMaxFiles },
-    () =>
-      process.stdout.write(
-        `${JSON.stringify({ at: now().toISOString(), level: "warn", event: "log.file_unavailable" })}\n`,
-      ),
+    () => stdoutLog("warn", "log.file_unavailable"),
   );
   // Reads the rotating files back for the diagnostics `/recent` surface — the reader mirrors the sink's
   // rotation naming and `maxFiles`, so the two agree by construction on which files exist.
@@ -442,11 +444,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // read per call. The two exit-path loggers (this file's `startListening` catch, `bin.ts`'s fatal
   // exit) stay 2-arg on purpose — they run at process death, want no file sink, and take the
   // `getThreshold` default (`info`).
-  const log = createLogger(
-    tee((line) => process.stdout.write(line), fileSink),
-    now,
-    () => verbosity.current(),
-  );
+  const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,

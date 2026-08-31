@@ -31,9 +31,8 @@ export function createVerbosityController(opts: {
       level = next;
       revertsAt = new Date(opts.now().getTime() + ttlMs);
       timer = setTimeout(() => {
+        clear(); // reset timer + revertsAt in one place; clearing the just-fired timer is a no-op
         level = opts.defaultLevel;
-        timer = null;
-        revertsAt = null;
       }, ttlMs);
       if (typeof timer === "object" && "unref" in timer) timer.unref(); // never keep the process alive
     },

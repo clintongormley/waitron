@@ -22,6 +22,10 @@ export function createRotatingFileSink(
   const current = join(opts.dir, fileName);
   let degraded = false;
   let dirEnsured = false;
+  // The live byte size of the current file, tracked in memory so the hot write path costs no
+  // `statSync` per line. Seeded lazily from disk on the first write (a file may survive a restart),
+  // grown by each append, and reset by `rotate`. `-1` means "not yet seeded".
+  let currentSize = -1;
   const sizeOf = (p: string): number => {
     try {
       return statSync(p).size;
@@ -48,9 +52,14 @@ export function createRotatingFileSink(
         mkdirSync(opts.dir, { recursive: true });
         dirEnsured = true;
       }
-      const size = sizeOf(current);
-      if (size > 0 && size + Buffer.byteLength(line) > opts.maxBytes) rotate();
+      if (currentSize < 0) currentSize = sizeOf(current);
+      const bytes = Buffer.byteLength(line);
+      if (currentSize > 0 && currentSize + bytes > opts.maxBytes) {
+        rotate();
+        currentSize = 0;
+      }
       appendFileSync(current, line);
+      currentSize += bytes;
     } catch (e) {
       degraded = true;
       try {
@@ -120,10 +129,32 @@ export function createLogReader(opts: {
     return out;
   };
   return {
+    // Tail-bounded: walks files newest-first and parses only from the end of each until `limit`
+    // events are gathered, so a poll returns the last N lines without reading or JSON-parsing every
+    // rotated file (the common case touches only the current file). Result is chronological.
     recent(o) {
-      const all = readAll();
       const limit = o?.limit ?? 500;
-      return all.slice(Math.max(0, all.length - limit));
+      const collected: LogEvent[] = []; // newest-first while gathering
+      const paths = orderedPaths(); // oldest → newest
+      for (let pi = paths.length - 1; pi >= 0 && collected.length < limit; pi--) {
+        let text: string;
+        try {
+          text = readFileSync(paths[pi]!, "utf8");
+        } catch {
+          continue;
+        }
+        const lines = text.split("\n");
+        for (let i = lines.length - 1; i >= 0 && collected.length < limit; i--) {
+          const line = lines[i]!;
+          if (line === "") continue;
+          try {
+            collected.push(JSON.parse(line) as LogEvent);
+          } catch {
+            /* skip a torn/garbage line */
+          }
+        }
+      }
+      return collected.reverse();
     },
     byRequestIds(ids) {
       const set = new Set(ids);
