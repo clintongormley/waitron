@@ -234,6 +234,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/printing",
   "@waitron/verifactu",
   "@waitron/bench-pglite",
+  "@waitron/diagnostics",
 ];
 
 /**
