@@ -145,7 +145,6 @@ function mountApp(v: Pick<Venue, "tenantId">, reader: LogReader): { app: Hono } 
         defaultLevel: "info",
         now: () => new Date("2026-08-31T12:00:00.000Z"),
       }),
-      defaultLevel: "info",
     },
     noopLog,
   );

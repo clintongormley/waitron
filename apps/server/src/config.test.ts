@@ -92,6 +92,11 @@ describe("loadConfig", () => {
       // No WAITRON_STATE_DIR set, so stateDir falls back to the boot-provided default (STATE_ROOT),
       // the same isUnset fallback mediaDir uses above — never resolve("") / cwd (CLAUDE.md §3).
       stateDir: STATE_ROOT,
+      // No WAITRON_LOG_DIR set, so logDir defaults to `join(stateDir, "logs")` — under whichever state
+      // root won above (here STATE_ROOT). The rotation knobs take their bytes/files defaults.
+      logDir: resolve(STATE_ROOT, "logs"),
+      logMaxBytes: 10_000_000,
+      logMaxFiles: 5,
       // No WAITRON_TLS_* set, so the whole optional block is absent — not present-but-undefined.
       // `tls` is omitted from the returned object entirely (see loadConfig's conditional spread).
       till: EXPECTED_TILL,
@@ -593,6 +598,53 @@ describe("loadConfig", () => {
     // Prove the trap directly: the empty value did NOT resolve to cwd.
     expect(config.stateDir).not.toBe(resolve(""));
     expect(config.stateDir).not.toBe(process.cwd());
+  });
+
+  // The rotating-log directory + rotation knobs (this task). logDir defaults to `join(stateDir, "logs")`
+  // under whichever state root actually won, so it tracks a WAITRON_STATE_DIR override rather than the
+  // boot default. The two knobs default to 10 MB / 5 files.
+  it("defaults logDir to join(stateDir, 'logs') and the rotation knobs to 10MB / 5 files", () => {
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT);
+    expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
+    expect(config.logMaxBytes).toBe(10_000_000);
+    expect(config.logMaxFiles).toBe(5);
+  });
+
+  it("derives the default logDir from a WAITRON_STATE_DIR override, not the boot default root", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_STATE_DIR: "/var/lib/waitron" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.logDir).toBe(resolve("/var/lib/waitron", "logs"));
+  });
+
+  it("reads WAITRON_LOG_DIR / WAITRON_LOG_MAX_BYTES / WAITRON_LOG_MAX_FILES overrides when set", () => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_LOG_DIR: "/srv/logs",
+        WAITRON_LOG_MAX_BYTES: "2000000",
+        WAITRON_LOG_MAX_FILES: "3",
+      },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.logDir).toBe("/srv/logs");
+    expect(config.logMaxBytes).toBe(2_000_000);
+    expect(config.logMaxFiles).toBe(3);
+  });
+
+  // The load-bearing empty-value guard (CLAUDE.md §3): `WAITRON_LOG_DIR=` (set but empty) falls back to
+  // the default exactly as an unset one does — NEVER `resolve("")` / cwd, which would scatter the box's
+  // logs into whatever directory the process happened to start in.
+  it("treats an empty WAITRON_LOG_DIR as unset, falling back to join(stateDir, 'logs')", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_LOG_DIR: "" }, ROOT, MEDIA_ROOT, STATE_ROOT);
+    expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
+    expect(config.logDir).not.toBe(resolve(""));
+    expect(config.logDir).not.toBe(process.cwd());
   });
 
   // The built front-end directories the box serves same-origin (slice 1a/2c). All OPTIONAL: dev leaves

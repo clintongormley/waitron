@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { tryLoadTillConfig } from "./till-config.js";
@@ -78,6 +78,23 @@ export interface ServerConfig {
    * the dev default lives beside the bundle and is gitignored, because it holds secrets.
    */
   stateDir: string;
+  /**
+   * Where the box writes its rotating structured logs — the directory `createRotatingFileSink` appends
+   * `waitron.log` (+ rotated `.1`..`.N`) into, and `createLogReader` reads back for the diagnostics
+   * `/recent` surface. Defaults to `join(stateDir, "logs")` so the logs live beside the box's other
+   * persisted state under one durable, protected root; `WAITRON_LOG_DIR` overrides it. An unset OR EMPTY
+   * value falls back to the default via `isUnset` — never `resolve("")`, which is cwd (the "empty value
+   * is a valid value" trap, CLAUDE.md §3). Kept as-is (not `resolve`d) like `stateDir` derives it: the
+   * default is already absolute (built from the absolute `stateDir`), and an operator override is used
+   * verbatim as the sink's `dir`, which `mkdirSync(dir, { recursive: true })`s it on first write.
+   */
+  logDir: string;
+  /** The rotation ceiling in bytes: once the current `waitron.log` would exceed this, the sink rotates
+   * before appending. Default 10_000_000; `WAITRON_LOG_MAX_BYTES` overrides it (a positive integer). */
+  logMaxBytes: number;
+  /** How many rotated files the sink keeps (`waitron.log.1`..`.N`) and the reader reads back. Default 5;
+   * `WAITRON_LOG_MAX_FILES` overrides it (a positive integer). */
+  logMaxFiles: number;
   /**
    * The PEM files that make this host serve HTTPS. BOTH-or-NEITHER (loadConfig refuses a
    * half-configured pair): absent means plain HTTP for loopback dev, present means TLS. This task
@@ -169,6 +186,12 @@ const DEFAULT_SYNC_FAST_TICK_MS = 1000;
  * housekeeping DELETE, not on any hot path, so it need not run tight. */
 const DEFAULT_SYNC_RETENTION_TICK_MS = 60_000;
 const DEFAULT_HTTP_PORT = 8080;
+/** The rotating log file's size ceiling when WAITRON_LOG_MAX_BYTES is unset — 10 MB, a full file that
+ * still opens instantly in an editor. */
+const DEFAULT_LOG_MAX_BYTES = 10_000_000;
+/** How many rotated log files the sink keeps + the reader reads back when WAITRON_LOG_MAX_FILES is
+ * unset. Five × 10 MB is a bounded, small on-disk footprint. */
+const DEFAULT_LOG_MAX_FILES = 5;
 const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
  * a value like `999999` reach `serve()` (`boot.ts`), which throws a raw, unformatted
@@ -575,6 +598,11 @@ export function loadConfig(
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const mediaDir = env.WAITRON_MEDIA_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
+  const logDir = env.WAITRON_LOG_DIR;
+  // The effective (absolute) state dir, computed once so `logDir`'s default reads the SAME value the
+  // returned `stateDir` field carries — `join(stateDir, "logs")` must sit under whatever state root
+  // actually won (the resolved override, or the boot-computed default), never a second derivation.
+  const resolvedStateDir = isUnset(stateDir) ? defaultStateRoot : resolve(stateDir);
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
@@ -625,7 +653,15 @@ export function loadConfig(
     mediaDir: isUnset(mediaDir) ? defaultMediaRoot : resolve(mediaDir),
     // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
     // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
-    stateDir: isUnset(stateDir) ? defaultStateRoot : resolve(stateDir),
+    stateDir: resolvedStateDir,
+    // The rotating-log directory. Default is `join(stateDir, "logs")` — under whichever state root won
+    // above (`resolvedStateDir`), so logs live beside the box's other persisted state. An unset OR empty
+    // WAITRON_LOG_DIR takes that default via `isUnset`, never `resolve("")` / cwd (CLAUDE.md §3); an
+    // operator override is used verbatim (the sink `mkdirSync`s it), matching how `tillAppDir` stores a
+    // set dir without `resolve`.
+    logDir: isUnset(logDir) ? join(resolvedStateDir, "logs") : logDir,
+    logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
+    logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
     // Conditionally present, never present-but-undefined: an absent `tls` key is what "no TLS
     // configured" means downstream (`config.tls !== undefined` decides `secureCookies` and whether
     // `buildServeOptions` reads any files at all).

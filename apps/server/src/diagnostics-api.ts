@@ -16,15 +16,13 @@ import "./errors.js";
  * and writes only the tenant's own records, so it wires no fiscal backend or clock. `cfg.tenantId` is
  * the dashboard's own tenant (provisioning stamped it), scoping the `withTenant` authorize gate below.
  * `reader` reads back the box's rotating log files; `verbosity` is the in-memory controller `boot.ts`
- * built and the logger reads its `current()` at each call; `defaultLevel` is the level a restart
- * reverts to (carried for the surface's own display, the verbosity controller owns its own default).
+ * built and the logger reads its `current()` at each call (which also owns its own default level).
  */
 export interface DiagnosticsApiDeps {
   db: Database;
   cfg: { tenantId: string };
   reader: LogReader;
   verbosity: VerbosityController;
-  defaultLevel: LogLevel;
 }
 
 /**

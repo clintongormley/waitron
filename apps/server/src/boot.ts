@@ -37,6 +37,10 @@ import { promoteLocalSecondaryToPrimary } from "./promote.js";
 import type { FenceAttestation, PromotionResult } from "./promote.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
+import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
+import { createVerbosityController } from "./verbosity.js";
+import { requestIdMiddleware } from "./request-id.js";
+import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import {
   createHealthState,
   healthApp,
@@ -412,8 +416,37 @@ function makeStartedServer(
  */
 export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
   const now = () => new Date();
-  const log = createLogger((line) => process.stdout.write(line), now);
+  // Config is loaded FIRST so `config.logDir` + the rotation knobs are available when the file sink is
+  // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
+  // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  // The verbosity controller the diagnostics API raises and the logger reads at each call: request
+  // logging (`http.request`, a `debug` line) is dropped by the default `info` threshold until an
+  // operator raises it for a bounded window, then auto-reverts in memory (never across a restart).
+  const verbosity = createVerbosityController({ defaultLevel: "info", now });
+  // The rotating file sink under `config.logDir`. On ANY IO failure it degrades to a no-op after ONE
+  // stdout warn line (`log.file_unavailable`) — the FILE is what failed, so the notice goes to stdout
+  // only, and the paired `tee` still writes every line to stdout. Logging never throws into a request
+  // path (SALE-SAFETY), so a lost log directory loses the file, not the sale.
+  const fileSink = createRotatingFileSink(
+    { dir: config.logDir, maxBytes: config.logMaxBytes, maxFiles: config.logMaxFiles },
+    () =>
+      process.stdout.write(
+        `${JSON.stringify({ at: now().toISOString(), level: "warn", event: "log.file_unavailable" })}\n`,
+      ),
+  );
+  // Reads the rotating files back for the diagnostics `/recent` surface — the reader mirrors the sink's
+  // rotation naming and `maxFiles`, so the two agree by construction on which files exist.
+  const reader = createLogReader({ dir: config.logDir, maxFiles: config.logMaxFiles });
+  // The one process logger: `tee`d to stdout AND the rotating file, with the live verbosity threshold
+  // read per call. The two exit-path loggers (this file's `startListening` catch, `bin.ts`'s fatal
+  // exit) stay 2-arg on purpose — they run at process death, want no file sink, and take the
+  // `getThreshold` default (`info`).
+  const log = createLogger(
+    tee((line) => process.stdout.write(line), fileSink),
+    now,
+    () => verbosity.current(),
+  );
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,
@@ -478,6 +511,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // one health state whichever mode boots.
   const health = createHealthState(now());
   const app = healthApp(health, now);
+  // Stamp + log every request FIRST, before the mirror read-only gate and every mounted surface below,
+  // so every route mounted after this line (the setup surface, the mirror gate, and all the trading/
+  // dashboard APIs) gets an `x-request-id` echo and a route-pattern `http.request` log line correlated
+  // by that id. Hono runs matching handlers in registration order, so this wraps everything registered
+  // AFTER it. The ONE route registered before it is `/health` (inside `healthApp` above), deliberately
+  // left unwrapped: a liveness probe needs no request correlation and should not fill the request log
+  // with probe noise. The request log is `debug`, dropped by the default verbosity until raised.
+  app.use("*", requestIdMiddleware(log, now));
 
   if (config.till === undefined) {
     // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
@@ -919,6 +960,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The dashboard's diagnostics surface (read the recent log tail, read + raise verbosity) on the SAME
+  // app, the identical convention. It reuses the EXACT `db` and tenant (`till.tenantId`, this venue's
+  // one tenant) `mountManagementApi` above receives, plus the `reader` over the rotating files and the
+  // in-memory `verbosity` controller the logger reads. All three routes are gated behind
+  // `diagnostics.view`. Routes only — no database work at boot; the gate runs per request.
+  mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
   // The dashboard's gated catalogue write group (catalogues/categories/products + image upload) on the
   // SAME app, the identical convention. It reuses the EXACT `db` and tenant `mountManagementApi` above
   // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift, plus the store
