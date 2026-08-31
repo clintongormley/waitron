@@ -89,10 +89,61 @@ describe("createInstrumentedFetch", () => {
     const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
       makeId: () => "rid-4",
     });
-    // A Request object is neither a string nor a URL, so it falls to String(input), which then
-    // fails URL parsing and exercises the raw-path fallback.
-    await f(new Request("http://box/api/x"));
-    expect(log.snapshot().at(-1)!.fields.requestId).toBe("rid-4");
+    // `new URL("http://[", "http://local")` genuinely throws (invalid IPv6 host), so the raw-path
+    // fallback keeps the unparsed string. Deleting the try/catch makes this call reject.
+    const raw = "http://[";
+    await f(raw);
+    const end = log.snapshot().at(-1)!;
+    expect(end.fields.requestId).toBe("rid-4");
+    expect(end.fields.path).toBe(raw);
+  });
+
+  it("stringifies an input that is neither a string nor a URL", async () => {
+    const log = createDiagnosticsLog();
+    const base = vi.fn(async () => new Response("{}", { status: 200 }));
+    const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
+      makeId: () => "rid-req",
+    });
+    // An object that is neither a string nor a URL falls to String(input), which invokes its
+    // toString(); the resulting url parses and its masked pathname is logged.
+    const urlish = {
+      toString: () => "http://box/api/persons/2f1c8e2a-0000-4000-8000-000000000000",
+    };
+    await f(urlish as unknown as URL);
+    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/persons/:id");
+  });
+
+  it("preserves a pre-existing content-type header while adding x-request-id", async () => {
+    const log = createDiagnosticsLog();
+    let seen: Headers | undefined;
+    const base = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      seen = new Headers(init?.headers);
+      return new Response("{}", { status: 200 });
+    });
+    const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
+      makeId: () => "rid-7",
+    });
+    await f("http://box/api/sales/9", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    expect(seen!.get("content-type")).toBe("application/json");
+    expect(seen!.get("x-request-id")).toBe("rid-7");
+  });
+
+  it("strips the query string from the logged path", async () => {
+    const log = createDiagnosticsLog();
+    const base = vi.fn(async () => new Response("{}", { status: 200 }));
+    const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
+      makeId: () => "rid-8",
+    });
+    await f("http://box/api/sales/9?token=secret&card=4242");
+    const events = log.snapshot();
+    expect(events.at(-1)!.fields.path).toBe("/api/sales/:id");
+    const dump = JSON.stringify(events);
+    expect(dump).not.toContain("token");
+    expect(dump).not.toContain("secret");
+    expect(dump).not.toContain("4242");
   });
 
   it("captures no code when the error body is not JSON", async () => {
