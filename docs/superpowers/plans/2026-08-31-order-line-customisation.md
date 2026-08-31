@@ -17,7 +17,7 @@
 - **Migration numbering:** after rebasing on a `main` that already carries the dietary feature's `0086`, this plan's generated migration will be **`0087_*`** — do NOT hand-number; re-run `db:generate` post-rebase and let drizzle-kit assign it (drizzle-rebase-collision pattern).
 - **Additive nullable columns + one new pgEnum on existing RLS tables = plain `db:generate`**, no custom migration — both tables' FORCE RLS/policy/`app_user` grants already cover new columns (0004 for working_order_lines, 0055 for ticket_items). Run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after. (map §1/§2/§8)
 - **No backfill / no backwards-compat** (pre-production; CLAUDE.md §3). Existing rows get NULL — correct empty state.
-- **Error codes `order.*`, domain-named, never renamed** — grep siblings first. (CLAUDE.md §3)
+- **Error codes `working_order.*`, domain-named, never renamed** — grep siblings first. (CLAUDE.md §3. Corrected 2026-09-01 in pre-merge review from the `order.*` first written here: the entity's six existing sibling codes are `working_order.*`.)
 - **TESTCONTAINERS_RYUK_DISABLED=true** locally; `pnpm reap` after an interrupted run; serialise browser-package coverage runs (till). (CLAUDE.md §4)
 
 ### Shared type (defined in Task 1; consumed verbatim later)
@@ -110,25 +110,25 @@ git commit -s -m "feat(db): per-line note + doneness on working_order_lines and 
 **Files:**
 - Modify: `apps/server/src/working-order.ts:115-134` (`priceOrderLines` line param), `:865-1037` (`fireLines` param `:878-883` + snapshot `:1003-1031` + insert `:1037`).
 - Modify: `apps/server/src/till-api.ts:796-800`, `:855-858`, `:1423-1434` (the three line-bearing request bodies).
-- Modify: `apps/server/src/errors.ts` — add `order.note_too_long`, `order.invalid_doneness`.
+- Modify: `apps/server/src/errors.ts` — add `working_order.note_too_long`, `working_order.invalid_doneness`.
 - Test: `apps/server/src/working-order.test.ts`, `apps/server/src/till-api.test.ts`.
 
 **Interfaces:**
 - Consumes: Task 1 columns; `DONENESS`/`Doneness` (import from `@waitron/db` where the enum's values are exported, or redefine the tuple in a shared spot — prefer exporting `DONENESS` from the db schema module).
 - Produces: `priceOrderLines` line param gains `note?: string; doneness?: Doneness`; `fireLines` threads them; ticket_items rows carry snapshotted values.
 
-- [ ] **Step 1: Failing wire test** — `till-api.test.ts`: a round-send with `{ note: "no onions", doneness: "medium" }` persists them on the `working_order_lines` row; an out-of-enum doneness is rejected `order.invalid_doneness`; an over-long note (>200) rejected `order.note_too_long`.
+- [ ] **Step 1: Failing wire test** — `till-api.test.ts`: a round-send with `{ note: "no onions", doneness: "medium" }` persists them on the `working_order_lines` row; an out-of-enum doneness is rejected `working_order.invalid_doneness`; an over-long note (>200) rejected `working_order.note_too_long`.
 
 - [ ] **Step 2: Run, watch fail.**
 
-- [ ] **Step 3: Add the error codes** in `apps/server/src/errors.ts` (grep the `order.*` family first; `server.*` is process-only, so these are `order.*`):
+- [ ] **Step 3: Add the error codes** in `apps/server/src/errors.ts` (grep the entity's family first; `server.*` is process-only, and the six existing sibling codes are `working_order.*`, so these are `working_order.*`):
 
 ```ts
-    "order.note_too_long": { length: number; limit: number };
-    "order.invalid_doneness": { value: string };
+    "working_order.note_too_long": { length: number; limit: number };
+    "working_order.invalid_doneness": { value: string };
 ```
 
-- [ ] **Step 4: Extend `priceOrderLines`** (`:129-134`) — add `note?: string; doneness?: Doneness` to the line param; validate: trim `note`, `if (note.length > 200) throw new AppError("order.note_too_long", {length, limit:200})`; `if (doneness !== undefined && !DONENESS.includes(doneness)) throw new AppError("order.invalid_doneness", {value:String(doneness)})`. Carry validated `note`/`doneness` onto the `working_order_lines` insert this function performs.
+- [ ] **Step 4: Extend `priceOrderLines`** (`:129-134`) — add `note?: string; doneness?: Doneness` to the line param; validate: trim `note`, `if (note.length > 200) throw new AppError("working_order.note_too_long", {length, limit:200})`; `if (doneness !== undefined && !DONENESS.includes(doneness)) throw new AppError("working_order.invalid_doneness", {value:String(doneness)})`. Carry validated `note`/`doneness` onto the `working_order_lines` insert this function performs.
 
 - [ ] **Step 5: Extend the three till-api bodies** (`:796-800`, `:855-858`, `:1423-1434`) — add optional `note`/`doneness` to each per-line body shape, forwarded into `priceOrderLines`. (The round body `:1423-1434` is the richest; mirror it.)
 

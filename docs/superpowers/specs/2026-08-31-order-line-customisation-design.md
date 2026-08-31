@@ -73,10 +73,12 @@ The working-order line wire (`SaleLine`) sends `productId`, `quantity`,
 `options: [{ optionGroupItemId }]`. Add two optional fields to the line payload: `note` and
 `doneness`. Server is authoritative:
 
-- `doneness` must be a member of the enum or absent — reject otherwise (`order.invalid_doneness`).
-- `note` trimmed and length-checked (`order.note_too_long`).
-- Error codes domain-named (`order.*`), grepped against sibling families before committing (codes are
-  never renamed once shipped; CLAUDE.md §3).
+- `doneness` must be a member of the enum or absent — reject otherwise (`working_order.invalid_doneness`).
+- `note` trimmed and length-checked (`working_order.note_too_long`).
+- Error codes domain-named (`working_order.*`), grepped against sibling families before committing (codes are
+  never renamed once shipped; CLAUDE.md §3). (Corrected 2026-09-01 in pre-merge review: the codes were
+  first written `order.*`, but this entity's six existing sibling codes use `working_order.*`, so they
+  ship as `working_order.note_too_long` / `working_order.invalid_doneness`.)
 - The server does **not** re-derive meat to police doneness — the till gates the *UI*; the server
   stores a validated value. Coupling the fiscal write path to diet derivation would be gratuitous.
 

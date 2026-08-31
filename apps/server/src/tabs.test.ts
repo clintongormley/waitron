@@ -422,7 +422,7 @@ describe("addTabRound per-line note + doneness (NON-FISCAL, spec §2/§3)", () =
     expect(line!.doneness).toBeNull();
   });
 
-  it("rejects a doneness not in the enum (order.invalid_doneness)", async () => {
+  it("rejects a doneness not in the enum (working_order.invalid_doneness)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await expect(
@@ -431,16 +431,22 @@ describe("addTabRound per-line note + doneness (NON-FISCAL, spec §2/§3)", () =
           { productId: cafeId, quantity: "1", doneness: "scorched" as never },
         ]),
       ),
-    ).rejects.toMatchObject({ code: "order.invalid_doneness", params: { value: "scorched" } });
+    ).rejects.toMatchObject({
+      code: "working_order.invalid_doneness",
+      params: { value: "scorched" },
+    });
   });
 
-  it("rejects a note longer than 200 chars (order.note_too_long)", async () => {
+  it("rejects a note longer than 200 chars (working_order.note_too_long)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const note = "x".repeat(201);
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note }])),
-    ).rejects.toMatchObject({ code: "order.note_too_long", params: { length: 201, limit: 200 } });
+    ).rejects.toMatchObject({
+      code: "working_order.note_too_long",
+      params: { length: 201, limit: 200 },
+    });
   });
 
   it("rejects a non-string note with a clean 400 screen (management.request_invalid), not a 500", async () => {

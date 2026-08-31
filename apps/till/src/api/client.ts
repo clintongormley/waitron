@@ -327,7 +327,7 @@ export interface ProductCatalogue {
  * The meat-doneness enum (order-line customisation) — a LOCAL redefinition of the server's
  * `packages/db` `Doneness`, the same bundle-decoupling rationale as every other type in this file (see
  * the file header). Values MUST match the server's `DONENESS` tuple exactly (`schema/orders.ts`); the
- * server re-validates any `doneness` it receives against that enum (`order.invalid_doneness`). NON-FISCAL:
+ * server re-validates any `doneness` it receives against that enum (`working_order.invalid_doneness`). NON-FISCAL:
  * doneness lives only on `working_order_lines`/`ticket_items` (snapshotted at fire), never on the fiscal
  * projection or a huella.
  *

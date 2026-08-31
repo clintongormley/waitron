@@ -145,8 +145,8 @@ async function priceOrderLines(
   // per dish, capped by the item's `max_quantity`; the child is priced at `dishQty × optionQty`.
   //
   // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note` and a
-  // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`order.note_too_long`); the
-  // doneness is validated against the enum (`order.invalid_doneness`). Both attach to the PARENT dish
+  // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`working_order.note_too_long`);
+  // the doneness is validated against the enum (`working_order.invalid_doneness`). Both attach to the PARENT dish
   // line only — a child modifier row carries neither. Absent = NULL (not chosen); a whitespace-only
   // note folds to NULL.
   lines: ({
@@ -210,11 +210,14 @@ async function priceOrderLines(
     const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
     const trimmedNote = screenedNote?.trim() ?? "";
     if (trimmedNote.length > NOTE_LIMIT) {
-      throw new AppError("order.note_too_long", { length: trimmedNote.length, limit: NOTE_LIMIT });
+      throw new AppError("working_order.note_too_long", {
+        length: trimmedNote.length,
+        limit: NOTE_LIMIT,
+      });
     }
     const note = trimmedNote.length === 0 ? null : trimmedNote;
     if (line.doneness !== undefined && !DONENESS.includes(line.doneness)) {
-      throw new AppError("order.invalid_doneness", { value: String(line.doneness) });
+      throw new AppError("working_order.invalid_doneness", { value: String(line.doneness) });
     }
     const doneness = line.doneness ?? null;
 
