@@ -76,13 +76,14 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
     });
   };
 
-  // Read the recent log tail. `?limit=` is clamped into `1..1000` (default 200): a non-finite value
-  // (absent, or non-numeric text) falls back to the default, and a finite one is truncated and bounded
-  // — so a crafted limit can neither read nothing nor ask the reader for an unbounded slice.
+  // Read the recent log tail. `?limit=` is clamped into `1..1000` (default 200): absent, empty, or
+  // non-numeric text falls back to the default, and a finite value is truncated and bounded — so a
+  // crafted limit can neither read nothing nor ask the reader for an unbounded slice.
   app.get("/management-api/diagnostics/recent", (c) =>
     run(c, log, async () => {
       await authorize(c);
-      const raw = Number(c.req.query("limit") ?? String(DEFAULT_LIMIT));
+      const q = c.req.query("limit");
+      const raw = q === undefined || q === "" ? Number.NaN : Number(q);
       const limit = Number.isFinite(raw)
         ? Math.min(Math.max(Math.trunc(raw), MIN_LIMIT), MAX_LIMIT)
         : DEFAULT_LIMIT;

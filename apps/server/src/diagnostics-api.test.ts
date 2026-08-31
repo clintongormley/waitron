@@ -219,6 +219,10 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
     // Non-numeric → falls back to the default.
     await get(app, "/management-api/diagnostics/recent?limit=abc", v.managerCookie);
     expect(stub.lastRecentOpts()).toEqual({ limit: 200 });
+
+    // Empty `?limit=` is "no value given" → the default, not `Number("")` = 0 clamped to 1.
+    await get(app, "/management-api/diagnostics/recent?limit=", v.managerCookie);
+    expect(stub.lastRecentOpts()).toEqual({ limit: 200 });
   });
 
   it("reports the default verbosity (no active override) as info with a null revert time", async () => {

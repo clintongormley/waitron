@@ -86,8 +86,8 @@ type NavItem = { screen: Screen; labelKey: StringKey; requiresManager?: boolean 
 type NavGroup = { headerKey?: StringKey; items: NavItem[] };
 
 /**
- * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the seventeen manager faces are
- * described here once rather than spelled out seventeen times in the template. The pinned first group
+ * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the manager faces are
+ * described here once rather than spelled out one-by-one in the template. The pinned first group
  * (overview + sales) carries no header — the two reporting faces lead. Each item keeps the stable
  * `data-test="nav-<screen>"` id every downstream consumer (tests included) pins.
  */

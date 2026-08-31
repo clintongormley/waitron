@@ -1164,10 +1164,10 @@ export interface SalesPeriodDto {
 // These are the CONTRACT the diagnostics viewer screen builds on; the server shapes stay the source
 // of truth, and a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
 
-/** One line of `GET /management-api/diagnostics/recent` — a structured log record. The four named
- * fields are always present (`at` the ISO instant, `level` the severity, `event` the log key,
- * `requestId` the correlating id when the line belongs to a request); the open `Record` tail carries
- * whatever per-event fields the server attached. */
+/** One line of `GET /management-api/diagnostics/recent` — a structured log record. `at` (the ISO
+ * instant), `level` (the severity) and `event` (the log key) are always present; `requestId` is set
+ * only when the line belongs to a request (a boot/background line carries none); the open `Record`
+ * tail carries whatever per-event fields the server attached. */
 export type DiagnosticsLine = {
   at: string;
   level: string;

@@ -166,8 +166,9 @@ export class DiagnosticsScreen extends LitElement {
   }
 
   /** Raise verbosity to `debug` for the bounded {@link WINDOW_MINUTES} window, then refresh so the
-   * header immediately reflects the new level + revert time. A rejection becomes the `errorKey` banner;
-   * never an unhandled rejection (called via `void`). */
+   * header reflects the new level + revert time — on the next poll tick if a refresh is already in
+   * flight, since the single-flight guard skips a concurrent one. A rejection becomes the `errorKey`
+   * banner; never an unhandled rejection (called via `void`). */
   async #raise(): Promise<void> {
     try {
       await this.api.setVerbosity("debug", WINDOW_MINUTES);

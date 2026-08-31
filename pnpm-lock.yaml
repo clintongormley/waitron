@@ -469,12 +469,6 @@ importers:
 
   packages/diagnostics:
     devDependencies:
-      '@stryker-mutator/core':
-        specifier: ^9.6.1
-        version: 9.6.1(@types/node@24.13.3)
-      '@stryker-mutator/vitest-runner':
-        specifier: ^9.6.1
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.3))(vitest@3.2.7)
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
