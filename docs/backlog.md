@@ -157,24 +157,32 @@ demo or behind-the-scenes".
    "Reserved HH:MM" on the floor, dashboard day-list screen. **Future:** public/online/QR booking,
    availability/double-booking prevention, reminders (SMS/email), a customer/CRM entity, recurring
    bookings, a calendar grid, deposits.
-7. **Ordering modifiers / variants** ("burger with options"). A **data-model gap** — products are flat
-   (`packages/catalogue`, no modifier/option-group concept). Needs its own spec; greenfield. **Pairs
-   with tableside ordering (#4).** NEW. In design (2026-08-30): reusable option groups (min/max/required)
-   + priced options, each *selected* option filed as its own fiscal sub-line linked to its parent line
-   — so it **touches the unrepairable fiscal core** (own amount + VAT into the desglose/huella),
-   dedicated fiscal review, supervised, never landed unattended. **Deferred niceties (out of the first
-   slice):** *per-option quantity* ("extra shot ×2") — the first slice expresses "up to N of a group"
-   via the group's `max_select`, but not a count on a single option; and a per-option **VAT-class
-   override** ships but is expected to be rarely used (options inherit the dish's rate by default).
-   **Follow-on slice — modifier↔allergen association (own spec, after modifiers lands; owner, 2026-08-30):**
-   a modifier changes a dish's **as-served allergen profile in BOTH directions** — *adds* ("extra cheese"
-   → milk) and, safety-critically, *removes* ("gluten-free bun" → removes gluten; "oat milk" → removes
-   milk). Add an allergen overlay to `option_group_items` (adds/removes, EU-14) and derive per line
-   (dish allergens − removed + added), building on the existing product allergen subsystem
-   (`allergens`/`manual_allergens`/`recipe_derivation`). **Non-fiscal** (never in the huella), so it is a
-   separately-reviewable, non-supervised slice — but **legally load-bearing** (EU 1169/2011 Annex II,
-   food-safety-advisor territory) and must ship add+remove together (an add-only half-version would show
-   a "gluten-free" modifier as still containing gluten — worse than nothing).
+7. **Ordering modifiers / variants** ("burger with options") — **LANDED (#184).** Reusable option groups
+   (min/max/required) + priced options; each *selected* option files as its own `sale_line` linked to its
+   parent dish by a nullable `parent_line_id`. Fiscal core (own amount + VAT flow into the desglose), but
+   `parent_line_id` is **structurally excluded from the huella** — the fiscal record is built from
+   total+vatBreakdown only, never from individual `sale_lines` (pinned by a huella-invariance test). Three
+   new FORCE-RLS tables (`option_groups`/`option_group_items`/`product_option_groups`); pricing reuses the
+   `priceRows` core. Surfaces: till modifier picker (min/max/required, empty-group skip), receipt + basket +
+   KDS + settled-ticket grouping, dashboard option-group manager + product attach, and demo-seed modifiers
+   (coffee size/milk, sirloin extras/cooking). Per-option **VAT-class override** ships (rarely used; options
+   inherit the dish's rate). Spec/plan `docs/superpowers/{specs,plans}/2026-08-30-ordering-modifiers*`.
+   **Open follow-ons (each its own slice):**
+   - **Modifier↔allergen association** (owner, 2026-08-30) — a modifier changes a dish's as-served allergen
+     profile in BOTH directions: *adds* ("extra cheese"→milk) and, safety-critically, *removes*
+     ("gluten-free bun"→gluten; "oat milk"→milk). Allergen overlay on `option_group_items` (adds/removes,
+     EU-14) + per-line derivation (dish − removed + added) on the existing product allergen subsystem.
+     **Non-fiscal** (never in the huella), separately reviewable — but **legally load-bearing** (EU
+     1169/2011 Annex II, food-safety advisor) and must ship add+remove together (an add-only half would
+     show a "gluten-free" modifier as still containing gluten — worse than nothing). Own spec.
+   - **Per-option quantity** ("extra shot ×2") — the slice expresses "up to N of a group" via `max_select`,
+     not a count on a single option.
+   - **Small deferred cleanups** (finish-branch simplify/review): share `kitchen-print`'s child-line read
+     with `working-order.ts`'s `readModifiersByParent`; lift `catalogue-api`'s `parseOptionalInteger` + the
+     dashboard pick-list add/move/remove into shared helpers; hoist the `groupByParent` receipt/till mirror
+     to `packages/shared`. **TS-4 partial-transfer guard:** when the unwired partial-transfer UI lands,
+     `transferLines` must keep refusing a modifier child split from its parent (today `tab.transfer_modifier_line`;
+     the picker just doesn't expose partial yet).
 8. **Menu-management depth.** The **live multi-menu till foundation landed**, and **Slice A — the
    location↔menu membership dashboard — LANDED (#177)**: a new **Location menus** screen (17th manager
    face, Menu nav group) lets an owner pick which catalogues a location sells and which is the default
@@ -281,7 +289,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, **location↔menu membership UI (Tier B #8 Slice A, #177)** | **ordering modifiers (demo Tier B #7) + menu draft/publish + schedule (Tier B #8 remainder)**; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, **location↔menu membership UI (Tier B #8 Slice A, #177)**, **ordering modifiers / option groups (Tier B #7, #184)** | **menu draft/publish + schedule (Tier B #8 remainder)**; modifier↔allergen + per-option-qty follow-ons (#7); nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked, post-demo); AI forecast deferred |
 
