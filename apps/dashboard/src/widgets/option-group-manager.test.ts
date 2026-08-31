@@ -369,6 +369,8 @@ describe("option-group-manager", () => {
         sort: 0,
         active: true,
         maxQuantity: 5,
+        addAllergens: null,
+        removeAllergens: null,
       },
     ];
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {

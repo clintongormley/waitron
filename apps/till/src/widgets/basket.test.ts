@@ -240,6 +240,7 @@ describe("till-basket", () => {
       name: { es: "Pan sin gluten" },
       priceDelta: "0.00",
       vatClass: null,
+      maxQuantity: 1,
       addAllergens: null,
       removeAllergens: ["gluten"],
     };
@@ -281,6 +282,7 @@ describe("till-basket", () => {
       name: { es: "Extra queso" },
       priceDelta: "0.50",
       vatClass: null,
+      maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
       removeAllergens: null,
     };
