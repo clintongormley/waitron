@@ -5,7 +5,7 @@ import { MONEY_SCALE, type Decimal, grossOf, sumDecimals, toScale } from "@waitr
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
-import { type DietPredicate, filterProductsByDiet, filterProductsByMenu } from "../menu-filter.js";
+import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
@@ -557,14 +557,13 @@ export class TillTableOrderScreen extends LitElement {
    *  narrowed to the active diet lens ({@link filterProductsByDiet}) when one is set. A tab line's name
    *  still resolves against the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
   #gridProducts(): TillProduct[] {
-    const byMenu = filterProductsByMenu(this.products, this.selectedMenuId);
-    return this.selectedDiet ? filterProductsByDiet(byMenu, this.selectedDiet) : byMenu;
+    return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
   }
 
   /** Whether to show the diet filter at all — only when some product carries a published diet, so a
    *  venue with no dietary data adds no filter chrome above the round grid. */
   #hasDietData(): boolean {
-    return this.products.some((product) => product.diet != null);
+    return hasDietData(this.products);
   }
 
   /**

@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
-import { type DietPredicate, filterProductsByDiet, filterProductsByMenu } from "../menu-filter.js";
+import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
 import { LAYOUT_A, type LayoutDef, type WidgetInstance } from "../layout.js";
 // Side-effect imports: registering each widget element so the layout below can render its tag. The
 // screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
@@ -240,14 +240,13 @@ export class TillCounterScreen extends LitElement {
    *  to the active diet lens ({@link filterProductsByDiet}) when one is set. The allergen lookup screen
    *  keeps the FULL set (a tab may span menus, and allergen lookup must reach every product). */
   #gridProducts(): TillProduct[] {
-    const byMenu = filterProductsByMenu(this.products, this.selectedMenuId);
-    return this.selectedDiet ? filterProductsByDiet(byMenu, this.selectedDiet) : byMenu;
+    return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
   }
 
   /** Whether to show the diet filter at all — only when some product carries a published diet, so a
    *  venue with no dietary data adds no filter chrome above the grid. */
   #hasDietData(): boolean {
-    return this.products.some((product) => product.diet != null);
+    return hasDietData(this.products);
   }
 
   /** Reveal the allergen lookup screen in place of the sale body. */

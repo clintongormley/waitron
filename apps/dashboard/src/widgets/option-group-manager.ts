@@ -9,6 +9,7 @@ import "./allergen-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
+import { DIETARY_ORIGINS } from "../api/client.js";
 import type { AllergenDeclaration, OptionGroup, OptionGroupItem, VatClass } from "../api/client.js";
 
 /** The VAT bands the item VAT-override select offers — mirrors `product-form.ts`'s `VAT_CLASSES` (the
@@ -17,21 +18,6 @@ import type { AllergenDeclaration, OptionGroup, OptionGroupItem, VatClass } from
  * type copies throughout `api/client.ts`, the `NameTable`s in `i18n/domain.ts`) is likewise a small,
  * deliberately-duplicated copy rather than an import, to keep each file's dependency edges obvious. */
 const VAT_CLASSES: readonly VatClass[] = ["general", "reduced", "super_reduced", "zero"];
-
-/** The dietary-origin taxonomy in DISPLAY order, the option-item ORIGIN overlay's multiselect source
- * (Task 8b). A LOCAL copy of `@waitron/catalogue`'s `DIETARY_ORIGINS` (no runtime import — the #70
- * bundle rule), exactly as `dietary-origin-picker.ts` keeps its own; the raw tokens stay the wire
- * values, each labelled at the render edge through `t("origin.<token>")`. */
-const DIETARY_ORIGINS = [
-  "plant",
-  "meat",
-  "fish",
-  "shellfish",
-  "dairy",
-  "egg",
-  "honey",
-  "other_animal",
-] as const;
 
 /** Parse a `wt-input`'s typed text as an integer. Returns `undefined` for anything not a finite
  * integer (an empty field, a partial "-", stray letters) so a caller can treat that as "ignore this
@@ -363,27 +349,23 @@ export class OptionGroupManager extends LitElement {
     this.#updateItem(groupId, itemId, { removeAllergens: selected.length ? selected : null });
   }
 
-  /** An item's ADD-ORIGINS multiselect changed (Task 8b — the diet twin of the allergen overlay):
-   * gather the picked origin tokens and emit them, sending `null` (not `[]`) for an empty pick so
-   * "adds nothing" clears cleanly. Native `change` is `composed: false`, so `stopPropagation` is
-   * defensive consistency, mirroring `#onItemRemoveChange` above. */
-  #onItemAddOriginsChange(groupId: string, itemId: string, event: Event): void {
+  /** An item's ADD-ORIGINS or REMOVE-ORIGINS multiselect changed (Task 8b — the diet twin of the
+   * allergen overlay), parametrised on which field it targets: gather the picked origin tokens and
+   * emit them, sending `null` (not `[]`) for an empty pick so "adds/removes nothing" clears cleanly.
+   * Native `change` is `composed: false`, so `stopPropagation` is defensive consistency, mirroring
+   * `#onItemRemoveChange` above. */
+  #onItemOriginsChange(
+    groupId: string,
+    itemId: string,
+    field: "addOrigins" | "removeOrigins",
+    event: Event,
+  ): void {
     event.stopPropagation();
     const selected = Array.from(
       (event.target as HTMLSelectElement).selectedOptions,
       (o) => o.value,
     );
-    this.#updateItem(groupId, itemId, { addOrigins: selected.length ? selected : null });
-  }
-
-  /** An item's REMOVE-ORIGINS multiselect changed — the sibling of {@link #onItemAddOriginsChange}. */
-  #onItemRemoveOriginsChange(groupId: string, itemId: string, event: Event): void {
-    event.stopPropagation();
-    const selected = Array.from(
-      (event.target as HTMLSelectElement).selectedOptions,
-      (o) => o.value,
-    );
-    this.#updateItem(groupId, itemId, { removeOrigins: selected.length ? selected : null });
+    this.#updateItem(groupId, itemId, { [field]: selected.length ? selected : null });
   }
 
   #renderItemRow(groupId: string, item: OptionGroupItem) {
@@ -450,7 +432,7 @@ export class OptionGroupManager extends LitElement {
             <select
               multiple
               data-test=${`item-add-origins-${item.id}`}
-              @change=${(e: Event) => this.#onItemAddOriginsChange(groupId, item.id, e)}
+              @change=${(e: Event) => this.#onItemOriginsChange(groupId, item.id, "addOrigins", e)}
             >
               ${DIETARY_ORIGINS.map(
                 (origin) =>
@@ -468,7 +450,8 @@ export class OptionGroupManager extends LitElement {
             <select
               multiple
               data-test=${`item-remove-origins-${item.id}`}
-              @change=${(e: Event) => this.#onItemRemoveOriginsChange(groupId, item.id, e)}
+              @change=${(e: Event) =>
+                this.#onItemOriginsChange(groupId, item.id, "removeOrigins", e)}
             >
               ${DIETARY_ORIGINS.map(
                 (origin) =>

@@ -56,7 +56,8 @@ const RECIPE_WRITE_PERMISSION: Permission = "recipe.manage";
  * Every AppError CODE these routes answer, and the HTTP status it maps to — the recipe parallel of
  * `purchasing-api.ts`'s `STATUS`. CLIENT faults only: a genuine SERVER fault (a driver error) reaches
  * `run` as a NON-AppError and becomes an opaque 500. The `allergen.*` codes are raised by
- * `validateAllergens` inside `createIngredient`/`updateIngredient` when a supplied map is malformed.
+ * `validateAllergens`, and `diet.invalid_origin` by `validateOrigin`, inside
+ * `createIngredient`/`updateIngredient` when a supplied value is malformed.
  * A registered code absent from this table defaults to 400 via `run`.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -69,6 +70,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
+  "diet.invalid_origin": 400,
 };
 
 // The one error boundary every recipe route wraps its handler in — the shared `createErrorBoundary`

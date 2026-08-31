@@ -53,3 +53,23 @@ export function filterProductsByDiet(
     return !diet.contains.includes("fish");
   });
 }
+
+/**
+ * The tiles a till grid shows: the selected menu's products ({@link filterProductsByMenu}), then
+ * narrowed to the active diet lens ({@link filterProductsByDiet}) when one is set. Pure — both the
+ * counter screen and the table-order screen call it so the compose order lives in one place.
+ */
+export function visibleProducts(
+  products: TillProduct[],
+  selectedMenuId: string,
+  selectedDiet: DietPredicate | null,
+): TillProduct[] {
+  const byMenu = filterProductsByMenu(products, selectedMenuId);
+  return selectedDiet ? filterProductsByDiet(byMenu, selectedDiet) : byMenu;
+}
+
+/** Whether any product carries a published diet — the screens gate their diet-filter chrome on it so
+ * a venue with no dietary data adds no filter above the grid. Pure. */
+export function hasDietData(products: TillProduct[]): boolean {
+  return products.some((product) => product.diet != null);
+}

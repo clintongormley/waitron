@@ -830,6 +830,36 @@ describe("catalogue operations", () => {
     expect(row!.diet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
   });
 
+  // Changing BOTH overlays in one updateProduct call republishes allergens AND diet together
+  // (republishProductOverlays' single SELECT+UPDATE), landing the same values the two single-overlay
+  // republishes would.
+  it("updateProduct with both allergens and dietOverride republishes both columns", async () => {
+    const result = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "salad" },
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "general",
+      });
+      // reviewed all-plant recipe derivation → derived is vegan
+      await applyDietDerivation(tx, p.id, { origins: ["plant"], pending: false });
+      await updateProduct(tx, p.id, {
+        allergens: { milk: { presence: "contains" } },
+        dietOverride: { vegan: "no" },
+      });
+      const [product] = await listProducts(tx, cat.id);
+      const [diet] = await readDiet(tx, p.id);
+      return { allergens: product!.allergens, diet: diet! };
+    });
+    expect(result.allergens).toEqual({ milk: { presence: "contains" } });
+    expect(result.diet.override).toEqual({ vegan: "no" });
+    // override wins for vegan; vegetarian still follows the all-plant derivation.
+    expect(result.diet.diet).toMatchObject({ vegan: "no", vegetarian: "yes" });
+  });
+
   it("updateProduct rejects a conflicting diet override", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });

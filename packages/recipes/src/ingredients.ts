@@ -8,11 +8,7 @@ import {
   type ProductAllergens,
 } from "@waitron/catalogue";
 import { CURRENT_TENANT, INGREDIENT_COLUMNS } from "./columns.js";
-import {
-  productsUsingIngredient,
-  recomputeProductAllergens,
-  recomputeProductDiet,
-} from "./recipes.js";
+import { productsUsingIngredient, recomputeProductDerivations } from "./recipes.js";
 
 /**
  * Ingredient operations — CRUD over the `ingredients` table (raw materials / prep items).
@@ -108,10 +104,11 @@ export async function updateIngredient(
   // when the relevant field was in the patch" guard.
   //
   // The gate fires when EITHER the allergen declaration OR the dietary origin was in the patch, and
-  // both roll-ups run in the SAME loop so they never drift apart. An origin-only edit (no `allergens`
-  // key) must still fan out `recomputeProductDiet`, or a product's diet goes stale — the gap the
-  // earlier allergen-only guard left, closed here (see recipes.test.ts's origin-only fan-out test,
-  // proven by deletion). Recomputing both on either change is a cheap, always-correct idempotency.
+  // both roll-ups run from the SAME recipe read (`recomputeProductDerivations`) so they never drift
+  // apart. An origin-only edit (no `allergens` key) must still re-derive the diet, or a product's diet
+  // goes stale — the gap the earlier allergen-only guard left, closed here (see recipes.test.ts's
+  // origin-only fan-out test, proven by deletion). Recomputing both on either change is a cheap,
+  // always-correct idempotency.
   //
   // Fans out O(N) over the products sharing this ingredient — each recompute is its own SELECT-join
   // plus a republish round-trip. A set-based batched rewrite (one join query → a JS fold → one batched
@@ -119,8 +116,7 @@ export async function updateIngredient(
   // scale-gated-deferral precedent; not worth the complexity at deli scale today.
   if (patch.allergens !== undefined || patch.dietaryOrigin !== undefined) {
     for (const productId of await productsUsingIngredient(tx, id)) {
-      await recomputeProductAllergens(tx, productId);
-      await recomputeProductDiet(tx, productId);
+      await recomputeProductDerivations(tx, productId);
     }
   }
 }

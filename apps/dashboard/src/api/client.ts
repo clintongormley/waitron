@@ -114,6 +114,27 @@ export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 export type DietaryOrigin =
   "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
 
+/**
+ * The dietary-origin taxonomy in DISPLAY order — the runtime companion of {@link DietaryOrigin}, the
+ * single dashboard-local source both the ingredient-form origin picker and the option-group manager's
+ * per-item origin overlay render from (the way `i18n/domain.ts`'s `ALLERGEN_CODES` is shared by the
+ * allergen picker and the same manager). Kept LOCAL, not imported from `@waitron/catalogue`, so its
+ * barrel — and through it `@waitron/db` and Node builtins — stays out of the browser bundle (the #70
+ * rule). The raw tokens stay the WIRE VALUES (emitted `origin` and `<option>` values); each renders
+ * its localised label at the render edge through `t("origin.<token>")`, so this stays `as const` to
+ * keep the literal keys.
+ */
+export const DIETARY_ORIGINS = [
+  "plant",
+  "meat",
+  "fish",
+  "shellfish",
+  "dairy",
+  "egg",
+  "honey",
+  "other_animal",
+] as const;
+
 /** The contains-tags a diet override may hand-assert / hand-strip — the strictly-smaller subset of
  * {@link DietaryOrigin} the derivation surfaces as `contains`. A LOCAL copy of `@waitron/catalogue`'s
  * `CONTAINS_TAGS` union (no runtime import — the #70 bundle rule). */

@@ -162,15 +162,20 @@ export function deriveAsServedDiet(
   overlays: readonly OptionOriginOverlay[],
 ): DietProfile {
   const origins = new Set<DietaryOrigin>(d.origins);
+  // Collect the origins added by the selected options while applying them, so the cap below can reason
+  // about them without a second walk of `overlays`.
+  const added = new Set<DietaryOrigin>();
   for (const o of overlays) for (const code of o.remove ?? []) origins.delete(code);
-  for (const o of overlays) for (const code of o.add ?? []) origins.add(code);
+  for (const o of overlays)
+    for (const code of o.add ?? []) {
+      origins.add(code);
+      added.add(code);
+    }
   const derived = deriveDietProfile({ origins: [...origins].sort(), pending: d.pending });
   const out = overlayDietProfile(derived, override);
-  // Cap: an ADD can only downgrade a forced-positive vegan/vegetarian (never uphold it). Collect the
-  // origins added by the selected options; if a forced positive survives beside an incompatible add,
-  // downgrade it to "no". halal/kosher are deliberately untouched (no origin signal, per the doc above).
-  const added = new Set<DietaryOrigin>();
-  for (const o of overlays) for (const code of o.add ?? []) added.add(code);
+  // Cap: an ADD can only downgrade a forced-positive vegan/vegetarian (never uphold it). If a forced
+  // positive survives beside an incompatible add, downgrade it to "no". halal/kosher are deliberately
+  // untouched (no origin signal, per the doc above).
   if (out.vegan === "yes" && [...added].some((code) => !VEGAN_OK.has(code))) out.vegan = "no";
   if (out.vegetarian === "yes" && [...added].some((code) => !VEGETARIAN_OK.has(code)))
     out.vegetarian = "no";

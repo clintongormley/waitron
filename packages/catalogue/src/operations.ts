@@ -408,6 +408,39 @@ async function republishProductDiet(tx: Transaction, id: string): Promise<void> 
 }
 
 /**
+ * Republish BOTH `products.allergens` and `products.diet` from the row's four overlay columns in a
+ * SINGLE SELECT + a SINGLE UPDATE — the combined form of {@link republishProduct} +
+ * {@link republishProductDiet}, for the common `updateProduct` case that changed BOTH overlays. Each
+ * published value is computed EXACTLY as the two functions do (`republish(manual, derivation)` for
+ * allergens; `overlayDietProfile(deriveDietProfile(derivation), override)` for diet, with the same
+ * empty-recipe default of `{ origins: [], pending: true }`), so the pair of columns lands byte-for-byte
+ * where the two separate round trips would have left them — one query pair instead of two. A
+ * well-formed id that names no row is a silent no-op (the SELECT returns nothing, the UPDATE matches
+ * nothing), matching both single-overlay functions.
+ */
+async function republishProductOverlays(tx: Transaction, id: string): Promise<void> {
+  const [row] = await tx
+    .select({
+      manual: products.manualAllergens,
+      recipeDerivation: products.recipeDerivation,
+      deriv: products.dietDerivation,
+      override: products.dietOverride,
+    })
+    .from(products)
+    .where(eq(products.id, id));
+  const publishedAllergens = republish(row?.manual ?? null, row?.recipeDerivation ?? null);
+  const derivation = (row?.deriv ?? { origins: [], pending: true }) as DietDerivation;
+  const publishedDiet = overlayDietProfile(
+    deriveDietProfile(derivation),
+    (row?.override ?? null) as DietOverride | null,
+  );
+  await tx
+    .update(products)
+    .set({ allergens: publishedAllergens, diet: publishedDiet })
+    .where(eq(products.id, id));
+}
+
+/**
  * Set a product's recipe-derived diet overlay and republish its diet profile — the diet twin of
  * {@link applyRecipeDerivation}. `@waitron/recipes` calls it when a recipe or its ingredients change;
  * `null` clears the derivation (no recipe), after which the published profile reverts to the override
@@ -500,8 +533,17 @@ export async function updateProduct(
       updatedAt: sql`now()`,
     })
     .where(eq(products.id, id));
-  if (allergens !== undefined) await republishProduct(tx, id);
-  if (dietOverride !== undefined) await republishProductDiet(tx, id);
+  // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
+  // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
+  // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
+  // the untouched column is never even re-read.
+  if (allergens !== undefined && dietOverride !== undefined) {
+    await republishProductOverlays(tx, id);
+  } else if (allergens !== undefined) {
+    await republishProduct(tx, id);
+  } else if (dietOverride !== undefined) {
+    await republishProductDiet(tx, id);
+  }
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
@@ -1039,15 +1081,15 @@ function normalizeOriginOverlay(input: {
   addOrigins?: string[] | null;
   removeOrigins?: string[] | null;
 }): { addOrigins?: string[] | null; removeOrigins?: string[] | null } {
+  // A present side normalises identically: null/empty collapse to null, otherwise the validated
+  // non-empty list. Called only for a side the caller supplied (not undefined).
+  const side = (v: string[] | null): string[] | null => {
+    const validated = v == null ? null : validateOrigins(v);
+    return validated && validated.length > 0 ? validated : null;
+  };
   const out: { addOrigins?: string[] | null; removeOrigins?: string[] | null } = {};
-  if (input.addOrigins !== undefined) {
-    const v = input.addOrigins == null ? null : validateOrigins(input.addOrigins);
-    out.addOrigins = v && v.length > 0 ? v : null;
-  }
-  if (input.removeOrigins !== undefined) {
-    const v = input.removeOrigins == null ? null : validateOrigins(input.removeOrigins);
-    out.removeOrigins = v && v.length > 0 ? v : null;
-  }
+  if (input.addOrigins !== undefined) out.addOrigins = side(input.addOrigins);
+  if (input.removeOrigins !== undefined) out.removeOrigins = side(input.removeOrigins);
   return out;
 }
 

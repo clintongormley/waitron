@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { segmentedOptionStyles } from "./segmented-control-styles.js";
 
 /** One accessible menu offered to the switcher — the `menus[]` shape `GET /api/products` returns. */
 interface SwitcherMenu {
@@ -46,29 +47,8 @@ export class TillMenuSwitcher extends LitElement {
            stays empty (zero height, no margin), so a single-menu location adds no space above the grid. */
         margin-bottom: var(--wt-space-3);
       }
-
-      .option {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        cursor: pointer;
-      }
-
-      .option:hover {
-        background: var(--wt-color-surface-raised);
-      }
-
-      .option[aria-pressed="true"] {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-        border-color: var(--wt-color-primary);
-      }
     `,
+    segmentedOptionStyles,
   ];
 
   /** The location's accessible menus (default first), straight from `GET /api/products` `menus`. */

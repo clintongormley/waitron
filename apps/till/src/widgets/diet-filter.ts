@@ -2,6 +2,7 @@ import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import type { DietPredicate } from "../menu-filter.js";
 
 /** The four dietary lenses the filter offers, in display order, each with its i18n label key. `vegan`/
@@ -48,29 +49,8 @@ export class TillDietFilter extends LitElement {
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
       }
-
-      .option {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        cursor: pointer;
-      }
-
-      .option:hover {
-        background: var(--wt-color-surface-raised);
-      }
-
-      .option[aria-pressed="true"] {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-        border-color: var(--wt-color-primary);
-      }
     `,
+    segmentedOptionStyles,
   ];
 
   /** The active dietary lens, owned by the parent — echoed here to mark the pressed option. `null`/

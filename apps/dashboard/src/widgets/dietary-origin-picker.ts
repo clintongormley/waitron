@@ -2,25 +2,7 @@ import { LitElement, type PropertyValues, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import type { DietaryOrigin } from "../api/client.js";
-
-/**
- * The dietary-origin taxonomy (design §diet) in DISPLAY order, redefined LOCALLY exactly as
- * `allergen-picker.ts`'s `ALLERGEN_DISPLAY_ORDER` is: a runtime import from `@waitron/catalogue` would
- * drag its barrel — and through it `@waitron/db` and Node builtins — into the browser bundle (the #70
- * rule). These raw tokens stay the WIRE VALUES (the emitted `origin` and the `<option>` values); each
- * renders its localised label at the render edge through `t("origin.<token>")`.
- */
-const DIETARY_ORIGINS = [
-  "plant",
-  "meat",
-  "fish",
-  "shellfish",
-  "dairy",
-  "egg",
-  "honey",
-  "other_animal",
-] as const;
+import { DIETARY_ORIGINS, type DietaryOrigin } from "../api/client.js";
 
 /**
  * The management dashboard's DIETARY-ORIGIN PICKER — the ingredient-form counterpart of the allergen
