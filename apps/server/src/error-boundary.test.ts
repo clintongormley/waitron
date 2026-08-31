@@ -95,6 +95,25 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(lines).toEqual([{ level: "warn", event: "session.required", fields: {} }]);
   });
 
+  it("includes the request id on an AppError warn line", async () => {
+    const lines: Line[] = [];
+    const status: Record<string, ContentfulStatusCode> = { "tenant.not_found": 404 };
+    const boundary = createErrorBoundary(status, "widget.failed");
+    const app = new Hono();
+    app.get("/boom", (c) => {
+      // The request-id middleware seeds this on the real request; here we set it directly so the
+      // boundary reads it out of context (`c.get("requestId")`) onto the structured warn line.
+      c.set("requestId", "req-xyz");
+      return boundary(c, collect(lines), () =>
+        Promise.reject(new AppError("tenant.not_found", { id: "s1" })),
+      );
+    });
+
+    await app.request("/boom");
+    const warn = lines.find((l) => l.level === "warn");
+    expect(warn?.fields.requestId).toBe("req-xyz");
+  });
+
   it("maps a non-AppError to an opaque server.internal 500, logs it at error under the given tag, and NEVER leaks .message", async () => {
     const lines: Line[] = [];
     // A message a driver could load with a secret — the boundary must keep it off the wire.
