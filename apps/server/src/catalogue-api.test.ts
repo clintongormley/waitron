@@ -1292,6 +1292,79 @@ describe("mountCatalogueApi — option group items", () => {
     });
     expect(res.status).toBe(204);
   });
+
+  // ── Allergen overlay (modifier↔allergen, Task 5): the routes accept addAllergens/removeAllergens
+  // and defer validation to the ops, exactly as product `allergens` is threaded. ──────────────────
+  it("POST /option-groups/:id/items accepts an allergen overlay and returns it", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "Panes" } });
+    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { en: "Gluten-free bun" }, removeAllergens: ["gluten"] },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()) as Record<string, unknown>).toMatchObject({
+      addAllergens: null,
+      removeAllergens: ["gluten"],
+    });
+  });
+
+  it("POST /option-groups/:id/items 400s on a conflicting overlay", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: {
+        name: { en: "x" },
+        addAllergens: { gluten: { presence: "contains" } },
+        removeAllergens: ["gluten"],
+      },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "allergen.add_remove_conflict" },
+    });
+  });
+
+  it("PATCH /option-groups/:id/items/:itemId threads an allergen overlay (204) and it lands", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" } },
+    });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
+      body: {
+        addAllergens: { milk: { presence: "contains" } },
+        removeAllergens: ["gluten"],
+      },
+    });
+    expect(res.status).toBe(204);
+    const rows = (await (
+      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
+    ).json()) as Record<string, unknown>[];
+    expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
+      addAllergens: { milk: { presence: "contains" } },
+      removeAllergens: ["gluten"],
+    });
+  });
+
+  it("PATCH /option-groups/:id/items/:itemId 400s on a conflicting overlay", async () => {
+    const app = mountApp();
+    const g = await createGroupVia(app, { name: { es: "x" } });
+    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
+      body: { name: { es: "x" } },
+    });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
+      body: {
+        addAllergens: { gluten: { presence: "contains" } },
+        removeAllergens: ["gluten"],
+      },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "allergen.add_remove_conflict" },
+    });
+  });
 });
 
 describe("mountCatalogueApi — attaching option groups to products", () => {
