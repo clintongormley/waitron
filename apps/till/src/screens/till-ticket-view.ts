@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
@@ -359,15 +359,12 @@ export class TillTicketView extends LitElement {
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
               ${group.options.map(
-                // Per-option quantity: the FILED child `quantity` is the COMBINED count (dishQty ×
-                // perOptionQty), so the per-dish count is `option.quantity ÷ dish.quantity` — an exact
-                // integer (options attach only to `each` products with integer dish counts). Append a
-                // "×N" badge to the name ONLY when it exceeds 1; the common one-per-dish case (including a
-                // plain modifier on a multi-quantity dish, where child and dish quantity are equal → 1)
-                // shows no badge and is byte-identical to before. Same `×` badge as the printed receipt
-                // (`apps/server/src/receipt-ticket.ts`).
+                // Per-option quantity: the per-dish count is recovered from the filed COMBINED child
+                // quantity (see perDishOptionQuantity). Append a "×N" badge to the name ONLY when it
+                // exceeds 1; the common one-per-dish case shows no badge and is byte-identical to before.
+                // Same `×` badge as the printed receipt (`apps/server/src/receipt-ticket.ts`).
                 (option) => {
-                  const perDish = Math.round(Number(option.quantity) / Number(group.dish.quantity));
+                  const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
                   const badge = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
                   return html`
                     <li class="line option">

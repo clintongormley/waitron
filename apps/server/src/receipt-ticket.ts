@@ -48,7 +48,7 @@
  * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
  */
 import { esc } from "@waitron/printing";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
@@ -261,15 +261,11 @@ export function formatReceipt({
       // Indented, and WITHOUT a leading quantity prefix — an option is priced per dish, so repeating the
       // dish's own count as a prefix reads as noise. The gross is the delta this option added.
       //
-      // Per-option quantity (landed feature): a modifier MAY be taken more than once per dish. The child
-      // line's filed `quantity` is the COMBINED count = parentDishQuantity × perOptionQuantity, so the
-      // PER-DISH count is `option.quantity ÷ dish.quantity` — an exact integer, since options attach only
-      // to `each` products (integer dish counts) and the child was priced from an integer per-option
-      // count. We APPEND a "×N" badge to the option's NAME only when that per-dish count exceeds 1; the
-      // overwhelmingly common case of one-per-dish (INCLUDING a plain modifier on a multi-quantity dish,
-      // where dish and child quantity are equal → 1) shows no badge and is byte-identical to before. The
-      // gross is left as the filed delta, unchanged by the badge.
-      const perDish = Math.round(Number(option.quantity) / Number(dish.quantity));
+      // Per-option quantity (landed feature): the PER-DISH count is recovered from the filed COMBINED
+      // child quantity (see perDishOptionQuantity). We APPEND a "×N" badge to the option's NAME only when
+      // that count exceeds 1; the common one-per-dish case shows no badge and is byte-identical to before.
+      // The gross is left as the filed delta, unchanged by the badge.
+      const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
       const name = lineName(option.descriptions, locale);
       const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
       b.line(twoColumn(label, formatMoney(option.gross, locale)));

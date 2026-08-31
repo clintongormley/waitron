@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dishGross, lineGross, optionGross, quantityLabel } from "./order-line.js";
+import { dishGross, lineGross, optionGross, quantityLabel, toWireOption } from "./order-line.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
 
@@ -100,6 +100,23 @@ describe("order-line pricing", () => {
     it("labels a weight line with kg and an each line bare", () => {
       expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
       expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2");
+    });
+  });
+
+  describe("toWireOption", () => {
+    it("includes quantity when it exceeds 1", () => {
+      expect(toWireOption({ ...shot, quantity: 2 })).toEqual({
+        optionGroupItemId: "opt-shot",
+        quantity: 2,
+      });
+    });
+
+    it("omits quantity when it is exactly 1", () => {
+      expect(toWireOption({ ...shot, quantity: 1 })).toEqual({ optionGroupItemId: "opt-shot" });
+    });
+
+    it("omits quantity when it is absent", () => {
+      expect(toWireOption(shot)).toEqual({ optionGroupItemId: "opt-shot" });
     });
   });
 });

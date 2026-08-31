@@ -9,6 +9,7 @@ import { filterProductsByMenu } from "../menu-filter.js";
 import { productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { toWireOption } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
 // Side-effect imports register the reused widgets this screen composes — the round-scoped product
 // picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
@@ -459,18 +460,7 @@ export class TillTableOrderScreen extends LitElement {
         roundLine.courseId = courseId;
       }
       if (line.options !== undefined && line.options.length > 0) {
-        roundLine.options = line.options.map((option) => {
-          // The bare id, plus the per-option quantity ONLY when it exceeds 1 (per-option quantity,
-          // feature A): the server prices and re-validates the count. Omitted at 1/absent so a plain
-          // modifier's wire stays byte-identical to before.
-          const wireOption: { optionGroupItemId: string; quantity?: number } = {
-            optionGroupItemId: option.optionGroupItemId,
-          };
-          if (option.quantity !== undefined && option.quantity > 1) {
-            wireOption.quantity = option.quantity;
-          }
-          return wireOption;
-        });
+        roundLine.options = line.options.map(toWireOption);
       }
       return roundLine;
     });

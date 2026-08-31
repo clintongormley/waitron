@@ -83,3 +83,24 @@ export function optionGross(line: OrderLine, option: SelectedLineOption): Decima
 export function quantityLabel(line: OrderLine): string {
   return line.product.pricingUnit === "weight" ? `${line.quantity} kg` : line.quantity;
 }
+
+/**
+ * Maps a client-side selected option to the wire shape every send builder posts
+ * (`SaleLine.options`, `RoundLine.options`). The wire carries the bare `optionGroupItemId`, plus the
+ * per-option quantity ONLY when it exceeds 1 (per-option quantity, feature A): the server prices and
+ * re-validates the count. Omitted at 1/absent so a plain modifier's wire stays byte-identical to
+ * before — the ONE mapping shared by `till-app`'s `#currentSaleLines` and
+ * `till-table-order-screen`'s round builder.
+ */
+export function toWireOption(option: SelectedLineOption): {
+  optionGroupItemId: string;
+  quantity?: number;
+} {
+  const wireOption: { optionGroupItemId: string; quantity?: number } = {
+    optionGroupItemId: option.optionGroupItemId,
+  };
+  if (option.quantity !== undefined && option.quantity > 1) {
+    wireOption.quantity = option.quantity;
+  }
+  return wireOption;
+}
