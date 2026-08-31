@@ -20,11 +20,13 @@ import {
 } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import {
-  assertDietOverrideDisjoint,
   deriveDietProfile,
   overlayDietProfile,
+  validateDietOverride,
+  validateOrigins,
   type DietDerivation,
   type DietOverride,
+  type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
@@ -137,6 +139,12 @@ export interface ResolvedOptionItem {
    * dish's published allergens to compute the as-served profile. */
   addAllergens: ProductAllergens | null;
   removeAllergens: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4), the diet twin of the allergen overlay. `addOrigins`:
+   * origins this option introduces ("add bacon" → ["meat"]), null when it adds nothing;
+   * `removeOrigins`: origins it removes ("no cheese" → ["dairy"]), null when it removes nothing. Task 5
+   * folds these into the dish's as-served diet (`deriveAsServedDiet`). */
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 /**
@@ -167,6 +175,18 @@ export interface AvailableProduct {
   vatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
+  /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
+   * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`; Task 6's
+   * till menu filter reads it. Beyond `PriceableProduct` and ignored by priceBasket. */
+  diet: DietProfile | null;
+  /** The recipe-derived diet overlay (`products.dietDerivation`) — the folded ingredient origins + a
+   * `pending` flag — or null when there is no recipe. Carried so Task 5 can recompute the as-served
+   * diet from the base derivation plus the selected options' origin overlays. */
+  dietDerivation: DietDerivation | null;
+  /** The staff diet override (`products.dietOverride`) ALONE, or null when none — exposed distinctly
+   * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
+   * `manualAllergens`. */
+  dietOverride: DietOverride | null;
   /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
    * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
    * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
@@ -396,8 +416,9 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // exactly the override alone (or all-"yes"/empty when unreviewed). Checked disjoint before the
   // write (defence-in-depth, never trust the caller — CLAUDE.md §3). The recipe fold overwrites `diet`
   // once a recipe is set (applyDietDerivation → republishProductDiet), matching the allergen twin.
-  const dietOverride = input.dietOverride ?? null;
-  assertDietOverrideDisjoint(dietOverride);
+  // Validate the untrusted override (labels ∈ {yes,no}, contains-tags ∈ {meat,fish}, disjoint) before
+  // the write — the diet twin of `validateAllergens`, defence-in-depth at the core (CLAUDE.md §3).
+  const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const [row] = await tx
     .insert(products)
     .values({
@@ -445,7 +466,7 @@ export async function updateProduct(
   // the write (`null`/`undefined` skip it), only a non-`undefined` value reaches the `diet_override`
   // column, and `diet` is republished only when the override was in the patch — an unrelated edit
   // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
-  if (dietOverride !== undefined) assertDietOverrideDisjoint(dietOverride);
+  if (dietOverride !== undefined) validateDietOverride(dietOverride);
   await tx
     .update(products)
     .set({
@@ -657,6 +678,9 @@ export async function listAvailableProducts(
       vatClass: products.vatClass,
       category: categories.name,
       allergens: products.allergens,
+      diet: products.diet,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
       courseId: products.courseId,
       catalogueId: catalogues.id,
       catalogueName: catalogues.name,
@@ -701,6 +725,8 @@ export async function listAvailableProducts(
         maxQuantity: optionGroupItems.maxQuantity,
         addAllergens: optionGroupItems.addAllergens,
         removeAllergens: optionGroupItems.removeAllergens,
+        addOrigins: optionGroupItems.addOrigins,
+        removeOrigins: optionGroupItems.removeOrigins,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -749,6 +775,8 @@ export async function listAvailableProducts(
           maxQuantity: r.maxQuantity!,
           addAllergens: r.addAllergens as ProductAllergens | null,
           removeAllergens: r.removeAllergens as string[] | null,
+          addOrigins: r.addOrigins as string[] | null,
+          removeOrigins: r.removeOrigins as string[] | null,
         });
       }
     }
@@ -763,6 +791,9 @@ export async function listAvailableProducts(
     vatClass: row.vatClass as VatClass,
     category: row.category,
     allergens: row.allergens,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
     courseId: row.courseId,
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
@@ -808,6 +839,10 @@ export interface OptionGroupItem {
   /** The per-option allergen overlay (Task 4): codes this option adds/removes, each null when empty. */
   addAllergens: ProductAllergens | null;
   removeAllergens: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4), the diet twin: origins this option adds/removes, each
+   * null when empty. */
+  addOrigins: string[] | null;
+  removeOrigins: string[] | null;
 }
 
 export interface CreateOptionGroupInput {
@@ -847,6 +882,10 @@ export interface CreateOptionGroupItemInput {
    * Validated and checked disjoint before the write — never trusted from the caller (CLAUDE.md §3). */
   addAllergens?: ProductAllergens | null;
   removeAllergens?: string[] | null;
+  /** The per-option ORIGIN overlay (Task 4). Omitted leaves the column NULL; `null` is the same. Each
+   * entry is validated against the origin taxonomy before the write (`validateOrigins`). */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 export interface UpdateOptionGroupItemInput {
@@ -861,6 +900,11 @@ export interface UpdateOptionGroupItemInput {
    * enforced on the RESULTING row (the current other side is read when only one is patched). */
   addAllergens?: ProductAllergens | null;
   removeAllergens?: string[] | null;
+  /** Patch the ORIGIN overlay. Omitted leaves the column unchanged; `null` clears it. Each present
+   * side is validated against the origin taxonomy (`validateOrigins`); an origin add/remove is not a
+   * conflict (add wins the fold), so no disjointness check — unlike the allergen overlay. */
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
 }
 
 const OPTION_GROUP_COLUMNS = {
@@ -884,6 +928,8 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   maxQuantity: optionGroupItems.maxQuantity,
   addAllergens: optionGroupItems.addAllergens,
   removeAllergens: optionGroupItems.removeAllergens,
+  addOrigins: optionGroupItems.addOrigins,
+  removeOrigins: optionGroupItems.removeOrigins,
 };
 
 /**
@@ -953,6 +999,32 @@ function normalizeOverlay(
   const removeNorm = remove && remove.length > 0 ? remove : null;
   assertAllergenOverlayDisjoint(addNorm, removeNorm);
   return { addAllergens: addNorm, removeAllergens: removeNorm };
+}
+
+/**
+ * Validate + normalise the per-option ORIGIN overlay patch (Task 4) — the diet twin of
+ * {@link normalizeOverlay}, but simpler: origins carry NO disjointness rule (an add and a remove of
+ * the same origin is not a contradiction — the as-served fold applies removes then adds, so add wins),
+ * so each side is normalised INDEPENDENTLY and there is no current-row read. Only the sides the caller
+ * touched appear in the result, so an UPDATE writes exactly the patched columns (Drizzle `.set()`
+ * ignores absent keys) and a CREATE lets the untouched columns default to NULL. A present side is
+ * validated against the origin taxonomy (`validateOrigins`), then an empty list collapses to NULL so
+ * the column has a single "no overlay" representation (mirroring the allergen overlay's collapse).
+ */
+function normalizeOriginOverlay(input: {
+  addOrigins?: string[] | null;
+  removeOrigins?: string[] | null;
+}): { addOrigins?: string[] | null; removeOrigins?: string[] | null } {
+  const out: { addOrigins?: string[] | null; removeOrigins?: string[] | null } = {};
+  if (input.addOrigins !== undefined) {
+    const v = input.addOrigins == null ? null : validateOrigins(input.addOrigins);
+    out.addOrigins = v && v.length > 0 ? v : null;
+  }
+  if (input.removeOrigins !== undefined) {
+    const v = input.removeOrigins == null ? null : validateOrigins(input.removeOrigins);
+    out.removeOrigins = v && v.length > 0 ? v : null;
+  }
+  return out;
 }
 
 export async function createOptionGroup(
@@ -1038,6 +1110,8 @@ export async function createOptionGroupItem(
       ...(input.active === undefined ? {} : { active: input.active }),
       // Both overlay columns default to NULL when the caller touched neither; validated + disjoint.
       ...(normalizeOverlay(input) ?? {}),
+      // The origin overlay columns default to NULL likewise; validated against the taxonomy.
+      ...normalizeOriginOverlay(input),
     })
     .returning(OPTION_GROUP_ITEM_COLUMNS);
   return {
@@ -1045,6 +1119,8 @@ export async function createOptionGroupItem(
     vatClass: row!.vatClass as VatClass | null,
     addAllergens: row!.addAllergens as ProductAllergens | null,
     removeAllergens: row!.removeAllergens as string[] | null,
+    addOrigins: row!.addOrigins as string[] | null,
+    removeOrigins: row!.removeOrigins as string[] | null,
   };
 }
 
@@ -1063,6 +1139,8 @@ export async function listOptionGroupItems(
     vatClass: r.vatClass as VatClass | null,
     addAllergens: r.addAllergens as ProductAllergens | null,
     removeAllergens: r.removeAllergens as string[] | null,
+    addOrigins: r.addOrigins as string[] | null,
+    removeOrigins: r.removeOrigins as string[] | null,
   }));
 }
 
@@ -1098,6 +1176,9 @@ export async function updateOptionGroupItem(
       }),
     );
   }
+  // The origin overlay is independent (no disjointness → no current-row read): validate + normalise
+  // each patched side and write exactly those columns.
+  Object.assign(write, normalizeOriginOverlay(patch));
   await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 

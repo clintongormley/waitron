@@ -500,6 +500,8 @@ describe("catalogue operations", () => {
         maxQuantity: 1,
         addAllergens: null,
         removeAllergens: null,
+        addOrigins: null,
+        removeOrigins: null,
       });
       expect(group.items[1]).toMatchObject({
         name: { en: "Bacon" },
@@ -509,6 +511,58 @@ describe("catalogue operations", () => {
 
       // A product with nothing attached comes back with an empty array, not undefined.
       expect(waterRow.optionGroups).toEqual([]);
+    });
+  });
+
+  // Task 4: the till read carries the published diet profile + the two diet overlays on the product,
+  // and the per-option ORIGIN overlay (addOrigins/removeOrigins) on each resolved item — the diet twin
+  // of the allergen projection above. Task 6 (till) consumes these.
+  it("listAvailableProducts carries the diet profile and option origin overlays", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const dish = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "falafel wrap" },
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "general",
+        dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
+      });
+
+      // A group whose item carries an origin overlay: "add bacon" introduces meat, "no cheese" removes
+      // dairy — inserted directly so the projection is exercised independent of the write path.
+      const [extras] = await tx
+        .insert(optionGroups)
+        .values({ tenantId: sql`current_tenant_id()`, name: { en: "Extras" }, active: true })
+        .returning({ id: optionGroups.id });
+      await tx.insert(optionGroupItems).values({
+        tenantId: sql`current_tenant_id()`,
+        groupId: extras!.id,
+        name: { en: "Add bacon" },
+        priceDelta: "1.00",
+        vatClass: null,
+        sort: 0,
+        active: true,
+        addOrigins: ["meat"],
+        removeOrigins: ["dairy"],
+      });
+      await tx.insert(productOptionGroups).values({
+        tenantId: sql`current_tenant_id()`,
+        productId: dish.id,
+        groupId: extras!.id,
+        sort: 0,
+      });
+
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const [available] = (await listAvailableProducts(tx, locationId)).products;
+
+      expect(available!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
+      expect(available!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
+      expect(available!.dietDerivation).toBeNull();
+      const item = available!.optionGroups[0]!.items[0]!;
+      expect(item.addOrigins).toEqual(["meat"]);
+      expect(item.removeOrigins).toEqual(["dairy"]);
     });
   });
 
@@ -1156,6 +1210,9 @@ describe("catalogue operations", () => {
       vatClass: "general",
       category: null,
       allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
       courseId: null,
       catalogueId: "00000000-0000-0000-0000-000000000001",
       catalogueName: "Deli",
@@ -1464,6 +1521,58 @@ describe("catalogue operations", () => {
         const plainItem = items.find((i) => i.id === plain.id)!;
         expect(plainItem.removeAllergens).toBeNull();
         expect(plainItem.addAllergens).toBeNull();
+      });
+    });
+
+    // Task 4: the ORIGIN overlay is the diet twin of the allergen overlay — createOptionGroupItem /
+    // updateOptionGroupItem accept addOrigins/removeOrigins, validate each against the origin taxonomy,
+    // collapse an empty list to NULL, and round-trip through listOptionGroupItems.
+    it("createOptionGroupItem persists an origin overlay and rejects a bad origin", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Extras" } });
+        const bacon = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Add bacon" },
+          addOrigins: ["meat"],
+          removeOrigins: ["dairy"],
+        });
+        expect(bacon.addOrigins).toEqual(["meat"]);
+        expect(bacon.removeOrigins).toEqual(["dairy"]);
+        // Omitting the overlay leaves both columns NULL; an empty list collapses to NULL too.
+        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Nothing" } });
+        expect(plain.addOrigins).toBeNull();
+        expect(plain.removeOrigins).toBeNull();
+        const empty = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Empty" },
+          addOrigins: [],
+        });
+        expect(empty.addOrigins).toBeNull();
+        // A non-origin entry is rejected before the write.
+        await expect(
+          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, addOrigins: ["wombat"] }),
+        ).rejects.toThrow(/diet.invalid_origin/);
+      });
+    });
+
+    it("updateOptionGroupItem threads the origin overlay and clears it with null", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Extras" } });
+        const item = await createOptionGroupItem(tx, g.id, { name: { en: "Add bacon" } });
+        await updateOptionGroupItem(tx, item.id, { addOrigins: ["meat"] });
+        const [added] = await listOptionGroupItems(tx, g.id);
+        expect(added!.addOrigins).toEqual(["meat"]);
+        // A single-side patch leaves the other side alone; a null clears.
+        await updateOptionGroupItem(tx, item.id, { removeOrigins: ["fish"] });
+        const [both] = await listOptionGroupItems(tx, g.id);
+        expect(both!.addOrigins).toEqual(["meat"]);
+        expect(both!.removeOrigins).toEqual(["fish"]);
+        await updateOptionGroupItem(tx, item.id, { addOrigins: null });
+        const [cleared] = await listOptionGroupItems(tx, g.id);
+        expect(cleared!.addOrigins).toBeNull();
+        expect(cleared!.removeOrigins).toEqual(["fish"]);
+        // A bad origin on update is rejected too.
+        await expect(
+          updateOptionGroupItem(tx, item.id, { removeOrigins: ["wombat"] }),
+        ).rejects.toThrow(/diet.invalid_origin/);
       });
     });
 

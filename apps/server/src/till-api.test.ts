@@ -914,6 +914,11 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: { sulphites: { presence: "may_contain" } },
+          // Dietary classification (Task 4): a product with no override and no recipe publishes the
+          // empty derived profile (vegan/vegetarian "yes", no contains), a null derivation and override.
+          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          dietDerivation: null,
+          dietOverride: null,
           courseId: null,
           catalogueId: aguaProduct.catalogueId,
           catalogueName: "Carta",
@@ -929,6 +934,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: null,
+          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          dietDerivation: null,
+          dietOverride: null,
           courseId: null,
           catalogueId: cervezaProduct.catalogueId,
           catalogueName: "Happy Hour",

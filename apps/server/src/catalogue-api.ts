@@ -39,6 +39,7 @@ import {
   validateImageBytes,
   type CreateOptionGroupInput,
   type CreateOptionGroupItemInput,
+  type DietOverride,
   type ProductAllergens,
   type UpdateOptionGroupInput,
   type UpdateOptionGroupItemInput,
@@ -105,6 +106,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
   "allergen.add_remove_conflict": 400,
+  // The diet-write validation codes (Task 4): an untrusted product `dietOverride` or option
+  // `addOrigins`/`removeOrigins` that fails the taxonomy/label/disjointness checks in the core diet
+  // validators is a CLIENT fault → 400. Listed explicitly as the house style requires; the `?? 400`
+  // default already covers them.
+  "diet.invalid_origin": 400,
+  "diet.invalid_label": 400,
+  "diet.add_remove_conflict": 400,
   "media.missing": 400,
   "media.unsupported_type": 415,
   "media.too_large": 413,
@@ -201,6 +209,20 @@ function parseOptionalVatClass(value: unknown): VatClass | null | undefined {
     throw new AppError("management.request_invalid", { field: "vatClass" });
   }
   return value as VatClass | null;
+}
+
+/**
+ * SHAPE-screen an optional product `dietOverride` body field (Task 4): `undefined` (leave unchanged)
+ * and `null` (clear) are legitimate no-ops, and a present value must be a plain OBJECT — a non-object
+ * (string/number/array) is `management.request_invalid` naming the field, mirroring how `descriptions`
+ * is screened. This is a SHAPE screen only; the label/contains-tag/disjointness CONTENT is
+ * `validateDietOverride`'s job inside `createProduct`/`updateProduct` (which throws the `diet.*` codes),
+ * exactly as `validateAllergens` owns the `allergens` content.
+ */
+function screenDietOverride(value: unknown): void {
+  if (value !== undefined && value !== null && !isPlainObject(value)) {
+    throw new AppError("management.request_invalid", { field: "dietOverride" });
+  }
 }
 
 /**
@@ -400,6 +422,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         unitPrice?: unknown;
         vatClass?: unknown;
         allergens?: unknown;
+        dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
         optionGroupIds?: unknown;
@@ -428,6 +451,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw new AppError("management.request_invalid", { field: "active" });
       }
+      // The optional staff diet override (Task 4): SHAPE-screened here (object or null, like
+      // `descriptions`), then threaded raw to `createProduct`, whose `validateDietOverride` is the
+      // authority on the label/contains-tag/disjointness content — exactly the posture `allergens`
+      // takes with `validateAllergens`.
+      screenDietOverride(body.dietOverride);
       // The optional ordered attach set (Task 11): screened here (array of uuid-shaped strings) and
       // applied in the SAME transaction as the create, so a product and its option groups land atomically.
       const optionGroupIds = parseOptionGroupIds(body.optionGroupIds);
@@ -439,6 +467,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
+        ...(body.dietOverride === undefined
+          ? {}
+          : { dietOverride: body.dietOverride as DietOverride | null }),
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
@@ -469,6 +500,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         pricingUnit?: unknown;
         categoryId?: unknown;
         allergens?: unknown;
+        dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
         optionGroupIds?: unknown;
@@ -518,6 +550,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;
+      }
+      // The diet override (Task 4): shape-screened (object or null) then threaded raw; `updateProduct`'s
+      // `validateDietOverride` is the content authority, and it republishes `diet` only when the key is
+      // present — the same posture `allergens` takes.
+      if (body.dietOverride !== undefined) {
+        screenDietOverride(body.dietOverride);
+        patch.dietOverride = body.dietOverride as DietOverride | null;
       }
       // The optional ordered attach set (Task 11): a full replace when present, applied in the SAME
       // transaction as the field update. Absent leaves the product's attached groups untouched; `[]`
@@ -667,6 +706,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         maxQuantity?: unknown;
         addAllergens?: unknown;
         removeAllergens?: unknown;
+        addOrigins?: unknown;
+        removeOrigins?: unknown;
       }>(c);
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
@@ -695,6 +736,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.removeAllergens === undefined
           ? {}
           : { removeAllergens: body.removeAllergens as string[] | null }),
+        // The origin overlay (Task 4) is threaded raw like the allergen overlay; the core's
+        // `normalizeOriginOverlay` validates each entry against the taxonomy (`diet.invalid_origin`).
+        ...(body.addOrigins === undefined
+          ? {}
+          : { addOrigins: body.addOrigins as string[] | null }),
+        ...(body.removeOrigins === undefined
+          ? {}
+          : { removeOrigins: body.removeOrigins as string[] | null }),
       };
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
@@ -720,6 +769,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         maxQuantity?: unknown;
         addAllergens?: unknown;
         removeAllergens?: unknown;
+        addOrigins?: unknown;
+        removeOrigins?: unknown;
       }>(c);
       const patch: UpdateOptionGroupItemInput = {};
       if (body.name !== undefined) {
@@ -751,6 +802,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       if (body.removeAllergens !== undefined) {
         patch.removeAllergens = body.removeAllergens as string[] | null;
+      }
+      // The origin overlay (Task 4), threaded raw like the allergen overlay; the core validates.
+      if (body.addOrigins !== undefined) {
+        patch.addOrigins = body.addOrigins as string[] | null;
+      }
+      if (body.removeOrigins !== undefined) {
+        patch.removeOrigins = body.removeOrigins as string[] | null;
       }
       // No mutable field → 204 no-op, sidestepping updateOptionGroupItem's empty `.set()` (which Drizzle
       // rejects). A well-formed-but-missing item id is a silent no-op (the updateProduct posture).
