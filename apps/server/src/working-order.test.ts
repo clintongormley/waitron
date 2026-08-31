@@ -2439,6 +2439,40 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     });
   });
 
+  it("rejects an invalid per-entry quantity even when duplicate entries SUM to a valid integer", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      // Crafted duplicates whose components are individually invalid (a negative; a fraction) but whose
+      // SUM is a valid integer must still be refused — each entry is validated before summing, so an
+      // invalid component cannot be washed out by the total.
+      for (const options of [
+        [
+          { optionGroupItemId: shot, quantity: 2 },
+          { optionGroupItemId: shot, quantity: -1 },
+        ],
+        [
+          { optionGroupItemId: shot, quantity: 1.5 },
+          { optionGroupItemId: shot, quantity: 0.5 },
+        ],
+      ]) {
+        await expect(
+          createOpenOrder(
+            tx,
+            cfg,
+            randomUUID(),
+            [{ productId: cafeId, quantity: "1", options }],
+            null,
+          ),
+        ).rejects.toMatchObject({
+          code: "options.selection_invalid",
+          params: { productId: cafeId, reason: "quantity_invalid" },
+        });
+      }
+    });
+  });
+
   it("counts the per-option quantity toward max_select: one item ×3 in a max_select 2 group is above_max", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {

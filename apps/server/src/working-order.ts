@@ -200,31 +200,40 @@ async function priceOrderLines(
       const qtyById = new Map<string, number>();
       const firstSeenOrder: string[] = [];
       for (const sel of selected) {
+        const found = itemById.get(sel.optionGroupItemId);
+        if (found === undefined) {
+          throw new AppError("option.not_found", {
+            optionGroupItemId: sel.optionGroupItemId,
+            productId: line.productId,
+          });
+        }
+        // Validate EACH wire entry's quantity is a positive integer BEFORE summing, so a crafted
+        // request cannot wash out an invalid component (a negative, a fraction) against a duplicate
+        // whose total lands on a valid integer. The SUMMED cap (`≤ max_quantity`) is checked below.
+        const entryQty = sel.quantity ?? 1;
+        if (!Number.isInteger(entryQty) || entryQty < 1) {
+          throw new AppError("options.selection_invalid", {
+            productId: line.productId,
+            groupId: found.groupId,
+            reason: "quantity_invalid",
+          });
+        }
         if (!qtyById.has(sel.optionGroupItemId)) {
           firstSeenOrder.push(sel.optionGroupItemId);
         }
-        qtyById.set(
-          sel.optionGroupItemId,
-          (qtyById.get(sel.optionGroupItemId) ?? 0) + (sel.quantity ?? 1),
-        );
+        qtyById.set(sel.optionGroupItemId, (qtyById.get(sel.optionGroupItemId) ?? 0) + entryQty);
       }
       // The per-group TALLY is the SUM of quantities (not the distinct-item count): a per-option
       // quantity COUNTS toward `max_select` (product decision). Applied consistently to required /
       // min_select / max_select below.
       const tallyByGroup = new Map<string, number>();
       for (const optionGroupItemId of firstSeenOrder) {
-        const found = itemById.get(optionGroupItemId);
-        if (found === undefined) {
-          throw new AppError("option.not_found", {
-            optionGroupItemId,
-            productId: line.productId,
-          });
-        }
+        // `found` and each entry's positive-integer validity were established in the summing loop
+        // above (every id in `firstSeenOrder` resolved there), so only the SUMMED cap can still fail
+        // here — duplicate entries summing PAST the item's `max_quantity`.
+        const found = itemById.get(optionGroupItemId)!;
         const qty = qtyById.get(optionGroupItemId)!;
-        // The summed per-option quantity must be an INTEGER within `1..max_quantity`. A 0/negative/
-        // fractional wire value, or a duplicate summing past the cap, is a crafted request the client
-        // should have caught — refuse it loud (`quantity_invalid`), the client is never the gate.
-        if (!Number.isInteger(qty) || qty < 1 || qty > found.item.maxQuantity) {
+        if (qty > found.item.maxQuantity) {
           throw new AppError("options.selection_invalid", {
             productId: line.productId,
             groupId: found.groupId,

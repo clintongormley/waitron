@@ -12,5 +12,10 @@
  * Callers use this to decide a "×N"/"xN" badge (renderers keep their own glyph); it is DISPLAY-ONLY.
  */
 export function perDishOptionQuantity(combinedChildQuantity: string, dishQuantity: string): number {
-  return Math.round(Number(combinedChildQuantity) / Number(dishQuantity));
+  const perDish = Math.round(Number(combinedChildQuantity) / Number(dishQuantity));
+  // Degenerate inputs — a non-numeric string, or a 0 dish quantity — would yield NaN/Infinity and,
+  // since a caller badges when the count is > 1, could leak "×NaN"/"×Infinity" onto a printed ticket.
+  // Neither is producible on the normal each-only path, but keep the helper total: fall back to 1 (the
+  // no-badge value) so a garbage count never reaches a badge.
+  return Number.isFinite(perDish) && perDish >= 1 ? perDish : 1;
 }

@@ -16,4 +16,12 @@ describe("perDishOptionQuantity", () => {
     // combined 2 = dish 1 × per-option 2 → 2 per dish
     expect(perDishOptionQuantity("2", "1")).toBe(2);
   });
+
+  it("returns 1 (the no-badge value) for degenerate inputs rather than NaN/Infinity", () => {
+    // A 0 dish quantity would give Infinity → "×Infinity" on a printed badge; a non-numeric string
+    // would give NaN. Neither is producible on the normal each-only path, but the helper must stay
+    // total so a ticket never shows a garbage count.
+    expect(perDishOptionQuantity("2", "0")).toBe(1);
+    expect(perDishOptionQuantity("x", "3")).toBe(1);
+  });
 });
