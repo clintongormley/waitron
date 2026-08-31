@@ -243,6 +243,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: null,
       removeAllergens: ["gluten"],
+      addOrigins: null,
+      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -285,6 +287,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
       removeAllergens: null,
+      addOrigins: null,
+      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -352,6 +356,8 @@ describe("till-basket", () => {
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
       removeAllergens: null,
+      addOrigins: null,
+      removeOrigins: null,
     };
     const tostada: TillProduct = {
       ...cafe,
