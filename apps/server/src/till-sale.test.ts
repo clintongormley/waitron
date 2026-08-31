@@ -949,6 +949,38 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(children.map((c) => c.parentLineId)).toEqual([filedParent!.id, filedParent!.id]);
   });
 
+  it("settles a tab through recordTillSale (the /api/sales entry point) with an EMPTY basket", async () => {
+    // REGRESSION (table-service settle 400s). The tab-pay flow posts `lines: []` with the tab id to
+    // `POST /api/sales` (till-app `#onPayTab`) — a retrieved order files its STORED locked lines and
+    // IGNORES the sent basket. That route calls `recordTillSale`, whose entry-point empty-basket
+    // early-out fired BEFORE `payWorkingOrder`'s walk-up-ONLY guard, refusing every tab settle with
+    // `sale.empty_basket`. The sibling tab test above exercises `payWorkingOrder` directly and so
+    // never saw it; this drives the SAME entry point the HTTP route does, where the guard lived.
+    const v = await setupModifierVenue();
+    const burger = burgerOf(v);
+
+    const tableId = randomUUID();
+    const tabId = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(
+        sql`insert into dining_tables (id, tenant_id, location_id, label, active)
+            values (${tableId}, ${v.cfg.tenantId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
+      );
+      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      await addTabRound(tx, v.cfg, tabId, [{ productId: burger.id, quantity: "1" }]);
+      return tabId;
+    });
+
+    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+      lines: [],
+      tender: { method: "cash", amount: "20.00" },
+      workingOrderId: tabId,
+    });
+    // Files the tab's stored burger line (9.00 gross), never a `sale.empty_basket` refusal.
+    expect(result.total).toBe("9.00");
+    expect(result.lines).toHaveLength(1);
+  });
+
   it("settles a NON-CONTIGUOUS tab (a voided child) with each child linked to its OWN dish", async () => {
     // FIX 1 (Critical, unrepairable fiscal record): after a void leaves a tab's `line_no`
     // non-contiguous, the STORED `line_no` space diverges from the COMPACTED array-position space

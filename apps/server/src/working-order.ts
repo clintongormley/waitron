@@ -678,8 +678,10 @@ export async function parkOrder(
   cfg: TillConfig,
   req: ParkOrderRequest,
 ): Promise<ParkOrderResult> {
-  // Refused before any database work: an empty basket has nothing to price and no order to open. The
-  // same guard `recordTillSale` makes, and the `lines` array is a network boundary, so it is real.
+  // Refused before any database work: an empty basket has nothing to price and no order to open. Park
+  // always needs lines, so this refusal is unconditional here (the sale path's is not — `payWorkingOrder`
+  // scopes it to a walk-up, so a retrieved order files stored lines); the `lines` array is a network
+  // boundary, so the guard is real.
   if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -2506,7 +2508,7 @@ export async function updateHeldOrder(
 
       // Refused before any line is touched: an empty basket has nothing to price, and rewriting an
       // order to zero lines is a discard, which is `abandonHeldOrder`'s job, not this one's. The same
-      // guard `parkOrder`/`recordTillSale` make.
+      // unconditional guard `parkOrder` makes.
       if (req.lines.length === 0) {
         throw new AppError("sale.empty_basket", {});
       }

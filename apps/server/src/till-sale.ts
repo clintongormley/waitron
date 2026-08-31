@@ -1612,7 +1612,9 @@ export async function collectOrder(
 
 /**
  * Ring one walk-up sale — the 7a entry point, now a thin walk-up special case of `payWorkingOrder`.
- * It keeps 7a's two fail-fast guards and its `TillSaleRequest`/`TillSaleResult` shape, and delegates.
+ * It keeps 7a's fail-fast tender guard and its `TillSaleRequest`/`TillSaleResult` shape, and delegates
+ * the rest (empty-basket refusal included) to `payWorkingOrder`, which scopes that refusal to the
+ * walk-up shape so a retrieved order paid with `lines: []` files from its stored lines.
  *
  * The working-order id it pays under is `req.workingOrderId` when the till supplied one, else a fresh
  * `randomUUID()` minted here. Either keys the same idempotency guard: `payWorkingOrder` creates the
@@ -1631,15 +1633,15 @@ export async function recordTillSale(
   req: TillSaleRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
-  // Both refusals are made before any database work (and before minting an id): an empty basket has
-  // nothing to price, and the counter POS supports cash (7a) and a manual card tender (this slice)
-  // only. A `tender.method` narrowed to `"cash" | "card"` at the type level can still arrive as
-  // anything at runtime (the till is a network boundary), so the guard is real. `payWorkingOrder`
-  // re-asserts both on its filing path — it is a shared entry point Task 8 also calls directly — so
-  // these are a cheap early-out, not the only check.
-  if (req.lines.length === 0) {
-    throw new AppError("sale.empty_basket", {});
-  }
+  // The tender guard is a cheap entry-point early-out: `tender.method` is typed `"cash" | "card"` but
+  // the till is a network boundary and can send anything. `payWorkingOrder` re-asserts it, so this is
+  // not the only check.
+  //
+  // There is deliberately NO empty-basket guard here — do not re-add one. A RETRIEVED order (a parked
+  // order or a table-service tab, `#onPayTab`) is paid with `lines: []` and its own id, filing from its
+  // STORED lines; an unconditional refusal here 400'd every such settle with `sale.empty_basket`.
+  // `payWorkingOrder` owns that refusal, scoped to the WALK-UP shape only — the sole layer that knows
+  // whether the id names an existing order.
   if (req.tender.method !== "cash" && req.tender.method !== "card") {
     throw new AppError("sale.unsupported_tender", { method: req.tender.method });
   }
