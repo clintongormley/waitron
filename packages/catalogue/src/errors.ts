@@ -10,6 +10,8 @@ declare module "@waitron/shared" {
     "allergen.invalid_presence": { code: string; presence: string };
     /** An allergen's optional `source` is present but is not a string. */
     "allergen.invalid_source": { code: string };
+    /** An option's allergen overlay adds and removes the same EU-14 code — a contradiction. */
+    "allergen.add_remove_conflict": { code: string };
     /** An image upload carried no file part in the multipart body. Thrown by the server route. */
     "media.missing": Record<string, never>;
     /**
