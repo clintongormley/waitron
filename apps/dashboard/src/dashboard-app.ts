@@ -6,6 +6,7 @@ import { baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { diag } from "./diagnostics.js";
 import type { StringKey } from "./i18n/strings.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 // Side-effect imports register the screen elements this shell swaps between; it names them only as
@@ -618,6 +619,7 @@ export class DashboardApp extends LitElement {
    * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
   #selectScreen(screen: Screen): void {
+    diag.record("info", "nav", { screen });
     this.screen = screen;
     this.drawerOpen = false;
   }

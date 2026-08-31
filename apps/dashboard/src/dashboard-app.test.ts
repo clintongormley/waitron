@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+import { diag } from "./diagnostics.js";
 
 /**
  * Installs a CONTROLLABLE stub for `window.matchMedia`, targeting only the drawer breakpoint
@@ -672,6 +673,23 @@ describe("dashboard-app", () => {
     expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
     expect(staff(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
+  });
+
+  it("records a nav event on the shared diagnostics trail when the screen changes", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // `diag` is a MODULE SINGLETON shared across every test, so scope the assertion to events appended
+    // after this baseline rather than the total length (which leaks across tests).
+    const before = diag.snapshot().length;
+    navSales(el)!.click();
+    await flush(el);
+    const nav = diag
+      .snapshot()
+      .slice(before)
+      .find((e) => e.event === "nav");
+    expect(nav?.fields.screen).toBe("sales");
   });
 
   // The grouped static sidebar (Task 11): every group header renders, every one of the eighteen manager

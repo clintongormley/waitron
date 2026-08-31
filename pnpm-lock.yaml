@@ -50,6 +50,9 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^13.0.0
         version: 13.3.0
+      '@waitron/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -254,6 +257,9 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../../packages/catalogue
+      '@waitron/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared

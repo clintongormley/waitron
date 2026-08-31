@@ -17,6 +17,7 @@
     "@waitron/ui": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/catalogue": "workspace:*",
+    "@waitron/diagnostics": "workspace:*",
     "lit": "^3.2.0",
     "qrcode-generator": "^1.4.4"
   },

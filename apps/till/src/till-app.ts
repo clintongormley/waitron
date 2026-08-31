@@ -4,6 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi } from "./api/client.js";
 import { WorkingOrderStore } from "./state/working-order.js";
@@ -557,7 +558,7 @@ export class TillApp extends LitElement {
     // no-device case both legitimately stay on `lock`).
     this.handheldMode = false;
     this.deviceMode = false;
-    this.screen = "lock";
+    this.#setScreen("lock");
     try {
       const identity = await this.api.getDeviceIdentity();
       if (identity.kind === "handheld") {
@@ -569,7 +570,7 @@ export class TillApp extends LitElement {
         // second read here is the accepted cost of keeping that one-mount-read optimisation (see above).
         this.initialDeviceStation = await this.api.getDeviceStation();
         this.deviceMode = true;
-        this.screen = "station";
+        this.#setScreen("station");
       }
     } catch {
       // Not an enrolled device (or a transient probe failure) — remain a normal operator till on `lock`.
@@ -610,7 +611,7 @@ export class TillApp extends LitElement {
       // unusable floor. `#onShowFloor` swallows a failed load (degrade gracefully), so this never blocks.
       await this.#onShowFloor();
     } else {
-      this.screen = landingFace;
+      this.#setScreen(landingFace);
       // The counter's cross-till held list + default-station queue — counter concerns a handheld's floor
       // landing never shows, so they run only on the counter path (mirroring counter→floor nav, which
       // likewise fetches neither).
@@ -724,7 +725,7 @@ export class TillApp extends LitElement {
       // and an already-settled order falls through to `recordSale`'s settled REPLAY below.
       await this.#syncIfDirty(id, lines, label);
       this.result = await this.api.recordSale(lines, tender, id);
-      this.screen = "ticket";
+      this.#setScreen("ticket");
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
       // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
       // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
@@ -784,7 +785,7 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.screen = "ticket";
+        this.#setScreen("ticket");
         await this.#refreshHeldOrders();
       } else {
         this.cardOutcome = out.outcome;
@@ -923,7 +924,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.screen = "ticket";
+      this.#setScreen("ticket");
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -978,7 +979,7 @@ export class TillApp extends LitElement {
    * owns its own fetching via `.api`, so this just switches. Operator path, so `deviceMode` stays false. */
   #onShowStation(): void {
     this.errorKey = undefined;
-    this.screen = "station";
+    this.#setScreen("station");
   }
 
   /**
@@ -1031,7 +1032,7 @@ export class TillApp extends LitElement {
    * till-owned); the screen owns its own fetching + levers via `.api`, so this just switches. */
   #onShowExpo(): void {
     this.errorKey = undefined;
-    this.screen = "expo";
+    this.#setScreen("expo");
   }
 
   /**
@@ -1275,14 +1276,14 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     this.selectedCatalogueId = this.#defaultCatalogueId();
-    this.screen = "counter";
+    this.#setScreen("counter");
   }
 
   /** Show the staff schedule screen (from the counter's "My schedule" control) WITHOUT clearing the
    * basket — the basket is till-owned and survives the round trip, exactly like logout. */
   #onShowSchedule(): void {
     this.errorKey = undefined;
-    this.screen = "schedule";
+    this.#setScreen("schedule");
   }
 
   /**
@@ -1310,7 +1311,7 @@ export class TillApp extends LitElement {
     } catch {
       // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
     }
-    this.screen = "floor";
+    this.#setScreen("floor");
   }
 
   /**
@@ -1357,7 +1358,7 @@ export class TillApp extends LitElement {
     // Load the tab's lines so the table-order screen renders populated. A failed read degrades to an
     // empty tab (see {@link #loadTabLines}) rather than blocking the transition.
     await this.#loadTabLines();
-    this.screen = "table-order";
+    this.#setScreen("table-order");
   }
 
   /**
@@ -1543,7 +1544,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
-      this.screen = "ticket";
+      this.#setScreen("ticket");
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -1576,7 +1577,16 @@ export class TillApp extends LitElement {
    */
   #goToScreen(target: Screen): void {
     if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
-    this.screen = target;
+    this.#setScreen(target);
+  }
+
+  /** The single funnel every face change flows through — the till's equivalent of the dashboard shell's
+   * `#selectScreen`. Records a `nav` diagnostics event (the one per-session trail, shared via
+   * ./diagnostics.js) and assigns the reactive `screen`. Every `this.#setScreen(...)` call site is a
+   * screen change; the scattered direct assignments were replaced by it so the trail sees them all. */
+  #setScreen(screen: Screen): void {
+    diag.record("info", "nav", { screen });
+    this.screen = screen;
   }
 
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
@@ -1605,7 +1615,7 @@ export class TillApp extends LitElement {
     // recomputes it (FP-2).
     this.canEdit = false;
     this.errorKey = undefined;
-    this.screen = "lock";
+    this.#setScreen("lock");
   }
 
   /**

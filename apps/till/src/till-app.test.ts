@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -1769,6 +1770,25 @@ describe("till-app", () => {
     // THE load-bearing assertion: a shift change never loses the half-built order.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  it("records a nav event on the shared diagnostics trail when the screen changes", async () => {
+    const { el } = await mountApp({
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    // `diag` is a MODULE SINGLETON shared across every test (login itself records a `nav`), so scope the
+    // assertion to events appended after this baseline rather than the total length (which leaks).
+    const before = diag.snapshot().length;
+    emit(c, "show-schedule");
+    await flush(el);
+    const nav = diag
+      .snapshot()
+      .slice(before)
+      .find((e) => e.event === "nav");
+    expect(nav?.fields.screen).toBe("schedule");
   });
 
   it("show-schedule shows the schedule screen (basket preserved) and threads the roster + operator id", async () => {
