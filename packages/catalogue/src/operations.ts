@@ -877,8 +877,13 @@ function normalizeOverlay(
     : input.removeAllergens == null
       ? null
       : validateRemoveAllergens(input.removeAllergens);
-  assertAllergenOverlayDisjoint(add, remove);
-  return { addAllergens: add, removeAllergens: remove };
+  // Collapse an empty overlay to NULL so the column has a single "no overlay" representation: an empty
+  // add map `{}` or empty remove list `[]` means exactly what NULL means (contributes nothing to the
+  // as-served fold), and storing both would force every consumer to handle two shapes for one meaning.
+  const addNorm = add && Object.keys(add).length > 0 ? add : null;
+  const removeNorm = remove && remove.length > 0 ? remove : null;
+  assertAllergenOverlayDisjoint(addNorm, removeNorm);
+  return { addAllergens: addNorm, removeAllergens: removeNorm };
 }
 
 export async function createOptionGroup(
