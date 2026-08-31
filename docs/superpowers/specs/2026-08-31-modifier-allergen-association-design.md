@@ -31,8 +31,12 @@ load-bearing**. It gets its own review, and a food-safety advisor should confirm
 - **Not snapshotted.** Computed live from the current catalogue on each read, not frozen onto the
   order line. Orders are short-lived (built → fired → served → settled in one service), so live is
   correct-enough and keeps the schema change to two columns. See §5 for the one accepted edge.
-- **Not client-side.** The safety-critical derivation runs server-side only — one tested
-  implementation, never duplicated into the till/handheld bundle.
+- **One shared derivation, not duplicated.** The safety-critical logic is a single pure leaf module
+  (`packages/catalogue/src/derivation.ts`, zero runtime imports), used server-side for KDS and
+  **deep-imported by the till** (`@waitron/catalogue/src/derivation.js`) — the exact precedent the till
+  already uses for pricing (`import { priceBasket } from "@waitron/catalogue/src/pricing.js"`,
+  `apps/till/src/state/working-order.ts:25`), which dodges the barrel's runtime deps. One tested
+  implementation, no mirror.
 - **No partial removes.** A remove deletes a code entirely; there is no "downgrade contains →
   may_contain". (Can be added later if an advisor asks for it.)
 - **No allergen-driven KDS routing / warnings-as-blocks.** KDS *shows* the profile; it does not gate
@@ -99,18 +103,26 @@ base). It is the spine of the test suite (§8).
 
 ## 5. Surfaces + data flow
 
-The server computes the as-served profile on the read paths; the clients render `{ allergens, pending }`
-with the rendering they already have for product allergens.
+The as-served profile is computed by the one shared `deriveAsServedAllergens` — client-side on the
+till (the live order lives in the client) and server-side for KDS (it reads stored lines) — and each
+surface renders the `{ allergens, pending }` shape it already knows from product allergens.
 
 **Till & handheld** (owner-selected surface):
-- `add_allergens` / `remove_allergens` are projected onto the option data the server sends, and the
-  as-served `{ allergens, pending }` for each dish line rides along on the **order-line read** (the
-  authoritative order state the till already round-trips to the server for pricing — exact read path
-  confirmed in the plan).
-- The till renders it on the **order line / line-detail**, where the selected-options context lives
-  (`apps/till/src/state/working-order.ts`, `widgets/basket.ts:55-113`). The existing standalone
-  allergen screen (`apps/till/src/screens/till-allergen-screen.ts`) keeps showing **base** products —
-  it has no order context — and is out of scope for change beyond reusing its allergen-name i18n.
+- `add_allergens` / `remove_allergens` are projected onto the option data the till already receives
+  (a new field on `TillOptionItem`, `apps/till/src/api/client.ts:147-152`).
+- The till computes as-served **client-side** on the **live order** from `TillProduct.allergens`
+  (`client.ts:185`) + the selected options' overlays, via the deep-imported shared
+  `deriveAsServedAllergens`. This is the same pattern the till already uses to display option prices
+  client-side (`SelectedLineOption.priceDelta` is display-only, the server re-prices at commit,
+  `apps/till/src/state/working-order.ts:40-48`) — and allergens are **never filed**, so there is no
+  authoritative server value to fetch. It renders on the **order line / line-detail** where the
+  selected-options context lives (`widgets/basket.ts:84-118`, `state/working-order.ts`).
+- **Scope boundary:** the surface is the **live order being built**. A *retrieved/held* order does
+  not carry its options today — `getHeldOrder` returns only `productId`/`quantity`
+  (`apps/server/src/working-order.ts:2282-2293`, a pre-existing #184 read gap) — so as-served on a
+  retrieved order is out of scope here and would need that read widened first.
+- The existing standalone allergen screen (`till-allergen-screen.ts`) keeps showing **base**
+  products — it has no order context — and is out of scope beyond reusing its allergen-name i18n.
 - The **handheld inherits this for free**: it reuses the same till widgets unchanged
   (`2026-08-30-handheld-tableside-ordering-design.md`).
 
@@ -142,11 +154,10 @@ snapshot column. Noted, accepted.
 | `option_group_items.{add,remove}_allergens` (migration + schema) | store the per-option overlay | existing FORCE-RLS table |
 | `deriveAsServedAllergens` (`packages/catalogue/derivation.ts`) | pure dish − removes + adds, Cautious policy | `mergeAllergenMaps`, allergen types |
 | overlay validation (`packages/catalogue`) | reject invalid / contradictory overlays at authoring | `validateAllergens`, `ALLERGEN_CODES` |
-| catalogue option-item CRUD (ops + `catalogue-api`) | persist/read the overlay | schema, validation |
-| order-line read (server) | attach `{allergens,pending}` per dish line for the till | derivation, catalogue read |
+| catalogue option-item CRUD (ops + `catalogue-api`) | persist/read the overlay; project onto `TillOptionItem` | schema, validation |
 | KDS/expo queue read (server) | attach `{allergens,pending}` per fired dish line | derivation, `readModifiersByParent` + joins |
 | dashboard option-group manager | author adds/removes | `allergen-picker`, dashboard API |
-| till/handheld order-line render | display `{allergens,pending}` | till allergen-name i18n |
+| till/handheld order-line render | compute (client-side, deep-imported derivation) + display `{allergens,pending}` | derivation, till allergen-name i18n |
 | KDS/expo ticket render | display as-served on the ticket | dashboard kitchen screen |
 
 Each is independently testable; the derivation is pure and the surfaces read a settled shape.
@@ -159,10 +170,10 @@ read): `record-sale.ts` carries no allergen field anywhere; `RecordSaleLine`
 `lineNo, descriptions, quantity, unitPrice, vatRate, lineTotal, category?, parentLineNo?`, and the
 huella hashes eight header fields built from `total` + `vatBreakdown` only (`:403-423`). This feature
 **adds no column to any fiscal table** and computes purely on read, so the as-served profile cannot
-reach a `registro` or the chain. The guarantee is enforced, not asserted: an **invariance test** (the
-#184 precedent) files a sale with allergen-bearing modifiers and one without and pins that they hash
-**identically** — the overlay never enters `computeHuella`. If that test ever fails, the guarantee
-has been broken.
+reach a `registro` or the chain. The guarantee is enforced, not asserted: a huella **invariance
+test** (the #184 precedent) files a sale with allergen-bearing modifiers and one without, and pins
+that they hash **identically** — the overlay never enters `computeHuella`. If that test ever fails,
+the guarantee has been broken.
 
 ## 8. Testing (TDD)
 
