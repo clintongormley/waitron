@@ -12,7 +12,12 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for `options.group_invalid`/`options.item_invalid` thrown below
-import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import {
+  assertAllergenOverlayDisjoint,
+  validateAllergens,
+  validateRemoveAllergens,
+  type ProductAllergens,
+} from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
@@ -112,6 +117,12 @@ export interface ResolvedOptionItem {
    * THIS option a diner may take on one dish (per-option quantity). The sale path validates a selected
    * option's quantity is an integer in `1..maxQuantity` and prices the child at `dishQty × optionQty`. */
   maxQuantity: number;
+  /** The per-option allergen OVERLAY (Task 4). `addAllergens`: codes this option contributes
+   * ("extra cheese" → milk), null when it adds nothing; `removeAllergens`: codes it strips
+   * ("gluten-free bun" → gluten), null when it removes nothing. A later task merges these onto the
+   * dish's published allergens to compute the as-served profile. */
+  addAllergens: ProductAllergens | null;
+  removeAllergens: string[] | null;
 }
 
 /**
@@ -619,6 +630,8 @@ export async function listAvailableProducts(
         priceDelta: optionGroupItems.priceDelta,
         vatClass: optionGroupItems.vatClass,
         maxQuantity: optionGroupItems.maxQuantity,
+        addAllergens: optionGroupItems.addAllergens,
+        removeAllergens: optionGroupItems.removeAllergens,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -665,6 +678,8 @@ export async function listAvailableProducts(
           priceDelta: r.priceDelta!,
           vatClass: r.vatClass as VatClass | null,
           maxQuantity: r.maxQuantity!,
+          addAllergens: r.addAllergens as ProductAllergens | null,
+          removeAllergens: r.removeAllergens as string[] | null,
         });
       }
     }
@@ -721,6 +736,9 @@ export interface OptionGroupItem {
   /** The most of this option a diner may take (`option_group_items.max_quantity`); 1 = no per-option
    * quantity. Always an integer >= 1, mirrored from the column's `>= 1` CHECK. */
   maxQuantity: number;
+  /** The per-option allergen overlay (Task 4): codes this option adds/removes, each null when empty. */
+  addAllergens: ProductAllergens | null;
+  removeAllergens: string[] | null;
 }
 
 export interface CreateOptionGroupInput {
@@ -756,6 +774,10 @@ export interface CreateOptionGroupItemInput {
   active?: boolean;
   /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
   maxQuantity?: number;
+  /** The per-option allergen overlay (Task 4). Omitted leaves the column NULL; `null` is the same.
+   * Validated and checked disjoint before the write — never trusted from the caller (CLAUDE.md §3). */
+  addAllergens?: ProductAllergens | null;
+  removeAllergens?: string[] | null;
 }
 
 export interface UpdateOptionGroupItemInput {
@@ -766,6 +788,10 @@ export interface UpdateOptionGroupItemInput {
   active?: boolean;
   /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
   maxQuantity?: number;
+  /** Patch the overlay. Omitted leaves the column unchanged; `null` clears it. Disjointness is
+   * enforced on the RESULTING row (the current other side is read when only one is patched). */
+  addAllergens?: ProductAllergens | null;
+  removeAllergens?: string[] | null;
 }
 
 const OPTION_GROUP_COLUMNS = {
@@ -787,6 +813,8 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   sort: optionGroupItems.sort,
   active: optionGroupItems.active,
   maxQuantity: optionGroupItems.maxQuantity,
+  addAllergens: optionGroupItems.addAllergens,
+  removeAllergens: optionGroupItems.removeAllergens,
 };
 
 /**
@@ -817,6 +845,29 @@ function validateOptionGroupItemMaxQuantity(maxQuantity: number): void {
     throw new AppError("options.item_invalid", { reason: "max_quantity" });
   }
 }
+
+/**
+ * Validate and normalise a create/update overlay patch (Task 4). Returns `undefined` when the caller
+ * touched NEITHER side (so the write omits both columns and the row defaults apply), otherwise the
+ * resolved `{ addAllergens, removeAllergens }` with each side `null` when cleared/omitted and the
+ * validated value when present. Disjointness is checked on the pair (defence-in-depth — never trust
+ * the caller, CLAUDE.md §3). `updateOptionGroupItem` does NOT use this: its disjointness must hold on
+ * the resulting row, so it reads the stored other side when only one is patched.
+ */
+function normalizeOverlay(input: {
+  addAllergens?: ProductAllergens | null;
+  removeAllergens?: string[] | null;
+}): { addAllergens: ProductAllergens | null; removeAllergens: string[] | null } | undefined {
+  const hasAdd = input.addAllergens !== undefined;
+  const hasRemove = input.removeAllergens !== undefined;
+  if (!hasAdd && !hasRemove) return undefined;
+  const add = input.addAllergens == null ? null : validateAllergens(input.addAllergens);
+  const remove =
+    input.removeAllergens == null ? null : validateRemoveAllergens(input.removeAllergens);
+  assertAllergenOverlayDisjoint(add, remove);
+  return { addAllergens: add, removeAllergens: remove };
+}
+
 
 export async function createOptionGroup(
   tx: Transaction,
@@ -899,9 +950,16 @@ export async function createOptionGroupItem(
       ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
       ...(input.sort === undefined ? {} : { sort: input.sort }),
       ...(input.active === undefined ? {} : { active: input.active }),
+      // Both overlay columns default to NULL when the caller touched neither; validated + disjoint.
+      ...(normalizeOverlay(input) ?? {}),
     })
     .returning(OPTION_GROUP_ITEM_COLUMNS);
-  return { ...row!, vatClass: row!.vatClass as VatClass | null };
+  return {
+    ...row!,
+    vatClass: row!.vatClass as VatClass | null,
+    addAllergens: row!.addAllergens as ProductAllergens | null,
+    removeAllergens: row!.removeAllergens as string[] | null,
+  };
 }
 
 /** A group's items (active AND inactive), for the authoring editor. Ordered by `sort` then `id`. */
@@ -914,7 +972,12 @@ export async function listOptionGroupItems(
     .from(optionGroupItems)
     .where(eq(optionGroupItems.groupId, groupId))
     .orderBy(asc(optionGroupItems.sort), asc(optionGroupItems.id));
-  return rows.map((r) => ({ ...r, vatClass: r.vatClass as VatClass | null }));
+  return rows.map((r) => ({
+    ...r,
+    vatClass: r.vatClass as VatClass | null,
+    addAllergens: r.addAllergens as ProductAllergens | null,
+    removeAllergens: r.removeAllergens as string[] | null,
+  }));
 }
 
 export async function updateOptionGroupItem(
@@ -922,11 +985,41 @@ export async function updateOptionGroupItem(
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
-  // maxQuantity's invariant is single-field, so there is nothing to merge onto: a patch that omits it
-  // leaves the stored value untouched (Drizzle `.set()` only writes provided keys); a patch that sets
-  // it is re-validated here before the write, the same clean-error-before-the-CHECK posture create takes.
+  // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
+  // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
+  // write, the same clean-error-before-the-CHECK posture create takes.
   if (patch.maxQuantity !== undefined) validateOptionGroupItemMaxQuantity(patch.maxQuantity);
-  await tx.update(optionGroupItems).set(patch).where(eq(optionGroupItems.id, itemId));
+  // Disjointness must hold on the RESULTING row, not just the patch: when only one side is patched,
+  // read the stored other side and check the effective pair. Defence-in-depth at the core — never
+  // trust the caller (CLAUDE.md §3). A well-formed id that names no row leaves `cur` undefined, so
+  // the effective sides fall back to null and the (zero-row) UPDATE is a silent no-op.
+  const touchesOverlay = patch.addAllergens !== undefined || patch.removeAllergens !== undefined;
+  const write: Record<string, unknown> = { ...patch };
+  if (touchesOverlay) {
+    const [cur] = await tx
+      .select({
+        addAllergens: optionGroupItems.addAllergens,
+        removeAllergens: optionGroupItems.removeAllergens,
+      })
+      .from(optionGroupItems)
+      .where(eq(optionGroupItems.id, itemId));
+    const add =
+      patch.addAllergens === undefined
+        ? ((cur?.addAllergens as ProductAllergens | null) ?? null)
+        : patch.addAllergens == null
+          ? null
+          : validateAllergens(patch.addAllergens);
+    const remove =
+      patch.removeAllergens === undefined
+        ? ((cur?.removeAllergens as string[] | null) ?? null)
+        : patch.removeAllergens == null
+          ? null
+          : validateRemoveAllergens(patch.removeAllergens);
+    assertAllergenOverlayDisjoint(add, remove);
+    write.addAllergens = add;
+    write.removeAllergens = remove;
+  }
+  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 
 /**

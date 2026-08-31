@@ -496,6 +496,8 @@ describe("catalogue operations", () => {
         vatClass: null,
         // Inserted without an explicit cap → the NOT-NULL default 1 (per-option quantity).
         maxQuantity: 1,
+        addAllergens: null,
+        removeAllergens: null,
       });
       expect(group.items[1]).toMatchObject({
         name: { en: "Bacon" },
@@ -1126,6 +1128,138 @@ describe("catalogue operations", () => {
           code: "options.item_invalid",
           params: { reason: "max_quantity" },
         });
+      });
+    });
+
+    it("createOptionGroupItem persists an allergen overlay", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "Buns" } });
+        const item = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Gluten-free bun" },
+          removeAllergens: ["gluten"],
+        });
+        expect(item.removeAllergens).toEqual(["gluten"]);
+        expect(item.addAllergens).toBeNull();
+        // Omitting the overlay entirely leaves both columns NULL.
+        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Plain bun" } });
+        expect(plain.addAllergens).toBeNull();
+        expect(plain.removeAllergens).toBeNull();
+        // The add side round-trips too.
+        const cheese = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Extra cheese" },
+          addAllergens: { milk: { presence: "contains" } },
+        });
+        expect(cheese.addAllergens).toEqual({ milk: { presence: "contains" } });
+        expect(cheese.removeAllergens).toBeNull();
+      });
+    });
+
+    it("createOptionGroupItem rejects a conflicting overlay", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        await expect(
+          createOptionGroupItem(tx, g.id, {
+            name: { en: "x" },
+            addAllergens: { gluten: { presence: "contains" } },
+            removeAllergens: ["gluten"],
+          }),
+        ).rejects.toThrow(/allergen.add_remove_conflict/);
+      });
+    });
+
+    it("updateOptionGroupItem enforces disjointness on the RESULTING row, not just the patch", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        // Stored with gluten already REMOVED; patching only the add side to gluten would make the
+        // resulting row conflict, so the read-current-side check must reject it.
+        const item = await createOptionGroupItem(tx, g.id, {
+          name: { en: "GF bun" },
+          removeAllergens: ["gluten"],
+        });
+        await expect(
+          updateOptionGroupItem(tx, item.id, {
+            addAllergens: { gluten: { presence: "contains" } },
+          }),
+        ).rejects.toThrow(/allergen.add_remove_conflict/);
+        // The row is unchanged after the rejected patch.
+        const [after] = await listOptionGroupItems(tx, g.id);
+        expect(after!.addAllergens).toBeNull();
+        expect(after!.removeAllergens).toEqual(["gluten"]);
+
+        // A non-conflicting single-side patch lands and clearing to null works.
+        await updateOptionGroupItem(tx, item.id, {
+          addAllergens: { milk: { presence: "contains" } },
+        });
+        const [merged] = await listOptionGroupItems(tx, g.id);
+        expect(merged!.addAllergens).toEqual({ milk: { presence: "contains" } });
+        expect(merged!.removeAllergens).toEqual(["gluten"]);
+
+        await updateOptionGroupItem(tx, item.id, { removeAllergens: null, addAllergens: null });
+        const [cleared] = await listOptionGroupItems(tx, g.id);
+        expect(cleared!.addAllergens).toBeNull();
+        expect(cleared!.removeAllergens).toBeNull();
+
+        // Symmetric direction: stored ADD, patch REMOVE only — the resulting-row check reads the
+        // stored add side and rejects the conflict.
+        const cheese = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Extra cheese" },
+          addAllergens: { milk: { presence: "contains" } },
+        });
+        await expect(
+          updateOptionGroupItem(tx, cheese.id, { removeAllergens: ["milk"] }),
+        ).rejects.toThrow(/allergen.add_remove_conflict/);
+      });
+    });
+
+    it("updateOptionGroupItem leaving the overlay untouched writes neither column", async () => {
+      await asTenant(async (tx) => {
+        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, g.id, {
+          name: { en: "GF bun" },
+          removeAllergens: ["gluten"],
+        });
+        // A patch that touches only non-overlay fields must leave the stored overlay intact — it never
+        // reads or rewrites the overlay columns.
+        await updateOptionGroupItem(tx, item.id, { name: { en: "GF bun v2" }, priceDelta: "0.20" });
+        const [after] = await listOptionGroupItems(tx, g.id);
+        expect(after!.name).toEqual({ en: "GF bun v2" });
+        expect(after!.priceDelta).toBe("0.20");
+        expect(after!.removeAllergens).toEqual(["gluten"]);
+        expect(after!.addAllergens).toBeNull();
+      });
+    });
+
+    it("listAvailableProducts projects the option overlay onto ResolvedOptionItem", async () => {
+      await asTenant(async (tx) => {
+        const cat = await createCatalogue(tx, { name: "Deli" });
+        const burger = await createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "burger" },
+          pricingUnit: "each",
+          unitPrice: "9.00",
+          vatClass: "general",
+        });
+        const g = await createOptionGroup(tx, { name: { en: "Buns" } });
+        const gf = await createOptionGroupItem(tx, g.id, {
+          name: { en: "Gluten-free bun" },
+          removeAllergens: ["gluten"],
+        });
+        // A sibling item with no overlay proves the projected fields default to null on the sell path.
+        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Plain bun" } });
+        await setProductOptionGroups(tx, burger.id, [g.id]);
+        await assignCatalogueToLocation(tx, locationId, cat.id);
+
+        const { products } = await listAvailableProducts(tx, locationId);
+        const items = products
+          .find((p) => p.id === burger.id)!
+          .optionGroups.flatMap((grp) => grp.items);
+        const gfItem = items.find((i) => i.id === gf.id)!;
+        expect(gfItem.removeAllergens).toEqual(["gluten"]);
+        expect(gfItem.addAllergens).toBeNull();
+        const plainItem = items.find((i) => i.id === plain.id)!;
+        expect(plainItem.removeAllergens).toBeNull();
+        expect(plainItem.addAllergens).toBeNull();
       });
     });
 
