@@ -187,6 +187,8 @@ async function fireNewOrder(
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
+      note: workingOrderLines.note,
+      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))

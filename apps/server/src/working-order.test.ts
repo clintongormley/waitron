@@ -858,6 +858,8 @@ async function placeOrderWith(
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
+      note: workingOrderLines.note,
+      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -1055,6 +1057,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
             productId: workingOrderLines.productId,
             courseId: workingOrderLines.courseId,
             parentLineId: workingOrderLines.parentLineId,
+            note: workingOrderLines.note,
+            doneness: workingOrderLines.doneness,
           })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, orderId));

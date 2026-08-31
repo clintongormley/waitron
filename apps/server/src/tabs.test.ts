@@ -140,6 +140,8 @@ async function seedFiredDelivery(
         productId: workingOrderLines.productId,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
+        note: workingOrderLines.note,
+        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
@@ -372,6 +374,73 @@ describe("addTabRound (append-only, no re-price)", () => {
     await expect(asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
+  });
+});
+
+describe("addTabRound per-line note + doneness (NON-FISCAL, spec §2/§3)", () => {
+  it("persists a TRIMMED note + doneness on the working_order_lines row AND snapshots them onto ticket_items at fire", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { productId: cafeId, quantity: "1", note: "  sin sal  ", doneness: "medium" },
+      ]),
+    );
+
+    // Draft line carries the validated (trimmed) note + doneness.
+    const [line] = await db
+      .select({
+        id: workingOrderLines.id,
+        note: workingOrderLines.note,
+        doneness: workingOrderLines.doneness,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(line!.note).toBe("sin sal");
+    expect(line!.doneness).toBe("medium");
+
+    // Fire SNAPSHOTTED them onto the ticket item (like station_id/course_id).
+    const [item] = await db
+      .select({ note: ticketItems.note, doneness: ticketItems.doneness })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, line!.id));
+    expect(item!.note).toBe("sin sal");
+    expect(item!.doneness).toBe("medium");
+  });
+
+  it("stores NULL for an absent note/doneness and for a whitespace-only note", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: "   " }]),
+    );
+    const [line] = await db
+      .select({ note: workingOrderLines.note, doneness: workingOrderLines.doneness })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(line!.note).toBeNull();
+    expect(line!.doneness).toBeNull();
+  });
+
+  it("rejects a doneness not in the enum (order.invalid_doneness)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await expect(
+      asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [
+          { productId: cafeId, quantity: "1", doneness: "scorched" as never },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "order.invalid_doneness", params: { value: "scorched" } });
+  });
+
+  it("rejects a note longer than 200 chars (order.note_too_long)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const note = "x".repeat(201);
+    await expect(
+      asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note }])),
+    ).rejects.toMatchObject({ code: "order.note_too_long", params: { length: 201, limit: 200 } });
   });
 });
 
