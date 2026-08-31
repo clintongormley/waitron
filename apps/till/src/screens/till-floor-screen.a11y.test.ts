@@ -33,7 +33,7 @@ const tables: TableState[] = [
     enRoute: 1,
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     // Carries a reservation too, so the list card's "Reservada HH:MM" chip is axe-scanned in both themes.
-    nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
+    nextReservation: { time: "20:30" },
     posX: null,
     posY: null,
     shape: null,
@@ -159,7 +159,7 @@ const placedTables: TableState[] = [
     enRoute: 0,
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     // Carries a reservation too, so the map token's "Reservada HH:MM" chip is axe-scanned in both themes.
-    nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
+    nextReservation: { time: "20:30" },
     posX: 250,
     posY: 400,
     shape: "round",

@@ -1067,7 +1067,7 @@ describe("TillApi", () => {
         enRoute: 1,
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         // Bookings-1 §4: an imminent reservation rides the read-model and must round-trip decoded.
-        nextReservation: { time: "20:30", partySize: 4, contactName: "Ana" },
+        nextReservation: { time: "20:30" },
         // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
         posX: 250,
         posY: 400,

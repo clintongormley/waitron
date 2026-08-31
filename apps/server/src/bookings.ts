@@ -7,8 +7,10 @@
 // Every verb runs on the CALLER's transaction, already tenant-scoped as `app_user` (Task 5's `gated`
 // wrapper = withTenant + asAppUser + authorizeManager). RLS confines every read/write to the tenant, so
 // a by-id verb needs no tenant predicate of its own; `cfg` supplies the LOCATION scope, which RLS does
-// not (a tenant can hold several locations), so only `createBooking`/`listBookings` read it — the
-// lifecycle/by-id verbs take `_cfg` unused, keeping one uniform signature the routes call.
+// not (a tenant can hold several locations). `createBooking`/`listBookings` read it for the creation /
+// day-list scope, and `updateBooking` reads it too — to location-scope an edited table assignment
+// (`requireActiveTable`), the same defence-in-depth `createBooking` applies. The pure lifecycle by-id
+// verbs (cancel/no-show/complete) take `_cfg` unused, keeping one uniform signature the routes call.
 //
 // "One of these throws imports ./errors.js" — the booking + table codes load here directly.
 import "./errors.js";
@@ -67,17 +69,33 @@ export interface UpdateBookingPatch {
 }
 
 /**
- * The table exists AND is active, or `table.not_found`. Bookings collapse "no such table" and
- * "deactivated table" into the ONE reused TS-1 code (design §3a) — a booking may not be assigned to a
- * table that cannot take a party, and the distinction `openTab` draws (`table.inactive`) is a running-
- * service concern, not a reservation one. Existence-and-active only; no `FOR UPDATE` — a reservation
- * takes no lock on the table (it is not opening a tab).
+ * The table exists, is active, AND belongs to `locationId`, or `table.not_found`. Bookings collapse "no
+ * such table", "deactivated table" and "table in another location" into the ONE reused TS-1 code
+ * (design §3a) — a booking may not be assigned to a table that cannot take its party, and the
+ * distinction `openTab` draws (`table.inactive`) is a running-service concern, not a reservation one.
+ *
+ * The `location_id` predicate is defence-in-depth (multi-location): RLS scopes only by TENANT and the
+ * composite FK enforces same-tenant only, so without it a crafted (non-UI) request could assign a
+ * booking in location A a table physically in location B — which the FP-1 floor read (keyed on
+ * `dt.location_id` + `table_id`) would then surface on B's floor. A cross-location table is simply "not
+ * found in this location", so it reuses `table.not_found` (do NOT invent a code). Existence-active-and-
+ * location only; no `FOR UPDATE` — a reservation takes no lock on the table (it is not opening a tab).
  */
-async function requireActiveTable(tx: Transaction, tableId: string): Promise<void> {
+async function requireActiveTable(
+  tx: Transaction,
+  locationId: LocationId,
+  tableId: string,
+): Promise<void> {
   const [table] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.active, true)));
+    .where(
+      and(
+        eq(diningTables.id, tableId),
+        eq(diningTables.active, true),
+        eq(diningTables.locationId, locationId),
+      ),
+    );
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId });
   }
@@ -97,7 +115,7 @@ export async function createBooking(
     throw new AppError("booking.invalid", { partySize: input.partySize });
   }
   if (input.tableId !== undefined) {
-    await requireActiveTable(tx, input.tableId);
+    await requireActiveTable(tx, cfg.locationId, input.tableId);
   }
   const [row] = await tx
     .insert(bookings)
@@ -161,7 +179,7 @@ export async function getBooking(
  */
 export async function updateBooking(
   tx: Transaction,
-  _cfg: BookingConfig,
+  cfg: BookingConfig,
   id: string,
   patch: UpdateBookingPatch,
 ): Promise<void> {
@@ -169,7 +187,7 @@ export async function updateBooking(
     throw new AppError("booking.invalid", { partySize: patch.partySize });
   }
   if (patch.tableId !== undefined && patch.tableId !== null) {
-    await requireActiveTable(tx, patch.tableId);
+    await requireActiveTable(tx, cfg.locationId, patch.tableId);
   }
   const updated = await tx
     .update(bookings)
@@ -281,6 +299,23 @@ export async function seatBooking(
   const tableId = req.tableId ?? booking.tableId;
   if (tableId === null || tableId === undefined) {
     throw new AppError("booking.table_required", {});
+  }
+  // A NEWLY chosen table (`req.tableId`) must be in the BOOKING's location — the booking's own
+  // `table_id` was already location-scoped at create/update time, but a `req.tableId` is caller-supplied
+  // here and reaches openTab, which is location-BLIND (RLS scopes only by tenant). A cross-location
+  // table reads as `table.not_found`, the same defence-in-depth `requireActiveTable` gives create/edit.
+  // A LOCATION-only check (not `requireActiveTable`): openTab still owns exists/active — an inactive
+  // same-location table keeps surfacing as `table.inactive`, the running-service concern it always was.
+  if (req.tableId !== undefined) {
+    const [inLocation] = await tx
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(
+        and(eq(diningTables.id, req.tableId), eq(diningTables.locationId, booking.locationId)),
+      );
+    if (inLocation === undefined) {
+      throw new AppError("table.not_found", { tableId: req.tableId });
+    }
   }
   const { tabId } = await openTab(tx, cfg, { tableId });
   // Compare-and-swap on the `booked` predecessor (the `advanceStatus` shape), NOT a bare id write. The

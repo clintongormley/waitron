@@ -611,13 +611,16 @@ export interface TableState {
   status: { id: string; label: string; color: string } | null;
   /**
    * The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — its earliest
-   * reservation for the venue's TODAY at or after the venue's current wall-clock, or `null`. The floor
+   * reservation for the venue's TODAY at or after the grace floor (the venue's wall-clock rolled back a
+   * short window so a due/late guest's badge lingers), or `null`. The floor
    * renders "Reserved HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
    * `TableState.nextReservation` (`apps/server/src/working-order.ts`'s `listTablesWithState`), NOT
    * imported — the same bundle-decoupling rationale as the siblings here. Non-optional `| null`,
-   * unconditionally present, matching `status`/`posX`.
+   * unconditionally present, matching `status`/`posX`. Data-minimisation: only `time` is projected —
+   * the floor badge renders "Reserved HH:MM" and nothing else, so the customer's party size / contact
+   * name are deliberately kept off every till device (server: `listTablesWithState`).
    */
-  nextReservation: { time: string; partySize: number; contactName: string } | null;
+  nextReservation: { time: string } | null;
   /**
    * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
    * rendered `shape`, and `rotation` in degrees, or `null` for an unplaced table. A LOCAL mirror of the
