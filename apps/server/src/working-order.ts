@@ -3245,6 +3245,13 @@ export interface StationQueueItem {
    *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (auto-fired earliest
    *  course, or released via `fireCourse`). */
   firedAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
+   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) rather than the live line, so a later
+   *  draft edit never changes what the kitchen already sees. `note` is a free-text instruction, `doneness`
+   *  the meat-doneness enum; both `null` when the line carried neither. The KDS renders the doneness
+   *  prominently and the note as sub-text beside the modifiers. */
+  note: string | null;
+  doneness: Doneness | null;
   /** `ticket_items.queued_at` — the moment this line reached its station (KDS order-timing alerts, design
    *  §3), so the client's `TickingClock` can re-derive {@link band} between refreshes from this plus the
    *  group's {@link StationQueueGroup.thresholds}. */
@@ -3463,6 +3470,11 @@ export async function listStationQueue(
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       firedAt: ticketItems.firedAt,
+      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — read from the
+      // SNAPSHOTTED `ticket_items` columns (frozen at fire), NOT the live `working_order_lines`, so a
+      // later draft edit never moves what the kitchen already sees.
+      note: ticketItems.note,
+      doneness: ticketItems.doneness,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
@@ -3597,6 +3609,9 @@ export async function listStationQueue(
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       firedAt: row.firedAt,
+      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
+      note: row.note,
+      doneness: row.doneness,
       queuedAt: row.queuedAt,
       // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
       // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
@@ -3622,6 +3637,12 @@ export interface ExpoItem {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
+   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) — the same snapshot
+   *  {@link StationQueueItem.note}/`doneness` carries, never the live line. Both `null` when the line
+   *  carried neither. The pass renders the doneness prominently and the note as sub-text. */
+  note: string | null;
+  doneness: Doneness | null;
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the pass renders
    *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
    *  (localised client-side, as `name` is). Empty for a plain dish. */
@@ -3731,6 +3752,11 @@ export async function listExpoQueue(
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       awayAt: ticketItems.awayAt,
+      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
+      // `ticket_items` columns (frozen at fire), the same snapshot `listStationQueue` reads, so a later
+      // draft edit never moves what the pass sees.
+      note: ticketItems.note,
+      doneness: ticketItems.doneness,
       // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
       // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
       descriptions: workingOrderLines.descriptions,
@@ -3907,6 +3933,9 @@ export async function listExpoQueue(
       state: row.state,
       firedAt: row.firedAt,
       awayAt: row.awayAt,
+      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
+      note: row.note,
+      doneness: row.doneness,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       // Task 8 — the same as-served profile the station read attaches, safe-defaulted identically.
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {

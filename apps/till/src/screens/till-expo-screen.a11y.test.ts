@@ -102,6 +102,10 @@ const queue: ExpoOrder[] = [
             awayAt: null,
             // A contains-meat chip + the NEUTRAL "not reviewed" diet note, swept here (a held/greyed item).
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: ["meat"] },
+            // Per-line customisation (order-line customisation, Task 5): a PROMINENT (bold) doneness label
+            // + a muted free-text note, swept for contrast here on a held/greyed meat item.
+            note: "poco hecho por dentro",
+            doneness: "medium_rare",
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",

@@ -235,6 +235,115 @@ describe("till-station-queue", () => {
     });
   });
 
+  describe("per-line customisation (Task 5): snapshotted doneness + note as sub-text under the dish", () => {
+    // A fired meat dish carrying the snapshotted note + doneness the server surfaces (order-line
+    // customisation) — the KDS renders the doneness prominently and the note as sub-text.
+    const withCustomisation: StationQueueGroup = {
+      orderId: "wo-c",
+      orderNumber: 12,
+      label: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      thresholds: DEFAULT_THRESHOLDS,
+      status: "placed",
+      items: [
+        {
+          id: "ti-c",
+          workingOrderLineId: "wol-c",
+          state: "queued",
+          descriptions: { "es-ES": "Chuletón" },
+          quantity: "1.000",
+          course: null,
+          firedAt: "2026-08-17T10:00:00.000Z",
+          note: "sin sal",
+          doneness: "medium_rare",
+        },
+      ],
+    };
+
+    it("rail: renders the doneness (localised label) and the note as sub-text beneath the dish", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withCustomisation],
+        view: "rail",
+        stationId: "st-c",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
+      expect(item.textContent).toContain("1× Chuletón");
+      const doneness = item.querySelector('[data-doneness="medium_rare"]')!;
+      expect(doneness).not.toBeNull();
+      expect(doneness.textContent).toContain(t("doneness.medium_rare"));
+      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
+      // Doneness precedes the note in DOM order (prominent first).
+      const html = item.innerHTML;
+      expect(html.indexOf("data-doneness")).toBeLessThan(html.indexOf("data-note"));
+    });
+
+    it("kanban: renders the same doneness + note beneath the cell's dish", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withCustomisation],
+        stationId: "st-c",
+      });
+      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
+      expect(cell.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
+      expect(cell.querySelector("[data-note]")!.textContent).toContain("sin sal");
+    });
+
+    it("localises the doneness label for the operator locale (es-ES)", async () => {
+      const previous = currentLocale();
+      setLocale("es-ES");
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [withCustomisation],
+          view: "rail",
+          stationId: "st-c",
+        });
+        expect(
+          el.shadowRoot!.querySelector('[data-item="ti-c"] [data-doneness]')!.textContent,
+        ).toContain(t("doneness.medium_rare", "es-ES"));
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it("a note-only line (no doneness) renders the note and no doneness label", async () => {
+      const noteOnly: StationQueueGroup = {
+        ...withCustomisation,
+        items: [{ ...withCustomisation.items[0]!, doneness: null }],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [noteOnly],
+        view: "rail",
+        stationId: "st-c",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
+      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
+      expect(item.querySelector("[data-doneness]")).toBeNull();
+    });
+
+    it("a doneness-only line (no note) renders the doneness and no note", async () => {
+      const donenessOnly: StationQueueGroup = {
+        ...withCustomisation,
+        items: [{ ...withCustomisation.items[0]!, note: null }],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [donenessOnly],
+        view: "rail",
+        stationId: "st-c",
+      });
+      const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
+      expect(item.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
+      expect(item.querySelector("[data-note]")).toBeNull();
+    });
+
+    it("a plain item (no note, no doneness) renders no customisation row at all (regression-safe)", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups, // the top-level fixture — no item carries note/doneness
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(el.shadowRoot!.querySelectorAll(".line-customisation")).toHaveLength(0);
+    });
+  });
+
   describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
     // A fired dish carrying the server-attached as-served profile: it CONTAINS milk (a "+ extra cheese"
     // option added it) and REMOVED gluten (a "gluten-free bun" option stripped it) — the exact shape

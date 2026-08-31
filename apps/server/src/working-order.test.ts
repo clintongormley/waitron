@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -1413,6 +1413,67 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { descriptions: { [LOCALE]: "Grande" } },
         { descriptions: { [LOCALE]: "Leche avena" } },
       ]);
+    });
+  });
+
+  // Order-line customisation (spec §2/§3, Task 5): the station/expo reads surface the SNAPSHOTTED
+  // per-line `note`/`doneness` so the cook sees them. Read off `ticket_items` (the snapshot frozen at
+  // fire), never the live line — a later draft edit must not change what the kitchen already sees.
+  it("surfaces a fired line's snapshotted note + doneness on listStationQueue and listExpoQueue", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const { id: orderId } = await placeOrderWith(tx, cfg, [
+        { productId: cafeId, quantity: "1", note: "sin cebolla", doneness: "medium_rare" },
+      ]);
+
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.orderId).toBe(orderId);
+      expect(group!.items).toHaveLength(1);
+      expect(group!.items[0]!.note).toBe("sin cebolla");
+      expect(group!.items[0]!.doneness).toBe("medium_rare");
+
+      const expo = await listExpoQueue(tx, cfg);
+      const expoItem = expo[0]!.courses[0]!.items[0]!;
+      expect(expoItem.note).toBe("sin cebolla");
+      expect(expoItem.doneness).toBe("medium_rare");
+
+      // A later DRAFT edit of the parent line does NOT move the fired snapshot the kitchen reads.
+      const [parent] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            isNull(workingOrderLines.parentLineId),
+          ),
+        );
+      await tx
+        .update(workingOrderLines)
+        .set({ note: "con cebolla", doneness: "well_done" })
+        .where(eq(workingOrderLines.id, parent!.id));
+      const [afterEdit] = await listStationQueue(tx, cfg, cocina.id);
+      expect(afterEdit!.items[0]!.note).toBe("sin cebolla");
+      expect(afterEdit!.items[0]!.doneness).toBe("medium_rare");
+    });
+  });
+
+  // A plain line (no note, no doneness) surfaces both as null — the belt-and-braces default so a cook
+  // never sees a phantom instruction, and a plain fixture reads exactly as before this task.
+  it("surfaces null note + doneness for a plain fired line", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      await placeOrderWith(tx, cfg, [{ productId: cafeId, quantity: "1" }]);
+
+      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      expect(group!.items[0]!.note).toBeNull();
+      expect(group!.items[0]!.doneness).toBeNull();
+      const expo = await listExpoQueue(tx, cfg);
+      expect(expo[0]!.courses[0]!.items[0]!.note).toBeNull();
+      expect(expo[0]!.courses[0]!.items[0]!.doneness).toBeNull();
     });
   });
 

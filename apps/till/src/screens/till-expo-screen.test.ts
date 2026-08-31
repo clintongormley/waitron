@@ -311,6 +311,91 @@ describe("till-expo-screen", () => {
     });
   });
 
+  describe("per-line customisation (Task 5): snapshotted doneness + note as sub-text under the item", () => {
+    // The wire shape `listExpoQueue` surfaces — a fired meat dish carrying the snapshotted note + doneness.
+    const orderWithCustomisation: ExpoOrder = {
+      orderId: "wo-c",
+      orderNumber: 12,
+      openedMinutes: 1,
+      worstBand: "fresh",
+      courses: [
+        {
+          courseId: null,
+          courseName: null,
+          displayOrder: null,
+          fired: true,
+          away: false,
+          items: [
+            {
+              id: "ti-c",
+              name: { "es-ES": "Chuletón" },
+              qty: "1.000",
+              stationName: "Cocina",
+              state: "queued",
+              firedAt: FIRED,
+              awayAt: null,
+              queuedAt: FIRED,
+              thresholds: DEFAULT_THRESHOLDS,
+              band: "fresh",
+              note: "sin sal",
+              doneness: "medium_rare",
+            },
+          ],
+        },
+      ],
+    };
+
+    it("renders the doneness (localised label) prominently and the note as sub-text beneath the item", async () => {
+      const el = await mount({ api: stubApi([orderWithCustomisation]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
+      expect(item.textContent).toContain("1× Chuletón");
+      const doneness = item.querySelector('[data-doneness="medium_rare"]')!;
+      expect(doneness).not.toBeNull();
+      expect(doneness.textContent).toContain(t("doneness.medium_rare"));
+      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
+      // Doneness precedes the note in DOM order (prominent first).
+      const html = item.innerHTML;
+      expect(html.indexOf("data-doneness")).toBeLessThan(html.indexOf("data-note"));
+    });
+
+    it("a note-only item (no doneness) renders the note and no doneness label", async () => {
+      const noteOnly: ExpoOrder = {
+        ...orderWithCustomisation,
+        courses: [
+          {
+            ...orderWithCustomisation.courses[0]!,
+            items: [{ ...orderWithCustomisation.courses[0]!.items[0]!, doneness: null }],
+          },
+        ],
+      };
+      const el = await mount({ api: stubApi([noteOnly]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
+      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
+      expect(item.querySelector("[data-doneness]")).toBeNull();
+    });
+
+    it("a doneness-only item (no note) renders the doneness and no note", async () => {
+      const donenessOnly: ExpoOrder = {
+        ...orderWithCustomisation,
+        courses: [
+          {
+            ...orderWithCustomisation.courses[0]!,
+            items: [{ ...orderWithCustomisation.courses[0]!.items[0]!, note: null }],
+          },
+        ],
+      };
+      const el = await mount({ api: stubApi([donenessOnly]) });
+      const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
+      expect(item.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
+      expect(item.querySelector("[data-note]")).toBeNull();
+    });
+
+    it("an item with no note/doneness renders no customisation row at all (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries note/doneness
+      expect(el.shadowRoot!.querySelectorAll(".item-customisation")).toHaveLength(0);
+    });
+  });
+
   describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
     // A fired pass item carrying the server-attached as-served profile: CONTAINS milk and REMOVED
     // gluten — the exact shape `listExpoQueue` returns (Task 8), which the pass renders as the chips +

@@ -583,6 +583,13 @@ export interface StationQueueItem {
    *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (the auto-fired
    *  earliest course, or released via {@link TillApi.fireCourse}). */
   firedAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL) — the
+   *  SNAPSHOTTED `note`/`doneness` the server froze at fire (not the live line, so a later edit never
+   *  changes what the cook sees). The KDS renders the doneness PROMINENTLY and the note as sub-text beside
+   *  the modifiers. Optional/`null`/absent (⇒ nothing rendered) on an older payload or a plain line —
+   *  {@link Doneness} is the meat-doneness enum, localised via the `doneness.*` labels. */
+  note?: string | null;
+  doneness?: Doneness | null;
 }
 
 /**
@@ -689,6 +696,12 @@ export interface ExpoItem {
   firedAt: string | null;
   /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
   awayAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
+   *  `note`/`doneness` the server froze at fire, the same fields {@link StationQueueItem.note}/`doneness`
+   *  carry; the pass renders the doneness PROMINENTLY and the note as sub-text. Optional/`null`/absent
+   *  (⇒ nothing rendered) on an older payload or a plain line. */
+  note?: string | null;
+  doneness?: Doneness | null;
   /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
    *  <name>` sub-text beneath this item (Task 14), the same {@link QueueModifier} shape the per-station
    *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically

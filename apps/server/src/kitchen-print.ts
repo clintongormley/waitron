@@ -151,6 +151,12 @@ export async function enqueueKitchenTickets(
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
       descriptions: workingOrderLines.descriptions,
+      // The per-line customisation (order-line customisation, spec §2/§3) — the note/doneness to print as
+      // sub-lines. Read from `working_order_lines` here (as name/qty are): this runs INSIDE the fire tx,
+      // right after `fireLines` snapshotted these SAME values onto `ticket_items`, so the line and the
+      // snapshot are identical at print time (the queue reads, viewed LATER, take the `ticket_items` copy).
+      note: workingOrderLines.note,
+      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(
@@ -242,6 +248,13 @@ export async function enqueueKitchenTickets(
     const item: KitchenTicketItem = {
       qty: Number(line.quantity),
       name: ticketName(line.descriptions, cfg.locale),
+      // The per-line customisation (order-line customisation, spec §2/§3): the doneness prints PROMINENTLY
+      // and the note as a sub-line beneath the dish (`emitItem`). Nullable columns → `?? undefined` so a
+      // plain line carries neither key and prints exactly as before. Doneness has no server-side locale
+      // label (there is no enum-i18n here); the raw enum value is formatted for print in `emitItem`, the
+      // "raw value acceptable on a kitchen ticket" rule.
+      doneness: line.doneness ?? undefined,
+      note: line.note ?? undefined,
       // The parent dish's selected options, printed as `+ <name>` sub-text (empty for a plain dish).
       modifiers: modifiersByParent.get(fired.workingOrderLineId) ?? [],
     };

@@ -13,7 +13,7 @@ import {
   withTenant,
   workingOrderLines,
 } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, Doneness, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
@@ -177,6 +177,9 @@ async function fireNewOrder(
     productId: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    // Order-line customisation (spec §2/§3): a parent line MAY carry a note/doneness, snapshotted at fire.
+    note?: string;
+    doneness?: Doneness;
   }[],
 ): Promise<string> {
   const id = randomUUID();
@@ -565,6 +568,32 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     // The options appear BELOW the dish, and each sub-text row carries the "+ " marker.
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Grande"));
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
+  });
+
+  it("prints the line's doneness prominently and its note as sub-lines on the kitchen ticket (order-line customisation)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      const chuleton = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+        stationId: cocina.id,
+      });
+
+      await fireNewOrder(tx, cfg, [
+        { productId: chuleton, quantity: "1", note: "sin sal", doneness: "medium_rare" },
+      ]);
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const ticket = decodeTicket(jobs.filter((j) => j.printerId === printerId)[0]!.payload);
+    expect(ticket).toContain("Chuleton");
+    // Doneness prominent (upper-cased, underscores spaced) BENEATH the dish, above the note.
+    expect(ticket).toContain("MEDIUM RARE");
+    expect(ticket).not.toContain("medium_rare");
+    expect(ticket).toContain("* sin sal");
+    expect(ticket.indexOf("Chuleton")).toBeLessThan(ticket.indexOf("MEDIUM RARE"));
+    expect(ticket.indexOf("MEDIUM RARE")).toBeLessThan(ticket.indexOf("* sin sal"));
   });
 
   it("badges a modifier's PER-DISH count when it exceeds one, leaving a plain modifier's line unchanged", async () => {

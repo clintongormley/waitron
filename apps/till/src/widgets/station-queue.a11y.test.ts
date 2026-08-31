@@ -148,6 +148,33 @@ const modifierGroups: StationQueueGroup[] = [
   },
 ];
 
+// A dish carrying the per-line customisation (order-line customisation, Task 5): a PROMINENT doneness
+// label (bold text — the non-colour tell) and a muted free-text note, both indented sub-text under the
+// same tappable line, so axe sweeps their contrast in both themes and confirms no new violation.
+const customisationGroups: StationQueueGroup[] = [
+  {
+    orderId: "wo-cust",
+    orderNumber: 12,
+    label: null,
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    thresholds: DEFAULT_THRESHOLDS,
+    status: "placed",
+    items: [
+      {
+        id: "ti-cust",
+        workingOrderLineId: "wol-cust",
+        state: "queued",
+        descriptions: { "es-ES": "Chuletón" },
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        note: "sin sal",
+        doneness: "medium_rare",
+      },
+    ],
+  },
+];
+
 // A dish carrying an as-served allergen profile (modifier↔allergen, Task 9): a CONTAINS-milk chip, a
 // struck localised "NO Cereals containing gluten" removal callout, and a second, PENDING item
 // (unreviewed base ⇒ the "not reviewed" warning). The chip/callout/warning use a data-driven danger
@@ -287,6 +314,15 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: modifierGroups, stationId: "st-1", view: "rail" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("a dish with a per-line note + prominent doneness (indented sub-text) has no violations", async () => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: customisationGroups, stationId: "st-1", view: "rail" },
       theme,
     );
     await expectNoA11yViolations(host);

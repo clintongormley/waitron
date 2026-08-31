@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { descriptionFor, trimQuantity } from "./dish-format.js";
@@ -222,6 +223,27 @@ export class TillStationQueue extends LitElement {
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
+         like the modifiers list. Doneness is PROMINENT — a cook must read how a steak is wanted first —
+         via text WEIGHT (the non-colour tell, house a11y rule), not colour alone; the free-text note is
+         muted sub-text like the modifiers. */
+      .line-customisation {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding-left: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .line-doneness {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+      }
+
+      .line-note {
+        color: var(--wt-color-text-muted);
       }
 
       /* The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
@@ -767,6 +789,7 @@ export class TillStationQueue extends LitElement {
     const main = html`<span class="line-main">
       <span class="line-name">${this.#dish(item)}</span>${secondary}
     </span>`;
+    const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
     const allergens = this.#allergens(item);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
@@ -774,7 +797,7 @@ export class TillStationQueue extends LitElement {
     if (held || NEXT[item.state] === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${modifiers}${allergens}${diet}</span
+        >${main}${customisation}${modifiers}${allergens}${diet}</span
       >`;
     }
     return html`<button
@@ -783,8 +806,34 @@ export class TillStationQueue extends LitElement {
       aria-label=${this.#bumpLabel(group)}
       @click=${() => this.#bump(group, item)}
     >
-      ${main}${modifiers}${allergens}${diet}
+      ${main}${customisation}${modifiers}${allergens}${diet}
     </button>`;
+  }
+
+  /** The line's per-line kitchen customisation (order-line customisation, Task 5) as indented sub-text
+   *  beneath the dish: the DONENESS rendered PROMINENTLY (localised `doneness.*` label, bold — a cook must
+   *  read how a steak is wanted first; the weight is the non-colour tell) and the free-text NOTE as muted
+   *  sub-text. Reads the SNAPSHOTTED fields the server froze at fire. `nothing` when the line carried
+   *  neither (a null/absent doneness and an empty/absent note), so a plain dish renders exactly as before
+   *  this task. */
+  #customisation(item: StationQueueItem): TemplateResult | typeof nothing {
+    const doneness = item.doneness ?? null;
+    const note = item.note ?? null;
+    if (doneness === null && (note === null || note === "")) return nothing;
+    return html`<span class="line-customisation" data-item-customisation=${item.id}>
+      ${
+        doneness !== null
+          ? html`<span class="line-doneness" data-doneness=${doneness}
+              >${t("doneness.label")}: ${t(`doneness.${doneness}` as StringKey)}</span
+            >`
+          : nothing
+      }
+      ${
+        note !== null && note !== ""
+          ? html`<span class="line-note" data-note>${note}</span>`
+          : nothing
+      }
+    </span>`;
   }
 
   /**

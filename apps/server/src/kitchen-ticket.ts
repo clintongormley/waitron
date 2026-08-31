@@ -38,6 +38,15 @@ const FEED_BEFORE_CUT = 3;
 export interface KitchenTicketItem {
   qty: number;
   name: string;
+  /** The meat-doneness (order-line customisation, spec §3) as its raw enum value (e.g. `medium_rare`),
+   *  snapshotted at fire by the caller. Printed PROMINENTLY on its own indented sub-line directly beneath
+   *  the dish — upper-cased with underscores spaced (`MEDIUM RARE`) — so the cook reads how a steak is
+   *  wanted first. Absent on a non-meat / no-preference line, which then prints exactly as before. */
+  doneness?: string;
+  /** The free-text kitchen note (order-line customisation, spec §2), snapshotted at fire. Printed as its
+   *  own indented `* <note>` sub-line beneath the dish (distinct from a `+ <modifier>`). Absent/empty on a
+   *  line that carried none, so a note-free caller is byte-for-byte unchanged. */
+  note?: string;
   modifiers?: string[];
 }
 
@@ -73,12 +82,20 @@ function itemLine(item: KitchenTicketItem): string {
   return `${item.qty} x ${item.name}`;
 }
 
-/** Emit one item — its `qty x name` line, then each selected modifier as an indented `+ <name>` line
- *  beneath it. The leading two spaces + ASCII "+" keep the sub-text legible on any single-byte code
- *  page. A plain dish (no `modifiers`) emits exactly the one line it always did. */
+/** Emit one item — its `qty x name` line, then (order-line customisation, spec §2/§3) the DONENESS as a
+ *  prominent indented sub-line, each selected modifier as an indented `+ <name>` line, and the free-text
+ *  NOTE as an indented `* <note>` line, in that order. Doneness prints FIRST and PROMINENT — upper-cased
+ *  with underscores spaced, wrapped in `**` markers — because there is no ESC/POS bold (ruling R-G) and
+ *  the cook must not miss how a steak is wanted; the ASCII markers keep it legible on any single-byte code
+ *  page, like the modifier `+`. A plain dish (no doneness/note/modifiers) emits exactly the one line it
+ *  always did. */
 function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem): void {
   b.line(itemLine(item));
+  if (item.doneness !== undefined && item.doneness !== "") {
+    b.line(`  ** ${item.doneness.replace(/_/g, " ").toUpperCase()} **`);
+  }
   for (const modifier of item.modifiers ?? []) b.line(`  + ${modifier}`);
+  if (item.note !== undefined && item.note !== "") b.line(`  * ${item.note}`);
 }
 
 /** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */
