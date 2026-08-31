@@ -340,6 +340,53 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`)).toBeNull();
   });
 
+  // A STALE selection — an `optionGroupItemId` absent from the product's option groups (`itemById.get`
+  // misses) — must degrade to an EMPTY overlay rather than throwing (`as-served.ts`). The row still
+  // renders from the reviewed base; the phantom option folds as no add/no remove.
+  it("degrades a stale option selection to no overlay without throwing", async () => {
+    const realCheese: TillOptionItem = {
+      id: "opt-real",
+      name: { es: "Extra queso" },
+      priceDelta: "0.50",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: { milk: { presence: "contains" } },
+      removeAllergens: null,
+    };
+    const tostada: TillProduct = {
+      ...cafe,
+      id: "tostada-stale",
+      descriptions: { es: "Tostada" },
+      allergens: { gluten: { presence: "contains" } }, // base REVIEWED → the row renders
+      optionGroups: [
+        {
+          id: "grp-extras",
+          name: { es: "Extras" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [realCheese],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    // The selection points at an id NOT present in `optionGroups` (a stale/removed option).
+    const stale: SelectedLineOption = {
+      optionGroupItemId: "opt-ghost",
+      name: { es: "Fantasma" },
+      priceDelta: "0.00",
+    };
+    store.addProduct(tostada, "1", [stale]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(asServed).not.toBeNull();
+    // Base gluten survives; the phantom option added nothing (no milk) and removed nothing, and no throw.
+    expect(asServed!.textContent).toMatch(/gluten/i);
+    expect(asServed!.textContent).not.toMatch(/milk|leche/i);
+    expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+  });
+
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store });

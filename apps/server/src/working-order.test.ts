@@ -1420,6 +1420,31 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
+  // A PLAIN, modifier-less dish whose base is unreviewed (products.allergens NULL, NO options at all)
+  // still gets an as-served profile attached to its parent line — the server errs safe and marks the
+  // plate `pending` so the KDS shows it unverified. (Divergence from the till, which SUPPRESSES the row
+  // for this same case — pinned in basket.test.ts. Kept as-is: the KDS is deliberately the cautious one.)
+  it("attaches a pending profile to a plain, modifier-less unreviewed dish (KDS errs safe)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
+      await placeOrderWith(tx, cfg, [line(dish)]); // no options at all
+      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      expect(item.modifiers).toEqual([]);
+      expect(item.asServed.pending).toBe(true);
+      expect(item.asServed.allergens).toEqual({});
+      expect(item.removed).toEqual([]);
+      // The expo read attaches the same pending profile to its item.
+      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      expect(expoItem.modifiers).toEqual([]);
+      expect(expoItem.asServed.pending).toBe(true);
+      expect(expoItem.asServed.allergens).toEqual({});
+      expect(expoItem.removed).toEqual([]);
+    });
+  });
+
   // An option that ADDS an allergen merges it into the served profile (over-declaring is the safe
   // direction), leaving the reviewed base non-pending and `removed` empty.
   it("attaches an added allergen from the option overlay", async () => {
