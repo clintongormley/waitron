@@ -1,4 +1,5 @@
-import { index, pgEnum, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { index, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { doneness } from "./orders.js";
 import { tenants } from "./tenants.js";
 
 /**
@@ -78,6 +79,13 @@ export const ticketItems = pgTable(
     // `preparing_at` / `ready_at` / `fired_at` lifecycle columns above. The existing FORCE RLS + policy +
     // SELECT/INSERT/UPDATE grant (0055) are table/row-level, so this column is covered — no RLS/grant change.
     awayAt: timestamp("away_at", { withTimezone: true, mode: "string" }),
+    // The per-line kitchen customisation, SNAPSHOTTED from the working-order line at fire time (like
+    // `station_id`/`course_id` above) so a later line edit never mutates fired kitchen state (spec §2/§3).
+    // `note` is a free-text instruction, `doneness` the meat-doneness enum. Additive nullable columns,
+    // covered by the existing FORCE RLS + policy + SELECT/INSERT/UPDATE grant (0055) — no RLS/grant change.
+    // NON-FISCAL: never read into a filed record.
+    note: text("note"),
+    doneness: doneness("doneness"),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide (23505)

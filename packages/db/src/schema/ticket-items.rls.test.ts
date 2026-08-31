@@ -231,6 +231,51 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
     expect(row!.awayAt).not.toBeNull();
   });
 
+  it("carries nullable note + doneness columns that app_user can stamp (spec §2/§3, NON-FISCAL)", async () => {
+    // Per-line kitchen customisation snapshotted from the working-order line at fire time (like
+    // station_id/course_id). `note` (free-text) and `doneness` (the meat-doneness enum) are additive
+    // NULLABLE columns under the existing SELECT/INSERT/UPDATE grant (0055) — a write raising 42501
+    // would mean the column was outside the grant, a read raising 42703 that the ADD COLUMN never
+    // applied. NON-FISCAL: never read into a filed record.
+    const meta = await suite.admin.execute<{
+      column_name: string;
+      is_nullable: string;
+      data_type: string;
+      udt_name: string;
+    }>(
+      sql`select column_name, is_nullable, data_type, udt_name
+            from information_schema.columns
+           where table_name = 'ticket_items' and column_name in ('note', 'doneness')
+           order by column_name`,
+    );
+    expect(meta.rows).toEqual([
+      {
+        column_name: "doneness",
+        is_nullable: "YES",
+        data_type: "USER-DEFINED",
+        udt_name: "doneness",
+      },
+      { column_name: "note", is_nullable: "YES", data_type: "text", udt_name: "text" },
+    ]);
+    // app_user stamps both (additive columns, existing grant) and reads them back.
+    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
+    await asApp(TENANT_A, (tx) =>
+      tx.execute(
+        sql`update ticket_items set note = 'sin sal', doneness = 'medium_rare' where id = ${id}`,
+      ),
+    );
+    const [row] = await asApp(TENANT_A, (tx) =>
+      tx
+        .execute<{ note: string; doneness: string }>(
+          sql`select note, doneness from ticket_items where id = ${id}`,
+        )
+        .then((r) => r.rows),
+    );
+    expect(row!.note).toBe("sin sal");
+    expect(row!.doneness).toBe("medium_rare");
+  });
+
   it("app_user has UPDATE on ticket_items but NOT DELETE (cancelled lines cascade via the line FK)", async () => {
     const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);

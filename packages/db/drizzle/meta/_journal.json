@@ -610,6 +610,13 @@
       "when": 1788190366881,
       "tag": "0086_known_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1788207353448,
+      "tag": "0087_clever_red_ghost",
+      "breakpoints": true
     }
   ]
 }

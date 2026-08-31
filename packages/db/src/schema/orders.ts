@@ -34,6 +34,20 @@ export const workingOrderStatus = pgEnum("working_order_status", [
 ]);
 
 /**
+ * How a meat dish is cooked (KDS-only, spec §3). A pgEnum rather than a text CHECK, deliberately —
+ * the same rationale as `working_order_status` above: these five values are settled by the spec, and
+ * one declaration yields both the TypeScript union and the database constraint. Optional even on a
+ * meat line: a stewed/minced dish leaves it NULL.
+ */
+export const doneness = pgEnum("doneness", [
+  "rare",
+  "medium_rare",
+  "medium",
+  "medium_well",
+  "well_done",
+]);
+
+/**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are
  * added, amended and removed all evening, and the order may end in nothing at
  * all. Two tables, one transition between them (architecture §6): conflating
@@ -211,6 +225,14 @@ export const workingOrderLines = pgTable(
     // never copied to the filed sale_lines (design §4), which stay decoupled from the mutable
     // catalogue. Additive nullable column; the existing FORCE-RLS policy + grants cover it.
     optionGroupItemId: uuid("option_group_item_id"),
+    // Free-text kitchen instruction ("hold the mayo"), per line (spec §2). Additive nullable;
+    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide,
+    // RLS row-level). NON-FISCAL: snapshotted onto ticket_items at fire time, never read into a filed
+    // record — the pay path rebuilds filed sale_lines from the locked price snapshot, not from this.
+    note: text("note"),
+    // How the dish is cooked, for meat dishes (spec §3). NON-FISCAL, same as `note`. NULL = not chosen
+    // (also every non-meat line). Additive nullable enum; the existing FORCE-RLS policy + grants cover it.
+    doneness: doneness("doneness"),
   },
   (t) => [
     // Composite FK: a line cannot point at an order belonging to another
