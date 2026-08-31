@@ -99,8 +99,12 @@ describe("log reader", () => {
   it("filters by request ids", () => {
     const dir = mkdir();
     const sink = createRotatingFileSink({ dir, maxBytes: 10_000, maxFiles: 2 });
-    sink(`${JSON.stringify({ at: "t1", level: "info", event: "http.request", requestId: "r1" })}\n`);
-    sink(`${JSON.stringify({ at: "t2", level: "info", event: "http.request", requestId: "r2" })}\n`);
+    sink(
+      `${JSON.stringify({ at: "t1", level: "info", event: "http.request", requestId: "r1" })}\n`,
+    );
+    sink(
+      `${JSON.stringify({ at: "t2", level: "info", event: "http.request", requestId: "r2" })}\n`,
+    );
     const reader = createLogReader({ dir, maxFiles: 2 });
     expect(reader.byRequestIds(["r2"]).map((e) => e.requestId)).toEqual(["r2"]);
   });
@@ -114,6 +118,10 @@ describe("log reader", () => {
     const sink = createRotatingFileSink({ dir, maxBytes: 10_000, maxFiles: 2 });
     sink("not json\n");
     sink(`${JSON.stringify({ at: "t", level: "info", event: "ok" })}\n`);
-    expect(createLogReader({ dir, maxFiles: 2 }).recent().map((e) => e.event)).toEqual(["ok"]);
+    expect(
+      createLogReader({ dir, maxFiles: 2 })
+        .recent()
+        .map((e) => e.event),
+    ).toEqual(["ok"]);
   });
 });
