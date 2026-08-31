@@ -5,10 +5,11 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "./allergen-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { vatClassName } from "../i18n/domain.js";
-import type { OptionGroup, OptionGroupItem, VatClass } from "../api/client.js";
+import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
+import type { AllergenDeclaration, OptionGroup, OptionGroupItem, VatClass } from "../api/client.js";
 
 /** The VAT bands the item VAT-override select offers — mirrors `product-form.ts`'s `VAT_CLASSES` (the
  * `products.vat_class` CHECK-set order, `schema/catalogue.ts`). Duplicated locally rather than shared:
@@ -132,11 +133,20 @@ export class OptionGroupManager extends LitElement {
         margin-top: var(--wt-space-3);
       }
 
-      label.vat {
+      label.vat,
+      label.adds,
+      label.removes {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
         color: var(--wt-color-text);
+      }
+
+      /* The allergen adds/removes editors carry a whole grid / 14-option list — let them break to a
+         full-width line under the single-line fields rather than squeeze into a 6rem column. */
+      label.adds,
+      label.removes {
+        flex-basis: 100%;
       }
     `,
   ];
@@ -325,6 +335,19 @@ export class OptionGroupManager extends LitElement {
     this.#updateItem(groupId, itemId, { vatClass: value === "" ? null : value });
   }
 
+  /** An item's REMOVES multiselect changed: gather the picked codes and emit them, sending `null`
+   * (not `[]`) for an empty pick so "removes nothing" is one value the server clears cleanly. Native
+   * `change` is `composed: false`, so `stopPropagation` here is defensive consistency, not a boundary
+   * guard (the `allergen-picker.ts` `#onPresence` convention). */
+  #onItemRemoveChange(groupId: string, itemId: string, event: Event): void {
+    event.stopPropagation();
+    const selected = Array.from(
+      (event.target as HTMLSelectElement).selectedOptions,
+      (o) => o.value,
+    );
+    this.#updateItem(groupId, itemId, { removeAllergens: selected.length ? selected : null });
+  }
+
   #renderItemRow(groupId: string, item: OptionGroupItem) {
     return html`
       <wt-card data-test=${`item-row-${item.id}`}>
@@ -351,6 +374,35 @@ export class OptionGroupManager extends LitElement {
                 (v) =>
                   html`<option value=${v} .selected=${v === item.vatClass}>
                     ${vatClassName(v)}
+                  </option>`,
+              )}
+            </select>
+          </label>
+          <label class="adds">
+            ${t("option_group.adds")}
+            <dashboard-allergen-picker
+              data-test=${`item-add-${item.id}`}
+              .declaration=${item.addAllergens ?? null}
+              @allergens-changed=${(e: CustomEvent<{ value: AllergenDeclaration }>) => {
+                e.stopPropagation();
+                this.#updateItem(groupId, item.id, { addAllergens: e.detail.value });
+              }}
+            ></dashboard-allergen-picker>
+          </label>
+          <label class="removes">
+            ${t("option_group.removes")}
+            <select
+              multiple
+              data-test=${`item-remove-${item.id}`}
+              @change=${(e: Event) => this.#onItemRemoveChange(groupId, item.id, e)}
+            >
+              ${ALLERGEN_CODES.map(
+                (code) =>
+                  html`<option
+                    value=${code}
+                    .selected=${(item.removeAllergens ?? []).includes(code)}
+                  >
+                    ${allergenName(code)}
                   </option>`,
               )}
             </select>

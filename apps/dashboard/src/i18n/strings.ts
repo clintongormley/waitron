@@ -306,6 +306,8 @@ export const en = {
   "option_group.price_delta": "Price delta",
   "option_group.vat": "VAT",
   "option_group.vat_inherit": "— inherit —",
+  "option_group.adds": "Adds allergens",
+  "option_group.removes": "Removes allergens",
   // Ingredient form / list
   "ingredient.new": "New ingredient",
   "ingredient.edit": "Edit ingredient",
@@ -740,6 +742,8 @@ export const es: Record<StringKey, string> = {
   "option_group.price_delta": "Ajuste de precio",
   "option_group.vat": "IVA",
   "option_group.vat_inherit": "— heredar —",
+  "option_group.adds": "Añade alérgenos",
+  "option_group.removes": "Quita alérgenos",
   "ingredient.new": "Nuevo ingrediente",
   "ingredient.edit": "Editar ingrediente",
   "ingredient.name": "Nombre",
