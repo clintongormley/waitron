@@ -311,7 +311,7 @@ describe("till-expo-screen", () => {
     });
   });
 
-  describe("as-served allergens (Task 9): contains chips, NO <CODE> removals, not-reviewed note", () => {
+  describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
     // A fired pass item carrying the server-attached as-served profile: CONTAINS milk and REMOVED
     // gluten — the exact shape `listExpoQueue` now returns (Task 8), which the pass doesn't render yet.
     const orderWithAllergens: ExpoOrder = {

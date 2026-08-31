@@ -149,10 +149,10 @@ const modifierGroups: StationQueueGroup[] = [
 ];
 
 // A dish carrying an as-served allergen profile (modifier↔allergen, Task 9): a CONTAINS-milk chip, a
-// struck "NO GLUTEN" removal callout, and a second, PENDING item (unreviewed base ⇒ the "not reviewed"
-// warning). The chip/callout/warning use a data-driven danger colour + strike-through/text weight, so
-// axe sweeps their contrast in both themes here (colour is never the only signal — the sweep confirms
-// the colour that IS there also passes).
+// struck localised "NO Cereals containing gluten" removal callout, and a second, PENDING item
+// (unreviewed base ⇒ the "not reviewed" warning). The chip/callout/warning use a data-driven danger
+// colour + strike-through/text weight, so axe sweeps their contrast in both themes here (colour is
+// never the only signal — the sweep confirms the colour that IS there also passes).
 const allergenGroups: StationQueueGroup[] = [
   {
     orderId: "wo-al",
@@ -245,7 +245,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the as-served allergen rail (contains chips, struck NO <CODE> removals, pending note) has no violations", async () => {
+  it("the as-served allergen rail (contains chips, struck localised NO <allergen> removals, pending note) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: allergenGroups, stationId: "st-1", view: "rail" },

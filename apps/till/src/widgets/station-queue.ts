@@ -223,8 +223,9 @@ export class TillStationQueue extends LitElement {
       }
 
       /* The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
-         modifiers: localised "contains" chips, struck "NO <CODE>" removal callouts, and a pending note.
-         A flex-wrap row (chips + callouts flow), the same indent as the modifiers list. */
+         modifiers: localised "contains" chips, struck localised "NO <allergen name>" removal callouts
+         (e.g. "NO Cereals containing gluten" / "SIN Leche"), and a pending note. A flex-wrap row
+         (chips + callouts flow), the same indent as the modifiers list. */
       .line-allergens {
         display: flex;
         flex-wrap: wrap;

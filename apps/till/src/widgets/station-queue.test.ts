@@ -235,7 +235,7 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("as-served allergens (Task 9): contains chips, NO <CODE> removals, not-reviewed note", () => {
+  describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
     // A fired dish carrying the server-attached as-served profile: it CONTAINS milk (a "+ extra cheese"
     // option added it) and REMOVED gluten (a "gluten-free bun" option stripped it) — the exact shape
     // `listStationQueue` now returns (Task 8), which the KDS just doesn't render yet.

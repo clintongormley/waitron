@@ -133,6 +133,11 @@ surface renders the `{ allergens, pending }` shape it already knows from product
   so each fired dish line carries its as-served profile, rendered as **"NO GLUTEN"** (removes) /
   **"+MILK"** (adds) on the ticket — a second safety check at prep.
 
+> **2026-08-31 (as built):** the KDS station/expo ticket render lives in `apps/till`
+> (`station-queue.ts` / `till-expo-screen.ts`), not the dashboard config screen; removal callouts are
+> localised via `allergenName` (e.g. "NO Cereals containing gluten" / "SIN Leche"), not the raw
+> uppercased code.
+
 **Live, not snapshotted** — the one accepted edge: `working_order_lines.option_group_item_id` is
 `ON DELETE SET NULL` (`0082_motionless_komodo.sql:61-65`), so an option **deleted mid-fired-service**
 loses its overlay link and that line falls back to base − nothing (the line keeps its stored name).

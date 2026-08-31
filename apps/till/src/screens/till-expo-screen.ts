@@ -263,8 +263,9 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* The item's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
-         modifiers — localised "contains" chips, struck "NO <CODE>" removal callouts, and a pending
-         note. A flex-wrap row so chips + callouts flow; mirrors the per-station display's identical row. */
+         modifiers — localised "contains" chips, struck localised "NO <allergen name>" removal callouts
+         (e.g. "NO Cereals containing gluten" / "SIN Leche"), and a pending note. A flex-wrap row so
+         chips + callouts flow; mirrors the per-station display's identical row. */
       .item-allergens {
         display: flex;
         flex-wrap: wrap;

@@ -51,7 +51,8 @@ const queue: ExpoOrder[] = [
             // is non-interactive plain text under the same item box, swept here for both themes.
             modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
             // As-served allergens (modifier↔allergen, Task 9): a CONTAINS-milk chip and a struck
-            // "NO GLUTEN" removal callout — their danger colour + strike-through swept for contrast here.
+            // localised "NO Cereals containing gluten" removal callout — their danger colour +
+            // strike-through swept for contrast here.
             asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
             removed: ["gluten"],
             queuedAt: FIRED,
