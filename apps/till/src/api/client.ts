@@ -324,6 +324,16 @@ export interface ProductCatalogue {
 }
 
 /**
+ * The meat-doneness enum (order-line customisation) — a LOCAL redefinition of the server's
+ * `packages/db` `Doneness`, the same bundle-decoupling rationale as every other type in this file (see
+ * the file header). Values MUST match the server's `DONENESS` tuple exactly (`schema/orders.ts`); the
+ * server re-validates any `doneness` it receives against that enum (`order.invalid_doneness`). NON-FISCAL:
+ * doneness lives only on `working_order_lines`/`ticket_items` (snapshotted at fire), never on the fiscal
+ * projection or a huella.
+ */
+export type Doneness = "rare" | "medium_rare" | "medium" | "medium_well" | "well_done";
+
+/**
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
  * `options` (ordering modifiers) are the selected modifiers on the line, each naming an
  * `optionGroupItemId` the server resolves AUTHORITATIVELY (price, VAT, name) and files as a child line
@@ -334,11 +344,19 @@ export interface ProductCatalogue {
  * line — never `[]` — so a no-modifier sale is byte-identical to before. The server (`POST /api/sales`,
  * `addTabRound`) reads `options ?? []`; a `weight` line carrying options is refused server-side. The
  * client sends only the id (and the count when > 1): the running line price is DISPLAY-ONLY.
+ *
+ * `note` (a free-text kitchen instruction, capped at 200 chars server-side) and `doneness` (the meat
+ * enum above) are the per-line customisation (order-line customisation, spec §2/§3), NON-FISCAL: the
+ * server trims/validates them and stores them on the working-order line only, never on the sale. Both
+ * are ABSENT for a plain line — a whitespace-only note is "not chosen" and omitted — so a no-note,
+ * no-doneness sale stays byte-identical to before.
  */
 export interface SaleLine {
   productId: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
+  note?: string;
+  doneness?: Doneness;
 }
 
 /**

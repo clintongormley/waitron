@@ -44,6 +44,31 @@ describe("WorkingOrderStore", () => {
     expect(s.total).toBe("3.20");
   });
 
+  it("attaches a per-line note and doneness passed as extras", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { note: "no mayo", doneness: "medium" });
+    expect(s.lines[0]).toEqual({
+      product: cafe,
+      quantity: "1",
+      note: "no mayo",
+      doneness: "medium",
+    });
+  });
+
+  it("attaches only the extra that is provided (each key omitted when absent)", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { doneness: "rare" });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", doneness: "rare" });
+  });
+
+  it("omits both note and doneness keys when extras are absent or empty", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    s.addProduct(cafe, "1", undefined, {});
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[1]).toEqual({ product: cafe, quantity: "1" });
+  });
+
   it("previews an empty basket as a zero total with no VAT bands", () => {
     const s = new WorkingOrderStore();
     expect(s.total).toBe("0");

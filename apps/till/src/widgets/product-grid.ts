@@ -5,7 +5,7 @@ import { formatMoney } from "../i18n/format.js";
 import { productName } from "./product-name.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
-import type { TillProduct } from "../api/client.js";
+import type { Doneness, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -107,10 +107,21 @@ export class TillProductGrid extends LitElement {
    * verbatim, so the empty case must be collapsed here).
    */
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
+    // Forward the picker's per-line note/doneness (order-line customisation) as `extras`, each key
+    // present only when the picker set it — an empty `extras` is collapsed to `undefined` so a
+    // note-free, doneness-free confirm leaves the line byte-identical to before.
+    const extras: { note?: string; doneness?: Doneness } = {};
+    if (detail.note !== undefined) {
+      extras.note = detail.note;
+    }
+    if (detail.doneness !== undefined) {
+      extras.doneness = detail.doneness;
+    }
     this.store.addProduct(
       detail.product,
       "1",
       detail.options.length > 0 ? detail.options : undefined,
+      Object.keys(extras).length > 0 ? extras : undefined,
     );
     this.pickerProduct = undefined;
   }
