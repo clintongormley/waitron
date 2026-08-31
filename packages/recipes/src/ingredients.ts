@@ -91,12 +91,10 @@ export async function updateIngredient(
   id: string,
   patch: UpdateIngredientInput,
 ): Promise<void> {
-  // A supplied map is validated before the write; `null` (clear) and `undefined` (leave unchanged)
-  // both skip validation. The patch keys map 1:1 to `ingredients` columns, so the spread stays fully
-  // typed against `.set()`.
   // A supplied allergen map / origin is validated before the write; `null` (clear) and `undefined`
   // (leave unchanged) both skip validation. `validateOrigin` throws `diet.invalid_origin` on a value
-  // outside `DIETARY_ORIGINS`; `null` is a legal uncategorise.
+  // outside `DIETARY_ORIGINS`; `null` is a legal uncategorise. The patch keys map 1:1 to `ingredients`
+  // columns, so the spread stays fully typed against `.set()`.
   if (patch.allergens != null) validateAllergens(patch.allergens);
   if (patch.dietaryOrigin != null) validateOrigin(patch.dietaryOrigin);
   await tx

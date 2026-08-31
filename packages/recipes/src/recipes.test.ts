@@ -134,6 +134,30 @@ describe("recipe composition and allergen derivation", () => {
     expect(row.diet).toMatchObject({ vegan: "yes", vegetarian: "yes", contains: [] });
   });
 
+  it("recomputeProductDiet: a multi-origin recipe stores origins SORTED (via the fold, not just applyDietDerivation)", async () => {
+    const row = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      // Insert in an order that is NOT already sorted (meat before dairy) so a missing sort shows.
+      const beef = await createIngredient(tx, { name: "beef" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "meat" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, beef.id));
+      const milk = await createIngredient(tx, { name: "milk" });
+      await tx
+        .update(ingredients)
+        .set({ dietaryOrigin: "dairy" satisfies DietaryOrigin })
+        .where(eq(ingredients.id, milk.id));
+      await setProductRecipe(tx, productId, [beef.id, milk.id]);
+      const [r] = await tx
+        .select({ deriv: products.dietDerivation })
+        .from(products)
+        .where(eq(products.id, productId));
+      return r!.deriv;
+    });
+    expect(row).toEqual({ origins: ["dairy", "meat"], pending: false });
+  });
+
   it("recomputeProductDiet: clearing the recipe resets the derivation to null", async () => {
     const cleared = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
