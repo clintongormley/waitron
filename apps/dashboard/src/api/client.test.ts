@@ -2429,4 +2429,48 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
       body: JSON.stringify({ optionGroupIds: ["og1"] }),
     });
   });
+
+  it("getRecentLogs GETs the recent endpoint with the given limit", async () => {
+    const lines = [{ at: "2026-08-31T10:00:00Z", level: "info", event: "boot" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ lines }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getRecentLogs(50)).toEqual({ lines });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/recent?limit=50", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("getRecentLogs defaults the limit to 200", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ lines: [] }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.getRecentLogs();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/recent?limit=200", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("getVerbosity GETs the verbosity endpoint", async () => {
+    const verbosity = { level: "info", revertsAt: null };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(verbosity));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getVerbosity()).toEqual(verbosity);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/verbosity", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("setVerbosity POSTs the level + ttl", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setVerbosity("debug", 5)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/verbosity", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ level: "debug", ttlMinutes: 5 }),
+    });
+  });
 });
