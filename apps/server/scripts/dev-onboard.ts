@@ -138,6 +138,9 @@ async function main(): Promise<void> {
   console.log("dev-onboard: migrated an UNPROVISIONED database — the box will boot in SETUP MODE.");
   console.log("");
   console.log(
+    "  wizard     http://localhost:5192   (the setup UI — apps/setup Vite dev server, open this)",
+  );
+  console.log(
     "  server     https://localhost:8080   (self-signed cert — browser warning is expected)",
   );
   console.log("  status     https://localhost:8080/setup-api/status   (provisioned: false)");
