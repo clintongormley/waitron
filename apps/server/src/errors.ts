@@ -1348,5 +1348,8 @@ declare module "@waitron/shared" {
      * fact about the adopt request, not the process. Never renamed once shipped.
      */
     "mirror.primary_url_invalid": Record<string, never>;
+    // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
+    // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
+    "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
   }
 }
