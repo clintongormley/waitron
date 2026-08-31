@@ -19,6 +19,15 @@ describe("diagnostics ring buffer", () => {
     expect(log.snapshot().map((e) => e.event)).toEqual(["a"]);
   });
 
+  it("snapshot deep-copies each event's fields, so mutating them does not reach the buffer", () => {
+    const log = createDiagnosticsLog({ now: at });
+    log.record("info", "a", { status: 200 });
+    const snap = log.snapshot();
+    snap[0]!.fields.status = 999;
+    snap[0]!.fields.extra = "leaked";
+    expect(log.snapshot()[0]!.fields).toEqual({ status: 200 });
+  });
+
   it("keeps primitive fields and drops non-primitive ones", () => {
     const log = createDiagnosticsLog({ now: at });
     log.record("info", "api", { status: 200, code: "sale.void", ok: true, body: { card: "4242" } });
@@ -46,8 +55,11 @@ describe("diagnostics ring buffer", () => {
 
   it("stamps `at` from the real clock when no `now` is supplied", () => {
     const log = createDiagnosticsLog();
+    const before = Date.now();
     log.record("info", "a");
-    const at = log.snapshot()[0]!.at;
-    expect(new Date(at).toISOString()).toBe(at);
+    const after = Date.now();
+    const parsed = Date.parse(log.snapshot()[0]!.at);
+    expect(parsed).toBeGreaterThanOrEqual(before);
+    expect(parsed).toBeLessThanOrEqual(after);
   });
 });
