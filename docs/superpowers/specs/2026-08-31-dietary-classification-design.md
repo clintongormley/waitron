@@ -77,6 +77,11 @@ From `(originsPresent, pending)`, a pure function computes the **derived diet pr
 The diet profile is tri-state per label: `yes` / `no` / `unknown` (pending). Contains-tags are
 boolean (a tag is either known-present or not-asserted).
 
+> **Update 2026-08-31:** the no-recipe case (a product with no recipe lines) is treated as **pending
+> (unknown)**, not vegan — `recomputeProductDiet` clears the derivation to `null`, and a `null`
+> derivation folds as `{ origins: [], pending: true }` at every as-served surface, so vegan/vegetarian
+> read `unknown` rather than a false positive on an unreviewed/empty dish.
+
 ### 3.2 Manual override & halal/kosher (product level)
 
 A product-level **override** wins over derivation (mirrors the allergen `manual` overlay + republish
@@ -116,6 +121,16 @@ apply. The subtlety is real and is exactly where a bug would hide, so it gets an
 
 Removal is **coarse** (set-level), identical to the allergen remove: `remove_origins: ["dairy"]`
 assumes the option removes *all* dairy from the plate. Documented, matches #187.
+
+> **Update 2026-08-31:** the shipped `deriveAsServedDiet` also **re-applies the product override at
+> as-served** (`overlay(recomputedDerived, override)`), so the owner's forced base label carries onto
+> the plate — but an option ADD can only ever **downgrade** a forced-positive vegan/vegetarian, never
+> uphold it. If a forced `vegan:"yes"` survives beside an added diet-incompatible origin
+> (`add:["meat"]`), it is capped to `"no"`; a remove never upgrades, and a base-only forced positive
+> with no incompatible add still stands. **halal/kosher forced values are left unchanged** by options
+> (no origin→halal/kosher signal). Without the cap a forced `vegan:"yes"` + an `add:["meat"]` option
+> would publish `vegan:"yes"` on a plate whose `contains` is `["meat"]` — the exact false positive
+> this feature prevents.
 
 ## 4. Data model changes
 

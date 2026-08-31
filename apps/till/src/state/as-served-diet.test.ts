@@ -118,6 +118,19 @@ describe("asServedDiet", () => {
     expect(asServed.halal).toBe("yes");
   });
 
+  it("a forced-vegan product + an add-meat option reads as-served vegan:'no' (cap, end-to-end)", () => {
+    // Owner forced vegan:"yes" on the product, but the diner adds bacon. The as-served line must NOT
+    // publish vegan:"yes" over a plate that now contains meat — the false positive the cap prevents.
+    const prod = product({ origins: ["plant"], pending: false }, [
+      item("add-bacon", { addOrigins: ["meat"] }),
+    ]);
+    prod.dietOverride = { vegan: "yes" };
+    expect(asServedDiet(line(prod)).vegan).toBe("yes"); // no option selected → owner override stands
+    const asServed = asServedDiet(line(prod, "add-bacon"));
+    expect(asServed.vegan).toBe("no");
+    expect(asServed.contains).toContain("meat");
+  });
+
   it("a line with no optionGroups at all still derives (absent groups fold as no overlays)", () => {
     const prod: TillProduct = {
       id: "dish",

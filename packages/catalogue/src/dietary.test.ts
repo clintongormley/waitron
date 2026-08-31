@@ -108,6 +108,49 @@ describe("deriveAsServedDiet", () => {
       "meat",
     ]);
   });
+
+  // The as-served cap (final-review fix): an option ADD can only DOWNGRADE a forced-positive
+  // vegan/vegetarian label — never let the owner's forced positive stand on a plate an added origin
+  // has made unsuitable. Prove-by-deletion target: remove the cap and the first two fail.
+  it("CAP: forced vegan:'yes' + add meat → vegan:'no', contains meat (false positive prevented)", () => {
+    const d: DietDerivation = { origins: ["plant"], pending: false };
+    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: ["meat"], remove: null }]);
+    expect(out.vegan).toBe("no");
+    expect(out.contains).toContain("meat");
+  });
+  it("CAP: forced vegetarian:'yes' + add meat → vegetarian:'no'", () => {
+    const d: DietDerivation = { origins: ["plant"], pending: false };
+    const out = deriveAsServedDiet(d, { vegetarian: "yes" }, [{ add: ["meat"], remove: null }]);
+    expect(out.vegetarian).toBe("no");
+  });
+  it("CAP: forced vegan:'yes' + add dairy → vegan:'no' but vegetarian:'yes' (dairy is veg-ok)", () => {
+    const d: DietDerivation = { origins: ["plant"], pending: false };
+    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: ["dairy"], remove: null }]);
+    expect(out.vegan).toBe("no");
+    expect(out.vegetarian).toBe("yes");
+  });
+  it("CAP: forced vegan:'yes' with NO incompatible add (only a remove) still stands", () => {
+    const d: DietDerivation = { origins: ["dairy"], pending: false };
+    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: null, remove: ["dairy"] }]);
+    expect(out.vegan).toBe("yes"); // base override preserved — no add downgraded it
+  });
+  it("CAP: halal/kosher forced values are UNCHANGED by an add (no origin→halal/kosher signal)", () => {
+    const d: DietDerivation = { origins: ["plant"], pending: false };
+    const out = deriveAsServedDiet(d, { halal: "yes", kosher: "yes" }, [
+      { add: ["meat"], remove: null },
+    ]);
+    expect(out.halal).toBe("yes");
+    expect(out.kosher).toBe("yes");
+  });
+
+  it("add WINS over a remove of the same origin across options (cross-option conflict)", () => {
+    const d: DietDerivation = { origins: ["meat", "plant"], pending: false };
+    const out = deriveAsServedDiet(d, null, [
+      { add: null, remove: ["meat"] },
+      { add: ["meat"], remove: null },
+    ]);
+    expect(out.contains).toContain("meat");
+  });
 });
 
 describe("validateOrigin / assertDietOverrideDisjoint", () => {
