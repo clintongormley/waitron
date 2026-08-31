@@ -80,8 +80,13 @@ live updates and the per-device layout editor (both under *Debt → cross-cuttin
     **Non-fiscal** (never in the huella), separately reviewable — but **legally load-bearing** (EU
     1169/2011 Annex II, food-safety advisor) and must ship add+remove together (an add-only half would
     show a "gluten-free" modifier as still containing gluten — worse than nothing). Own spec.
-  - **Per-option quantity** ("extra shot ×2") — today the slice expresses "up to N of a group" via
-    `max_select`, not a count on a single option.
+  - **Per-option quantity** ("extra shot ×2", author-capped by `option_group_items.max_quantity`,
+    priced per dish) **+ dish-line quantity** (a −/N/+ stepper on each basket line, no auto-merge of
+    identical lines) — LANDED (#186). Deferred follow-ons: on-screen **expo / station-queue / tab**
+    modifier `×N` (needs the server queue reads to carry the option count — the printed kitchen ticket
+    already shows it); `min_select`/`required` now count the SUMMED per-option quantity like
+    `max_select` (one consistent tally — only differs from distinct-count when `min_select > 1`;
+    revisit if a menu ever needs distinct-count minimums).
   - **Small deferred cleanups** — share `kitchen-print`'s child-line read with `working-order.ts`'s
     `readModifiersByParent`; lift `catalogue-api`'s `parseOptionalInteger` + the dashboard pick-list
     add/move/remove into shared helpers; hoist the `groupByParent` receipt/till mirror to
@@ -175,7 +180,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184) | menu draft/publish + schedule (#8); modifier↔allergen + per-option-qty (#7); nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186) | menu draft/publish + schedule (#8); modifier↔allergen (#7); nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
