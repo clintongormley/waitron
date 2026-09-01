@@ -37,6 +37,7 @@ const pendingLine: TabLine = {
   servedAt: null,
   courseId: null,
   firedAt: "2026-08-20T09:59:00.000Z",
+  state: "queued",
 };
 const servedLine: TabLine = {
   lineNo: 2,
@@ -46,6 +47,7 @@ const servedLine: TabLine = {
   servedAt: "2026-08-20T10:00:00.000Z",
   courseId: null,
   firedAt: "2026-08-20T09:59:00.000Z",
+  state: "queued",
 };
 
 const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
@@ -461,7 +463,70 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
   });
 
+  // ── Coursing editing (A3): the round bar's per-line HOLD toggle ─────────────────────────────────────
+
+  /** Rings one café into the current round (the grid tile) and returns the per-line hold switches. */
+  async function ringAndHolds(el: TillTableOrderScreen): Promise<HTMLElement[]> {
+    grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+    await el.updateComplete;
+    return [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-round-hold]")];
+  }
+
+  /** Toggles a round line's hold `wt-switch` by clicking its inner native checkbox — the same pattern
+   * `tender-pay.test.ts`/`wt-switch.test.ts` use (a real `click()` flips `checked` before `change`). */
+  async function toggleHold(el: TillTableOrderScreen, sw: HTMLElement): Promise<void> {
+    await (sw as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+    await el.updateComplete;
+  }
+
+  it("renders a per-line hold toggle per round line, defaulting OFF", async () => {
+    const { el } = await mount({ courses });
+    // No round yet ⇒ no toggle.
+    expect(el.shadowRoot!.querySelector("[data-round-hold]")).toBeNull();
+    const [hold] = await ringAndHolds(el);
+    // One switch for the one round line, OFF by default (a round line fires unless the waiter holds it).
+    expect(hold).not.toBeUndefined();
+    expect((hold as HTMLElement & { checked: boolean }).checked).toBe(false);
+  });
+
+  it("send-round OMITS hold for an un-held line (the default — the line fires on send)", async () => {
+    const { el } = await mount({ courses });
+    await ringAndHolds(el);
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    // Hold off ⇒ the line carries no `hold` (never `hold: false`); the server fires it by its course rule.
+    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+  });
+
+  it("send-round threads hold: true for a line the waiter held", async () => {
+    const { el } = await mount({ courses });
+    const [hold] = await ringAndHolds(el);
+    // Hold the café line — inserted but not fired.
+    await toggleHold(el, hold!);
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    // The course is untouched (no override), so only `hold: true` rides alongside productId + quantity.
+    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1", hold: true }]);
+  });
+
+  it("toggling hold off again clears it back to firing on send (omitted)", async () => {
+    const { el } = await mount({ courses });
+    const [hold] = await ringAndHolds(el);
+    // On, then off — back to the default, so the line carries no `hold` (the WeakMap entry is deleted).
+    await toggleHold(el, hold!);
+    await toggleHold(el, hold!);
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+  });
+
   // A held (fired_at null) line of a named course — the tab's food waiting for the waiter to fire it.
+  // Held still means the round-send already inserted its ticket item (fireLines does this for every
+  // parent line, fired or held), so `state` is the fresh-insert "queued", not null.
   const heldLine: TabLine = {
     lineNo: 3,
     productId: "cafe",
@@ -470,6 +535,7 @@ describe("till-table-order-screen", () => {
     servedAt: null,
     courseId: "postres",
     firedAt: null,
+    state: "queued",
   };
 
   it("shows a Fire <course> action per HELD course under fire_control='waiter' and emits fire-course", async () => {
@@ -507,6 +573,246 @@ describe("till-table-order-screen", () => {
     const { el } = await mount({ lines: [pendingLine], courses, fireControl: "waiter" });
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
+  });
+
+  // ── Coursing editing (A1): moving a NOT-yet-fired tab line into a different course ──────────────────
+
+  it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
+    // heldLine: firedAt null, current course Postres ⇒ an editable select bound to it.
+    const { el } = await mount({ lines: [heldLine], courses });
+    await openDrawer(el);
+    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]');
+    expect(picker).not.toBeNull();
+    expect(picker!.value).toBe("postres");
+    // The reused picker's options: the no-course placeholder plus one per active venue course.
+    expect([...picker!.options].map((o) => o.value)).toEqual(["", "entrantes", "postres"]);
+  });
+
+  it("emits set-line-course { lineNo, courseId } when a held tab line is re-pointed", async () => {
+    const { el } = await mount({ lines: [heldLine], courses, orderId: "wo-9" });
+    await openDrawer(el);
+    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]')!;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
+    picker.value = "entrantes";
+    picker.dispatchEvent(new Event("change"));
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: "entrantes" });
+  });
+
+  it("clears a held tab line's course to null when the no-course placeholder is picked", async () => {
+    const { el } = await mount({ lines: [heldLine], courses });
+    await openDrawer(el);
+    const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-line-course="3"]')!;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
+    // The "" placeholder is the explicit no-course null (setLineCourse takes `string | null`).
+    picker.value = "";
+    picker.dispatchEvent(new Event("change"));
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
+  });
+
+  it("shows a FIRED tab line's course READ-ONLY, offering no editable picker", async () => {
+    // A fired line (firedAt set) is corrected via recall, not moved here.
+    const firedWithCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: "postres" };
+    const { el } = await mount({ lines: [firedWithCourse], courses });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector('[data-line-course="1"]')).toBeNull();
+    const stat = el.shadowRoot!.querySelector('[data-line-course-static="1"]');
+    expect(stat).not.toBeNull();
+    expect(stat!.textContent).toContain("Postres");
+  });
+
+  it("shows a fired line's course as 'no course' when it has none, and the raw id for a retired course", async () => {
+    const noCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: null };
+    const retired: TabLine = { ...servedLine, lineNo: 2, courseId: "gone" };
+    const { el } = await mount({ lines: [noCourse, retired], courses });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector('[data-line-course-static="1"]')!.textContent).toContain(
+      t("table.course_none"),
+    );
+    // A course deactivated since the line was rung falls back to its raw id (the retrieve-path philosophy).
+    expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')!.textContent).toContain(
+      "gone",
+    );
+  });
+
+  it("renders no course control at all when the venue has no courses", async () => {
+    const { el } = await mount({ lines: [heldLine], courses: [] });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-line-course-static="3"]')).toBeNull();
+  });
+
+  // ── Coursing corrections (C5): per-line Send / Recall / Cancel, gated on the line's kitchen state ───
+  describe("send / recall / cancel line actions (C5)", () => {
+    // A line the kitchen has already STARTED (fired + preparing/ready) — the cancel-only case.
+    const preparingLine: TabLine = { ...pendingLine, lineNo: 1, state: "preparing" };
+    const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
+    // A CHILD MODIFIER line (ordering modifiers): productId null, no ticket item of its own, so firedAt
+    // AND state are both null — the shape whose null firedAt would wrongly fall into the HELD/Send branch
+    // and whose held-shape would paint an editable course picker, if the child guard were absent.
+    const childLine: TabLine = {
+      lineNo: 2,
+      productId: null,
+      quantity: "1.000",
+      unitPriceGross: "0.50",
+      servedAt: null,
+      courseId: null,
+      firedAt: null,
+      state: null,
+    };
+
+    it("renders NO per-line action and NO course picker on a child modifier line (productId null)", async () => {
+      // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
+      const { el } = await mount({ lines: [pendingLine, childLine], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+      // The child row: no Send/Recall/Cancel action…
+      expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-recall-line="2"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).toBeNull();
+      // …and no course control at all (neither the editable held picker nor the fired static span).
+      expect(el.shadowRoot!.querySelector('[data-line-course="2"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
+    });
+
+    it("hides Send all on a fully-fired tab that merely contains a modifier'd dish (child excluded)", async () => {
+      // pendingLine: firedAt set (fired). childLine: firedAt null but productId null ⇒ NOT held.
+      const { el } = await mount({ lines: [pendingLine, childLine], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
+    it("shows Send on a HELD line and emits send-lines { lineNos: [lineNo] }", async () => {
+      // heldLine: firedAt null ⇒ HELD ⇒ the Send action (release it to the kitchen).
+      const { el } = await mount({ lines: [heldLine], courses });
+      await openDrawer(el);
+      const send = el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]');
+      expect(send).not.toBeNull();
+      // A held line is neither recallable nor cancellable — it is not fired yet.
+      expect(el.shadowRoot!.querySelector('[data-recall-line="3"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="3"]')).toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("send-lines", (e) => (captured = e as CustomEvent));
+      send!.click();
+      expect(captured).toBeInstanceOf(CustomEvent);
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+      expect(captured!.detail).toEqual({ lineNos: [3] });
+    });
+
+    it("renders NO Send on a PARENT line with no ticket item (firedAt null, state null)", async () => {
+      // A moved/merged line or an openTab-initial line: a real dish (productId set) that was re-inserted
+      // or opened WITHOUT firing, so it carries no LIVE ticket item (firedAt null AND state null). Its
+      // null firedAt alone would fall into the HELD/Send branch, but sendLines matches no ticket item and
+      // no-ops, so the button would be dead — the `state !== null` guard suppresses it. (Contrast heldLine
+      // above: firedAt null but state "queued" ⇒ a real held item ⇒ Send still shows.)
+      const ticketlessParent: TabLine = { ...heldLine, lineNo: 4, state: null };
+      const { el } = await mount({ lines: [ticketlessParent], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-send-line="4"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-recall-line="4"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
+    });
+
+    it("offers a tab-level Send all that emits send-lines { lineNos: [] } (release every held line)", async () => {
+      const { el } = await mount({ lines: [heldLine], courses });
+      await openDrawer(el);
+      const sendAll = el.shadowRoot!.querySelector<HTMLElement>("[data-send-all]");
+      expect(sendAll).not.toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("send-lines", (e) => (captured = e as CustomEvent));
+      sendAll!.click();
+      expect(captured!.detail).toEqual({ lineNos: [] });
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+    });
+
+    it("hides Send all when no line is held (every line already fired)", async () => {
+      // pendingLine: firedAt set ⇒ nothing held ⇒ no send-all affordance.
+      const { el } = await mount({ lines: [pendingLine], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
+    it("hides Send all when the only firedAt-null line is a ticket-item-less parent (state null)", async () => {
+      // Symmetric with the per-line Send guard: a moved/merged or openTab-initial parent carries
+      // firedAt null but state null (no ticket item), so #anyHeld must NOT count it — Send-all would
+      // no-op on it. A real held line (state "queued") DOES still surface Send-all (test above).
+      const ticketlessParent: TabLine = { ...heldLine, lineNo: 4, state: null };
+      const { el } = await mount({ lines: [ticketlessParent], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
+    });
+
+    it("shows Recall on a FIRED, queued line and emits recall-lines { lineNos: [lineNo] }", async () => {
+      // pendingLine: firedAt set + state queued ⇒ recallable (not yet started).
+      const { el } = await mount({ lines: [pendingLine], courses });
+      await openDrawer(el);
+      const recall = el.shadowRoot!.querySelector<HTMLElement>('[data-recall-line="1"]');
+      expect(recall).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("recall-lines", (e) => (captured = e as CustomEvent));
+      recall!.click();
+      expect(captured!.detail).toEqual({ lineNos: [1] });
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+    });
+
+    it("shows Cancel on a FIRED, started line; confirming emits void-line { lineNo }", async () => {
+      const { el } = await mount({ lines: [preparingLine], courses });
+      await openDrawer(el);
+      const cancel = el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]');
+      expect(cancel).not.toBeNull();
+      // A started line is cancel-only — no Send, no Recall.
+      expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+
+      let captured: CustomEvent | undefined;
+      el.addEventListener("void-line", (e) => (captured = e as CustomEvent));
+      // Clicking Cancel OPENS the confirm — it does NOT void yet.
+      cancel!.click();
+      await el.updateComplete;
+      expect(captured).toBeUndefined();
+      const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-cancel-confirm]");
+      expect(confirm).not.toBeNull();
+      // Only on confirm does the void fire.
+      confirm!.click();
+      expect(captured).toBeInstanceOf(CustomEvent);
+      expect(captured!.detail).toEqual({ lineNo: 1 });
+      expect(captured!.composed).toBe(true);
+      expect(captured!.bubbles).toBe(true);
+    });
+
+    it("also shows Cancel (not Recall) on a FIRED, ready line", async () => {
+      const { el } = await mount({ lines: [readyLine], courses });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+    });
+
+    it("dismissing the cancel confirm does NOT emit void-line", async () => {
+      const { el } = await mount({ lines: [preparingLine], courses });
+      await openDrawer(el);
+      let captured: CustomEvent | undefined;
+      el.addEventListener("void-line", (e) => (captured = e as CustomEvent));
+      el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
+      await el.updateComplete;
+      expect(captured).toBeUndefined();
+      // The confirm closed, so its buttons are gone from view.
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog");
+      expect(dialog!.open).toBe(false);
+    });
   });
 
   // ── TS-3/TS-4: the in-drawer move / join / merge / transfer table-action flow ──────────────────────

@@ -263,6 +263,39 @@ async function placeOrder(descriptions: string[]): Promise<string> {
   return id;
 }
 
+/** Open a fresh-table tab and ring SOPA (Entrantes, auto-fires as line 1) + FILETE (Principales, HELD line
+ *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable); FILETE holds a Principales
+ *  ticket-item snapshot until it is sent. Shared by the A1 re-course, A2 send and A4 recall blocks. */
+async function tabWithSopaAndFilete(): Promise<string> {
+  const ids = await productIdsByDescription();
+  const table = await app.request("/api/tables", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({ label: `Mesa-${randomUUID().slice(0, 8)}` }),
+  });
+  expect(table.status).toBe(200);
+  const { id: tableId } = (await table.json()) as { id: string };
+  const opened = await app.request(`/api/tables/${tableId}/tab`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({}),
+  });
+  expect(opened.status).toBe(200);
+  const { tabId } = (await opened.json()) as { tabId: string };
+  const round = await app.request(`/api/working-orders/${tabId}/round`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({
+      lines: [
+        { productId: ids.get(SOPA)!, quantity: "1" },
+        { productId: ids.get(FILETE)!, quantity: "1" },
+      ],
+    }),
+  });
+  expect(round.status).toBe(200);
+  return tabId;
+}
+
 describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => {
   it("auto-fires the earliest course + the loose line, holds the later course, and the queue carries course + firedAt", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
@@ -360,6 +393,208 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     // 2xx/4xx (the deletion proof).
     const res = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/fire`, {
       method: "POST",
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a held line)", () => {
+  it("moves the held line to another course (200), then clears it to null, the queue reflecting each", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    // The held Principales line (line 2) carries a Principales course snapshot in the queue.
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
+      priCourseId,
+    );
+
+    // Move it onto Entrantes.
+    const move = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ courseId: entCourseId }),
+    });
+    expect(move.status).toBe(200);
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
+      entCourseId,
+    );
+
+    // Clear it to null (the courseId === null route branch) — the item now serialises no course.
+    const clear = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ courseId: null }),
+    });
+    expect(clear.status).toBe(200);
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course).toBeNull();
+  });
+
+  it("an empty {} body (courseId key absent) clears the course cleanly (200), never a 500", async () => {
+    // A structurally-valid body that omits `courseId` means "clear the course": the route coerces the
+    // absent key to null (`body.courseId ?? null`) so `undefined` never reaches setLineCourse. Without the
+    // coercion the omitted value surfaces as an opaque server.internal 500 — this test is the receipt: it
+    // fails at the 200 assertion below if the coercion is reverted. The held Principales line starts on
+    // priCourseId; an empty-body PATCH must land it on null, not error.
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
+      priCourseId,
+    );
+
+    const res = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course).toBeNull();
+  });
+
+  it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
+    // A well-formed tab id + line no, but a non-uuid courseId — the isUuid screen fires it as a clean 404,
+    // never a 22P02 → 500. (No tab is even opened: the screen runs before lockOpenTab.)
+    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ courseId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
+    });
+  });
+
+  it("REJECTS with 401 session.required when no cookie is present", async () => {
+    // The guard runs FIRST, before any id screen or DB touch; deleting `requireSession` flips this to a
+    // 2xx/4xx (the deletion proof).
+    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ courseId: null }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines / send-all)", () => {
+  it("sends a NAMED held line (200) — the queue then shows it fired", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    // The Principales line (line 2) is held — no fired_at in the station queue yet.
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+
+    const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [2] }),
+    });
+    expect(res.status).toBe(200);
+    // Sent → fired_at now set, so the kitchen can start it.
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+  });
+
+  it("an OMITTED line list sends all held lines (200) — the send-all default", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+
+    // No `lineNos` in the body → `body.lineNos ?? []` → release every held line of the tab.
+    const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+  });
+
+  it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
+    const res = await app.request(`/api/working-orders/not-a-uuid/lines/send`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
+    });
+  });
+
+  it("REJECTS with 401 session.required when no cookie is present", async () => {
+    // The guard runs FIRST, before the id screen or any DB touch (the deletion proof: without
+    // `requireSession` this flips to a 2xx/4xx).
+    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/send`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started line)", () => {
+  it("recalls a fired-not-started line (200) — the queue then shows it held again", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    // SOPA (line 1) auto-fired at round-send — the queue shows it fired.
+    expect((await queueItemsByDescription(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
+
+    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    expect(res.status).toBe(200);
+    // Recalled → fired_at cleared, so the line greys back to held on the station display.
+    expect((await queueItemsByDescription(tabId, station)).get(SOPA)!.firedAt).toBeNull();
+  });
+
+  it("refuses a STARTED line (409 ticket.already_started), naming its item id", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+    const sopaItemId = (await queueItemsByDescription(tabId, station)).get(SOPA)!.id;
+
+    // The kitchen begins the (fired) SOPA line — advance it to `preparing` via the bump route.
+    const advance = await app.request(`/api/ticket-items/${sopaItemId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "preparing" }),
+    });
+    expect(advance.status).toBe(200);
+
+    // Recall is now refused — a started line is cancelled, not recalled.
+    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "ticket.already_started", params: { ticketItemId: sopaItemId } },
+    });
+  });
+
+  it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
+    const res = await app.request(`/api/working-orders/not-a-uuid/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
+    });
+  });
+
+  it("REJECTS with 401 session.required when no cookie is present", async () => {
+    // The guard runs FIRST, before the id screen or any DB touch (the deletion proof: without
+    // `requireSession` this flips to a 2xx/4xx).
+    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lineNos: [1] }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });

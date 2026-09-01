@@ -1384,9 +1384,10 @@ export class TillApp extends LitElement {
   }
 
   /** Append the picked round to the open tab (FP-1) then reload so the drawer reflects it. Each line MAY
-   * carry a `courseId` OVERRIDE the tab screen's course picker set (KDS-2 §5b) and its selected modifier
-   * `options` (ordering modifiers, Task 9), both forwarded verbatim to `addTabRound`. A failed append is
-   * non-fatal — surface a banner, leave the tab as it was. */
+   * carry a `courseId` OVERRIDE the tab screen's course picker set (KDS-2 §5b), its selected modifier
+   * `options` (ordering modifiers, Task 9) and a `hold` flag from the per-line hold toggle (coursing
+   * editing A3), all forwarded verbatim to `addTabRound` (the whole `RoundLine[]` rides through untouched).
+   * A failed append is non-fatal — surface a banner, leave the tab as it was. */
   async #onSendRound(event: Event): Promise<void> {
     const { lines } = (event as CustomEvent<{ lines: RoundLine[] }>).detail;
     if (this.activeTabId === undefined) return;
@@ -1428,6 +1429,75 @@ export class TillApp extends LitElement {
     } catch {
       this.errorKey = "table.error";
       return;
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Move one NOT-yet-fired tab line into another course (coursing editing A1) — the tab screen's per-line
+   * course picker on a held line — then reload the drawer so its course controls reconcile to server truth.
+   * `courseId` is `string | null` (`null` clears the line's course), forwarded verbatim to `setLineCourse`.
+   * NON-FISCAL. A failed move is non-fatal — the same banner-and-stay shape as {@link #onServeLine}. Like
+   * the send/recall/void siblings the reload runs on BOTH paths: a raced `ticket.already_fired` rejects,
+   * but the line is now fired, so re-reading reconciles the stale picker to server truth. */
+  async #onSetLineCourse(event: Event): Promise<void> {
+    const { lineNo, courseId } = (event as CustomEvent<{ lineNo: number; courseId: string | null }>)
+      .detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.setLineCourse(this.activeTabId, lineNo, courseId);
+    } catch {
+      this.errorKey = "table.error";
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Fire held tab lines (coursing corrections C5) — the tab screen's per-line **Send** or the tab-level
+   * **Send all** (`lineNos: []`, which releases every held line server-side). Releases via `sendLines`
+   * then reloads the tab so its per-line actions reconcile. UNLIKE {@link #onSetLineCourse}, the reload
+   * runs even on a reject (see {@link #onRecallLines}), because a raced failure means the server truth has
+   * moved and the UI must re-read it. NON-FISCAL. */
+  async #onSendLines(event: Event): Promise<void> {
+    const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.sendLines(this.activeTabId, lineNos);
+    } catch {
+      this.errorKey = "table.error";
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Un-send not-yet-started tab lines (coursing corrections C5) — the tab screen's per-line **Recall**.
+   * Un-sends via `recallLines` then reloads the tab. The reload runs on BOTH paths on purpose: a raced
+   * `ticket.already_started` (the kitchen began the line between paint and tap) rejects, but the line is
+   * now started, so re-reading flips its action from Recall to Cancel — the banner tells the operator the
+   * recall did not take, and the reconciled screen shows why. NON-FISCAL. */
+  async #onRecallLines(event: Event): Promise<void> {
+    const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.recallLines(this.activeTabId, lineNos);
+    } catch {
+      this.errorKey = "table.error";
+    }
+    await this.#loadTabLines();
+  }
+
+  /** Cancel (void) ONE started tab line (coursing corrections C5) — the tab screen's per-line **Cancel**,
+   * already confirmed behind the consequence-naming dialog on the screen. Voids via `voidLine` then
+   * reloads the tab. Like the send/recall handlers the reload runs even on a reject, to reconcile to
+   * server truth. NON-FISCAL (a pre-fiscal working-order edit; the server prints a correction slip). */
+  async #onVoidLine(event: Event): Promise<void> {
+    const { lineNo } = (event as CustomEvent<{ lineNo: number }>).detail;
+    if (this.activeTabId === undefined) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.voidLine(this.activeTabId, lineNo);
+    } catch {
+      this.errorKey = "table.error";
     }
     await this.#loadTabLines();
   }
@@ -1707,6 +1777,10 @@ export class TillApp extends LitElement {
         @send-round=${(event: Event) => void this.#onSendRound(event)}
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
         @serve-line=${(event: Event) => void this.#onServeLine(event)}
+        @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
+        @send-lines=${(event: Event) => void this.#onSendLines(event)}
+        @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
+        @void-line=${(event: Event) => void this.#onVoidLine(event)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-tab=${(event: Event) => void this.#onMoveTab(event)}
         @join-table=${(event: Event) => void this.#onJoinTable(event)}

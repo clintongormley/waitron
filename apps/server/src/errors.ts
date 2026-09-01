@@ -854,6 +854,26 @@ declare module "@waitron/shared" {
      */
     "ticket.item_held": { ticketItemId: string };
     /**
+     * A recall was asked for a line the kitchen has already STARTED — its `ticket_items.state` is
+     * `preparing`/`ready`, not `queued` (coursing editing A4). `recallLines` un-fires a not-yet-started
+     * line back to HELD (`fired_at → NULL`), which is clean only while nothing is cooking; once started the
+     * food is real, so the correction is a CANCEL (void), not a recall — the till offers that instead. The
+     * inverse-direction sibling of `ticket.already_fired` (which refuses a DOUBLE fire) and `ticket.not_fired`
+     * (which refuses a handover of an UN-fired order): this refuses UN-firing a line the kitchen has moved
+     * PAST fired. Distinct from `ticket.item_held`, the orthogonal fact that a line is not yet in the kitchen
+     * at all — `already_started` is a line that has gone too FAR, `item_held` a line that has not gone far
+     * enough. The items are read BEFORE the un-fire so the refusal can name the exact offending item.
+     *
+     * `ticketItemId` names the affected item's OWN id — a line is recalled/started per LINE, so the id that
+     * failed is the line's ticket item, not the order — mirroring `ticket.item_held`'s / `ticket.invalid_transition`'s
+     * `ticketItemId` exactly. It is an opaque uuid the station display already holds, not a secret, so echoing
+     * it is what makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the
+     * DOMAIN CONCEPT (a kitchen ticket item), never the throwing package (that same note). A fact about the
+     * item's kitchen state, not the process → mapped to 409 by the till route's surface (the same 409 the
+     * state-conflict `ticket.*` codes sit in). Never renamed once shipped.
+     */
+    "ticket.already_started": { ticketItemId: string };
+    /**
      * A kitchen-course name already exists in this venue (KDS-2) — the `(tenant_id, location_id, name)`
      * unique (`kitchen_courses_name_key`) rejected the insert/update. `name` is the operator-supplied
      * human label ("Entrantes", "Principales", "Postres"), not a secret, so echoing it is what makes the

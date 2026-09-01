@@ -370,9 +370,15 @@ export interface SaleLine {
  * that MAY carry a `courseId` OVERRIDE the waiter picked. Absent (the picker left on the product default)
  * = the server resolves the product's default course (`<override> ?? product.course_id`). Only ever a real
  * course id — the picker offers no explicit "no course" option — so never `null`.
+ *
+ * It MAY also carry `hold: true` — the round bar's per-line hold toggle (coursing editing A3): insert the
+ * line but do NOT fire it yet, regardless of its course (the server reads `hold` to hold `fired_at NULL`
+ * even for a course that would otherwise fire on send). Absent (the toggle left OFF, its default) = the
+ * line fires by the normal course rule; only ever `true` — an un-held line OMITS the field, never `false`.
  */
 export interface RoundLine extends SaleLine {
   courseId?: string;
+  hold?: boolean;
 }
 
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
@@ -999,7 +1005,13 @@ export interface TabResult {
  */
 export interface TabLine {
   lineNo: number;
-  productId: string;
+  /** The line's product, or `null` for a CHILD MODIFIER line (ordering modifiers, Task 2) — a child has
+   * no product of its own (it rides under its parent dish). Mirrors the server's nullable
+   * `TabLine.productId` (`apps/server/src/working-order.ts`). The tab screen keys off this to tell a
+   * top-level dish from a modifier row: a child (`productId === null`) carries no per-line kitchen action
+   * and no course picker (coursing corrections C5 / C4), since it never fires a ticket item of its own
+   * (`firedAt`/`state` are always null for it). Non-null for every top-level dish line. */
+  productId: string | null;
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
@@ -1011,6 +1023,16 @@ export interface TabLine {
    * course with any held line gets a "Fire <course>" action under `fire_control = 'waiter'`. Mirrors the
    * server's `TabLine.firedAt`, NOT imported (the bundle rule). */
   firedAt: string | null;
+  /** The line's kitchen ticket item {@link TicketState}, or null when the line has no ticket item — the
+   * same LEFT-join edge {@link firedAt} documents. A child modifier line ALWAYS lacks one (the server
+   * never fires a modifier line to the kitchen). A parent line normally has one once fired/held, but can
+   * also lack one — e.g. a tab opened with an initial round (inserted without firing), or a line moved
+   * between tabs (merge/transfer re-inserts the line under a new id without re-firing it). Treat null as
+   * "no LIVE ticket item", not as impossible for a parent. Coursing corrections (C1): lets the till tell
+   * a RECALLABLE line (`firedAt` set, `state === "queued"`) from a CANCEL-only one (`state` "preparing"/
+   * "ready") — `firedAt === null` alone means held, not recallable. Mirrors the server's `TabLine.state`,
+   * NOT imported (the bundle rule). */
+  state: TicketState | null;
 }
 
 /**
@@ -1519,6 +1541,62 @@ export class TillApi {
    */
   getTabLines(orderId: string): Promise<TabLine[]> {
     return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");
+  }
+
+  /**
+   * Move ONE not-yet-fired line of an open tab into another course, or clear its course to `null`
+   * (coursing editing A1) → `PATCH /api/working-orders/:orderId/lines/:lineNo/course` with
+   * `{ courseId }`. `courseId` is a first-class `string | null` — `null` CLEARS the line's course
+   * override, sent as an explicit null, not an absent field. NON-FISCAL. `tab.not_open` (a malformed
+   * tab id) / `course.not_found` (an absent/foreign/retired target) / `tab.line_not_found` (an
+   * in-range line matching nothing) / `ticket.already_fired` (the line's ticket has already fired —
+   * correct via {@link recallLines}, not a move) surface as a rejected `{ code }`. The server answers
+   * an empty 200; re-read {@link getTabLines} for the new course.
+   */
+  async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
+      courseId,
+    });
+  }
+
+  /**
+   * Fire SPECIFIC held lines of an open tab (coursing editing A2) → `POST
+   * /api/working-orders/:orderId/lines/send` with `{ lineNos }` — a finer release than
+   * {@link fireCourse}'s whole-course fire. An empty/omitted `lineNos` releases every held line of the
+   * tab (send-all). NON-FISCAL: it writes only `ticket_items` (fired_at/queued_at) + the kitchen-print
+   * outbox, never a filed record. IDEMPOTENT — an unknown or already-fired line simply matches nothing.
+   * `tab.not_open` (a malformed/absent/non-open tab) surfaces as a rejected `{ code }`. The server
+   * answers an empty 200; re-read {@link getTabLines}/{@link getStationQueue} for the fired lines.
+   */
+  async sendLines(orderId: string, lineNos: number[]): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });
+  }
+
+  /**
+   * UN-send not-yet-started lines of an open tab (coursing editing A4) → `POST
+   * /api/working-orders/:orderId/lines/recall` with `{ lineNos }` — the inverse of {@link sendLines}.
+   * NON-FISCAL: it writes `ticket_items` (clearing `fired_at`) plus, for a previously-fired line, a
+   * RECALLED correction slip to the `print_jobs` outbox; never a filed record. `tab.not_open` (a
+   * malformed/absent/non-open tab) / `tab.line_not_found` (an
+   * absent line) / `ticket.already_started` (the kitchen has already started the line — preparing/
+   * ready, so it can no longer be recalled) surface as a rejected `{ code }`; an already-held line is
+   * a no-op. The server answers an empty 200; re-read {@link getTabLines} for the recalled lines.
+   */
+  async recallLines(orderId: string, lineNos: number[]): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
+  }
+
+  /**
+   * Cancel (VOID) ONE line of an open tab (coursing editing C5) → `DELETE
+   * /api/working-orders/:orderId/lines/:lineNo` (the server's `voidTabLine`). This is the cancel path for
+   * a line the kitchen has already STARTED — one that can no longer be {@link recallLines}'d — so the till
+   * gates it behind a consequence-naming confirm. NON-FISCAL: it edits the pre-fiscal working order (drops
+   * the line + its kitchen ticket item), never a filed record; the server prints a correction slip.
+   * `tab.not_open` (a malformed/absent/non-open tab) / `tab.line_not_found` (an absent line) surface as a
+   * rejected `{ code }`. The server answers an empty 200; re-read {@link getTabLines} after.
+   */
+  async voidLine(orderId: string, lineNo: number): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}`, "DELETE");
   }
 
   /**

@@ -1221,10 +1221,12 @@ describe("TillApi", () => {
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
     // Typed `TabLine[]` so the mock is a compile-time proof the client mirror carries every field the
     // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`, and KDS-2's
-    // `courseId`/`firedAt`). A served line carries a timestamp, an unserved one `null` — the two floor
-    // states the table-order screen renders ("Servido" vs "Pendiente de servir"). `courseId`/`firedAt`
-    // carry the kitchen coursing state the waiter-fire actions read. `unitPriceGross` is the LOCKED gross
-    // unit, not a re-price.
+    // `courseId`/`firedAt`/`state`). A served line carries a timestamp, an unserved one `null` — the two
+    // floor states the table-order screen renders ("Servido" vs "Pendiente de servir"). `courseId`/
+    // `firedAt`/`state` carry the kitchen coursing state the waiter-fire + recall-vs-cancel-only actions
+    // read (coursing corrections, C1): `state: null` for the second line pins the LEFT-join edge (a line
+    // with no ticket item yet), distinct from a held line that already has one (`state: "queued"`,
+    // `firedAt: null`). `unitPriceGross` is the LOCKED gross unit, not a re-price.
     const lines: TabLine[] = [
       {
         lineNo: 1,
@@ -1234,6 +1236,7 @@ describe("TillApi", () => {
         servedAt: "2026-08-06T10:00:00.000Z",
         courseId: null,
         firedAt: "2026-08-06T09:59:00.000Z",
+        state: "queued",
       },
       {
         lineNo: 2,
@@ -1243,6 +1246,7 @@ describe("TillApi", () => {
         servedAt: null,
         courseId: "course-1",
         firedAt: null,
+        state: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(lines));
@@ -1257,6 +1261,10 @@ describe("TillApi", () => {
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();
     expect(r[1]!.servedAt).toBeNull();
+    // The ticket `state` signal (C1) survives the round-trip too — "queued" for the fired line, null for
+    // the line with no ticket item yet.
+    expect(r[0]!.state).toBe("queued");
+    expect(r[1]!.state).toBeNull();
   });
 
   it("getTabLines surfaces { code } when the tab is not open", async () => {
@@ -1268,6 +1276,142 @@ describe("TillApi", () => {
 
     await expect(new TillApi("", fetchStub).getTabLines("ord-1")).rejects.toMatchObject({
       code: "tab.not_open",
+    });
+  });
+
+  // --- Coursing editing (A1/A2/A4): per-line re-course + fine-grained send/recall of held lines. Each
+  //     mirrors the served/status verbs above — an operational floor verb, PRE-FISCAL. ---
+
+  it("setLineCourse PATCHes { courseId } to the line's /course route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).setLineCourse("wo-1", 2, "c-9"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/lines/2/course",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ courseId: "c-9" }),
+      }),
+    );
+  });
+
+  it("setLineCourse PATCHes { courseId: null } to CLEAR a line's course", async () => {
+    // `null` is a first-class value the route accepts (`courseId: string | null`) — clearing the
+    // course, not an absent field — so it must ride the body as an explicit null.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new TillApi("", fetchStub).setLineCourse("wo-1", 2, null);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/lines/2/course",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ courseId: null }),
+      }),
+    );
+  });
+
+  it("setLineCourse surfaces { code } for an unknown/retired course or an already-fired line", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "course.not_found" } }), { status: 404 }),
+      );
+
+    await expect(new TillApi("", fetchStub).setLineCourse("wo-1", 2, "gone")).rejects.toMatchObject(
+      { code: "course.not_found" },
+    );
+  });
+
+  it("sendLines POSTs { lineNos } to the tab's /lines/send route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).sendLines("wo-1", [2, 3])).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/lines/send",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lineNos: [2, 3] }),
+      }),
+    );
+  });
+
+  it("sendLines surfaces { code } when the tab is not open", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "tab.not_open" } }), { status: 409 }),
+      );
+
+    await expect(new TillApi("", fetchStub).sendLines("wo-1", [2, 3])).rejects.toMatchObject({
+      code: "tab.not_open",
+    });
+  });
+
+  it("recallLines POSTs { lineNos } to the tab's /lines/recall route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).recallLines("wo-1", [2, 3])).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/lines/recall",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lineNos: [2, 3] }),
+      }),
+    );
+  });
+
+  it("recallLines surfaces { code } for a line the kitchen has already started", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "ticket.already_started" } }), {
+        status: 409,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).recallLines("wo-1", [2, 3])).rejects.toMatchObject({
+      code: "ticket.already_started",
+    });
+  });
+
+  it("voidLine DELETEs the tab line's path (empty 200 body, no request body)", async () => {
+    // Cancel (void) ONE line of an open tab (coursing editing C5) → DELETE
+    // /api/working-orders/:orderId/lines/:lineNo (voidTabLine). The server answers an EMPTY 200 body, so
+    // the client resolves void; a discard carries neither a body nor a content-type header.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines/2",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    );
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("voidLine surfaces { code } when the tab line is not found", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "tab.line_not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).rejects.toMatchObject({
+      code: "tab.line_not_found",
     });
   });
 

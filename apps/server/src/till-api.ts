@@ -64,7 +64,10 @@ import {
   parkOrder,
   placeOrder,
   readTabLines,
+  recallLines,
+  sendLines,
   sendToPrep,
+  setLineCourse,
   splitOffCheck,
   transferLines,
   unjoinTable,
@@ -200,6 +203,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // (`bumpCourseReady`) does NOT existence-check, so it never surfaces this. A malformed ORDER id on any
   // of those routes is `working_order.not_found` (404, already mapped above), the honest "no such order".
   "ticket.item_held": 409,
+  // Coursing editing (A4). A recall of a line the kitchen has already STARTED (`state` preparing/ready, not
+  // queued) is `ticket.already_started` (409, thrown by `recallLines` after reading the offending item) —
+  // the inverse-direction sibling of `ticket.already_fired`/`ticket.not_fired` beside it, the same
+  // STATE-forbids-it family: the id is valid, but un-firing a line that is cooking is refused (it is cancelled,
+  // not recalled). An already-held or unknown line is not this — a held line is a no-op and an absent `line_no`
+  // is `tab.line_not_found` (404, already mapped above via the sibling tab verbs).
+  "ticket.already_started": 409,
   "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
@@ -1430,12 +1440,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // a plain `{productId, quantity}` round is unchanged. An option MAY carry a per-option `quantity`
         // (absent = 1), validated + priced server-side against the item's `max_quantity`. A round line
         // MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
-        // line and snapshotted onto its ticket item at fire.
+        // line and snapshotted onto its ticket item at fire. Coursing editing (A3): a round line MAY carry
+        // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
+        // print) regardless of course, released later by `sendLines`.
         lines: ({
           productId: string;
           quantity: string;
           courseId?: string | null;
           options?: { optionGroupItemId: string; quantity?: number }[];
+          hold?: boolean;
         } & LineExtras)[];
       }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -1517,6 +1530,82 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await unmarkLineServed(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Move ONE not-yet-fired line of an open tab into another course, or clear its course to null (coursing
+  // editing A1, design §3b) — the tab screen's per-line course re-picker. SESSION-GUARDED, an operational
+  // floor verb gated by the session, NOT a permission. `:id`/`:lineNo` screens are the SAME as the sibling
+  // served/void line routes (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
+  // `tab.line_not_found` on a non-int4/out-of-range one). A present-but-malformed body `courseId` is
+  // screened to `course.not_found` (it names no course) BEFORE it reaches `requireLiveCourse`'s uuid cast —
+  // the same 404 the fire route's `:courseId` screen gives — while `null` (clear the course) is left alone.
+  // `setLineCourse` then throws `tab.not_open` / `course.not_found` (absent/foreign/retired target) /
+  // `tab.line_not_found` (an in-range line matching nothing) / `ticket.already_fired` (the line's ticket
+  // has fired — corrected via recall, not a move) for the cases it reaches. Body: { courseId: string | null }.
+  app.patch("/api/working-orders/:id/lines/:lineNo/course", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      const body = await c.req.json<{ courseId?: string | null }>();
+      // An absent `courseId` key means "clear the course" (the null branch) — coerce it so `undefined`
+      // never reaches `setLineCourse`, where an omitted query param would surface as an opaque
+      // `server.internal` 500 instead of the clean null-clear the `{ courseId: string | null }` contract
+      // declares. The `{}`-body route test proves the 200 and fails (500) if this coercion is reverted.
+      const courseId = body.courseId ?? null;
+      if (courseId !== null && !isUuid(courseId)) {
+        throw new AppError("course.not_found", { courseId });
+      }
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setLineCourse(tx, deps.cfg, id, lineNo, courseId);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Fire SPECIFIC held lines of an open tab — a finer release than the whole-course fire route (coursing
+  // editing A2, design §3b). The line set rides in the BODY (`{ lineNos?: number[] }`), not a `:lineNo`
+  // path param, so ONE request releases several lines at once — and an OMITTED / empty list means "send
+  // all together" (release every held line of the tab), the `body.lineNos ?? []` default. SESSION-GUARDED,
+  // an operational floor verb gated by the session, NOT a permission. Malformed :id → `tab.not_open`
+  // (via `requireTabParam`, the same screen the sibling tab routes use); `sendLines` then locks the open
+  // tab (`tab.not_open` for a non-open/absent tab) and no-ops on a `line_no` naming no held line — an
+  // unknown or already-fired line simply matches nothing (idempotent, like the course fire). PRE-FISCAL:
+  // it writes only `ticket_items` (fired_at/queued_at) + the kitchen-print outbox, never a filed record.
+  app.post("/api/working-orders/:id/lines/send", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{ lineNos?: number[] }>();
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await sendLines(tx, deps.cfg, id, body.lineNos ?? []);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // UN-SEND not-yet-started lines of an open tab — the inverse of the /lines/send route (coursing editing
+  // A4, design §3b). The line set rides in the BODY (`{ lineNos: number[] }`), not a `:lineNo` path param,
+  // like /lines/send — one request recalls several lines at once. SESSION-GUARDED, an operational floor verb
+  // gated by the session, NOT a permission. Malformed :id → `tab.not_open` (via `requireTabParam`, the same
+  // screen the sibling tab routes use); `recallLines` then locks the open tab (`tab.not_open` for a
+  // non-open/absent tab), throws `tab.line_not_found` for an absent `line_no` and `ticket.already_started`
+  // (409) for a line the kitchen has already started (preparing/ready) — an already-held line is a no-op.
+  // PRE-FISCAL: it writes `ticket_items` (clearing `fired_at`) plus, for a previously-fired line, a
+  // RECALLED correction slip to the `print_jobs` outbox; never a filed record.
+  app.post("/api/working-orders/:id/lines/recall", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{ lineNos?: number[] }>();
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await recallLines(tx, deps.cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
     }),

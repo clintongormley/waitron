@@ -66,7 +66,7 @@ import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
-import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
 import { requireNullableString } from "./request-screens.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -946,6 +946,11 @@ export async function fireLines(
   // the same `lines` param — read back from `working_order_lines` by each caller's line-select, exactly
   // as `courseId` is — and is SNAPSHOTTED onto the `ticket_items` row below (like `station_id`/
   // `course_id`), so a later edit to the draft line never moves an already-fired ticket.
+  // Coursing editing (A3): a line MAY carry `hold: true` — the round-send's "insert but do NOT fire yet"
+  // marker (the tab screen's per-line hold toggle). It is TRANSIENT (read here to decide `fired_at`, never
+  // a stored column, so no migration): a held line inserts with `fired_at NULL` REGARDLESS of its course,
+  // so it is greyed on the KDS and prints nothing until a later `sendLines`/`fireCourse` releases it. Absent
+  // (`undefined`) = today's auto-fire-by-course rule, unchanged — placeOrder/sendToPrep omit it entirely.
   lines: {
     id: string;
     productId: string | null;
@@ -953,6 +958,7 @@ export async function fireLines(
     parentLineId: string | null;
     note: string | null;
     doneness: Doneness | null;
+    hold?: boolean;
   }[],
 ): Promise<void> {
   // Keep only PARENT lines (`parent_line_id IS NULL`); child modifier lines fire nothing. Done first, so
@@ -1087,10 +1093,16 @@ export async function fireLines(
     // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
     // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
     // incoherent state that alone produces it.
+    // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
+    // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
+    // is the order's earliest (or already fired). It is then released like any other held line, by
+    // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
     const fired =
-      courseId === null ||
-      firedCourseIds.has(courseId) ||
-      displayOrderByCourse.get(courseId) === earliestDisplayOrder;
+      line.hold === true
+        ? false
+        : courseId === null ||
+          firedCourseIds.has(courseId) ||
+          displayOrderByCourse.get(courseId) === earliestDisplayOrder;
     return {
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
@@ -1192,6 +1204,192 @@ export async function fireCourse(
   // round is re-selected, and a re-fire of an already-fired course matches zero rows and enqueues
   // nothing. Same-tx outbox INSERTs, so the enqueue rolls back with the fire and never blocks it.
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
+}
+
+/**
+ * Fire SPECIFIC held lines of an OPEN tab (coursing editing A2, design §3b) — a finer-grained release
+ * than {@link fireCourse}'s whole-course lever, for the operator who wants to send just line 3 and 5
+ * now while the rest of their course waits. Stamps `fired_at = now()` on the named lines' HELD ticket
+ * items (`fired_at IS NULL`) and, unlike {@link fireCourse}, ALSO refreshes `queued_at = now()`: the KDS
+ * order-timing clock (#185) measures a line's age from when the kitchen was told to cook it, so a line
+ * held back and sent later must start its clock at the SEND, not at the original ring — otherwise a
+ * deliberately-delayed course would show as overdue the instant it is released. {@link lockOpenTab}
+ * locks the tab row `FOR UPDATE` and confirms it is an open tab a `dining_tables.tab_id` points at
+ * (else `tab.not_open`), serialising this release against a concurrent round/void the way every tab
+ * verb does.
+ *
+ * `lineNos` is a set of `line_no`s on the tab; an EMPTY list means "send all together" — release EVERY
+ * held line of the tab regardless of course (the `undefined` line filter, so only the tab + `IS NULL`
+ * predicates remain). A non-empty list restricts the fire to the ticket items whose line is in that set,
+ * via a subquery from `working_order_lines` (an unknown `line_no` simply matches no row — no throw, the
+ * same no-op convenience {@link fireCourse} makes for an empty course). IDEMPOTENT: an already-fired
+ * line named in the set is not matched by `fired_at IS NULL`, so re-sending it leaves its timestamps
+ * untouched.
+ *
+ * SIDE EFFECT (KDS-4 print-on-fire, §3b): the `IS NULL` UPDATE's `.returning()` is EXACTLY this send's
+ * newly-fired items — a held line prints nothing until it is sent — handed to {@link enqueueKitchenTickets}
+ * to INSERT kitchen print jobs on this same tx (never blocking the fire; see `kitchen-print.ts`).
+ *
+ * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table — no sale, tender,
+ * registro or huella. The `requireSession` gate lives at the route, not here — this runs on the CALLER's
+ * transaction under its tenant/`app_user` scope, RLS confining the update to the tenant.
+ */
+export async function sendLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lineNos: number[],
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  // Empty list ⇒ no line filter ⇒ every HELD line of the tab fires ("send all together"). A non-empty
+  // list restricts the fire to the ticket items whose line is in the set. The subquery selects from
+  // `working_order_lines` (its own FROM), so its bare `"id"` resolves inward and the outer
+  // `ticket_items."working_order_line_id"` stays qualified — verified with `.toSQL()`; not a correlated
+  // subquery, so the CLAUDE.md base-vs-join bare-column hazard does not apply.
+  const lineFilter =
+    lineNos.length === 0
+      ? undefined
+      : inArray(
+          ticketItems.workingOrderLineId,
+          tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(
+              and(
+                eq(workingOrderLines.workingOrderId, tabId),
+                inArray(workingOrderLines.lineNo, lineNos),
+              ),
+            ),
+        );
+  const firedItems = await tx
+    .update(ticketItems)
+    .set({ firedAt: sql`now()`, queuedAt: sql`now()` })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, tabId),
+        isNull(ticketItems.firedAt),
+        ...(lineFilter ? [lineFilter] : []),
+      ),
+    )
+    .returning({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+    });
+  // Print-on-fire (KDS-4 §3c): the `fired_at IS NULL` predicate matched EXACTLY the lines that fired now,
+  // so `RETURNING` is precisely this send's newly-fired set — a re-send of an already-fired line matches
+  // zero rows and enqueues nothing. Same-tx outbox INSERTs, so the enqueue rolls back with the fire.
+  await enqueueKitchenTickets(tx, cfg, tabId, firedItems);
+}
+
+/**
+ * UN-SEND not-yet-started lines of an OPEN tab — the inverse of {@link sendLines} (coursing editing A4,
+ * design §3b). Clears `fired_at` back to NULL on the named lines' ticket items WHERE `state = 'queued'`
+ * (the clean recall window), so a line the kitchen has been told to cook but has NOT begun greys back to
+ * held — re-courseable ({@link setLineCourse}) or re-sendable ({@link sendLines}) again. {@link lockOpenTab}
+ * locks the tab row `FOR UPDATE` and confirms it is an open tab a `dining_tables.tab_id` points at (else
+ * `tab.not_open`), serialising this recall against a concurrent round/void the way every tab verb does.
+ *
+ * Each named `line_no` must exist on the tab — an absent one is `tab.line_not_found` (the same
+ * resolve-or-throw {@link setLineCourse}/{@link voidTabLine} make), NOT the silent no-op {@link sendLines}
+ * makes for an unknown line. A named line whose item the kitchen has already STARTED (`state` is
+ * `preparing`/`ready`, not `queued`) is a state conflict → `ticket.already_started` naming that item: once
+ * cooking has begun the food is real, so the correction is a CANCEL (void), not a recall. The items are
+ * read BEFORE the un-fire so the refusal can name the exact offending `ticketItemId`, and the check refuses
+ * the WHOLE call — no line is un-fired if any named line has started. An already-HELD line (`fired_at`
+ * already null, `state = 'queued'`) is a clean no-op: it is in the recall window, and clearing an
+ * already-null `fired_at` changes nothing.
+ *
+ * CORRECTION PRINT (A6): a recalled line that had ALREADY FIRED (printed) gets a RECALLED correction slip
+ * so the paper kitchen is told to pull it. Only PREVIOUSLY-FIRED lines produce a slip — the read below
+ * captures those whose `fired_at` was NON-null AND `state = 'queued'` (the ones this recall actually
+ * un-fires) and hands exactly them to {@link enqueueCorrectionSlips}; a recall of an already-HELD line
+ * (`fired_at` already null) never printed, so it enqueues nothing. `queued_at` is deliberately left
+ * untouched: a later {@link sendLines} refreshes it at the re-send, the point from which the KDS timing
+ * clock should run.
+ *
+ * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table plus the `print_jobs`
+ * outbox — no sale, tender, registro or huella. The `requireSession` gate lives at the route, not here —
+ * this runs on the CALLER's transaction under its tenant/`app_user` scope, RLS confining the writes to the
+ * tenant, and the correction enqueue rides the same tx (rolls back with the recall).
+ */
+export async function recallLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lineNos: number[],
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  if (lineNos.length === 0) {
+    return;
+  }
+  // Resolve every named line by `(working_order_id, line_no)` — an absent line_no yields no row for it
+  // (→ tab.line_not_found, the resolve-or-throw the sibling single-line tab verbs make, naming the first
+  // that matches nothing).
+  const lines = await tx
+    .select({ lineNo: workingOrderLines.lineNo, id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.workingOrderId, tabId), inArray(workingOrderLines.lineNo, lineNos)),
+    );
+  const foundLineNos = new Set(lines.map((r) => r.lineNo));
+  for (const lineNo of lineNos) {
+    if (!foundLineNos.has(lineNo)) {
+      throw new AppError("tab.line_not_found", { tabId, lineNo });
+    }
+  }
+  const lineIds = lines.map((r) => r.id);
+  // Race-safe read (Copilot #191, twin of setLineCourse). {@link fireCourse} stamps `fired_at` on
+  // `ticket_items` WITHOUT taking {@link lockOpenTab}, so the tab-row lock above does NOT serialise it: a
+  // concurrent `fireCourse` firing (and PRINTING) a held line BETWEEN this lock-free read and the un-fire
+  // below would leave the line seen as not-previously-fired here — so it would be un-fired with NO RECALLED
+  // slip enqueued, while the kitchen ticket `fireCourse` printed is never pulled. So take a ROW LOCK on the
+  // named lines' held ticket-item rows (`FOR UPDATE`) BEFORE reading `state`/`fired_at` for the started
+  // check AND the RECALLED capture. A concurrent `fireCourse`'s `UPDATE ticket_items` on any of these rows
+  // then BLOCKS until this tx commits, serialising the two: either this recall wins (reads the line held,
+  // un-fires it, nothing printed, no slip) or `fireCourse` wins (line fires + prints, and this recall then
+  // reads it as previously-fired → un-fires AND enqueues the RECALLED slip). A line with NO ticket item yet
+  // (a pending line) contributes no row: not started, never fired, un-fire is a no-op. Single-table lock,
+  // NOT a LEFT JOIN, so no lock-through-outer-join hazard. `working_order_line_id` is unique on
+  // `ticket_items`, so each line contributes at most one row. Read BEFORE the un-fire so a STARTED
+  // (preparing/ready) line can be named in the refusal and `fired_at` reflects the pre-recall state.
+  const items = await tx
+    .select({
+      ticketItemId: ticketItems.id,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      state: ticketItems.state,
+      firedAt: ticketItems.firedAt,
+      stationId: ticketItems.stationId,
+    })
+    .from(ticketItems)
+    .where(inArray(ticketItems.workingOrderLineId, lineIds))
+    .for("update");
+  // Refuse the WHOLE call if any named line has started (nothing is un-fired unless every line is
+  // recallable). A started line has a ticket item, so it appears in `items`.
+  const started = items.find((r) => r.state === "preparing" || r.state === "ready");
+  if (started !== undefined) {
+    throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
+  }
+  // A6: the correction set is the PREVIOUSLY-FIRED lines this recall actually un-fires — `fired_at`
+  // non-null AND `state = 'queued'` (the same rows the update below matches AND that had paper out). A
+  // held line (`fired_at` already null) never printed and is excluded, so it produces no slip. `fired_at`
+  // non-null implies a joined ticket-item row, so `stationId` is non-null there.
+  const recalled = items
+    .filter((r) => r.firedAt !== null && r.state === "queued")
+    .map((r) => ({ workingOrderLineId: r.workingOrderLineId, stationId: r.stationId! }));
+  // Un-fire only the queued items of the named lines — an already-held line (fired_at already null) is
+  // matched but its clear is a no-op, and a started line never reaches here (refused above).
+  await tx
+    .update(ticketItems)
+    .set({ firedAt: null })
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, tabId),
+        eq(ticketItems.state, "queued"),
+        inArray(ticketItems.workingOrderLineId, lineIds),
+      ),
+    );
+  // Tell the paper kitchen to pull each previously-printed recalled line (no-op when `recalled` is empty).
+  await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
 }
 
 /**
@@ -1300,13 +1498,16 @@ export async function addTabRound(
   // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
   // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Per-line
   // customisation (`LineExtras`): a line MAY carry a `note`/`doneness` (NON-FISCAL), persisted on the
-  // parent dish line and snapshotted onto its ticket item at fire. All optional, so existing callers
-  // (and the till's current `{productId, quantity}` send-round) are unchanged.
+  // parent dish line and snapshotted onto its ticket item at fire. Coursing editing (A3): a line MAY carry
+  // `hold: true` — insert it HELD (no fire, no print) regardless of course; the marker is correlated onto
+  // the priced PARENT row below and read by `fireLines`. All optional, so existing callers (and the till's
+  // current `{productId, quantity}` send-round) are unchanged.
   lines: ({
     productId: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
+    hold?: boolean;
   } & LineExtras)[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
@@ -1337,12 +1538,32 @@ export async function addTabRound(
     parentLineId: workingOrderLines.parentLineId,
     note: workingOrderLines.note,
     doneness: workingOrderLines.doneness,
+    lineNo: workingOrderLines.lineNo,
   });
+  // Coursing editing (A3): correlate each input round line's `hold` onto the PARENT row `priceOrderLines`
+  // produced for it. `priceOrderLines` emits one PARENT row (`parentLineId === null`) per input line, in
+  // INPUT ORDER, each immediately followed by its option CHILD rows (verified at its source: a single loop
+  // over `lines` pushes the parent then its children into `lineMeta`, and `lineRows[i]` maps 1-for-1 to
+  // that parent-then-children expansion). `appended` stamps `line_no = maxLineNo + i + 1` in that same
+  // order, so the parents carry ASCENDING `line_no` in input-line order — the k-th parent by `line_no` is
+  // input line k. Correlate on that sorted `line_no` rather than on the `RETURNING` array position, so the
+  // hold-to-parent mapping does not depend on the INSERT emitting rows in VALUES order. A CHILD row is
+  // never held (it has no ticket item — `fireLines` filters it out anyway) → `hold: false`. Pinned
+  // end-to-end by the modifier-first correlation test, which fires the wrong dish on an off-by-one.
+  const holdByParentId = new Map<string, boolean>();
+  appendedLines
+    .filter((row) => row.parentLineId === null)
+    .sort((a, b) => a.lineNo - b.lineNo)
+    .forEach((row, k) => holdByParentId.set(row.id, lines[k]?.hold === true));
+  const withHold = appendedLines.map((row) => ({
+    ...row,
+    hold: row.parentLineId === null ? (holdByParentId.get(row.id) ?? false) : false,
+  }));
   // Fire the round: `fireLines` fires only the PARENT dish lines and NEVER a child modifier line
   // (`parent_line_id` set) — a modifier is part of its dish, not its own kitchen ticket. The parent-only
   // filter lives in `fireLines` (the shared chokepoint), so this passes the whole set (parents AND
-  // children) straight through, exactly as placeOrder/sendToPrep do.
-  await fireLines(tx, cfg, tabId, appendedLines);
+  // children) straight through, exactly as placeOrder/sendToPrep do. `hold` rides through per parent.
+  await fireLines(tx, cfg, tabId, withHold);
 }
 
 /**
@@ -1350,14 +1571,19 @@ export async function addTabRound(
  * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
  * `require_open_parent` trigger is the DB backstop). {@link lockOpenTab} locks the tab row `FOR UPDATE`
  * so a concurrent round/pay cannot race the delete, and confirms it is an open tab. `tab.not_open` if the
- * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it. `_cfg` is unused
- * (the delete is by tab id + line no, RLS-scoped) but kept for the tab-verb signature shape the route
- * layer calls uniformly — underscore-prefixed so `noUnusedParameters` leaves it, the repo's convention
- * for an interface-shape parameter (`report-source.ts`'s `_tenantId`, `provider.ts`'s `_now`).
+ * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it.
+ *
+ * CORRECTION PRINT (A6): if the voided line had ALREADY FIRED (printed) — its ticket item carries a
+ * non-null `fired_at` — a VOID correction slip tells the paper kitchen to bin it. The ticket item is read
+ * BEFORE the delete (the `ON DELETE CASCADE` from `working_order_lines` removes both the line AND its
+ * ticket item), capturing `{workingOrderLineId, stationId}`; a held line (`fired_at` null) or a directly
+ * voided CHILD modifier (no ticket item of its own) captures nothing and prints nothing. The enqueue runs
+ * BEFORE the delete — {@link enqueueCorrectionSlips} RE-READS the line's qty/name/modifiers from
+ * `working_order_lines`, which the cascade is about to remove — and rides the same tx (rolls back with it).
  */
 export async function voidTabLine(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tabId: string,
   lineNo: number,
 ): Promise<void> {
@@ -1369,13 +1595,37 @@ export async function voidTabLine(
   // 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
   // Voiding a CHILD line directly matches only itself (a modifier has no children), so this is a plain
   // one-row delete in that case — unchanged behaviour.
+  // A6: resolve the named line AND its (at most one) ticket item in ONE round trip via a LEFT JOIN, still
+  // BEFORE the delete (the `ON DELETE CASCADE` removes both). An absent line yields zero rows (→
+  // tab.line_not_found); a held line, or a directly voided CHILD modifier (no ticket item), joins to null
+  // ticket columns. `working_order_line_id` is unique on `ticket_items`, so at most one row.
   const [target] = await tx
-    .select({ id: workingOrderLines.id })
+    .select({
+      id: workingOrderLines.id,
+      firedAt: ticketItems.firedAt,
+      stationId: ticketItems.stationId,
+    })
     .from(workingOrderLines)
+    .leftJoin(
+      ticketItems,
+      and(
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+      ),
+    )
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  // Only a PARENT that has fired carries a non-null `fired_at` (which implies a joined ticket-item row, so
+  // `stationId` is non-null there); a held line or a child modifier yields nothing to correct.
+  const voided =
+    target.firedAt !== null
+      ? [{ workingOrderLineId: target.id, stationId: target.stationId! }]
+      : [];
+  // Enqueue the VOID slip BEFORE the delete — enqueueCorrectionSlips re-reads the line from
+  // `working_order_lines`, which the cascade below is about to remove (no-op when `voided` is empty).
+  await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   await tx
     .delete(workingOrderLines)
     .where(
@@ -1384,6 +1634,73 @@ export async function voidTabLine(
         or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
       ),
     );
+}
+
+/**
+ * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null
+ * (coursing editing A1, design §3b). {@link lockOpenTab} locks the tab row `FOR UPDATE` and confirms it
+ * is an open tab a `dining_tables.tab_id` points at (else `tab.not_open`), serialising this re-course
+ * against a concurrent round/void the way every tab verb does. A non-null target is screened with
+ * {@link requireLiveCourse} — the SAME live-course definition the config/fire verbs use, so an absent /
+ * foreign / RETIRED course is `course.not_found` (a deactivated course is not a valid new target); a
+ * malformed (non-uuid) id is screened to that same code at the ROUTE before it reaches this uuid cast.
+ *
+ * The named line is resolved by `(working_order_id, line_no)` — `tab.line_not_found` if none matches,
+ * exactly as {@link voidTabLine}. A line whose ticket item has already FIRED (`fired_at IS NOT NULL`) is
+ * REFUSED with `ticket.already_fired` (naming the order): once the kitchen has been told to cook a line,
+ * it is corrected via a recall, never silently re-coursed underneath the pass. Otherwise BOTH the open-tab
+ * line's `course_id` AND its held ticket item's `course_id` snapshot are updated — the ticket-item UPDATE
+ * matches no row (a no-op) when the line has no held item yet, so a not-yet-fired line without a ticket
+ * item re-courses cleanly too.
+ *
+ * PRE-FISCAL (design H2): `course_id` is a kitchen-routing field written only while the parent order is
+ * open; it never enters `registros`/`computeHuella`/`recordSale` (the pay path rebuilds `sale_lines` from
+ * the locked price snapshot), so this touches nothing filed.
+ */
+export async function setLineCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lineNo: number,
+  courseId: string | null,
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  if (courseId !== null) {
+    await requireLiveCourse(tx, cfg, courseId);
+  }
+  // Resolve the named line by `(working_order_id, line_no)` — `tab.line_not_found` if none matches, exactly
+  // as {@link voidTabLine}.
+  const [line] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
+  if (line === undefined) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+  // Race-safe fired check (Copilot #191). {@link fireCourse} stamps `fired_at` on `ticket_items` WITHOUT
+  // taking {@link lockOpenTab}, so the tab-row lock above does NOT serialise it: a concurrent `fireCourse`
+  // could fire this line AFTER a lock-free read of `fired_at` and BEFORE this verb's write, re-coursing an
+  // already-fired line under the pass. So take a ROW LOCK on this line's held ticket item (`FOR UPDATE`)
+  // BEFORE reading `fired_at`. A concurrent `fireCourse`'s `UPDATE ticket_items` on the same row then BLOCKS
+  // until this tx commits, serialising the two: either we re-course the held line (and it fires LATER under
+  // its new course — `fireCourse`'s `course_id` predicate re-reads the moved row and skips it) or
+  // `fireCourse` fires first and this SELECT then reads `fired_at` set and throws `ticket.already_fired`. A
+  // line with NO ticket item yet (a pending line) locks zero rows and has no fire to race — the check below
+  // is skipped and the `ticket_items` update stays a 0-row no-op. This REVERTS the simplify pass's LEFT-JOIN
+  // fold here (correctness over the one-query micro-optimisation); the sibling `voidTabLine`/`recallLines`
+  // folds keep theirs. `working_order_line_id` is unique on `ticket_items`, so at most one row is locked.
+  const [item] = await tx
+    .select({ firedAt: ticketItems.firedAt })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, line.id))
+    .for("update");
+  // A line whose kitchen ticket has already fired is corrected via recall, not moved — refuse it here.
+  if (item !== undefined && item.firedAt != null) {
+    throw new AppError("ticket.already_fired", { workingOrderId: tabId });
+  }
+  await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
+  // Update the HELD ticket item's course snapshot too — a no-op (0 rows) when the line has no item yet.
+  await tx.update(ticketItems).set({ courseId }).where(eq(ticketItems.workingOrderLineId, line.id));
 }
 
 /**
@@ -1615,12 +1932,28 @@ export interface TabLine {
    * none (a null-course line fires immediately). The tab-order screen groups the waiter-fire actions by
    * this; the course NAME comes from the venue course list the boot payload carries, not from here. */
   courseId: string | null;
-  /** When the line's kitchen ticket item was FIRED (`ticket_items.fired_at`), or null while its course
-   * is still HELD — the tab surfaces a "Fire <course>" action for each course with a held line under
-   * `fire_control = 'waiter'` (§5b). LEFT-joined, so it is null for a line that never fired a ticket
-   * item (the empty-`openTab`-with-lines edge the app never exercises); a null-course line always fires,
-   * so a held line always carries a non-null `courseId`. */
+  /** When the line's kitchen ticket item was FIRED (`ticket_items.fired_at`), or null when no LIVE
+   * ticket item of the line's has fired. Null covers two overlapping cases: a line whose course is still
+   * HELD (the tab surfaces a "Fire <course>" action for each course with a held line under
+   * `fire_control = 'waiter'`, §5b), and — since this is LEFT-joined — a line with no ticket item at all,
+   * the same edge the adjacent `state` field documents. That no-item shape is reachable for a real PARENT
+   * line, e.g. a line {@link openTab} inserted with the tab's initial round (its `lines` go through
+   * {@link createOpenOrder}, which never fires) or one moved between tabs ({@link moveTabLines}, used by
+   * both merge and transfer, re-inserts the line under a new id without re-firing). Course is independent:
+   * {@link setLineCourse} clears a HELD line's course to null (it refuses only a FIRED line), so a null
+   * `firedAt` says nothing about whether `courseId` is null. */
   firedAt: string | null;
+  /** The line's kitchen ticket item's `state` (`ticket_items.state`), or null when the line has no
+   * ticket item — the same LEFT-join edge {@link firedAt} documents. A child modifier line ALWAYS lacks
+   * one ({@link fireLines} filters children out of the fire). A parent line normally has one once
+   * fired/held, but can also lack one — e.g. a line {@link openTab} inserted without firing (its
+   * initial `lines` go through {@link createOpenOrder}, which never calls {@link fireLines}), or one
+   * moved between tabs ({@link moveTabLines}, used by both merge and transfer, re-inserts the line
+   * under a brand-new id without re-firing, cascading the old id's item away). Treat null as "no LIVE
+   * ticket item", not as impossible for a parent. Coursing corrections (C1): distinguishes a RECALLABLE
+   * line (`firedAt` set, `state === "queued"`, not yet started) from a CANCEL-only one (`state`
+   * "preparing"/"ready") — the till reads this, not implemented here. */
+  state: TicketState | null;
 }
 
 /**
@@ -1647,12 +1980,18 @@ export async function readTabLines(
   tabId: string,
 ): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
-  // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` — one item per line at
-  // most (`ticket_items` is UNIQUE on `(tenant_id, working_order_line_id)`), so the join never
-  // multiplies rows. `course_id` is read from `working_order_lines` (the authoritative ring-time
-  // resolution), not the item snapshot, so a line with no ticket item still reports its course; `fired_at`
-  // has no home but the item, so it is null when the join finds none. Both feed the tab's per-course
-  // waiter-fire (§5b); the existing pay/serve columns are unchanged.
+  // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
+  // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
+  // `(tenant_id, working_order_line_id)`), so the join never multiplies rows. `course_id` is read from
+  // `working_order_lines` (the authoritative ring-time resolution), not the item snapshot, so a line with
+  // no ticket item still reports its course; `fired_at`/`state` have no home but the item, so both are
+  // null when the join finds none. A child modifier line ALWAYS has no ticket item (`fireLines` filters
+  // children out of the fire); a PARENT line normally has one once fired/held, but can also have none —
+  // e.g. `openTab`'s initial `lines` are inserted without firing, or `moveTabLines` (merge/transfer)
+  // re-inserts a moved line under a brand-new id without re-firing it. Treat null as "no LIVE ticket
+  // item", not as impossible for a parent. Both columns feed the tab's per-course waiter-fire (§5b) and
+  // the till's recall-vs-cancel-only distinction (`firedAt` set + `state === "queued"` ⇒ recallable,
+  // `state` "preparing"/"ready" ⇒ cancel-only); the existing pay/serve columns are unchanged.
   return tx
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -1662,9 +2001,16 @@ export async function readTabLines(
       servedAt: workingOrderLines.servedAt,
       courseId: workingOrderLines.courseId,
       firedAt: ticketItems.firedAt,
+      state: ticketItems.state,
     })
     .from(workingOrderLines)
-    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(
+      ticketItems,
+      and(
+        eq(ticketItems.tenantId, workingOrderLines.tenantId),
+        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+      ),
+    )
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
 }

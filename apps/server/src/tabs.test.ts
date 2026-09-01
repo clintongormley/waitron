@@ -651,6 +651,69 @@ describe("readTabLines", () => {
     expect(cafe.firedAt).not.toBeNull();
     expect(agua.courseId).toBe(postres.id);
     expect(agua.firedAt).toBeNull();
+    // Coursing corrections (C1): both lines already have a ticket item (fireLines inserts one per fired
+    // OR held parent line), so both carry the fresh row's `state`, always "queued" at insert time
+    // (working-order.ts ~1041) — HELD vs FIRED is `firedAt`, not `state`; `state` only advances once the
+    // kitchen screen bumps it (preparing/ready), which this fixture never does.
+    expect(cafe.state).toBe("queued");
+    expect(agua.state).toBe("queued");
+  });
+
+  it("carries state: null for a child modifier line, which has no ticket item of its own", async () => {
+    // A round line with `options` expands into a parent dish line plus one child line per option
+    // (Task 6); only the PARENT is fired to the kitchen (`fireLines` filters children out), so the
+    // child never gets a `ticket_items` row at all — `readTabLines`'s LEFT JOIN then reports `state: null`
+    // for it, distinct from a HELD parent (which has a row, state "queued", firedAt null).
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const baconId = await asApp(cfg, async (tx) => {
+      const [group] = await tx
+        .insert(optionGroups)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          name: { [LOCALE]: "Extras" },
+          minSelect: 0,
+          maxSelect: 2,
+          required: false,
+          sort: 0,
+        })
+        .returning({ id: optionGroups.id });
+      const [bacon] = await tx
+        .insert(optionGroupItems)
+        .values({
+          tenantId: sql`current_tenant_id()`,
+          groupId: group!.id,
+          name: { [LOCALE]: "Bacon" },
+          priceDelta: "0.50",
+          vatClass: "reduced",
+          sort: 0,
+        })
+        .returning({ id: optionGroupItems.id });
+      await tx.insert(productOptionGroups).values({
+        tenantId: sql`current_tenant_id()`,
+        productId: cafeId,
+        groupId: group!.id,
+        sort: 0,
+      });
+      return bacon!.id;
+    });
+
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+      ]),
+    );
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(lines).toHaveLength(2);
+    const parent = lines.find((l) => l.productId === cafeId)!;
+    const child = lines.find((l) => l.productId === null)!;
+    // Null course → auto-fires (§2b): the parent gets a fresh "queued" ticket item.
+    expect(parent.firedAt).not.toBeNull();
+    expect(parent.state).toBe("queued");
+    // The child modifier line has no ticket item of its own — null firedAt AND null state.
+    expect(child.firedAt).toBeNull();
+    expect(child.state).toBeNull();
   });
 
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {

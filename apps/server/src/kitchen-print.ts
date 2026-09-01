@@ -41,7 +41,7 @@ import type { Transaction } from "@waitron/db";
 import { perDishOptionQuantity } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import { formatKitchenTicket } from "./kitchen-ticket.js";
+import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -81,6 +81,173 @@ function ticketName(descriptions: Record<string, string>, locale: string): strin
 }
 
 /**
+ * The active station→printer mappings for `stationIds`, joined to `printers` for each printer's ticket
+ * scope, FILTERED to ACTIVE printers, under a `FOR SHARE OF printers` row lock. Factored out of the fire
+ * path so the recall/void correction path ({@link enqueueCorrectionSlips}) resolves printers through the
+ * SAME locked lookup — the two never-block guards in this file's header (the `active = true` pre-filter
+ * and the FOR SHARE lock that keeps a concurrent `deactivatePrinter` from flipping `active` before commit)
+ * apply identically to a correction slip. `of: printers` scopes the lock to `printers` only (not the
+ * mapping rows); FOR SHARE (not FOR KEY SHARE) is required because a `SET active = false` UPDATE touches
+ * no key column, so only FOR SHARE conflicts with it.
+ */
+async function lockActivePrinters(
+  tx: Transaction,
+  tenantId: string,
+  stationIds: string[],
+): Promise<{ stationId: string; printerId: string; ticketScope: "station" | "order" }[]> {
+  return tx
+    .select({
+      stationId: stationPrinters.stationId,
+      printerId: stationPrinters.printerId,
+      ticketScope: printers.ticketScope,
+    })
+    .from(stationPrinters)
+    .innerJoin(
+      printers,
+      and(
+        eq(stationPrinters.printerId, printers.id),
+        eq(stationPrinters.tenantId, printers.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(stationPrinters.tenantId, tenantId),
+        inArray(stationPrinters.stationId, stationIds),
+        eq(printers.active, true),
+      ),
+    )
+    .for("share", { of: printers });
+}
+
+/**
+ * Each line's printed `KitchenTicketItem` — quantity, localised name, and its `+ <name>`/` xN` modifier
+ * sub-lines — keyed by LINE ID, each carrying the line's `line_no` for a stable within-station order.
+ * Factored from the fire path so the correction path formats a recalled/voided line's item BYTE-FOR-BYTE
+ * like the original ticket the cook is correcting: same `descriptions`→name pick ({@link ticketName}),
+ * same per-option-quantity modifier labels, same locale (`cfg.locale`). Reads the fired parents' qty +
+ * snapshotted `descriptions` and their child modifier lines in ONE grouped read each (never N+1),
+ * tenant-scoped beside RLS. `lineIds` are the PARENT dish lines; a child modifier is never itself a key
+ * here (it is fetched as sub-text of its parent).
+ */
+async function buildTicketItems(
+  tx: Transaction,
+  cfg: TillConfig,
+  lineIds: string[],
+): Promise<Map<string, { lineNo: number; item: KitchenTicketItem }>> {
+  // The fired lines' display fields — quantity + the snapshotted description map — for the qty×name lines.
+  const lineRows = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+      descriptions: workingOrderLines.descriptions,
+      // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
+      // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
+      // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
+      note: workingOrderLines.note,
+      doneness: workingOrderLines.doneness,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.tenantId, cfg.tenantId), inArray(workingOrderLines.id, lineIds)),
+    );
+  const lineById = new Map(lineRows.map((row) => [row.id, row]));
+
+  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed by
+  // `parent_line_id` over the fired parents' ids, printed as indented `+ <name>` sub-text beneath each
+  // dish. Ordered by `line_no` so the options print in selection order; tenant-scoped beside RLS.
+  const childRows = await tx
+    .select({
+      parentLineId: workingOrderLines.parentLineId,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+      descriptions: workingOrderLines.descriptions,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, cfg.tenantId),
+        inArray(workingOrderLines.parentLineId, lineIds),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+  // parent line id → its option strings in line_no order. Per-option quantity is recovered from the filed
+  // COMBINED child quantity (see perDishOptionQuantity); a per-dish count > 1 appends an ASCII " xN"
+  // suffix, matching kitchen-ticket.ts's `qty x name` convention. Every child's parent is in `lineById`.
+  const modifiersByParent = new Map<string, string[]>();
+  for (const child of childRows) {
+    const parent = lineById.get(child.parentLineId!)!;
+    const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
+    const name = ticketName(child.descriptions, cfg.locale);
+    const label = perDish > 1 ? `${name} x${perDish}` : name;
+    const names = modifiersByParent.get(child.parentLineId!) ?? [];
+    names.push(label);
+    modifiersByParent.set(child.parentLineId!, names);
+  }
+
+  const byLine = new Map<string, { lineNo: number; item: KitchenTicketItem }>();
+  for (const row of lineRows) {
+    byLine.set(row.id, {
+      lineNo: row.lineNo,
+      item: {
+        qty: Number(row.quantity),
+        name: ticketName(row.descriptions, cfg.locale),
+        // Nullable columns → `?? undefined` so a plain line carries neither key and prints exactly as
+        // before; `emitItem` prints doneness prominently and the note as a sub-line.
+        doneness: row.doneness ?? undefined,
+        note: row.note ?? undefined,
+        modifiers: modifiersByParent.get(row.id) ?? [],
+      },
+    });
+  }
+  return byLine;
+}
+
+/** The involved stations' names (a ticket/slip header), keyed by station id, tenant-scoped beside RLS. */
+async function readStationNames(
+  tx: Transaction,
+  tenantId: string,
+  stationIds: string[],
+): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ id: kitchenStations.id, name: kitchenStations.name })
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.tenantId, tenantId), inArray(kitchenStations.id, stationIds)));
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+/**
+ * The order header: the human order number + the dining-table label. The label comes from the
+ * fan-out-proof scalar subquery `listExpoQueue` uses (both `tab_id` and `delivery_table_id` directions,
+ * tenant + location scoped); a walk-up with no table resolves null. The outer `working_orders` columns
+ * are referenced by their LITERAL qualified names, NOT via `${workingOrders.id}`: drizzle renders a
+ * base-`.from()` table's column inside a `sql` template as a BARE `"id"`, which inside this subquery would
+ * bind to `dining_tables.id` (→ `dt.tab_id = dt.id`, never matching) rather than correlating to the outer
+ * order. `cfg.locationId` stays a bound `$n` param. `orderNumber` is stringified for the printed header.
+ */
+async function readOrderHeader(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<{ orderNumber: string; tableLabel: string | null }> {
+  const rows = await tx
+    .select({
+      orderNumber: workingOrders.orderNumber,
+      tableLabel: sql<string | null>`(
+        select dt.label from dining_tables dt
+        where dt.tenant_id = working_orders.tenant_id
+          and dt.location_id = ${cfg.locationId}
+          and (dt.tab_id = working_orders.id or working_orders.delivery_table_id = dt.id)
+        order by (dt.tab_id = working_orders.id) desc nulls last, dt.id
+        limit 1)`,
+    })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, orderId)));
+  const order = rows[0]!;
+  return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
+}
+
+/**
  * Enqueue the kitchen tickets for a set of just-fired lines (design §3c), all within the passed `tx`.
  * For each INVOLVED station (one with ≥1 fired line), each attached `station`-scope printer gets a
  * ticket of that station's own items; every attached `order`-scope (group) printer gets ONE consolidated
@@ -98,40 +265,11 @@ export async function enqueueKitchenTickets(
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  // The station→printer mappings for the involved stations, joined to `printers` for each printer's
-  // ticket scope and FILTERED to ACTIVE printers. Read FIRST so a fire whose stations map to NO printer
-  // can return before the three detail SELECTs below — the common case for a venue not using kitchen
-  // printing (see the early return). Two things keep `enqueuePrintJob` from throwing `printer.not_found`
-  // (which would abort the fire tx — see the header):
-  //   - the `active = true` filter drops an already-deactivated printer (never enqueued);
-  //   - `FOR SHARE OF printers` row-locks the matched `printers` rows, so a concurrent
-  //     `deactivatePrinter` UPDATE (which needs a conflicting FOR NO KEY UPDATE lock) BLOCKS until this
-  //     fire tx commits — so `active` cannot flip to false between here and `enqueuePrintJob`'s own
-  //     re-check under READ COMMITTED. `of: printers` scopes the lock to `printers` only (not the
-  //     mapping rows), and FOR SHARE (not FOR KEY SHARE) is required: a `SET active = false` UPDATE
-  //     touches no key column, so only FOR SHARE conflicts with it.
-  const mappingRows = await tx
-    .select({
-      stationId: stationPrinters.stationId,
-      printerId: stationPrinters.printerId,
-      ticketScope: printers.ticketScope,
-    })
-    .from(stationPrinters)
-    .innerJoin(
-      printers,
-      and(
-        eq(stationPrinters.printerId, printers.id),
-        eq(stationPrinters.tenantId, printers.tenantId),
-      ),
-    )
-    .where(
-      and(
-        eq(stationPrinters.tenantId, cfg.tenantId),
-        inArray(stationPrinters.stationId, stationIds),
-        eq(printers.active, true),
-      ),
-    )
-    .for("share", { of: printers });
+  // The station→printer mappings for the involved stations, ACTIVE-filtered and FOR-SHARE-locked (the
+  // two never-block guards — see {@link lockActivePrinters} and this file's header). Read FIRST so a fire
+  // whose stations map to NO printer can return before the detail reads below — the common case for a
+  // venue not using kitchen printing (see the early return).
+  const mappingRows = await lockActivePrinters(tx, cfg.tenantId, stationIds);
 
   // No printer maps to any involved station → nothing to enqueue. Returning HERE, before the three
   // detail reads below, skips those reads on every no-kitchen-printer fire and takes no row lock (an empty
@@ -141,136 +279,34 @@ export async function enqueueKitchenTickets(
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
-  // The fired lines' display fields — quantity + the snapshotted description map — for the qty×name
-  // lines. A `RETURNING` on the fire only sees `ticket_items`, so this is the follow-up read ruling R-D
-  // calls for; tenant-scoped (belt-and-braces beside RLS), matching the `ticket_items` →
-  // `working_order_lines` join `listStationQueue`/`listExpoQueue` use for name + qty.
-  const lineRows = await tx
-    .select({
-      id: workingOrderLines.id,
-      lineNo: workingOrderLines.lineNo,
-      quantity: workingOrderLines.quantity,
-      descriptions: workingOrderLines.descriptions,
-      // The per-line customisation (order-line customisation, spec §2/§3) — the note/doneness to print as
-      // sub-lines. Read from `working_order_lines` here (as name/qty are): this runs INSIDE the fire tx,
-      // right after `fireLines` snapshotted these SAME values onto `ticket_items`, so the line and the
-      // snapshot are identical at print time (the queue reads, viewed LATER, take the `ticket_items` copy).
-      note: workingOrderLines.note,
-      doneness: workingOrderLines.doneness,
-    })
-    .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.tenantId, cfg.tenantId), inArray(workingOrderLines.id, lineIds)),
-    );
-  const lineById = new Map(lineRows.map((row) => [row.id, row]));
-
-  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed by
-  // `parent_line_id` over the fired parents' ids (`lineIds`), NOT an N+1 per parent. A child is never
-  // itself a `ticket_item` (only parents fire — the `fireLines` filter), so it is fetched here from
-  // `working_order_lines` to print as indented `+ <name>` sub-text beneath its dish. Its printed name is
-  // the SNAPSHOTTED `descriptions` map through the SAME `ticketName` picker the dish uses, ordered by
-  // `line_no` so the options print in selection order. Tenant-scoped (belt-and-braces beside RLS),
-  // matching the other detail reads. No modifiers ⇒ an empty result ⇒ every item prints exactly as before.
-  const childRows = await tx
-    .select({
-      parentLineId: workingOrderLines.parentLineId,
-      lineNo: workingOrderLines.lineNo,
-      quantity: workingOrderLines.quantity,
-      descriptions: workingOrderLines.descriptions,
-    })
-    .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        inArray(workingOrderLines.parentLineId, lineIds),
-      ),
-    )
-    .orderBy(workingOrderLines.lineNo);
-  // parent line id → its option strings in line_no order (the `.orderBy` above fixes the order, and a Map
-  // append preserves it). `parentLineId` is non-null on every row here (the `inArray` matched it).
-  //
-  // Per-option quantity (landed feature): the PER-DISH count is recovered from the filed COMBINED child
-  // quantity (see perDishOptionQuantity). We APPEND an ASCII "xN" suffix to the modifier string only when
-  // that count exceeds 1, matching `kitchen-ticket.ts`'s own `qty x name` convention (ASCII "x", so any
-  // single-byte printer code page renders it). One-per-dish — the common case, and any plain modifier —
-  // leaves the string `<name>` and prints `  + <name>` exactly as before. Every child's parent is in
-  // `lineById` (its `parentLineId` ∈ the fired `lineIds` the read covered).
-  const modifiersByParent = new Map<string, string[]>();
-  for (const child of childRows) {
-    const parent = lineById.get(child.parentLineId!)!;
-    const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
-    const name = ticketName(child.descriptions, cfg.locale);
-    const label = perDish > 1 ? `${name} x${perDish}` : name;
-    const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(label);
-    modifiersByParent.set(child.parentLineId!, names);
-  }
-
-  // The involved stations' names (the station ticket's header + the group ticket's sub-headers).
-  const stationRows = await tx
-    .select({ id: kitchenStations.id, name: kitchenStations.name })
-    .from(kitchenStations)
-    .where(
-      and(eq(kitchenStations.tenantId, cfg.tenantId), inArray(kitchenStations.id, stationIds)),
-    );
-
-  // The order header: the human order number + the dining-table label. The label comes from the
-  // fan-out-proof scalar subquery `listExpoQueue` uses (both `tab_id` and `delivery_table_id` directions,
-  // tenant + location scoped); a walk-up with no table resolves null.
-  // The outer `working_orders` columns are referenced here by their LITERAL qualified names, NOT via
-  // `${workingOrders.id}`: drizzle renders a base-`.from()` table's column inside a `sql` template as a
-  // BARE `"id"`, which inside this subquery would bind to `dining_tables.id` (→ `dt.tab_id = dt.id`,
-  // never matching) rather than correlating to the outer order. (`listExpoQueue`'s identical-looking
-  // `${workingOrders.id}` works only because there `working_orders` is a JOINED table, which drizzle DOES
-  // qualify.) `cfg.locationId` stays a bound `$n` param.
-  const orderRows = await tx
-    .select({
-      orderNumber: workingOrders.orderNumber,
-      tableLabel: sql<string | null>`(
-        select dt.label from dining_tables dt
-        where dt.tenant_id = working_orders.tenant_id
-          and dt.location_id = ${cfg.locationId}
-          and (dt.tab_id = working_orders.id or working_orders.delivery_table_id = dt.id)
-        order by (dt.tab_id = working_orders.id) desc nulls last, dt.id
-        limit 1)`,
-    })
-    .from(workingOrders)
-    .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, orderId)));
-  const order = orderRows[0]!;
+  // The fired lines' printed items (qty + localised name + `+ <name>` modifier sub-lines), the involved
+  // stations' names, and the order header — the three shared reads, factored out so the recall/void
+  // correction path formats an item byte-for-byte the same way (see the helpers above). `ruling R-D`: a
+  // `RETURNING` on the fire only sees `ticket_items`, so these follow-up reads rebuild the display fields.
+  const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const stationNames = await readStationNames(tx, cfg.tenantId, stationIds);
+  const order = await readOrderHeader(tx, cfg, orderId);
 
   // This round's items grouped by station, each carrying its `line_no` for a stable within-station order
-  // (the same `line_no` ordering `listStationQueue` renders). Every fired line has a `lineById` row (the
-  // read above covers exactly `lineIds`) and every fired station has a `stationRows` row, so both `.get`s
-  // are total here.
+  // (the same `line_no` ordering `listStationQueue` renders). Every fired line has an `itemsByLine` entry
+  // (the read above covers exactly `lineIds`) and every fired station has a `stationNames` entry, so both
+  // `.get`s are total here.
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
   for (const fired of firedItems) {
-    const line = lineById.get(fired.workingOrderLineId)!;
-    const item: KitchenTicketItem = {
-      qty: Number(line.quantity),
-      name: ticketName(line.descriptions, cfg.locale),
-      // The per-line customisation (order-line customisation, spec §2/§3): the doneness prints PROMINENTLY
-      // and the note as a sub-line beneath the dish (`emitItem`). Nullable columns → `?? undefined` so a
-      // plain line carries neither key and prints exactly as before. Doneness has no server-side locale
-      // label (there is no enum-i18n here); the raw enum value is formatted for print in `emitItem`, the
-      // "raw value acceptable on a kitchen ticket" rule.
-      doneness: line.doneness ?? undefined,
-      note: line.note ?? undefined,
-      // The parent dish's selected options, printed as `+ <name>` sub-text (empty for a plain dish).
-      modifiers: modifiersByParent.get(fired.workingOrderLineId) ?? [],
-    };
+    const entry = itemsByLine.get(fired.workingOrderLineId)!;
     const bucket = itemsByStation.get(fired.stationId) ?? [];
-    bucket.push({ lineNo: line.lineNo, item });
+    bucket.push(entry);
     itemsByStation.set(fired.stationId, bucket);
   }
 
   // The involved stations with their names, in a deterministic name order — station names are unique per
   // location, so the name alone totally orders them — each carrying its fired items in `line_no` order.
-  const stations = stationRows
-    .map((station) => ({
-      id: station.id,
-      name: station.name,
+  const stations = [...stationNames.entries()]
+    .map(([id, name]) => ({
+      id,
+      name,
       items: itemsByStation
-        .get(station.id)!
+        .get(id)!
         .sort((a, b) => a.lineNo - b.lineNo)
         .map((entry) => entry.item),
     }))
@@ -289,7 +325,7 @@ export async function enqueueKitchenTickets(
   const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
   const firedAt = new Date();
   const tableLabel = order.tableLabel ?? "";
-  const orderNumber = String(order.orderNumber);
+  const orderNumber = order.orderNumber;
 
   // Station-scope printers print their OWN station's items now; order-scope (group) printers are
   // collected and deduped, then print ONE consolidated whole-event ticket each, below.
@@ -333,6 +369,83 @@ export async function enqueueKitchenTickets(
     });
     for (const printerId of groupPrinterIds) {
       await enqueuePrintJob(tx, printCfg, printerId, consolidated);
+    }
+  }
+}
+
+/**
+ * Enqueue a kitchen CORRECTION slip per item (coursing editing A6) — the paper-kitchen counterpart to a
+ * RECALL ({@link recallLines}) or a VOID ({@link voidTabLine}) of a line that had ALREADY FIRED (printed).
+ * The caller passes ONLY previously-fired lines: a held line never printed, so it produces no slip and is
+ * never in `items` (the callers filter on `fired_at IS NOT NULL` before the recall/void). Each item is
+ * formatted with {@link formatCorrectionSlip} — the SAME `emitItem` body the original ticket used, so the
+ * cook sees the line rendered identically — and enqueued to EVERY active printer attached to the line's
+ * station (both station- and order-scope: a correction is a single item, so there is no consolidated
+ * variant to build — the cook at each attached printer gets told what changed).
+ *
+ * DRY with the fire path: the station→printer lookup ({@link lockActivePrinters}), the item/modifier
+ * formatting ({@link buildTicketItems}), the station names ({@link readStationNames}) and the order header
+ * ({@link readOrderHeader}) are the SAME factored reads {@link enqueueKitchenTickets} uses — so a slip's
+ * qty/name/modifiers, table label and order number match the original ticket exactly.
+ *
+ * NEVER-BLOCK (§5) and the two printer guards apply exactly as on the fire path: `lockActivePrinters`
+ * ACTIVE-filters and FOR-SHARE-locks, so `enqueuePrintJob`'s `printer.not_found` stays unreachable and the
+ * enqueue rides the caller's recall/void tx (rolls back with it). An empty `items` — the common case, a
+ * recall/void of a held line — enqueues nothing. Tenant-scoped beside the caller's RLS.
+ *
+ * NOTE for VOID: {@link voidTabLine}'s delete cascades the line + its ticket item away
+ * (`ON DELETE CASCADE`), and this function RE-READS the line from `working_order_lines` via
+ * `buildTicketItems`; so the void caller must invoke this WHILE the line still exists (before its delete),
+ * having captured `{workingOrderLineId, stationId}` from the pre-delete ticket-item read.
+ */
+export async function enqueueCorrectionSlips(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: FiredItem[],
+  kind: "VOID" | "RECALLED",
+): Promise<void> {
+  // No previously-fired line to correct (a recall/void of a held line) → nothing to print.
+  if (items.length === 0) return;
+
+  const stationIds = [...new Set(items.map((i) => i.stationId))];
+  const mappingRows = await lockActivePrinters(tx, cfg.tenantId, stationIds);
+  // No active printer maps to any involved station → nothing to enqueue (skips the detail reads below).
+  if (mappingRows.length === 0) return;
+
+  const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
+  const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const stationNames = await readStationNames(tx, cfg.tenantId, stationIds);
+  const header = await readOrderHeader(tx, cfg, orderId);
+
+  // Every ACTIVE printer attached to a station, keyed by station id (station- and order-scope alike — a
+  // correction slip has no consolidated variant, so scope does not branch here).
+  const printersByStation = new Map<string, string[]>();
+  for (const mapping of mappingRows) {
+    const bucket = printersByStation.get(mapping.stationId) ?? [];
+    bucket.push(mapping.printerId);
+    printersByStation.set(mapping.stationId, bucket);
+  }
+
+  const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  const at = new Date().toISOString();
+
+  for (const target of items) {
+    const attachedPrinters = printersByStation.get(target.stationId);
+    // A line whose station has no active printer produced no paper — nothing to correct there.
+    if (attachedPrinters === undefined) continue;
+    const entry = itemsByLine.get(target.workingOrderLineId)!;
+    // One slip's bytes built ONCE per item, then enqueued to each attached printer of its station.
+    const bytes = formatCorrectionSlip({
+      kind,
+      stationName: stationNames.get(target.stationId)!,
+      tableLabel: header.tableLabel,
+      orderNumber: header.orderNumber,
+      at,
+      item: entry.item,
+    });
+    for (const printerId of attachedPrinters) {
+      await enqueuePrintJob(tx, printCfg, printerId, bytes);
     }
   }
 }
