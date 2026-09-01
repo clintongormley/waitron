@@ -4,14 +4,16 @@ This file answers **"what should I work on?"** It is state, not history: what is
 what is open, and the order to take it in. The git log, the PR threads, and the committed
 specs/plans in `docs/superpowers/` hold the detail — do not paste receipts back in here.
 
-> **Decluttered 2026-08-31.** Collapsed the demo Phase-0/Phase-1 threads and the sync/onboarding
-> sections back to state after a large landing burst (#160–#185): landed work moved to *What's built*,
-> and the `LANDED (#XXX)` mechanism narrative + proof-of-work (test counts, grep-proofs, review
-> findings) went back to git history where it belongs. A PR number is kept only as a locator, never a
-> receipt paragraph.
+> **Reshaped 2026-09-01.** The owner demo is done; the north star moved from "something to show" to
+> "a polished local product + the robustness that completes it". *Priorities* was rebuilt around two
+> parallel tracks (UI polish, infra robustness); the finished demo Phase-0/Phase-1 Tier-A/B/C narrative
+> was dropped (it is git history); and Track-1 status moved to its own tracker, `ui-review.md`. Detail
+> still lives under *Open threads*; a PR number is a locator, never a receipt paragraph.
 
 **Companion documents, not duplicated here:**
 
+- **[ui-review.md](ui-review.md)** — the live tracker for **Track 1** (the UI/UX polish walkthrough):
+  which areas are examined, which remain, and the corrections logged against each.
 - **[compliance/action-plan.md](compliance/action-plan.md)** — the legal/administrative track
   (certificates, company formation, the declaración responsable).
 - **[compliance/asesor-questions.md](compliance/asesor-questions.md)** — the fiscal-advisor question
@@ -35,149 +37,106 @@ records, never-reused invoice numbers.
 
 ## Priorities
 
-**North star: a working frontend to demo to a restaurant owner** (owner decision, 2026-08-29) —
-runnable on a dev laptop, on-prem, or cloud; **the demo needs none of the cloud sync,
-primary/secondary failover, or appliance-hardware track.** Rank by what a restaurant owner will
-notice, not by infra completeness. The soundness-first ordering still governs the *infra* work (under
-*Parked*), just beneath the demo until there is something to show.
+**North star: a polished product that runs locally with an intuitive UI — plus the robustness that
+makes it a complete product** (owner decision, 2026-09-01). The owner demo is DONE; the goal is no
+longer "something to show" but (1) every screen correct and intuitive and (2) finishing
+primary/secondary failover, cloud failover, and sync. Two tracks run at once; everything else ranks
+beneath them.
 
-**Run path:** `pnpm dev:setup && pnpm dev` boots a real till + dashboard on real Postgres — cash +
-manual-card sales, live fiscal chaining, no hardware, no cloud, no AEAT cert (till PIN 5555 /
-dashboard 1234). `dev:setup` seeds a believable demo restaurant: two menus (~44 products with
-per-dish images), a floor plan (3 zones / ~16 tables), staff on PIN 5555, and ~28 days of back-dated
-preproduction sales — English by default, Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out
-screens on one enforced design system.
+- **Track 1 — UI/UX polish & correctness (foreground).** A systematic customer-journey walkthrough of
+  every chunk of functionality: each area's current behaviour is shown to the owner, who corrects
+  intuitiveness/correctness problems, and the fixes land. **[ui-review.md](ui-review.md) is the
+  authoritative tracker** — which areas are examined, which remain, and the corrections against each.
+- **Track 2 — robustness / infra (background).** Primary/secondary failover, cloud failover, sync
+  completion — unfinished, and what makes Waitron a complete product. Runs in background / parallel
+  sessions, soundness-first. Gates + detail under *Open threads → SIF topology / Sync / Onboarding*;
+  the two slices buildable-and-background **now** are called out there. **Never autonomously land
+  anything touching the unrepairable fiscal core (H2)** — hash-chained records, never-reused invoice
+  numbers.
 
-### Phase 0 — self-contained in-flight threads — COMPLETE
+**Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
+deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
+de-risking the most-reused / most-uncertain foundations first.
 
-- **Onboarding Slice 4** (backup / status / break-glass) — **DONE** (4a #159, 4b-i #161, 4b-ii #163,
-  4b-iii cold-restore runbook, 4c break-glass #166). Onboarding slices 5–7 (AP-mode firmware / OS
-  image / paid real-cert) stay parked. Detail + remaining follow-ups under *Open threads → Onboarding*.
-- **Sync cloud-mirror C2b** (operator flow) — **DONE** (#162). Deferred follow-ups under *Open
-  threads → Sync*.
-- **Promotion Slice 1** (local secondary → primary, in-process) — **DONE** (#160). The remaining
-  promote-action slices stay **PARKED** (gated on unbuilt foundations — break-glass mint, reserved-SIF,
-  backup regime; the demo never touches them). Detail under *Open threads → SIF topology*.
+**Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
+<http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
+:8080. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a
+believable demo restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16
+tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
+Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
 
-### Phase 1 — the demo build (ranked)
+### Product work still open (beneath the two tracks)
 
-Tiers A/B/C = "an owner notices in five minutes / an owner will ask / defer past a first demo or
-behind-the-scenes".
+The demo Phase-0/Phase-1 Tier-A/B/C build is finished (git history); what remains is the open
+follow-ons and the still-greenfield product features, ranked beneath Tracks 1 and 2. Landed
+sub-projects and their state are in *What's built*; the open detail is under *Open threads*.
 
-**Tier A — an owner notices in the first five minutes — COMPLETE.** Sales screen + business-overview
-home (#167); grouped sidebar + email login (#172) with admin-email captured at onboarding (#175);
-split/move/merge (#174) + TS-5 split-bill (#178, #181); tableside handheld ordering + cash-at-table
-(#173, #176). See *What's built* rows 7/8/10/12. **Remaining is only deferred follow-ups:** handheld
-live updates and the per-device layout editor (both under *Debt → cross-cutting engineering*).
+**Ordering / menu (SP18):**
 
-**Tier B — an owner will ask; product-defining:**
+- **Counter/walk-up kitchen fire (#193 follow-up) — the next actionable ordering slice.** The
+  counter/walk-up basket shows the note/doneness editor and the server persists both on
+  `working_order_lines`, but `/api/sales` (`recordTillSale` → `createOpenOrder`) never calls
+  `fireLines`, so a note/doneness typed on a counter sale reaches no kitchen surface. The owner
+  confirmed counter food DOES go to the kitchen (2026-09-01), so this is real work: make the walk-up
+  path fire kitchen tickets (mirror the table/tab round path, snapshotting note/doneness onto
+  `ticket_items`) and extend the KDS/expo/print reads to cover counter-fired tickets. Wire/state
+  already exist; only the counter fire path + its reads are missing. Keep the fiscal boundary intact
+  (note/doneness must NOT reach `sale_lines`/`computeHuella` — same guard as #193).
+- **Modifiers / quantity deferred follow-ons** (all landed — #184/#186/#187/#190/#193): on-screen
+  expo/station-queue/tab modifier `×N`; extract the shared `#allergens` render across
+  basket/station-queue/expo; fold the base-allergen `products` join into the KDS queue select; the
+  owner UX call on how an unreviewed dish shows on the KDS vs the till; post-fire tab-line note/doneness
+  edit (parked — needs a re-fire endpoint); customer-facing menu surface (parked — its own
+  sub-project); the TS-4 partial-transfer modifier-split guard; and the small shared-helper cleanups
+  (`kitchen-print` child-line read, `parseOptionalInteger`, `groupByParent`).
+- **Menu-management depth (#8)** — greenfield, no owner decision pending: a menu **draft/published**
+  state (only an `active` bool today) and **time-of-day / seasonal scheduling**. (Per-till persisted
+  menu selection was DROPPED — owner call.)
+- **Order-timing follow-ons (#9, spec §13)** — delivery-order floor flash; idle-floor escalation;
+  real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
+  flash helper.
 
-- **#7 Ordering modifiers / variants** — LANDED (#184). **Open follow-ons, each its own slice:**
-  - **Modifier ↔ allergen association** — LANDED (#187). Per-option add/remove EU-14 overlay on
-    `option_group_items` (nullable `add_allergens`/`remove_allergens`, migration 0085) folded by one
-    shared pure `deriveAsServedAllergens` (**Cautious** policy: an unreviewed base stays pending &
-    removes are ignored, a remove clears may_contain, an add wins a conflict); surfaced on the till
-    order line (client-side deep import) + the KDS/expo tickets (server) + dashboard authoring.
-    **Non-fiscal**, pinned by a huella-invariance test (legally load-bearing, EU 1169/2011). Rebased
-    onto #186 (both touch `option_group_items`). **Open follow-ons:** (a) **owner UX call** — a plain
-    modifier-less *unreviewed* dish shows "not fully reviewed" on the KDS but is suppressed on the till
-    (the KDS errs safe, spec says pending shows "on every surface"; pinned by a test — align the two if
-    the owner prefers); (b) extract the shared `#allergens` render + CSS across
-    basket/station-queue/expo (~90 lines duplicated); (c) fold the base-allergen `products` join into
-    the main KDS queue select (one fewer read).
-  - **Dietary classification** — LANDED (#190). Contains-meat/fish tags + vegan/vegetarian
-    (derived from a per-ingredient `dietary_origin`) + halal/kosher (manual), with a per-dish manual
-    override and per-option as-served overlays; surfaced on the till menu diet filter + basket +
-    expo/KDS badges + the dashboard recipe/product/option authoring UIs. **Cautious** posture: an
-    unreviewed ingredient reads diet "unknown", never a false positive. The
-    **customer-facing menu surface stays PARKED** (its own future sub-project); the published product
-    `diet` field is ready for it.
-  - **Order-line customisation** — LANDED (#193). Per-line free-text `note` ("hold the mayo",
-    "hold the onions") reachable on EVERY basket line via a per-line editor (fast-add preserved) + a
-    `doneness` picker (rare…well_done) that appears only for meat dishes (gated on the dietary
-    `diet.contains` ∋ meat — consumes #190's `meat` origin). Both are **KITCHEN-only, NON-FISCAL**:
-    snapshotted onto `ticket_items` at fire, never in `sale_lines`/the huella (pinned by a
-    huella-invariance guard). Rendered on the till basket, station queue, expo, and printed kitchen
-    ticket. Deferred follow-up (post-fire tab-line edit): editing note/doneness on an ALREADY-SENT
-    tab line (post-fire drawer `TabLine`) is NOT supported — it would need a new server endpoint +
-    re-fire semantics; today both are set at the ordering stage, before send. Parked.
-  - **Counter/walk-up kitchen fire — NEXT (follow-up to #193, run after a context clear).** The
-    COUNTER/walk-up basket shows the note/doneness editor and the server validates + persists both on
-    `working_order_lines`, but the walk-up `/api/sales` path (`recordTillSale` → `createOpenOrder`)
-    **never calls `fireLines`**, so a note/doneness typed on a counter sale reaches no kitchen surface
-    (KDS/expo/printed ticket). The owner confirmed (2026-09-01) that **counter food DOES go to the
-    kitchen**, so this is real work, not a UI-hide. Make the counter/walk-up sale path fire kitchen
-    tickets (mirror how the table/tab round path funnels into `fireLines`, snapshotting note/doneness
-    onto `ticket_items` at fire), then extend the KDS/expo/print reads to cover counter-fired tickets.
-    Wire/state plumbing already exists (note/doneness on the wire `SaleLine`, `working_order_lines`,
-    and the snapshot columns); only the **counter fire path + its reads** are missing. Surfaced by the
-    #193 whole-branch review; verify the fiscal boundary stays intact (counter fire must NOT thread
-    note/doneness into `sale_lines`/`computeHuella` — same guard as #193).
-  - **Per-option quantity** ("extra shot ×2", author-capped by `option_group_items.max_quantity`,
-    priced per dish) **+ dish-line quantity** (a −/N/+ stepper on each basket line, no auto-merge of
-    identical lines) — LANDED (#186). Deferred follow-ons: on-screen **expo / station-queue / tab**
-    modifier `×N` (needs the server queue reads to carry the option count — the printed kitchen ticket
-    already shows it); `min_select`/`required` now count the SUMMED per-option quantity like
-    `max_select` (one consistent tally — only differs from distinct-count when `min_select > 1`;
-    revisit if a menu ever needs distinct-count minimums).
-  - **Small deferred cleanups** — share `kitchen-print`'s child-line read with `working-order.ts`'s
-    `readModifiersByParent`; lift `catalogue-api`'s `parseOptionalInteger` + the dashboard pick-list
-    add/move/remove into shared helpers; hoist the `groupByParent` receipt/till mirror to
-    `packages/shared`.
-  - **TS-4 partial-transfer guard** — when the unwired partial-transfer UI lands, `transferLines` must
-    keep refusing a modifier child split from its parent (today `tab.transfer_modifier_line`; the picker
-    just doesn't expose partial yet).
-- **#8 Menu-management depth** — Slice A (location↔menu membership dashboard) LANDED (#177, #179).
-  **Remaining (both greenfield, no owner decision pending):** a menu **draft/published** state (only an
-  `active` bool today) and **time-of-day / seasonal scheduling**. (Per-till persisted menu selection was
-  DROPPED — owner call; a switch stays temporary.)
-- **#9 Order-timing alerts** (overdue / forgotten) — LANDED (#185). **Deferred follow-ups** (spec §13):
-  delivery-order floor flash (`timingBand` is tab-scoped); idle-floor escalation (floor advances a band
-  only on its next refetch); real-time push; station-kind threshold defaults; an unbumped-since-fire
-  neglect metric; a shared flash helper.
-- **#6 Reservations (Bookings-1)** — LANDED (#180, #182). **Future** (Tier-B/C, each greenfield):
-  public/online/QR booking, availability/double-booking prevention, reminders (SMS/email), a
-  customer/CRM entity, recurring bookings, a calendar grid, deposits.
+**Bookings (SP14):** Bookings-1 landed (#180, #182); future, each greenfield — public/online/QR
+booking, availability / double-booking prevention, reminders (SMS/email), a customer/CRM entity,
+recurring bookings, a calendar grid, deposits.
 
-**Tier C — valuable, but defer past a first demo or behind-the-scenes:**
+**Tier C — valuable, defer (behind-the-scenes or post-polish):**
 
-10. **Square (and generic CSV) menu import — as a product feature.** The full dashboard flow (auth to a
-    Square account, map its catalogue, ongoing re-import) — a switching-cost story for an owner leaving
-    Square. Spike outcome (2026-08-29): a one-off import is NOT the cheap seed path (the demo menu was
-    hand-authored). MISSING; greenfield + external API.
-11. **Definable roles with selectable privileges.** Roles are a fixed 4-value enum + a code-defined
-    permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a large
-    backend change. Demoable on the fixed roles for now.
-12. **Payment-provider config UI** (Stripe / SumUp / …). No dashboard UI today (provider is env-stamped,
-    sealed via the credentials CLI) and no SumUp integration at all; also gated on the unanswered SumUp
-    offline question (*Debt → SumUp*). Behind-the-scenes for a demo.
-13. **AEAT cert / Veri*Factu management UI.** First-run only today (`apps/setup` cert screen);
-    `cert-expiry.ts` monitors but there is no view/rotate/renew surface. Behind-the-scenes.
-14. **Hardware config profiles per device kind.** No profile abstraction exists; lowest demo value.
+- **Square (and generic CSV) menu import** — full dashboard flow (auth, map catalogue, re-import): a
+  switching-cost story for an owner leaving Square. A one-off import is NOT the cheap seed path (spike,
+  2026-08-29). Greenfield + external API.
+- **Definable roles with selectable privileges** — roles are a fixed 4-value enum + a code-defined
+  permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a large
+  backend change.
+- **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
+  the credentials CLI); also gated on the SumUp offline question (*Debt → SumUp*).
+- **AEAT cert / Veri*Factu management UI** — first-run only today (`apps/setup` cert screen);
+  `cert-expiry.ts` monitors but there is no view/rotate/renew surface.
+- **Hardware config profiles per device kind** — no profile abstraction exists.
 
-### Parked below the demo (real, but not until there's something to show)
+### Parked (real, but beneath the two tracks)
 
 - **Engage a fiscal advisor** — a parallel *human* task (long lead time), not a build; worth starting,
-  blocks nothing in the demo. See *The advisor gap*.
-- **Sync completion beyond C2b** — fiscal-lane / hash-chain sync (H2, owner-gated), multi-tenant
-  transport, cloud-mirror C-remainder follow-ups. See *Open threads → Sync*.
+  blocks nothing. See *The advisor gap*.
+- **Sync completion beyond the landed lanes** (Track 2) — fiscal-lane / hash-chain sync (H2,
+  owner-gated), multi-tenant transport, cloud-mirror C-remainder. See *Open threads → Sync*.
 - **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
-  intra-community 32–39) + two pre-filing caveats. Distinct from the demo sales screen (Tier A #1):
-  AEAT filing completeness (asesor-gated), not an owner takings view. See *Open threads → Reporting*.
-- **Printing cloud-poll transports + expo device kind** — the subsystem, KDS, receipt + cash-drawer are
-  built; a single-printer demo needs none of the rest. See *Open threads → Printing*.
-- **Cloud trial on-ramp** — gated on Waitron-cloud infra that does not exist yet; the demo runs in dev.
-  See *Open threads → Onboarding*.
-- **Recipes → stock → procurement (depth)** — recipe-authoring is built; plate costing / stock
-  depletion / suppliers/POs is post-demo product depth. See *Open threads → Recipes*.
-- **Distribution / deployment / failover remainder** — appliance image, on-device agent, reroute, SIF
-  promotion/fencing + till-side failover. See *Open threads → SIF topology*.
+  intra-community 32–39) + two pre-filing caveats: AEAT filing completeness (asesor-gated), not an owner
+  takings view. See *Open threads → Reporting*.
+- **Printing cloud-poll transports + expo device kind** — subsystem, KDS, receipt + cash-drawer built;
+  the rest is post-polish. See *Open threads → Printing*.
+- **Cloud trial on-ramp** — gated on Waitron-cloud infra that does not exist yet. See *Open threads →
+  Onboarding*.
+- **Recipes → stock → procurement (depth)** — recipe-authoring built; plate costing / stock depletion /
+  suppliers/POs is product depth. See *Open threads → Recipes*.
+- **Distribution / deployment / failover remainder** (Track 2) — appliance image, on-device agent,
+  reroute, SIF promotion/fencing + till-side failover. See *Open threads → SIF topology*.
 
 **Later / smaller:** SumUp card provider (gated, *Debt*) · D3 payroll export (integrate-not-build) ·
 accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering
-(SP15) · the owner-added table-service extensions (per-seat ordering; multiple tabs per table — both
-reopen settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish**
-(routing read-back/audit view + station kind; definable kitchen statuses). See *Open threads*.
+(SP15) · owner-added table-service extensions (per-seat ordering; multiple tabs per table — reopen
+settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish** (routing
+read-back/audit view + station kind; definable kitchen statuses). See *Open threads*.
 
 **Cloud services — parked for later review.** The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
@@ -266,7 +225,7 @@ transitions) and automated GitHub-issue creation (needs a stored token in `@wait
   trail (Slice 1 logs only `#selectScreen` sidebar clicks).
 - Roll the trail + report button out to `apps/setup`.
 
-### Sync completion (C2b LANDED #162; rest parked below the demo)
+### Sync completion (rest parked; two slices buildable-and-background NOW — Track 2)
 
 Mechanism is decided and slices 1–3 + ops + the cloud-mirror A/B/C1/C2a/C2b are landed:
 cross-replication is **application-level** (an outbox — `sync_log` + a generic capture trigger, apply as
@@ -277,6 +236,16 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
 #153), the mirror-mode server (C2a, #155 + hardening #164), and the operator flow (C2b, #162 + hardening
 #164). Designs + findings under `docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and
 `*cloud-mirror*`.
+
+**Buildable-and-background NOW (Track 2 — start here, in this order):** (1) **identity-config
+flow-down** — specced + planned, enrols `persons` + `webauthn_credentials` into the ordered lane,
+closes the one *verified* failover gap (the cashier is logged out on failover today), touches no fiscal
+core; refresh the plan's stale table counts first (see *Onboarding* below). (2) **kitchen-sync
+enrolment** (below) — after a short FK-closure design pass. Everything else on the failover /
+cloud-failover track is gated on an unbuilt foundation (break-glass secret mint; reserved-SIF staging,
+which *mints fiscal identity* so it is supervised not background; the backup regime; the membership
+wire-protocol), on real cloud hosting/relay, on the go-native decision, or on the owner-gated fiscal H2
+lane. Mapped 2026-09-01.
 
 **Remaining, each its own design pass:**
 
@@ -297,7 +266,7 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
   kitchen-sync slice lands (both were built single-writer-per-row). The `dining_tables` HARD GATE is
   closed by C1 (#153).
 
-### Reporting fiscal remainder (parked below the demo)
+### Reporting fiscal remainder (parked)
 
 Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-desglose-and-modelo303-spec.md).
 
@@ -315,7 +284,7 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 - **Duplicate-invoice-key decision:** `(tenant_id, supplier_tax_id, supplier_invoice_number)` is
   unique-forever today — asesor to confirm per-year vs forever.
 
-### Printing + hardware surface (built; remainder parked below the demo)
+### Printing + hardware surface (built; remainder parked)
 
 The printing subsystem is built and security-reviewed, with kitchen (KDS-4), counter-receipt +
 cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
@@ -347,7 +316,7 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 
 ### KDS operations — routing, order timings & status config
 
-**Order routing — BUILT, composes into the demo.** Item→station (`products.station_id ??
+**Order routing — BUILT.** Item→station (`products.station_id ??
 categories.station_id ??` the location default; snapshotted at fire, fails loud `station.no_default`),
 station→printer (`station_printers` m2m + per-printer scope), receipt→printer (per-till
 `receipt_printer_id` + per-location `receipt_print_mode`). "drinks → bar, food → kitchen, grill → grill"
@@ -413,14 +382,17 @@ option** for the cold-restore re-registration path.
   "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and unverified; the trust
   page instructs + offers the download/QR but does not assert trust state.
 
-**Parked below the demo (distribution / failover):**
+**Parked beneath the two tracks (distribution / failover):**
 
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
   tenant. Gated on Waitron-cloud infra that does not exist yet.
 - **Identity-config flow-down** (own spec) — `sessions` + the `identity` package are outside the sync
   set, so a failover **logs the user out today**. Identity *config* must flow to a read-only secondary
   the way catalogue does; the *session* must not replicate. Re-establishment: PIN-re-prompt v1 →
-  portable signed token later.
+  portable signed token later. **Track 2 start-here slice** (mapped 2026-09-01): specced **and** planned
+  (`plans/2026-08-16-identity-config-flow-down.md`), buildable-and-background now — enrols `persons` +
+  `webauthn_credentials` into the ordered lane, keeps `sessions`/`webauthn_challenges` out; refresh the
+  plan's stale table counts (the registry now enrols 17) before dispatch.
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
   venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
   decision**.
@@ -506,7 +478,7 @@ the re-gating of the singleton duties onto `isSingletonPrimary` (#168) are lande
 [compliance/asesor-questions.md](compliance/asesor-questions.md) have nowhere to go.
 [compliance/who-to-ask.md](compliance/who-to-ask.md) is blunt: *"every candidate turned out to be a
 marketing page. Assume you will be educating whoever you hire."* — so engaging is itself a task with a
-lead time (a parallel human task — worth starting, but blocks nothing in the demo).
+lead time (a parallel human task — worth starting, but blocks nothing).
 
 **The task is a re-read, then engage.** Two architectural shifts changed the question list: [#19] (cloud
 is a sync root, not a shared system of record) and #33 (server-as-SIF). Several older questions assumed
