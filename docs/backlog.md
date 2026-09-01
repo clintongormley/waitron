@@ -47,12 +47,13 @@ beneath them.
   every chunk of functionality: each area's current behaviour is shown to the owner, who corrects
   intuitiveness/correctness problems, and the fixes land. **[ui-review.md](ui-review.md) is the
   authoritative tracker** — which areas are examined, which remain, and the corrections against each.
-- **Track 2 — robustness / infra (background).** Primary/secondary failover, cloud failover, sync
-  completion — unfinished, and what makes Waitron a complete product. Runs in background / parallel
-  sessions, soundness-first. Gates + detail under *Open threads → SIF topology / Sync / Onboarding*;
-  the two slices buildable-and-background **now** are called out there. **Never autonomously land
-  anything touching the unrepairable fiscal core (H2)** — hash-chained records, never-reused invoice
-  numbers.
+- **Track 2 — robustness / infra (its own track).** Primary/secondary failover, cloud failover, sync
+  completion — unfinished, and what makes Waitron a complete product. Run it as a **separate
+  interactive session** (its own worktree), in parallel with Track 1, soundness-first — it does not
+  have to be unattended/background; the real question is ready-to-build vs gated. Gates + the
+  infra-session **start-here menu** are under *Open threads → SIF topology / Sync / Onboarding*.
+  **Never land anything touching the unrepairable fiscal core (H2) without owner sign-off** —
+  hash-chained records, never-reused invoice numbers.
 
 **Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
 deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
@@ -225,7 +226,7 @@ transitions) and automated GitHub-issue creation (needs a stored token in `@wait
   trail (Slice 1 logs only `#selectScreen` sidebar clicks).
 - Roll the trail + report button out to `apps/setup`.
 
-### Sync completion (rest parked; two slices buildable-and-background NOW — Track 2)
+### Sync completion (rest parked; infra-session start-here menu — Track 2)
 
 Mechanism is decided and slices 1–3 + ops + the cloud-mirror A/B/C1/C2a/C2b are landed:
 cross-replication is **application-level** (an outbox — `sync_log` + a generic capture trigger, apply as
@@ -237,15 +238,25 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
 #164). Designs + findings under `docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and
 `*cloud-mirror*`.
 
-**Buildable-and-background NOW (Track 2 — start here, in this order):** (1) **identity-config
-flow-down** — specced + planned, enrols `persons` + `webauthn_credentials` into the ordered lane,
-closes the one *verified* failover gap (the cashier is logged out on failover today), touches no fiscal
-core; refresh the plan's stale table counts first (see *Onboarding* below). (2) **kitchen-sync
-enrolment** (below) — after a short FK-closure design pass. Everything else on the failover /
-cloud-failover track is gated on an unbuilt foundation (break-glass secret mint; reserved-SIF staging,
-which *mints fiscal identity* so it is supervised not background; the backup regime; the membership
-wire-protocol), on real cloud hosting/relay, on the go-native decision, or on the owner-gated fiscal H2
-lane. Mapped 2026-09-01.
+**Track 2 infra-session — start-here menu (mapped 2026-09-01).** The infra track runs as its own
+interactive session, so "needs supervision" is not a disqualifier — the real question is ready-to-build
+vs gated on an unbuilt foundation or an external dependency:
+
+- **Ready to build now:** (1) **identity-config flow-down** — specced + planned; enrols `persons` +
+  `webauthn_credentials` into the ordered lane, closes the one *verified* failover gap (the cashier is
+  logged out on failover today), touches no fiscal core; refresh the plan's stale table counts first
+  (see *Onboarding* below). (2) **kitchen-sync enrolment** (below) — after a short FK-closure design
+  pass.
+- **Highest-leverage next design pass** (spec-only, unblocks the most): the **membership & rejoin
+  wire-protocol** (promotion-failover spec §9 item 1) — gates promote Slice 5 + the conflict watcher,
+  and is entangled with both open split-brain seams. Owner-reviewed, since it sets topology direction.
+- **Foundation-first, then its dependents (fiscal-adjacent, owner-gated):** **reserved-SIF staging**
+  mints the installation number + disjoint series → unblocks promote **Slice 3**, the C2a promote
+  action, and starting the primary-only workers on promotion.
+- **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); backup regime
+  (→ Slice 4); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay); the go-native decision
+  (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
+  owner sign-off.
 
 **Remaining, each its own design pass:**
 
@@ -390,7 +401,7 @@ option** for the cold-restore re-registration path.
   set, so a failover **logs the user out today**. Identity *config* must flow to a read-only secondary
   the way catalogue does; the *session* must not replicate. Re-establishment: PIN-re-prompt v1 →
   portable signed token later. **Track 2 start-here slice** (mapped 2026-09-01): specced **and** planned
-  (`plans/2026-08-16-identity-config-flow-down.md`), buildable-and-background now — enrols `persons` +
+  (`plans/2026-08-16-identity-config-flow-down.md`), ready to build now — enrols `persons` +
   `webauthn_credentials` into the ordered lane, keeps `sessions`/`webauthn_challenges` out; refresh the
   plan's stale table counts (the registry now enrols 17) before dispatch.
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
