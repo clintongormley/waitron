@@ -363,7 +363,7 @@ no per-modifier/per-time rules).
 **user-definable kitchen-status list** (the table-status editor's equivalent) does NOT exist — kitchen
 tickets run a fixed queued→preparing→bumped lifecycle. Low priority (owner, 2026-08-29).
 
-**Coursing editing & kitchen corrections — PR #191 (open, ready to land).** Server verbs to move a
+**Coursing editing & kitchen corrections — LANDED (#191).** Server verbs to move a
 held line's course (`setLineCourse`), fire specific held lines / send-all (`sendLines`), hold lines on
 send, un-send a not-started line (`recallLines`), and VOID/RECALLED correction slips on recall & void;
 till UI for per-line course move, a round-builder hold toggle, and state-gated Send/Recall/Cancel with
