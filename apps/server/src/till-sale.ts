@@ -38,7 +38,7 @@ import {
   readInvoiceNumber,
   toVatBreakdown,
 } from "./working-order.js";
-import type { TillSaleDeps } from "./working-order.js";
+import type { LineExtras, TillSaleDeps } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
 import { enqueueReceiptReprint, enqueueSaleReceipt } from "./receipt-print.js";
 
@@ -74,12 +74,16 @@ export interface TillSaleRequest {
    *  each an `optionGroupItemId` chosen from the product's attached option groups; the server validates
    *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. An
    *  option MAY carry `quantity` (a small positive integer, absent = 1) — the per-option count, capped
-   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate. */
-  lines: {
+   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate.
+   *
+   *  A line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated and persisted server-side and
+   *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
+   *  on this wire. */
+  lines: ({
     productId: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
-  }[];
+  } & LineExtras)[];
   /**
    * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
    *  - `cash` — `amount` is the money tendered; the sale settles at the total and `change` is the
@@ -201,12 +205,14 @@ export interface PayWorkingOrderRequest {
   /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
    *  locked lines (see this interface's doc comment). A walk-up line MAY carry selected modifier
    *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`; each
-   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. */
-  lines: {
+   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. A line MAY
+   *  also carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never threaded
+   *  into a fiscal projection. Declared here because the till already sends them on this wire. */
+  lines: ({
     productId: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
-  }[];
+  } & LineExtras)[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
   tender: TillTender;
@@ -227,8 +233,10 @@ export interface PayWorkingOrderRequest {
  */
 export interface IntegratedPayRequest {
   id: string;
-  /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock). */
-  lines: { productId: string; quantity: string }[];
+  /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock).
+   *  A line MAY carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never
+   *  threaded into a fiscal projection. Declared here because the till already sends them on this wire. */
+  lines: ({ productId: string; quantity: string } & LineExtras)[];
   /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
    *  (`TillConfig.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
   tip?: string;

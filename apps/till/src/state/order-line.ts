@@ -8,6 +8,7 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
+import type { Doneness } from "../api/client.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 
 /**
@@ -103,4 +104,30 @@ export function toWireOption(option: SelectedLineOption): {
     wireOption.quantity = option.quantity;
   }
   return wireOption;
+}
+
+/**
+ * Maps a line's per-line customisation (order-line customisation) to the `note`/`doneness` fields every
+ * send builder spreads onto its wire line (`SaleLine`, `RoundLine`). Each key is present ONLY when the
+ * line carries it — the same omission pattern as {@link toWireOption} — so a plain line's wire is
+ * byte-identical to before (an empty object spreads nothing). The ONE mapping shared by `till-app`'s
+ * `#currentSaleLines`, `till-table-order-screen`'s round builder, and the modifier picker's confirm
+ * (`product-grid`). The server trims/validates both; they never reach a sale or a huella.
+ *
+ * The parameter is the MINIMAL `{ note?; doneness? }` shape, not the full `OrderLine` — both `OrderLine`
+ * and the picker's `ModifierConfirmDetail` satisfy it structurally, so every caller passes its own line
+ * object directly without hand-copying the two fields first.
+ */
+export function toWireLineExtras(line: { note?: string; doneness?: Doneness }): {
+  note?: string;
+  doneness?: Doneness;
+} {
+  const extras: { note?: string; doneness?: Doneness } = {};
+  if (line.note !== undefined) {
+    extras.note = line.note;
+  }
+  if (line.doneness !== undefined) {
+    extras.doneness = line.doneness;
+  }
+  return extras;
 }

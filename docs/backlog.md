@@ -89,11 +89,18 @@ live updates and the per-device layout editor (both under *Debt → cross-cuttin
     (derived from a per-ingredient `dietary_origin`) + halal/kosher (manual), with a per-dish manual
     override and per-option as-served overlays; surfaced on the till menu diet filter + basket +
     expo/KDS badges + the dashboard recipe/product/option authoring UIs. **Cautious** posture: an
-    unreviewed ingredient reads diet "unknown", never a false positive. Sibling spec
-    `docs/superpowers/specs/2026-08-31-order-line-customisation-design.md` (free-text line note + meat
-    doneness) is designed and depends on this feature's `meat` origin — NOT yet implemented. The
+    unreviewed ingredient reads diet "unknown", never a false positive. The
     **customer-facing menu surface stays PARKED** (its own future sub-project); the published product
     `diet` field is ready for it.
+  - **Order-line customisation** — LANDED (this branch). Per-line free-text `note` ("hold the mayo",
+    "hold the onions") reachable on EVERY basket line via a per-line editor (fast-add preserved) + a
+    `doneness` picker (rare…well_done) that appears only for meat dishes (gated on the dietary
+    `diet.contains` ∋ meat — consumes #190's `meat` origin). Both are **KITCHEN-only, NON-FISCAL**:
+    snapshotted onto `ticket_items` at fire, never in `sale_lines`/the huella (pinned by a
+    huella-invariance guard). Rendered on the till basket, station queue, expo, and printed kitchen
+    ticket. **Known out-of-scope follow-up:** editing note/doneness on an ALREADY-SENT tab line
+    (post-fire drawer `TabLine`) is NOT supported — it would need a new server endpoint + re-fire
+    semantics; today both are set at the ordering stage, before send.
   - **Per-option quantity** ("extra shot ×2", author-capped by `option_group_items.max_quantity`,
     priced per dish) **+ dish-line quantity** (a −/N/+ stepper on each basket line, no auto-merge of
     identical lines) — LANDED (#186). Deferred follow-ons: on-screen **expo / station-queue / tab**
@@ -194,7 +201,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190) | menu draft/publish + schedule (#8); customer-facing menu surface + order-line customisation spec parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190), order-line customisation (kitchen-only line note + meat doneness) | menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 

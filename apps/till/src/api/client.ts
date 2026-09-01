@@ -324,6 +324,22 @@ export interface ProductCatalogue {
 }
 
 /**
+ * The meat-doneness enum (order-line customisation) — a LOCAL redefinition of the server's
+ * `packages/db` `Doneness`, the same bundle-decoupling rationale as every other type in this file (see
+ * the file header). Values MUST match the server's `DONENESS` tuple exactly (`schema/orders.ts`); the
+ * server re-validates any `doneness` it receives against that enum (`working_order.invalid_doneness`). NON-FISCAL:
+ * doneness lives only on `working_order_lines`/`ticket_items` (snapshotted at fire), never on the fiscal
+ * projection or a huella.
+ *
+ * Declared as a runtime `as const` TUPLE so the `Doneness` TYPE is DERIVED from it — the client picker
+ * (`line-extras-editor`) imports this one array rather than re-listing the five values, and the type
+ * pins them so the array and the union can never drift. Kept a client-local literal, NOT imported from
+ * `@waitron/db` at runtime (the bundle rule — see the file header).
+ */
+export const DONENESS = ["rare", "medium_rare", "medium", "medium_well", "well_done"] as const;
+export type Doneness = (typeof DONENESS)[number];
+
+/**
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
  * `options` (ordering modifiers) are the selected modifiers on the line, each naming an
  * `optionGroupItemId` the server resolves AUTHORITATIVELY (price, VAT, name) and files as a child line
@@ -334,11 +350,19 @@ export interface ProductCatalogue {
  * line — never `[]` — so a no-modifier sale is byte-identical to before. The server (`POST /api/sales`,
  * `addTabRound`) reads `options ?? []`; a `weight` line carrying options is refused server-side. The
  * client sends only the id (and the count when > 1): the running line price is DISPLAY-ONLY.
+ *
+ * `note` (a free-text kitchen instruction, capped at 200 chars server-side) and `doneness` (the meat
+ * enum above) are the per-line customisation (order-line customisation, spec §2/§3), NON-FISCAL: the
+ * server trims/validates them and stores them on the working-order line only, never on the sale. Both
+ * are ABSENT for a plain line — a whitespace-only note is "not chosen" and omitted — so a no-note,
+ * no-doneness sale stays byte-identical to before.
  */
 export interface SaleLine {
   productId: string;
   quantity: string;
   options?: { optionGroupItemId: string; quantity?: number }[];
+  note?: string;
+  doneness?: Doneness;
 }
 
 /**
@@ -565,6 +589,13 @@ export interface StationQueueItem {
    *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (the auto-fired
    *  earliest course, or released via {@link TillApi.fireCourse}). */
   firedAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL) — the
+   *  SNAPSHOTTED `note`/`doneness` the server froze at fire (not the live line, so a later edit never
+   *  changes what the cook sees). The KDS renders the doneness PROMINENTLY and the note as sub-text beside
+   *  the modifiers. Optional/`null`/absent (⇒ nothing rendered) on an older payload or a plain line —
+   *  {@link Doneness} is the meat-doneness enum, localised via the `doneness.*` labels. */
+  note?: string | null;
+  doneness?: Doneness | null;
 }
 
 /**
@@ -671,6 +702,12 @@ export interface ExpoItem {
   firedAt: string | null;
   /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
   awayAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
+   *  `note`/`doneness` the server froze at fire, the same fields {@link StationQueueItem.note}/`doneness`
+   *  carry; the pass renders the doneness PROMINENTLY and the note as sub-text. Optional/`null`/absent
+   *  (⇒ nothing rendered) on an older payload or a plain line. */
+  note?: string | null;
+  doneness?: Doneness | null;
   /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
    *  <name>` sub-text beneath this item (Task 14), the same {@link QueueModifier} shape the per-station
    *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically

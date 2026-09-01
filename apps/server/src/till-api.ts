@@ -72,7 +72,7 @@ import {
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
-import type { TicketState } from "./working-order.js";
+import type { LineExtras, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -795,7 +795,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c);
       const body = await c.req.json<{
         id: string;
-        lines: { productId: string; quantity: string }[];
+        // A parked line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `parkOrder` →
+        // `priceOrderLines`, which validates + persists them on the parent dish line.
+        lines: ({ productId: string; quantity: string } & LineExtras)[];
         label?: string;
       }>();
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
@@ -853,7 +855,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await c.req.json<{
-        lines: { productId: string; quantity: string }[];
+        // A line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `updateHeldOrder` →
+        // `priceOrderLines`, which validates + persists them on the parent dish line.
+        lines: ({ productId: string; quantity: string } & LineExtras)[];
         label?: string;
       }>();
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
@@ -1424,13 +1428,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // A round line MAY carry selected modifier `options` (ordering modifiers) — threaded through
         // `addTabRound` → `priceOrderLines`, which expands each into a parent + child rows. Optional, so
         // a plain `{productId, quantity}` round is unchanged. An option MAY carry a per-option `quantity`
-        // (absent = 1), validated + priced server-side against the item's `max_quantity`.
-        lines: {
+        // (absent = 1), validated + priced server-side against the item's `max_quantity`. A round line
+        // MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
+        // line and snapshotted onto its ticket item at fire.
+        lines: ({
           productId: string;
           quantity: string;
           courseId?: string | null;
           options?: { optionGroupItemId: string; quantity?: number }[];
-        }[];
+        } & LineExtras)[];
       }>();
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

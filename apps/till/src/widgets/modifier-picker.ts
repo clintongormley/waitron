@@ -3,11 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
+import { selectStyles } from "../select-styles.js";
 import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
+import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
-import type { TillOptionGroup, TillOptionItem, TillProduct } from "../api/client.js";
+import type { Doneness, TillOptionGroup, TillOptionItem, TillProduct } from "../api/client.js";
 
 /**
  * The `modifier-confirm` payload: the parent product the diner was configuring plus the modifiers they
@@ -19,6 +21,12 @@ import type { TillOptionGroup, TillOptionItem, TillProduct } from "../api/client
 export interface ModifierConfirmDetail {
   product: TillProduct;
   options: SelectedLineOption[];
+  /** The free-text kitchen note the operator typed (order-line customisation), or ABSENT when the box
+   * was left blank/whitespace — the grid forwards it to `addProduct`'s `extras` only when present. */
+  note?: string;
+  /** The chosen meat doneness (order-line customisation), or ABSENT when the meat-gated select was left
+   * on its blank default — doneness is optional even on a meat dish. */
+  doneness?: Doneness;
 }
 
 /**
@@ -62,6 +70,8 @@ export interface ModifierConfirmDetail {
 export class TillModifierPicker extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
+    lineExtrasEditorStyles,
     css`
       .group {
         margin: 0 0 var(--wt-space-4);
@@ -146,6 +156,14 @@ export class TillModifierPicker extends LitElement {
    * re-renders; a count that reaches 0 is DELETED from the map, so an unselected item leaves no key.
    */
   @state() private quantities: Record<string, number> = {};
+
+  /** The free-text kitchen note typed into the always-shown textarea (order-line customisation). Held
+   * raw; `#confirm` trims it and omits an empty result, so a whitespace-only note is "not chosen". */
+  @state() private note = "";
+
+  /** The chosen meat doneness, or `""` for the blank "no preference" default (the select shows only on a
+   * meat product). Optional even on a meat dish, so `""` confirms with no `doneness`. */
+  @state() private doneness: Doneness | "" = "";
 
   /** The product's groups that actually have something to pick — the empty-group carry drops `items: []`
    * groups here, so they are neither rendered nor counted as a constraint. */
@@ -253,13 +271,28 @@ export class TillModifierPicker extends LitElement {
     this.#setQuantity(item.id, clamped);
   }
 
-  /** Emit the parent product + the chosen options. Guarded so a force-click past the disabled state can
-   * never confirm an unsatisfied selection. */
-  #confirm(): void {
+  /** Emit the parent product + the chosen options, plus the per-line note/doneness (order-line
+   * customisation) when set. Guarded so a force-click past the disabled state can never confirm an
+   * unsatisfied selection. The note is trimmed and OMITTED when empty (a whitespace-only note is "not
+   * chosen"); doneness is omitted on the blank default. `stopPropagation` keeps the triggering click
+   * from bubbling out of the picker's shadow root alongside the `modifier-confirm` it raises. */
+  #confirm(e?: Event): void {
     if (!this.#allSatisfied) return;
+    e?.stopPropagation();
+    const detail: ModifierConfirmDetail = {
+      product: this.product,
+      options: this.#selectedOptions(),
+    };
+    const note = this.note.trim();
+    if (note !== "") {
+      detail.note = note;
+    }
+    if (this.doneness !== "") {
+      detail.doneness = this.doneness;
+    }
     this.dispatchEvent(
       new CustomEvent<ModifierConfirmDetail>("modifier-confirm", {
-        detail: { product: this.product, options: this.#selectedOptions() },
+        detail,
         bubbles: true,
         composed: true,
       }),
@@ -278,6 +311,17 @@ export class TillModifierPicker extends LitElement {
       @wt-close=${() => this.#cancel()}
     >
       ${this.#renderableGroups.map((group) => this.#renderGroup(group))}
+      ${renderLineExtrasEditor({
+        product: this.product,
+        note: this.note,
+        doneness: this.doneness,
+        onNoteChange: (note) => {
+          this.note = note;
+        },
+        onDonenessChange: (doneness) => {
+          this.doneness = doneness;
+        },
+      })}
       <div class="running">
         <span class="running-label">${t("label.total")}</span>
         <span class="running-amount">${this.#runningPrice}</span>
@@ -290,7 +334,7 @@ export class TillModifierPicker extends LitElement {
         class="confirm"
         variant="primary"
         ?disabled=${!this.#allSatisfied}
-        @click=${() => this.#confirm()}
+        @click=${(e: Event) => this.#confirm(e)}
       >
         ${t("action.add")}
       </wt-button>

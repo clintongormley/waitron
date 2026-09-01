@@ -806,6 +806,10 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
             course: null,
             firedAt: expect.any(String),
+            // Order-line customisation (spec §2/§3): this line carried no note/doneness, so the
+            // snapshotted fields the KDS reads serialise null.
+            note: null,
+            doneness: null,
             // No options selected on this line → an empty modifier sub-item list (ordering modifiers).
             modifiers: [],
             // Just fired — nowhere near the default station's 5-minute warm threshold.

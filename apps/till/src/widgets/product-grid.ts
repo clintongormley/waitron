@@ -6,6 +6,7 @@ import { productName } from "./product-name.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct } from "../api/client.js";
+import { toWireLineExtras } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -107,10 +108,15 @@ export class TillProductGrid extends LitElement {
    * verbatim, so the empty case must be collapsed here).
    */
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
+    // Forward the picker's per-line note/doneness (order-line customisation) through the ONE
+    // `toWireLineExtras` mapping (`detail` satisfies its minimal `{ note?; doneness? }` shape), each key
+    // present only when the picker set it. The result may be an empty `{}`, which `addProduct` treats
+    // exactly like `undefined`, so a note-free, doneness-free confirm leaves the line byte-identical.
     this.store.addProduct(
       detail.product,
       "1",
       detail.options.length > 0 ? detail.options : undefined,
+      toWireLineExtras(detail),
     );
     this.pickerProduct = undefined;
   }

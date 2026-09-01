@@ -513,6 +513,33 @@ describeEachTarget("working_order_lines", (target) => {
     expect(references).toEqual(["option_group_item_id", "product_id"]);
   });
 
+  it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
+    // Per-line kitchen customisation: `note` (free-text instruction) and `doneness` (the meat-doneness
+    // enum) are additive NULLABLE columns, covered by working_order_lines' existing FORCE-RLS policy +
+    // app_user grants. NON-FISCAL: snapshotted to ticket_items at fire, never read into a filed record.
+    const meta = await rows<{
+      column_name: string;
+      is_nullable: string;
+      data_type: string;
+      udt_name: string;
+    }>(
+      db,
+      sql`select column_name, is_nullable, data_type, udt_name
+            from information_schema.columns
+           where table_name = 'working_order_lines' and column_name in ('note', 'doneness')
+           order by column_name`,
+    );
+    expect(meta).toEqual([
+      {
+        column_name: "doneness",
+        is_nullable: "YES",
+        data_type: "USER-DEFINED",
+        udt_name: "doneness",
+      },
+      { column_name: "note", is_nullable: "YES", data_type: "text", udt_name: "text" },
+    ]);
+  });
+
   it("stores every monetary column as numeric(12, 2)", async () => {
     const cols = await rows<{
       column_name: string;

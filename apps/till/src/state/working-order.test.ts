@@ -44,6 +44,31 @@ describe("WorkingOrderStore", () => {
     expect(s.total).toBe("3.20");
   });
 
+  it("attaches a per-line note and doneness passed as extras", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { note: "no mayo", doneness: "medium" });
+    expect(s.lines[0]).toEqual({
+      product: cafe,
+      quantity: "1",
+      note: "no mayo",
+      doneness: "medium",
+    });
+  });
+
+  it("attaches only the extra that is provided (each key omitted when absent)", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { doneness: "rare" });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", doneness: "rare" });
+  });
+
+  it("omits both note and doneness keys when extras are absent or empty", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    s.addProduct(cafe, "1", undefined, {});
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[1]).toEqual({ product: cafe, quantity: "1" });
+  });
+
   it("previews an empty basket as a zero total with no VAT bands", () => {
     const s = new WorkingOrderStore();
     expect(s.total).toBe("0");
@@ -130,6 +155,62 @@ describe("WorkingOrderStore", () => {
     expect(s.lines[0]?.product).toBe(cafe);
     expect(s.lines[1]?.product).toBe(jamon);
     expect(n).toBe(notificationsAfterAdds);
+  });
+
+  // Per-line note + meat-gated doneness (order-line customisation, Task 4b): the basket-line editor
+  // sets a rung line's note/doneness AFTER it was fast-added, via `setLineExtras`. It marks the basket
+  // dirty (the extra rides the wire, so a retrieved order must re-sync) and notifies, exactly like the
+  // other line edits, and applies the SAME omission discipline as the picker — a whitespace-only note
+  // and a blank doneness clear the key rather than storing "".
+  it("setLineExtras attaches a note and doneness to a fast-added line, marks dirty and notifies", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    expect(s.dirty).toBe(false);
+    let n = 0;
+    s.subscribe(() => n++);
+    s.setLineExtras(0, { note: "no onion", doneness: "medium_rare" });
+    expect(s.lines[0]).toEqual({
+      product: cafe,
+      quantity: "1",
+      note: "no onion",
+      doneness: "medium_rare",
+    });
+    expect(s.dirty).toBe(true);
+    expect(n).toBe(1);
+  });
+
+  it("setLineExtras updates only the key it is given, leaving the other extra untouched", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { note: "keep me", doneness: "rare" });
+    // A doneness-only change must not wipe the existing note (partial update).
+    s.setLineExtras(0, { doneness: "well_done" });
+    expect(s.lines[0]).toEqual({
+      product: cafe,
+      quantity: "1",
+      note: "keep me",
+      doneness: "well_done",
+    });
+  });
+
+  it("setLineExtras trims a whitespace-only note and clears a blank doneness (omission discipline)", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", undefined, { note: "old note", doneness: "medium" });
+    s.setLineExtras(0, { note: "   " });
+    s.setLineExtras(0, { doneness: "" });
+    // Both keys are gone — a plain line, byte-identical to a note-free add.
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+  });
+
+  it("setLineExtras is a true no-op for an out-of-range index — no mutation, no notification", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    let n = 0;
+    s.subscribe(() => n++);
+    s.setLineExtras(-1, { note: "x" });
+    s.setLineExtras(3, { note: "x" }); // past the end
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.dirty).toBe(false);
+    expect(n).toBe(0);
   });
 
   it("stops notifying once the subscription is disposed", () => {

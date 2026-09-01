@@ -26,6 +26,7 @@ import {
   categories,
   DEFAULT_TIME_ZONE,
   diningTables,
+  DONENESS,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -40,7 +41,7 @@ import {
   workingOrders,
   workingOrderStatus,
 } from "@waitron/db";
-import type { AllergenMap, Database, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
 import {
   deriveAsServedAllergens,
   deriveAsServedDiet,
@@ -66,6 +67,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { requireNullableString } from "./request-screens.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -96,6 +98,15 @@ type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
  * catalogue and re-pricing the identical basket a second time. Same shape as plain `priceBasket`'s
  * result (both return `PricedLines`); this alias just names the one `priceOrderLines` actually calls. */
 type PricedBasket = PricedLines;
+
+/**
+ * Per-line customisation carried on the wire and threaded through every order path (spec §2/§3): a
+ * free-text kitchen `note` and, for a meat product, a `doneness`. BOTH ARE NON-FISCAL — validated and
+ * persisted server-side on the parent dish line (and snapshotted onto its ticket item at fire), and
+ * NEVER threaded into any sale/fiscal projection or huella. Intersected into each request/parameter
+ * line shape so the field pair (and this rationale) is declared ONCE rather than re-copied per site.
+ */
+export type LineExtras = { note?: string; doneness?: Doneness };
 
 /**
  * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
@@ -132,12 +143,18 @@ async function priceOrderLines(
   // option. Absent/empty `options` = a plain single line, unchanged from before. Per-option quantity:
   // an option MAY carry `quantity` (a small positive integer, absent = 1) — the count of THIS option
   // per dish, capped by the item's `max_quantity`; the child is priced at `dishQty × optionQty`.
-  lines: {
+  //
+  // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note` and a
+  // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`working_order.note_too_long`);
+  // the doneness is validated against the enum (`working_order.invalid_doneness`). Both attach to the PARENT dish
+  // line only — a child modifier row carries neither. Absent = NULL (not chosen); a whitespace-only
+  // note folds to NULL.
+  lines: ({
     productId: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
-  }[],
+  } & LineExtras)[],
 ): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   if (lines.length === 0) {
     // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
@@ -155,7 +172,13 @@ async function priceOrderLines(
   // parent row then its option rows IN THIS SAME ORDER (see its doc), so `lineMeta[i]` lines up with
   // `priced.lines[i]` one-for-one below.
   type LineMeta =
-    | { kind: "parent"; productId: string; courseId: string | null }
+    | {
+        kind: "parent";
+        productId: string;
+        courseId: string | null;
+        note: string | null;
+        doneness: Doneness | null;
+      }
     | { kind: "child"; optionGroupItemId: string };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
@@ -173,6 +196,31 @@ async function priceOrderLines(
     if (product === undefined) {
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
+
+    // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
+    // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
+    // note is TYPE-SCREENED first: a non-string (e.g. `123`) is refused `management.request_invalid`
+    // (a clean 400) rather than reaching `.trim()` as a `123.trim is not a function` TypeError → an
+    // opaque 500 — an absent (`undefined`) note stays "not chosen", the same as before. It is then
+    // trimmed (trailing whitespace never trips the cap) and capped at 200 chars; a note empty after
+    // trimming folds to NULL. The doneness is screened against the enum — the same runtime check keeps a
+    // crafted value out of the `working_order_lines` insert. Both belong to the PARENT dish line and are
+    // carried on its `lineMeta` entry below.
+    const NOTE_LIMIT = 200;
+    const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
+    const trimmedNote = screenedNote?.trim() ?? "";
+    if (trimmedNote.length > NOTE_LIMIT) {
+      throw new AppError("working_order.note_too_long", {
+        length: trimmedNote.length,
+        limit: NOTE_LIMIT,
+      });
+    }
+    const note = trimmedNote.length === 0 ? null : trimmedNote;
+    if (line.doneness !== undefined && !DONENESS.includes(line.doneness)) {
+      throw new AppError("working_order.invalid_doneness", { value: String(line.doneness) });
+    }
+    const doneness = line.doneness ?? null;
+
     const selected = line.options ?? [];
     // Modifiers attach to `each` products only this slice (design): a `weight` product (loose deli by
     // the kilo) carrying options is a crafted request the till never produces — refuse it loud, the
@@ -314,6 +362,8 @@ async function priceOrderLines(
       kind: "parent",
       productId: line.productId,
       courseId: line.courseId ?? product.courseId ?? null,
+      note,
+      doneness,
     });
     for (const option of selectedOptions) {
       lineMeta.push({ kind: "child", optionGroupItemId: option.id });
@@ -430,6 +480,11 @@ async function priceOrderLines(
       // `lineMeta` when the basket was built (data already in hand — the input line's override and the
       // resolved `product.courseId`); a CHILD row inherits no course.
       courseId: meta.kind === "parent" ? meta.courseId : null,
+      // Per-line customisation (spec §2/§3), NON-FISCAL: the validated + normalised note/doneness, on the
+      // PARENT dish line only — a child modifier row carries neither (NULL). Snapshotted onto the
+      // ticket item at fire (`fireLines`), never onto the sale.
+      note: meta.kind === "parent" ? meta.note : null,
+      doneness: meta.kind === "parent" ? meta.doneness : null,
     };
   });
   return { lineRows, priced };
@@ -570,7 +625,9 @@ export function toVatBreakdown(
  */
 export interface ParkOrderRequest {
   id: string;
-  lines: { productId: string; quantity: string }[];
+  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
+  // `createOpenOrder`.
+  lines: ({ productId: string; quantity: string } & LineExtras)[];
   label?: string;
   operatorId?: string;
 }
@@ -603,11 +660,13 @@ export async function createOpenOrder(
   // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
   // which validates them and expands the line into a parent dish row + child option rows. A walk-up
   // counter sale threads them here; park/openTab pass a plain `{productId, quantity}` line (no options).
-  lines: {
+  // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
+  // which validates + persists them on the parent dish line.
+  lines: ({
     productId: string;
     quantity: string;
     options?: { optionGroupItemId: string; quantity?: number }[];
-  }[],
+  } & LineExtras)[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
   // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
@@ -883,11 +942,17 @@ export async function fireLines(
   // line" — covering every caller by construction rather than being repeated at each. `productId` stays
   // nullable in the row shape only so a caller can hand the whole line set through; after the filter it
   // is non-null on every surviving parent.
+  // Per-line customisation (spec §2/§3): each parent line's `note`/`doneness` (NON-FISCAL) rides in on
+  // the same `lines` param — read back from `working_order_lines` by each caller's line-select, exactly
+  // as `courseId` is — and is SNAPSHOTTED onto the `ticket_items` row below (like `station_id`/
+  // `course_id`), so a later edit to the draft line never moves an already-fired ticket.
   lines: {
     id: string;
     productId: string | null;
     courseId: string | null;
     parentLineId: string | null;
+    note: string | null;
+    doneness: Doneness | null;
   }[],
 ): Promise<void> {
   // Keep only PARENT lines (`parent_line_id IS NULL`); child modifier lines fire nothing. Done first, so
@@ -1033,6 +1098,11 @@ export async function fireLines(
       workingOrderLineId: line.id,
       stationId,
       courseId,
+      // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
+      // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
+      // afterwards never moves this fired ticket.
+      note: line.note,
+      doneness: line.doneness,
       firedAt: fired ? sql`now()` : null,
       state: "queued" as const,
     };
@@ -1228,14 +1298,16 @@ export async function addTabRound(
   tabId: string,
   // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
   // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
-  // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Both optional,
-  // so existing callers (and the till's current `{productId, quantity}` send-round) are unchanged.
-  lines: {
+  // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Per-line
+  // customisation (`LineExtras`): a line MAY carry a `note`/`doneness` (NON-FISCAL), persisted on the
+  // parent dish line and snapshotted onto its ticket item at fire. All optional, so existing callers
+  // (and the till's current `{productId, quantity}` send-round) are unchanged.
+  lines: ({
     productId: string;
     quantity: string;
     courseId?: string | null;
     options?: { optionGroupItemId: string; quantity?: number }[];
-  }[],
+  } & LineExtras)[],
 ): Promise<void> {
   await lockOpenTab(tx, tabId);
   if (lines.length === 0) {
@@ -1263,6 +1335,8 @@ export async function addTabRound(
     productId: workingOrderLines.productId,
     courseId: workingOrderLines.courseId,
     parentLineId: workingOrderLines.parentLineId,
+    note: workingOrderLines.note,
+    doneness: workingOrderLines.doneness,
   });
   // Fire the round: `fireLines` fires only the PARENT dish lines and NEVER a child modifier line
   // (`parent_line_id` set) — a modifier is part of its dish, not its own kitchen ticket. The parent-only
@@ -2455,7 +2529,8 @@ export async function getHeldOrder(
  * The basket is a full REPLACEMENT, not a delta: whatever the till sends becomes the order's lines.
  */
 export interface UpdateHeldOrderRequest {
-  lines: { productId: string; quantity: string }[];
+  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
+  lines: ({ productId: string; quantity: string } & LineExtras)[];
   label?: string;
 }
 
@@ -2734,6 +2809,8 @@ export async function placeOrder(
           productId: workingOrderLines.productId,
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
@@ -2873,6 +2950,8 @@ export async function sendToPrep(
         productId: workingOrderLines.productId,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
+        note: workingOrderLines.note,
+        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
@@ -3175,6 +3254,13 @@ export interface StationQueueItem {
    *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (auto-fired earliest
    *  course, or released via `fireCourse`). */
   firedAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
+   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) rather than the live line, so a later
+   *  draft edit never changes what the kitchen already sees. `note` is a free-text instruction, `doneness`
+   *  the meat-doneness enum; both `null` when the line carried neither. The KDS renders the doneness
+   *  prominently and the note as sub-text beside the modifiers. */
+  note: string | null;
+  doneness: Doneness | null;
   /** `ticket_items.queued_at` — the moment this line reached its station (KDS order-timing alerts, design
    *  §3), so the client's `TickingClock` can re-derive {@link band} between refreshes from this plus the
    *  group's {@link StationQueueGroup.thresholds}. */
@@ -3393,6 +3479,11 @@ export async function listStationQueue(
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       firedAt: ticketItems.firedAt,
+      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — read from the
+      // SNAPSHOTTED `ticket_items` columns (frozen at fire), NOT the live `working_order_lines`, so a
+      // later draft edit never moves what the kitchen already sees.
+      note: ticketItems.note,
+      doneness: ticketItems.doneness,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
@@ -3527,6 +3618,9 @@ export async function listStationQueue(
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       firedAt: row.firedAt,
+      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
+      note: row.note,
+      doneness: row.doneness,
       queuedAt: row.queuedAt,
       // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
       // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
@@ -3552,6 +3646,12 @@ export interface ExpoItem {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
+  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
+   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) — the same snapshot
+   *  {@link StationQueueItem.note}/`doneness` carries, never the live line. Both `null` when the line
+   *  carried neither. The pass renders the doneness prominently and the note as sub-text. */
+  note: string | null;
+  doneness: Doneness | null;
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the pass renders
    *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
    *  (localised client-side, as `name` is). Empty for a plain dish. */
@@ -3661,6 +3761,11 @@ export async function listExpoQueue(
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       awayAt: ticketItems.awayAt,
+      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
+      // `ticket_items` columns (frozen at fire), the same snapshot `listStationQueue` reads, so a later
+      // draft edit never moves what the pass sees.
+      note: ticketItems.note,
+      doneness: ticketItems.doneness,
       // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
       // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
       descriptions: workingOrderLines.descriptions,
@@ -3837,6 +3942,9 @@ export async function listExpoQueue(
       state: row.state,
       firedAt: row.firedAt,
       awayAt: row.awayAt,
+      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
+      note: row.note,
+      doneness: row.doneness,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       // Task 8 — the same as-served profile the station read attaches, safe-defaulted identically.
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {

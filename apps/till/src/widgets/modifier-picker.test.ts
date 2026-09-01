@@ -282,6 +282,76 @@ const brokenProduct: TillProduct = {
   ],
 };
 
+// A MEAT dish (diet.contains includes "meat") carrying one optional group so the picker opens — the
+// doneness picker must appear for it. Leaving the optional side blank keeps "Add" enabled.
+const steak: TillProduct = {
+  id: "steak",
+  descriptions: { en: "Steak", es: "Filete" },
+  pricingUnit: "each",
+  unitPrice: "18.00",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+  diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+  optionGroups: [
+    {
+      id: "g-side",
+      name: { en: "Side", es: "Guarnición" },
+      minSelect: 0,
+      maxSelect: 1,
+      required: false,
+      items: [
+        {
+          id: "i-fries",
+          name: { en: "Fries", es: "Patatas" },
+          priceDelta: "0.00",
+          vatClass: null,
+          maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
+          addOrigins: null,
+          removeOrigins: null,
+        },
+      ],
+    },
+  ],
+};
+
+// A FISH dish (diet.contains ["fish"], not "meat") with an optional group — the doneness picker must
+// be HIDDEN for it, exactly as it is for a product with no diet at all (burger).
+const seabass: TillProduct = {
+  id: "seabass",
+  descriptions: { en: "Sea bass", es: "Lubina" },
+  pricingUnit: "each",
+  unitPrice: "16.00",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+  diet: { vegan: "no", vegetarian: "no", contains: ["fish"] },
+  optionGroups: [
+    {
+      id: "g-side",
+      name: { en: "Side", es: "Guarnición" },
+      minSelect: 0,
+      maxSelect: 1,
+      required: false,
+      items: [
+        {
+          id: "i-fries",
+          name: { en: "Fries", es: "Patatas" },
+          priceDelta: "0.00",
+          vatClass: null,
+          maxQuantity: 1,
+          addAllergens: null,
+          removeAllergens: null,
+          addOrigins: null,
+          removeOrigins: null,
+        },
+      ],
+    },
+  ],
+};
+
 afterEach(cleanupWidgets);
 
 /** The picker the grid opened, or null when none is mounted. */
@@ -660,6 +730,80 @@ describe("till-modifier-picker", () => {
       expect(incButton(picker, "i-large")).toBeNull();
       const radios = picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]');
       expect(radios).toHaveLength(2);
+    });
+  });
+
+  describe("per-line note + meat-gated doneness", () => {
+    /** The note textarea inside the picker, or null when absent. */
+    function noteBox(picker: TillModifierPicker): HTMLTextAreaElement | null {
+      return picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+    }
+    /** The doneness select inside the picker, or null when it is not shown (non-meat). */
+    function donenessBox(picker: TillModifierPicker): HTMLSelectElement | null {
+      return picker.shadowRoot!.querySelector<HTMLSelectElement>('[data-test="line-doneness"]');
+    }
+
+    it("shows a note textarea for EVERY product the picker opens over", async () => {
+      // A non-meat product with modifiers still gets the note box.
+      const burgerPicker = await openPicker(burger, "Burger", new WorkingOrderStore());
+      expect(noteBox(burgerPicker.picker)).not.toBeNull();
+      expect(noteBox(burgerPicker.picker)!.maxLength).toBe(200);
+      // As does a meat product.
+      const steakPicker = await openPicker(steak, "Steak", new WorkingOrderStore());
+      expect(noteBox(steakPicker.picker)).not.toBeNull();
+    });
+
+    it("shows the doneness select ONLY for a product whose diet.contains includes meat", async () => {
+      const steakPicker = await openPicker(steak, "Steak", new WorkingOrderStore());
+      expect(donenessBox(steakPicker.picker)).not.toBeNull();
+      // Five doneness options plus a blank "no preference" default.
+      expect(donenessBox(steakPicker.picker)!.querySelectorAll("option")).toHaveLength(6);
+    });
+
+    it("HIDES the doneness select for a fish product and for a product with no diet", async () => {
+      const fishPicker = await openPicker(seabass, "Sea bass", new WorkingOrderStore());
+      expect(donenessBox(fishPicker.picker)).toBeNull();
+      const burgerPicker = await openPicker(burger, "Burger", new WorkingOrderStore());
+      expect(donenessBox(burgerPicker.picker)).toBeNull();
+    });
+
+    it("carries the typed note and chosen doneness on Add (through to the rung line)", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(steak, "Steak", store);
+
+      const note = noteBox(picker)!;
+      note.value = "well seasoned, no butter";
+      note.dispatchEvent(new Event("input"));
+      const done = donenessBox(picker)!;
+      done.value = "medium_rare";
+      done.dispatchEvent(new Event("change"));
+      await picker.updateComplete;
+
+      addButton(picker).click();
+      await el.updateComplete;
+      expect(store.lines[0]!.note).toBe("well seasoned, no butter");
+      expect(store.lines[0]!.doneness).toBe("medium_rare");
+    });
+
+    it("omits note and doneness when left blank on a meat product (byte-identical line)", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(steak, "Steak", store);
+      addButton(picker).click();
+      await el.updateComplete;
+      // No note typed, no doneness chosen, no side ticked → a plain line with no extra keys.
+      expect(store.lines).toEqual([{ product: steak, quantity: "1" }]);
+    });
+
+    it("folds a whitespace-only note to nothing (not chosen)", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(steak, "Steak", store);
+      const note = noteBox(picker)!;
+      note.value = "   ";
+      note.dispatchEvent(new Event("input"));
+      await picker.updateComplete;
+      addButton(picker).click();
+      await el.updateComplete;
+      expect(store.lines).toEqual([{ product: steak, quantity: "1" }]);
     });
   });
 });

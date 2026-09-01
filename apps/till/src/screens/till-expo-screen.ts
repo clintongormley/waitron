@@ -5,6 +5,7 @@ import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/sh
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { descriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
@@ -262,6 +263,25 @@ export class TillExpoScreen extends LitElement {
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
+         — the same shape the per-station display uses. Doneness is PROMINENT via text WEIGHT (the
+         non-colour tell, house a11y rule); the free-text note is muted sub-text like the modifiers. */
+      .item-customisation {
+        display: flex;
+        flex-direction: column;
+        padding-left: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .item-doneness {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+      }
+
+      .item-note {
+        color: var(--wt-color-text-muted);
       }
 
       /* The item's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
@@ -586,10 +606,35 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#modifiers(item)}${this.#allergens(item)}${dietBadges(
+      ${this.#customisation(item)}${this.#modifiers(item)}${this.#allergens(item)}${dietBadges(
         item.asServedDiet,
         `item-diet-${item.id}`,
       )}
+    </span>`;
+  }
+
+  /** The item's per-line kitchen customisation (order-line customisation, Task 5) as indented sub-text —
+   *  the DONENESS rendered PROMINENTLY (localised `doneness.*` label, bold — the expediter must read how a
+   *  steak is wanted; the weight is the non-colour tell) and the free-text NOTE as muted sub-text. Reads
+   *  the SNAPSHOTTED fields the server froze at fire, the same rendering the per-station display uses.
+   *  `nothing` when the line carried neither, so a plain dish renders identically to before this task. */
+  #customisation(item: ExpoItem): TemplateResult | typeof nothing {
+    const doneness = item.doneness ?? null;
+    const note = item.note ?? null;
+    if (doneness === null && (note === null || note === "")) return nothing;
+    return html`<span class="item-customisation" data-item-customisation=${item.id}>
+      ${
+        doneness !== null
+          ? html`<span class="item-doneness" data-doneness=${doneness}
+              >${t("doneness.label")}: ${donenessLabel(doneness)}</span
+            >`
+          : nothing
+      }
+      ${
+        note !== null && note !== ""
+          ? html`<span class="item-note" data-note>${note}</span>`
+          : nothing
+      }
     </span>`;
   }
 

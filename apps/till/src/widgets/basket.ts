@@ -1,14 +1,17 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { donenessLabel } from "../i18n/doneness-label.js";
+import { selectStyles } from "../select-styles.js";
 import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 
@@ -43,6 +46,8 @@ export class TillBasket extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    selectStyles,
+    lineExtrasEditorStyles,
     css`
       :host {
         display: block;
@@ -57,11 +62,35 @@ export class TillBasket extends LitElement {
 
       .line {
         display: grid;
-        grid-template-columns: 1fr auto auto auto;
+        grid-template-columns: 1fr auto auto auto auto;
         align-items: center;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      /* The per-line note/doneness editor (order-line customisation) — an inline expander opened by the
+         line's Note button, indented under the dish like its option/allergen/diet sub-rows. */
+      .line-extras-editor {
+        padding: var(--wt-space-2) 0 var(--wt-space-3);
+        padding-left: var(--wt-space-4);
+      }
+
+      /* The at-a-glance read-out of a line's SET note/doneness (order-line customisation) — indented
+         under the dish like the allergen/diet rows, a label plus the value. */
+      .line-extras {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        padding: var(--wt-space-1) 0 var(--wt-space-2);
+        padding-left: var(--wt-space-4);
+        font-size: var(--wt-font-size-sm, 0.85em);
+        color: var(--wt-color-text-muted);
+      }
+
+      .line-extras-label {
+        font-weight: 600;
       }
 
       .qty {
@@ -147,11 +176,73 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
+  /** The index of the line whose note/doneness editor (order-line customisation) is expanded, or `null`
+   * when none is — only one line's editor is open at a time. Toggled by each line's Note button. It is a
+   * POSITIONAL index into `store.lines`, so it must be kept in step with any structural change that
+   * shifts positions: {@link #removeLine} adjusts it atomically with an in-basket removal, and a
+   * whole-basket swap (clear / loadFrom) closes it via {@link #onStoreChanged} — otherwise a note (which
+   * can carry allergy info) would reattach to whatever line slid into the edited line's old slot. */
+  @state() private editingIndex: number | null = null;
+
+  /** The `store.id` last seen by {@link #onStoreChanged}, used to detect a whole-basket swap. `clear`
+   * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
+   * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
+   * first change fires (the initial render already starts with no editor open). */
+  #lastStoreId?: string;
+
   constructor() {
     super();
     // Re-render on any basket change (add / remove / clear); the controller owns the subscription
-    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned.
-    new StoreChangeController(this, () => this.store);
+    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned. The
+    // custom handler also closes a dangling editor when the whole basket is swapped out.
+    new StoreChangeController(
+      this,
+      () => this.store,
+      "changed",
+      () => this.#onStoreChanged(),
+    );
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Seed the swap detector with the store's CURRENT id (the `store` property is assigned before
+    // connect). Without this the first `"changed"` would see `#lastStoreId` still `undefined`, read the
+    // unchanged id as a swap, and wrongly close an editor on the first in-basket add / remove.
+    this.#lastStoreId = this.store.id;
+  }
+
+  /**
+   * Handle a store `"changed"` notification. Besides re-rendering, it closes any open note/doneness
+   * editor when the basket was SWAPPED WHOLESALE — `clear` (fresh id) or `loadFrom` (a retrieved order's
+   * id) — because the line the editor pointed at no longer exists and a positional index into the new
+   * basket would open the editor on an unrelated line. An in-basket add / remove / edit keeps the id and
+   * is handled positionally ({@link #removeLine}), so it does not close the editor here.
+   */
+  #onStoreChanged(): void {
+    if (this.store.id !== this.#lastStoreId) {
+      this.#lastStoreId = this.store.id;
+      this.editingIndex = null;
+    }
+    this.requestUpdate();
+  }
+
+  /**
+   * Remove the line at `index`, keeping the open editor's {@link editingIndex} in step with the splice so
+   * a note never reattaches to the wrong dish. Removing the EDITED line closes the editor; removing an
+   * EARLIER line slides every later line (the edited one included) down by one, so the tracked index must
+   * follow it down. A later line's removal leaves the edited line's index unchanged. This adjustment is
+   * done BEFORE `store.removeLine` so the re-render that its `"changed"` fires already sees the corrected
+   * index.
+   */
+  #removeLine(index: number): void {
+    if (this.editingIndex !== null) {
+      if (index === this.editingIndex) {
+        this.editingIndex = null;
+      } else if (index < this.editingIndex) {
+        this.editingIndex -= 1;
+      }
+    }
+    this.store.removeLine(index);
   }
 
   override render() {
@@ -167,15 +258,27 @@ export class TillBasket extends LitElement {
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
+              class="note-toggle"
+              variant="ghost"
+              size="md"
+              data-test=${`line-note-button-${index}`}
+              aria-expanded=${this.editingIndex === index}
+              aria-label=${`${t("line.note.button")} ${productName(line.product)}`}
+              @click=${() => this.#toggleEditor(index)}
+            >
+              ${t("line.note.button")}
+            </wt-button>
+            <wt-button
               class="remove"
               variant="ghost"
               size="md"
               aria-label=${`${t("action.remove")} ${productName(line.product)}`}
-              @click=${() => this.store.removeLine(index)}
+              @click=${() => this.#removeLine(index)}
             >
               <span aria-hidden="true">×</span>
             </wt-button>
           </div>
+          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
           ${(line.options ?? []).map(
             // Each selected modifier on its own indented row — the option's name and its delta (0,00 for
             // a free option). No remove control: a child is removed only by removing its dish above,
@@ -194,6 +297,63 @@ export class TillBasket extends LitElement {
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
+    `;
+  }
+
+  /** Open the note/doneness editor for `index`, or close it if it is already the open one (the Note
+   * button toggles). A store change never closes an open editor — only the button does. */
+  #toggleEditor(index: number): void {
+    this.editingIndex = this.editingIndex === index ? null : index;
+  }
+
+  /**
+   * The line's SET note/doneness as an at-a-glance indented sub-row (order-line customisation), or
+   * `nothing` when the line carries neither — so a plain line adds no chrome. Shows the kitchen note and,
+   * for a meat line with a chosen doneness, its localised label, mirroring the option/allergen/diet rows.
+   */
+  #extrasRow(line: OrderLine, index: number) {
+    if (line.note === undefined && line.doneness === undefined) return nothing;
+    return html`
+      <div class="line-extras" data-test=${`line-extras-${index}`}>
+        ${
+          line.note !== undefined
+            ? html`<span class="line-extras-note"
+                ><span class="line-extras-label">${t("line.note.label")}:</span> ${line.note}</span
+              >`
+            : nothing
+        }
+        ${
+          line.doneness !== undefined
+            ? html`<span class="line-extras-doneness"
+                ><span class="line-extras-label">${t("doneness.label")}:</span>
+                ${donenessLabel(line.doneness)}</span
+              >`
+            : nothing
+        }
+      </div>
+    `;
+  }
+
+  /**
+   * The inline note/doneness EDITOR (order-line customisation) for the line at `index`, shown only while
+   * that line's Note button has it expanded — the SAME shared field group the modifier picker renders
+   * ({@link renderLineExtrasEditor}), so a meat line offers the doneness select and any line offers the
+   * note. Each change drives the store's {@link WorkingOrderStore.setLineExtras}, which trims/omits and
+   * notifies (re-rendering the sub-row above). This is the affordance that makes note/doneness reachable
+   * on a plain fast-added line that never opened the picker.
+   */
+  #extrasEditor(line: OrderLine, index: number) {
+    if (this.editingIndex !== index) return nothing;
+    return html`
+      <div class="line-extras-editor">
+        ${renderLineExtrasEditor({
+          product: line.product,
+          note: line.note ?? "",
+          doneness: line.doneness ?? "",
+          onNoteChange: (note) => this.store.setLineExtras(index, { note }),
+          onDonenessChange: (doneness) => this.store.setLineExtras(index, { doneness }),
+        })}
+      </div>
     `;
   }
 

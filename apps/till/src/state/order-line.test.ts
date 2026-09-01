@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { dishGross, lineGross, optionGross, quantityLabel, toWireOption } from "./order-line.js";
+import {
+  dishGross,
+  lineGross,
+  optionGross,
+  quantityLabel,
+  toWireLineExtras,
+  toWireOption,
+} from "./order-line.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
 
@@ -117,6 +124,25 @@ describe("order-line pricing", () => {
 
     it("omits quantity when it is absent", () => {
       expect(toWireOption(shot)).toEqual({ optionGroupItemId: "opt-shot" });
+    });
+  });
+
+  describe("toWireLineExtras", () => {
+    it("forwards note and doneness when both are present", () => {
+      const line: OrderLine = { product: cafe, quantity: "1", note: "no mayo", doneness: "medium" };
+      expect(toWireLineExtras(line)).toEqual({ note: "no mayo", doneness: "medium" });
+    });
+
+    it("forwards only the field that is present", () => {
+      const donenessOnly: OrderLine = { product: cafe, quantity: "1", doneness: "well_done" };
+      expect(toWireLineExtras(donenessOnly)).toEqual({ doneness: "well_done" });
+      const noteOnly: OrderLine = { product: cafe, quantity: "1", note: "extra crispy" };
+      expect(toWireLineExtras(noteOnly)).toEqual({ note: "extra crispy" });
+    });
+
+    it("returns an empty object when neither is present", () => {
+      const plain: OrderLine = { product: cafe, quantity: "1" };
+      expect(toWireLineExtras(plain)).toEqual({});
     });
   });
 });

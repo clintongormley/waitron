@@ -51,6 +51,77 @@ describe("formatKitchenTicket", () => {
       expect(text).toContain("09:05");
     });
 
+    it("prints the doneness prominently and the note as indented sub-lines beneath the dish", () => {
+      const text = decodeTicket(
+        formatKitchenTicket({
+          scope: "station",
+          stationName: "Cocina",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          items: [
+            {
+              qty: 1,
+              name: "Steak",
+              doneness: "medium_rare",
+              note: "sin sal",
+              modifiers: ["Grande"],
+            },
+          ],
+        }),
+      );
+      const lines = text.split("\n");
+      const dish = lines.findIndex((l) => l.includes("1 x Steak"));
+      expect(dish).toBeGreaterThanOrEqual(0);
+      // Doneness is PROMINENT (upper-cased, underscores → spaces, marked) and sits directly beneath the
+      // dish — the cook must read it first — above the `+ modifier` and the note sub-lines.
+      expect(lines[dish + 1]).toContain("MEDIUM RARE");
+      expect(lines[dish + 1]).not.toContain("medium_rare");
+      expect(text).toContain("  + Grande");
+      // The free-text note prints as its own indented sub-line, distinct from a `+ modifier`.
+      expect(text).toMatch(/\n {2}\* sin sal/);
+    });
+
+    it("sanitizes a free-text note with a newline so it prints on ONE ticket line", () => {
+      // A free-text note is operator-typed and may carry newlines / control bytes; printed raw they
+      // would split the note across ticket lines (or emit stray control commands) and garble the
+      // thermal ticket. The control chars collapse to a space so the note stays a single `* ` sub-line.
+      const text = decodeTicket(
+        formatKitchenTicket({
+          scope: "station",
+          stationName: "Cocina",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          items: [{ qty: 1, name: "Steak", note: "sin sal\nmuy hecho" }],
+        }),
+      );
+      const lines = text.split("\n");
+      // Exactly one sub-line, with the newline collapsed to a space — never a second "muy hecho" line.
+      expect(lines).toContain("  * sin sal muy hecho");
+      expect(lines.filter((l) => l.includes("* "))).toHaveLength(1);
+    });
+
+    it("prints a plain dish (no doneness, no note) byte-for-byte as before", () => {
+      const withExtras = formatKitchenTicket({
+        scope: "station",
+        stationName: "Cocina",
+        tableLabel: "Mesa 4",
+        orderNumber: "A-17",
+        firedAt: new Date(2026, 7, 17, 14, 30),
+        items: [{ qty: 1, name: "Chips", doneness: undefined, note: undefined }],
+      });
+      const plain = formatKitchenTicket({
+        scope: "station",
+        stationName: "Cocina",
+        tableLabel: "Mesa 4",
+        orderNumber: "A-17",
+        firedAt: new Date(2026, 7, 17, 14, 30),
+        items: [{ qty: 1, name: "Chips" }],
+      });
+      expect([...withExtras]).toEqual([...plain]);
+    });
+
     it("does not crash on a zero-item station ticket, and still ends in a cut", () => {
       const bytes = formatKitchenTicket({
         scope: "station",

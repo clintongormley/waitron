@@ -26,7 +26,7 @@ import { priceBasket } from "@waitron/catalogue/src/pricing.js";
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import type { TillProduct } from "../api/client.js";
+import type { Doneness, TillProduct } from "../api/client.js";
 
 /**
  * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
@@ -68,6 +68,21 @@ export interface OrderLine {
    * never counted independently), matching the server's `priceBasketWithOptions`.
    */
   options?: SelectedLineOption[];
+  /**
+   * A free-text kitchen instruction the operator typed on the line (order-line customisation), or
+   * ABSENT when none — the common case, kept absent (never `""`) so a plain add stays byte-identical to
+   * before. The picker trims it and omits an empty result, so a whitespace-only note never lands here.
+   * NON-FISCAL: it rides the wire (`SaleLine.note`) to the working-order line and the server caps it at
+   * 200 chars; it never reaches a sale or a huella.
+   */
+  note?: string;
+  /**
+   * The chosen meat doneness (order-line customisation), or ABSENT when not chosen — optional even on a
+   * meat dish. Attached only when the meat-gated picker selects one, so a plain line carries no key.
+   * NON-FISCAL: it rides the wire (`SaleLine.doneness`) to the working-order line; the server
+   * re-validates it against the `DONENESS` enum and it never reaches a sale or a huella.
+   */
+  doneness?: Doneness;
 }
 
 /**
@@ -234,11 +249,27 @@ export class WorkingOrderStore {
    * `options` (ordering modifiers, Task 9) are the modifiers selected on the line; OMITTED — the common
    * tap, and the vast majority — the line carries no `options` key at all, so a no-modifier add is
    * byte-identical to before (the picker, Task 10, is the only caller that passes them).
+   *
+   * `extras` (order-line customisation) carry the per-line `note`/`doneness` the picker collected. Each
+   * key attaches ONLY when present — the same omission pattern as `options` above — so a plain add
+   * (`extras` absent, or an empty `{}`) leaves the line byte-identical to before. The picker already
+   * trims a whitespace-only note to nothing and omits an unchosen doneness before calling.
    */
-  addProduct(product: TillProduct, quantity: string, options?: SelectedLineOption[]): void {
+  addProduct(
+    product: TillProduct,
+    quantity: string,
+    options?: SelectedLineOption[],
+    extras?: { note?: string; doneness?: Doneness },
+  ): void {
     const line: OrderLine = { product, quantity };
     if (options !== undefined) {
       line.options = options;
+    }
+    if (extras?.note !== undefined) {
+      line.note = extras.note;
+    }
+    if (extras?.doneness !== undefined) {
+      line.doneness = extras.doneness;
     }
     this.#lines.push(line);
     this.#invalidatePricing();
@@ -259,6 +290,47 @@ export class WorkingOrderStore {
       return;
     }
     this.#lines[index]!.quantity = quantity;
+    this.#invalidatePricing();
+    this.#dirty = true;
+    this.emit("changed");
+  }
+
+  /**
+   * Set the per-line note and/or doneness (order-line customisation) on the line at `index` and notify.
+   * The basket-line editor (Task 4b) is the caller — it reaches EVERY line, including a plain product
+   * fast-added with one tap that never passed through the modifier picker. A PARTIAL update: only the
+   * keys PRESENT in `extras` are touched (a doneness-only change leaves an existing note alone), so the
+   * editor can drive note and doneness independently. Out-of-range indices are a no-op, like
+   * {@link removeLine}.
+   *
+   * Applies the SAME omission discipline as the picker: a `note` is trimmed and an empty result CLEARS
+   * the key (a whitespace-only note is "not chosen"); a blank/undefined `doneness` clears its key too —
+   * so a line stays byte-identical to a note-free add once its extras are cleared, never carrying `""`.
+   * Marks the basket {@link #dirty} — the note/doneness ride the wire (`SaleLine.note`/`doneness`), so a
+   * retrieved order must re-sync before pay, the same as {@link addProduct}/{@link setLineQuantity}. Note
+   * and doneness do NOT affect price, but {@link #invalidatePricing} is called for consistency with every
+   * other mutation (the recompute is cheap and can never disagree with the unchanged prices).
+   */
+  setLineExtras(index: number, extras: { note?: string; doneness?: Doneness | "" }): void {
+    if (index < 0 || index >= this.#lines.length) {
+      return;
+    }
+    const line = this.#lines[index]!;
+    if ("note" in extras) {
+      const note = (extras.note ?? "").trim();
+      if (note === "") {
+        delete line.note;
+      } else {
+        line.note = note;
+      }
+    }
+    if ("doneness" in extras) {
+      if (extras.doneness === "" || extras.doneness === undefined) {
+        delete line.doneness;
+      } else {
+        line.doneness = extras.doneness;
+      }
+    }
     this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");

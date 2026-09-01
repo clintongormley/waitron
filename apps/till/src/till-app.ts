@@ -8,7 +8,7 @@ import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi } from "./api/client.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { toWireOption } from "./state/order-line.js";
+import { toWireLineExtras, toWireOption } from "./state/order-line.js";
 import { LAYOUT_A } from "./layout.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
@@ -805,7 +805,11 @@ export class TillApp extends LitElement {
    * `#onConfirmPayment` and `#onCollectCard`. */
   #currentSaleLines(): SaleLine[] {
     return this.#store.lines.map((line) => {
-      const saleLine: SaleLine = { productId: line.product.id, quantity: line.quantity };
+      const saleLine: SaleLine = {
+        productId: line.product.id,
+        quantity: line.quantity,
+        ...toWireLineExtras(line),
+      };
       if (line.options !== undefined && line.options.length > 0) {
         saleLine.options = line.options.map(toWireOption);
       }

@@ -42,6 +42,23 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  it("a line with the note editor OPEN and a doneness picker has no violations (order-line customisation)", async () => {
+    const steak: TillProduct = {
+      ...cafe,
+      id: "steak",
+      descriptions: { es: "Filete" },
+      unitPrice: "18.00",
+      diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(steak, "1", undefined, { note: "no butter", doneness: "medium" });
+    const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    // Open the inline editor so the textarea + doneness select are in the tree when scanned.
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("a basket with diet & contains badges (dietary-classification, Task 7) has no violations", async () => {
     const store = new WorkingOrderStore();
     const salad: TillProduct = {
