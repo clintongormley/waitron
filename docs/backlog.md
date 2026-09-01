@@ -92,15 +92,27 @@ live updates and the per-device layout editor (both under *Debt → cross-cuttin
     unreviewed ingredient reads diet "unknown", never a false positive. The
     **customer-facing menu surface stays PARKED** (its own future sub-project); the published product
     `diet` field is ready for it.
-  - **Order-line customisation** — LANDED (this branch). Per-line free-text `note` ("hold the mayo",
+  - **Order-line customisation** — LANDED (#193). Per-line free-text `note` ("hold the mayo",
     "hold the onions") reachable on EVERY basket line via a per-line editor (fast-add preserved) + a
     `doneness` picker (rare…well_done) that appears only for meat dishes (gated on the dietary
     `diet.contains` ∋ meat — consumes #190's `meat` origin). Both are **KITCHEN-only, NON-FISCAL**:
     snapshotted onto `ticket_items` at fire, never in `sale_lines`/the huella (pinned by a
     huella-invariance guard). Rendered on the till basket, station queue, expo, and printed kitchen
-    ticket. **Known out-of-scope follow-up:** editing note/doneness on an ALREADY-SENT tab line
-    (post-fire drawer `TabLine`) is NOT supported — it would need a new server endpoint + re-fire
-    semantics; today both are set at the ordering stage, before send.
+    ticket. Deferred follow-up (post-fire tab-line edit): editing note/doneness on an ALREADY-SENT
+    tab line (post-fire drawer `TabLine`) is NOT supported — it would need a new server endpoint +
+    re-fire semantics; today both are set at the ordering stage, before send. Parked.
+  - **Counter/walk-up kitchen fire — NEXT (follow-up to #193, run after a context clear).** The
+    COUNTER/walk-up basket shows the note/doneness editor and the server validates + persists both on
+    `working_order_lines`, but the walk-up `/api/sales` path (`recordTillSale` → `createOpenOrder`)
+    **never calls `fireLines`**, so a note/doneness typed on a counter sale reaches no kitchen surface
+    (KDS/expo/printed ticket). The owner confirmed (2026-09-01) that **counter food DOES go to the
+    kitchen**, so this is real work, not a UI-hide. Make the counter/walk-up sale path fire kitchen
+    tickets (mirror how the table/tab round path funnels into `fireLines`, snapshotting note/doneness
+    onto `ticket_items` at fire), then extend the KDS/expo/print reads to cover counter-fired tickets.
+    Wire/state plumbing already exists (note/doneness on the wire `SaleLine`, `working_order_lines`,
+    and the snapshot columns); only the **counter fire path + its reads** are missing. Surfaced by the
+    #193 whole-branch review; verify the fiscal boundary stays intact (counter fire must NOT thread
+    note/doneness into `sale_lines`/`computeHuella` — same guard as #193).
   - **Per-option quantity** ("extra shot ×2", author-capped by `option_group_items.max_quantity`,
     priced per dish) **+ dish-line quantity** (a −/N/+ stepper on each basket line, no auto-merge of
     identical lines) — LANDED (#186). Deferred follow-ons: on-screen **expo / station-queue / tab**
@@ -201,7 +213,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 15 | Online ordering | — | not started (Later phase) |
 | 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190), order-line customisation (kitchen-only line note + meat doneness) | menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190), order-line customisation (kitchen-only line note + meat doneness) | **counter/walk-up kitchen fire (#193 follow-up) — NEXT**; menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
