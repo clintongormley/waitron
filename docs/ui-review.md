@@ -11,6 +11,12 @@ walkthrough survives a context clear.
 <http://localhost:5191>, setup <http://localhost:5192>. Till PIN **5555**; dashboard
 **owner@demo.waitron.local / dashPass123**.
 
+**Gotcha (cost ~an hour on 2026-09-01):** if the till shows a blank/error screen after login and
+`/api/products` returns 500, the `:8080` server is a **stale orphan** from a previous session that no
+longer matches the (re)seeded DB — it is not a `main` bug (the demo proves products serves fine).
+Restart it: `kill` the `:8080` node PID, then `pnpm --filter @waitron/server dev` (or restart the whole
+stack). The front-end vite servers can stay up.
+
 **Status legend:**
 
 - ⬜ **not examined** — not yet looked at
@@ -25,7 +31,7 @@ walkthrough survives a context clear.
 | --- | --- | --- | --- | --- |
 | 1 | First-run setup & onboarding wizard | setup | ⬜ | inactive in trading mode — may skip or review separately |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
-| 3 | Counter / walk-up sales — menu, basket, modifiers, notes/doneness, park/retrieve, pay, receipt | till | ⬜ | |
+| 3 | Counter / walk-up sales — menu, basket, modifiers, notes/doneness, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
 | 5 | Coursing & rounds — build, hold/fire, course move, recall/cancel | till | ⬜ | |
 | 6 | Handheld tableside ordering & cash-at-table | till (handheld) | ⬜ | |
@@ -63,3 +69,21 @@ Candidates from the first look (awaiting owner confirmation — not yet fixes):
       real person name.
 - [ ] `en-GB` locale toggle is a small button bottom-left — confirm it belongs on the login screen and
       whether it should read as a language name ("English") rather than a locale code.
+
+### 3 — Counter / walk-up sales
+
+Much more polished than the login screen (proper top bar, product grid, basket column). Candidates
+(awaiting owner confirmation):
+
+- [ ] **Held order "#4 · 0 · €0.00"** — a held order with zero items / €0.00 in the Held orders list;
+      looks like an empty basket got held (seed artifact or a real "can hold nothing" gap). Confirm.
+- [ ] **"Pay" vs "Card" as two big buttons** — relationship is unclear (is Pay = cash, Card = card?);
+      the tender each triggers should read plainly.
+- [ ] **Top bar mixes navigation, actions and identity** — Allergens / Floor / Kitchen / Pass / My
+      schedule / Marta Ruiz / en-GB / Log out sit in one undifferentiated row; consider grouping
+      (navigate vs act vs who-am-I).
+- [ ] **Per-kg deli items** (e.g. White tuna belly €54.00/kg) — confirm the add-to-basket weight-entry
+      flow is intuitive when tapped (not yet exercised).
+- [ ] **Menu tab labels** — "Casa Delgado" (the venue name?) vs "Menú del Día"; confirm the à-la-carte
+      tab should carry the venue name.
+- [ ] `en-GB` toggle repeats on this screen too — same language-name question as the login.
