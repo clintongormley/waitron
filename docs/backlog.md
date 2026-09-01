@@ -363,6 +363,31 @@ no per-modifier/per-time rules).
 **user-definable kitchen-status list** (the table-status editor's equivalent) does NOT exist — kitchen
 tickets run a fixed queued→preparing→bumped lifecycle. Low priority (owner, 2026-08-29).
 
+**Coursing editing & kitchen corrections — PR #191 (open, ready to land).** Server verbs to move a
+held line's course (`setLineCourse`), fire specific held lines / send-all (`sendLines`), hold lines on
+send, un-send a not-started line (`recallLines`), and VOID/RECALLED correction slips on recall & void;
+till UI for per-line course move, a round-builder hold toggle, and state-gated Send/Recall/Cancel with
+a consequence-naming cancel confirm. Non-fiscal throughout (`working_order_lines`/`ticket_items`/print
+outbox only). `setLineCourse`/`recallLines` take a `ticket_items … FOR UPDATE` lock so they serialize
+against a concurrent `fireCourse` (real-PG race tests). **Deferred follow-ups (each its own slice —
+owner decisions 2026-09-01):**
+
+- **Moved dishes keep their kitchen status.** `moveTabLines` (TS-3/TS-4 transfer/merge) deletes+reinserts
+  a line under a new id, so its `ticket_items` row cascade-drops — a cooking dish vanishes from the KDS
+  at the destination. Decision: the ticket must TRAVEL with the line (re-point
+  `working_order_line_id`/`working_order_id` to the destination, preserving `fired_at`/`state`/station/
+  course); it keeps its EXISTING status, it is NOT re-fired. No test covers a fired line's ticket fate
+  across a move today.
+- **Hold-on-send without courses + a venue disable setting.** The hold toggle only renders when the
+  venue has ≥1 kitchen course (it lives in the courses-gated per-line strip), though the server holds
+  null-course lines fine. Decision: hold-on-send is available BY DEFAULT independent of courses (ungate
+  the toggle — render it whenever a round is in progress), PLUS a venue-level setting to DISABLE
+  hold-on-send for venues that don't want it.
+- **FP-1 renders a child modifier line as its own empty-named tab row.** Pre-existing display shape;
+  #191 suppresses its meaningless per-line actions/pickers via a `productId === null` guard, but the
+  blank row itself remains — needs a `parent_line_id`/`product_id`-aware tab-lines render (nest the
+  modifier under its parent, or skip it).
+
 ### Onboarding, cloud trial & distribution/failover (Phase 0 4b/4c COMPLETE; rest parked)
 
 Distribution & client-topology design landed (#86,
