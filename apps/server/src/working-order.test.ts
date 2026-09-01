@@ -8,6 +8,7 @@ import {
   optionGroupItems,
   optionGroups,
   pgErrorCode,
+  printJobs,
   productOptionGroups,
   ticketItems,
   withTenant,
@@ -52,7 +53,10 @@ import {
   openTab,
   parkOrder,
   placeOrder,
+  recallLines,
+  sendLines,
   sendToPrep,
+  setLineCourse,
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
@@ -66,6 +70,10 @@ import {
   setProductCourse,
   setProductStation,
 } from "./kitchen.js";
+import { createPrinter } from "@waitron/printing";
+import type { PrintConfig } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import "./errors.js";
 
@@ -832,6 +840,26 @@ async function makeProduct(
     await setProductStation(tx, cfg, id, route.stationId);
   }
   return id;
+}
+
+/** Create a station, an active cloud-poll printer, and attach the printer to it — the createStation +
+ *  createPrinter + attachPrinterToStation trio the print-on-fire / correction-slip tests repeat verbatim.
+ *  Returns the created station and the printer id (call sites use whichever they need). */
+async function attachedPrinter(
+  tx: Transaction,
+  cfg: TillConfig,
+  station: { name: string; isDefault?: boolean },
+  printerName: string,
+): Promise<{ station: Awaited<ReturnType<typeof createStation>>; printerId: string }> {
+  const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  const created = await createStation(tx, cfg, station);
+  const { id: printerId } = await createPrinter(tx, printCfg, {
+    name: printerName,
+    transport: "cloud_poll",
+    pollId: `poll-${randomUUID()}`,
+  });
+  await attachPrinterToStation(tx, printCfg, { stationId: created.id, printerId });
+  return { station: created, printerId };
 }
 
 /** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
@@ -1973,6 +2001,756 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         code: "course.not_found",
         params: { courseId: missing },
       });
+    });
+  });
+});
+
+// Coursing editing (A1) — `setLineCourse` moves a not-yet-fired tab line into another active course (or
+// clears it to null), updating BOTH the open-tab line's `course_id` and its held ticket item's snapshot.
+// It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) — a fired line is
+// corrected via recall, not a silent move — validates a non-null target with the same `requireLiveCourse`
+// the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
+// `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
+// (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
+// plain SQL a single backend proves; RLS/node isolation is real-Postgres's job (working-order.rls.test.ts).
+// Every write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// ---------------------------------------------------------------------------------------------------
+describe("setLineCourse (A1: move a held line to another course)", () => {
+  it("moves a HELD line to another course, updating both course_id snapshots", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const post = await createCourse(tx, cfg, { name: "Postres", displayOrder: 2 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // Ring both: starter (Entrantes, earliest) auto-fires; main (Principales) is HELD — it is line 2.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const before = await courseItemsFor(tx, tabId);
+      expect(byLine(before, main).firedAt).toBeNull(); // held — a later course
+      expect(byLine(before, main).courseId).toBe(pri.id); // its snapshot sits on Principales
+
+      // Move the held line (line_no 2) onto Postres.
+      await setLineCourse(tx, cfg, tabId, 2, post.id);
+
+      // The open-tab line AND its held ticket item snapshot both moved to Postres…
+      const [lineRow] = await tx
+        .select({ courseId: workingOrderLines.courseId })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
+      expect(lineRow!.courseId).toBe(post.id);
+      const after = await courseItemsFor(tx, tabId);
+      expect(byLine(after, main).courseId).toBe(post.id);
+      expect(byLine(after, main).firedAt).toBeNull(); // …and it is STILL held — a move does not fire it
+    });
+  });
+
+  it("clears a held line's course to null (fire-earliest), updating both snapshots", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+
+      // A null target clears the course (skipping the requireLiveCourse screen).
+      await setLineCourse(tx, cfg, tabId, 2, null);
+
+      const [lineRow] = await tx
+        .select({ courseId: workingOrderLines.courseId })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
+      expect(lineRow!.courseId).toBeNull();
+      expect(byLine(await courseItemsFor(tx, tabId), main).courseId).toBeNull();
+    });
+  });
+
+  it("refuses to re-course a FIRED line (ticket.already_fired)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      // A lone Entrantes line is the order's earliest (only) course, so it auto-fires at round-send.
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
+
+      // Principales is a valid LIVE course, so requireLiveCourse passes — the FIRED guard is what refuses.
+      await expect(setLineCourse(tx, cfg, tabId, 1, pri.id)).rejects.toMatchObject({
+        code: "ticket.already_fired",
+        params: { workingOrderId: tabId },
+      });
+    });
+  });
+
+  it("refuses an unknown OR retired target course (course.not_found)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const retired = await createCourse(tx, cfg, { name: "Postres", displayOrder: 1 });
+      await deactivateCourse(tx, cfg, retired.id);
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+
+      // An id naming no course of this venue — screened by requireLiveCourse BEFORE the line is resolved.
+      const missing = randomUUID();
+      await expect(setLineCourse(tx, cfg, tabId, 1, missing)).rejects.toMatchObject({
+        code: "course.not_found",
+        params: { courseId: missing },
+      });
+      // A DEACTIVATED course is not a valid new target either (liveness, not mere existence).
+      await expect(setLineCourse(tx, cfg, tabId, 1, retired.id)).rejects.toMatchObject({
+        code: "course.not_found",
+        params: { courseId: retired.id },
+      });
+    });
+  });
+
+  it("throws tab.line_not_found for a line_no not on the tab", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+
+      // A live target course, so we get PAST requireLiveCourse to the line-resolution miss.
+      await expect(setLineCourse(tx, cfg, tabId, 999, ent.id)).rejects.toMatchObject({
+        code: "tab.line_not_found",
+        params: { tabId, lineNo: 999 },
+      });
+    });
+  });
+});
+
+// Coursing editing (A2) — `sendLines` fires SPECIFIC held lines of an open tab (finer than a whole
+// course): it stamps `fired_at = now()` on the named lines' HELD ticket items, refreshes `queued_at =
+// now()` so the KDS timing clock (#185) restarts from the send rather than the ring, and enqueues each
+// sent line's kitchen print (a held line prints nothing until it is sent). An EMPTY line list releases
+// EVERY held line of the tab ("send all together"). An already-fired line in the set is skipped by the
+// `fired_at IS NULL` predicate, so it is idempotent like `fireCourse`. Non-fiscal: it writes only
+// `ticket_items` (the mutable kitchen table), never a filed record. PGlite proves the line-keyed
+// update, the queued_at refresh, and the print enqueue — plain SQL a single backend proves; RLS/node
+// isolation is real-Postgres's job. Every write runs through `withTenant` + `asAppUser`.
+// ---------------------------------------------------------------------------------------------------
+describe("sendLines (A2: fire specific held lines / send-all)", () => {
+  /** A fixed instant well in the past — an aged `queued_at` a same-tx `now()` refresh moves off, so the
+   *  refresh is observable (within one transaction `now()` is constant, so an un-aged held line rung and
+   *  sent in the same tx would read the identical stamp before and after). */
+  const AGED = "2000-01-01T00:00:00.000Z";
+
+  /** Read `(fired_at, queued_at)` for a tab's ticket items, keyed by the line's `line_no` (two lines can
+   *  share a product, so `byLine` — which keys on product — cannot address them individually here). */
+  async function itemsByLineNo(
+    tx: Transaction,
+    tabId: string,
+  ): Promise<Map<number, { firedAt: string | null; queuedAt: string }>> {
+    const rows = await tx
+      .select({
+        lineNo: workingOrderLines.lineNo,
+        firedAt: ticketItems.firedAt,
+        queuedAt: ticketItems.queuedAt,
+      })
+      .from(ticketItems)
+      .innerJoin(
+        workingOrderLines,
+        and(
+          eq(ticketItems.workingOrderLineId, workingOrderLines.id),
+          eq(ticketItems.tenantId, workingOrderLines.tenantId),
+        ),
+      )
+      .where(eq(ticketItems.workingOrderId, tabId));
+    return new Map(rows.map((r) => [r.lineNo, { firedAt: r.firedAt, queuedAt: r.queuedAt }]));
+  }
+
+  it("fires a SUBSET of held lines (refreshing queued_at) and leaves the rest held", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main1 = await makeProduct(tx, cfg, catalogueId, {});
+      const main2 = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main1, pri.id);
+      await setProductCourse(tx, cfg, main2, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // Ring three: starter (Entrantes, earliest) auto-fires as line 1; both Principales mains are HELD
+      // — main1 is line 2, main2 is line 3.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main1), line(main2)]);
+      // Age the held lines' queued_at so the send's now() refresh is distinguishable from the ring stamp.
+      await tx
+        .update(ticketItems)
+        .set({ queuedAt: AGED })
+        .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt)));
+
+      const before = await itemsByLineNo(tx, tabId);
+      // Read the stored aged stamp back (Postgres renders it in the session TZ, not the ISO literal we
+      // wrote), and use THAT as the baseline the refresh must move off.
+      const agedStamp = before.get(2)!.queuedAt;
+      expect(before.get(2)!.firedAt).toBeNull(); // main1 held
+      expect(before.get(3)!.firedAt).toBeNull(); // main2 held
+      expect(before.get(3)!.queuedAt).toBe(agedStamp); // both held lines aged identically
+
+      // Send ONLY line 2.
+      await sendLines(tx, cfg, tabId, [2]);
+
+      const after = await itemsByLineNo(tx, tabId);
+      // Line 2 fired, and its queued_at was refreshed off the aged value to the send instant (== fired_at).
+      expect(after.get(2)!.firedAt).not.toBeNull();
+      expect(after.get(2)!.queuedAt).not.toBe(agedStamp);
+      expect(after.get(2)!.queuedAt).toBe(after.get(2)!.firedAt);
+      // Line 3 is untouched — still held, queued_at still the aged value.
+      expect(after.get(3)!.firedAt).toBeNull();
+      expect(after.get(3)!.queuedAt).toBe(agedStamp);
+    });
+  });
+
+  it("an empty line list releases EVERY held line (send-all together)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const post = await createCourse(tx, cfg, { name: "Postres", displayOrder: 2 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      const dessert = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      await setProductCourse(tx, cfg, dessert, post.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // starter (line 1) auto-fires; main (line 2, Principales) and dessert (line 3, Postres) are held.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main), line(dessert)]);
+      const before = await itemsByLineNo(tx, tabId);
+      expect(before.get(2)!.firedAt).toBeNull();
+      expect(before.get(3)!.firedAt).toBeNull();
+
+      // Empty list ⇒ release every remaining held line, regardless of course.
+      await sendLines(tx, cfg, tabId, []);
+
+      const after = await itemsByLineNo(tx, tabId);
+      expect(after.get(1)!.firedAt).not.toBeNull(); // starter still fired
+      expect(after.get(2)!.firedAt).not.toBeNull(); // main released
+      expect(after.get(3)!.firedAt).not.toBeNull(); // dessert released
+    });
+  });
+
+  it("is idempotent — an already-fired line in the set is left untouched", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      // Send line 2 once — it fires. Age line 1's (already-fired) stamps so a re-fire that wrongly matched
+      // it would move them.
+      await sendLines(tx, cfg, tabId, [2]);
+      await tx
+        .update(ticketItems)
+        .set({ firedAt: AGED, queuedAt: AGED })
+        .where(
+          and(
+            eq(ticketItems.workingOrderId, tabId),
+            eq(
+              ticketItems.workingOrderLineId,
+              tx
+                .select({ id: workingOrderLines.id })
+                .from(workingOrderLines)
+                .where(
+                  and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 1)),
+                ),
+            ),
+          ),
+        );
+
+      // Read the stored aged stamps back (session-TZ rendering, not the ISO literal) as the baseline.
+      const aged = await itemsByLineNo(tx, tabId);
+      const agedFired = aged.get(1)!.firedAt;
+      const agedQueued = aged.get(1)!.queuedAt;
+
+      // Sending line 1 (already fired) matches no HELD row — its aged stamps stay put (the fired_at IS
+      // NULL predicate skips it), so the timestamps are not overwritten with now().
+      await sendLines(tx, cfg, tabId, [1]);
+      const after = await itemsByLineNo(tx, tabId);
+      expect(after.get(1)!.firedAt).toBe(agedFired);
+      expect(after.get(1)!.queuedAt).toBe(agedQueued);
+    });
+  });
+
+  it("a held line produces NO kitchen print until sent, then exactly one after", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      // A printer per station, so the HELD line's print can be counted in isolation from the auto-fired
+      // starter's (which prints at Cocina the moment it is rung).
+      await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
+      const { station: barra, printerId: pBarra } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Barra" },
+        "P-Barra",
+      );
+
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {}); // → Cocina (default)
+      const main = await makeProduct(tx, cfg, catalogueId, { stationId: barra.id }); // → Barra
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // Ring both: starter auto-fires (prints at Cocina); main (Principales, Barra) is HELD — no Barra
+      // print yet, because a held line prints only when it is sent.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const allJobsBefore = await tx.select({ id: printJobs.id }).from(printJobs);
+      const barraJobsBefore = await tx
+        .select({ id: printJobs.id })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, pBarra));
+      expect(barraJobsBefore).toHaveLength(0); // the HELD Barra line has NOT printed
+      // (Cocina already has the auto-fired starter's ticket, so the outbox is not simply empty.)
+      expect(allJobsBefore.length).toBeGreaterThan(0);
+
+      // Send the held line — its kitchen print is enqueued now.
+      await sendLines(tx, cfg, tabId, [2]);
+      const barraJobsAfter = await tx
+        .select({ id: printJobs.id })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, pBarra));
+      expect(barraJobsAfter).toHaveLength(1);
+    });
+  });
+});
+
+// Coursing editing (A4) — `recallLines` UN-sends a not-yet-started line: it clears `fired_at` back to
+// NULL on the named lines' ticket items WHERE `state = 'queued'` (the clean recall window), so a line the
+// kitchen has not begun greys back to held and is re-courseable (A1) / re-sendable (A2). A line the kitchen
+// has already STARTED (`state` = `preparing`/`ready`) is a state conflict → `ticket.already_started` (the
+// till offers cancel instead), and the offending `ticketItemId` is read BEFORE the update so the refusal can
+// name it. An already-held line (`fired_at` already null) is a no-op; an absent `line_no` is
+// `tab.line_not_found` (the same resolve-or-throw the sibling single-line tab verbs use). Non-fiscal: it
+// writes only `ticket_items` (the mutable kitchen table), never a filed record; no correction print here
+// (that is A6). PGlite proves the state-gated un-fire, the started-refusal and the no-op — plain SQL a
+// single backend proves; RLS/node isolation is real-Postgres's job. Every write runs `withTenant`/`asAppUser`.
+// ---------------------------------------------------------------------------------------------------
+describe("recallLines (A4: un-send a not-started line — fired → held)", () => {
+  it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // A lone earliest-course line auto-fires at round-send — fired but not yet started (state queued).
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      const before = byLine(await courseItemsFor(tx, tabId), starter);
+      expect(before.firedAt).not.toBeNull();
+      expect(before.state).toBe("queued");
+
+      // Recall line 1 — it un-fires back to held.
+      await recallLines(tx, cfg, tabId, [1]);
+
+      const after = byLine(await courseItemsFor(tx, tabId), starter);
+      expect(after.firedAt).toBeNull(); // greyed back to held
+      expect(after.state).toBe("queued"); // recall does not move the kitchen state
+    });
+  });
+
+  it("refuses a STARTED (preparing/ready) line with ticket.already_started, naming its item id", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+
+      // The kitchen begins the (fired) line — advance it to `preparing` via the real bump verb.
+      const item = byLine(await courseItemsFor(tx, tabId), starter);
+      await advanceTicketItem(tx, cfg, item.id, "preparing");
+
+      // Recall is refused once cooking has begun — a started line is corrected via cancel, not recall.
+      await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: item.id },
+      });
+      // The line is untouched — still fired, still preparing (the refusal ran before any update).
+      const after = byLine(await courseItemsFor(tx, tabId), starter);
+      expect(after.firedAt).not.toBeNull();
+      expect(after.state).toBe("preparing");
+    });
+  });
+
+  it("refuses an AWAY (ready + dispatched) line with ticket.already_started, naming its item id", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+
+      // Cook it through to READY, then dispatch it to the floor (away). markCourseAway stamps away_at ONLY
+      // on state='ready' items, so an away line is state='ready' — caught by the started-check's `ready`
+      // disjunct (NOT a no-op: a dispatched/served line cannot be cleanly recalled).
+      const item = byLine(await courseItemsFor(tx, tabId), starter);
+      await advanceTicketItem(tx, cfg, item.id, "preparing");
+      await advanceTicketItem(tx, cfg, item.id, "ready");
+      await markCourseAway(tx, cfg, tabId, ent.id);
+      const away = byLine(await courseItemsFor(tx, tabId), starter);
+      expect(away.state).toBe("ready");
+      expect(away.awayAt).not.toBeNull(); // actually dispatched to the floor
+
+      await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: item.id },
+      });
+    });
+  });
+
+  it("is a no-op on an already-HELD line (its fired_at stays null)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      const main = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      await setProductCourse(tx, cfg, main, pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // starter (line 1) auto-fires; main (line 2, Principales) is HELD — fired_at already null.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
+
+      // Recalling an already-held line resolves and changes nothing.
+      await recallLines(tx, cfg, tabId, [2]);
+      const after = byLine(await courseItemsFor(tx, tabId), main);
+      expect(after.firedAt).toBeNull();
+      expect(after.state).toBe("queued");
+    });
+  });
+
+  it("throws tab.line_not_found for a line_no not on the tab", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, starter, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+
+      await expect(recallLines(tx, cfg, tabId, [999])).rejects.toMatchObject({
+        code: "tab.line_not_found",
+        params: { tabId, lineNo: 999 },
+      });
+    });
+  });
+});
+
+// Coursing editing (A6) — a recall or void of a PREVIOUSLY-FIRED (printed) line tells the paper kitchen
+// what changed via a correction slip (`enqueueCorrectionSlips` → `formatCorrectionSlip`). Only a line
+// whose ticket item had a NON-null `fired_at` produced paper, so ONLY it produces a slip: recalling or
+// voiding a HELD line (never printed) enqueues nothing. `recallLines` emits RECALLED for the items it
+// actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
+// reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
+// `ticket_items`/`working_order_lines`/`print_jobs`. PGlite proves the enqueue count + payload in both
+// directions; every write runs through `withTenant`/`asAppUser`.
+// ---------------------------------------------------------------------------------------------------
+describe("correction slips on recall & void (A6)", () => {
+  /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
+   *  an optional course. Station routing is left to the venue default. */
+  async function namedProduct(
+    tx: Transaction,
+    cfg: TillConfig,
+    catalogueId: string,
+    name: string,
+    courseId?: string,
+  ): Promise<string> {
+    const { id } = await createProduct(tx, {
+      catalogueId,
+      categoryId: null,
+      descriptions: { [LOCALE]: name },
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    if (courseId !== undefined) await setProductCourse(tx, cfg, id, courseId);
+    return id;
+  }
+
+  /** The whole print-job outbox (RLS scopes it to the caller's tenant), for the before/after id diff. */
+  function jobRows(tx: Transaction): Promise<{ id: string; printerId: string; payload: Buffer }[]> {
+    return tx
+      .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
+      .from(printJobs);
+  }
+
+  it("(a) recalling a FIRED line enqueues ONE RECALLED slip at that station's printer", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { printerId: pCocina } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Cocina", isDefault: true },
+        "P-Cocina",
+      );
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Cocina.
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
+      const before = await jobRows(tx);
+
+      await recallLines(tx, cfg, tabId, [1]);
+
+      const after = await jobRows(tx);
+      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0]!.printerId).toBe(pCocina);
+      const text = decodeTicket(fresh[0]!.payload);
+      expect(text).toContain("RECALLED");
+      expect(text).toContain("Croquetas");
+    });
+  });
+
+  it("(b) recalling a HELD line enqueues NO slip (it never printed)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
+      const main = await namedProduct(tx, cfg, catalogueId, "Chuleton", pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // starter (line 1) auto-fires; main (line 2, Principales) is HELD — never printed.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
+      const before = await jobRows(tx);
+
+      await recallLines(tx, cfg, tabId, [2]);
+
+      const after = await jobRows(tx);
+      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
+      expect(fresh).toHaveLength(0);
+    });
+  });
+
+  it("(c) voiding a FIRED line enqueues ONE VOID slip at that station's printer", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { printerId: pCocina } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Cocina", isDefault: true },
+        "P-Cocina",
+      );
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
+      const before = await jobRows(tx);
+
+      await voidTabLine(tx, cfg, tabId, 1);
+
+      const after = await jobRows(tx);
+      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0]!.printerId).toBe(pCocina);
+      const text = decodeTicket(fresh[0]!.payload);
+      expect(text).toContain("VOID");
+      expect(text).toContain("Croquetas");
+    });
+  });
+
+  it("(d) voiding a HELD line enqueues NO slip (it never printed)", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
+      const main = await namedProduct(tx, cfg, catalogueId, "Chuleton", pri.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // starter (line 1) auto-fires; main (line 2) is HELD — never printed.
+      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
+      const before = await jobRows(tx);
+
+      await voidTabLine(tx, cfg, tabId, 2);
+
+      const after = await jobRows(tx);
+      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
+      expect(fresh).toHaveLength(0);
+    });
+  });
+});
+
+// Coursing editing (A3) — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
+// that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
+// it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
+// the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
+// time, never stored (no migration). PGlite proves the hold short-circuit and the parent correlation under
+// modifier expansion — plain SQL a single backend proves; every write runs through `withTenant`/`asAppUser`.
+// ---------------------------------------------------------------------------------------------------
+describe("addTabRound hold-on-send (A3)", () => {
+  it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { printerId: pCocina } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Cocina", isDefault: true },
+        "P-Cocina",
+      );
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const olives = await makeProduct(tx, cfg, catalogueId, {});
+      const bread = await makeProduct(tx, cfg, catalogueId, {});
+      await setProductCourse(tx, cfg, olives, ent.id);
+      await setProductCourse(tx, cfg, bread, ent.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      // Both starters sit in the EARLIEST course, so both WOULD auto-fire — but line 2 carries hold:true.
+      await addTabRound(tx, cfg, tabId, [
+        { productId: olives, quantity: "1" },
+        { productId: bread, quantity: "1", hold: true },
+      ]);
+
+      // Both lines get a ticket item; only the un-held one is fired.
+      const items = await courseItemsFor(tx, tabId);
+      expect(items).toHaveLength(2);
+      expect(byLine(items, olives).firedAt).not.toBeNull(); // fired (earliest course)
+      expect(byLine(items, bread).firedAt).toBeNull(); // HELD despite the earliest course
+
+      // Exactly one kitchen print — the fired line only; the held line prints nothing until sent.
+      const jobs = await tx
+        .select({ id: printJobs.id })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, pCocina));
+      expect(jobs).toHaveLength(1);
+    });
+  });
+
+  it("correlates hold to the right PARENT when a modifier expands the row count (modifier line first)", async () => {
+    // The load-bearing correlation guard. The MODIFIED product is rung FIRST, so its child modifier row
+    // sits BETWEEN the two parents in `priceOrderLines`'s output — a naive position map (one that did not
+    // skip child rows) would slide hold onto the wrong parent and hold the modified dish instead of the
+    // plain one. No courses, so both parents fire by the null-course rule and ONLY hold decides which stays
+    // held, isolating the correlation from coursing.
+    const { cfg, catalogueId } = await setupVenue();
+    await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { printerId: pCocina } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Cocina", isDefault: true },
+        "P-Cocina",
+      );
+      const modified = await makeProduct(tx, cfg, catalogueId, {});
+      const plain = await makeProduct(tx, cfg, catalogueId, {});
+      const extra = await addOption(tx, modified, "Extra");
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+
+      await addTabRound(tx, cfg, tabId, [
+        {
+          productId: modified,
+          quantity: "1",
+          options: [{ optionGroupItemId: extra }],
+          hold: false,
+        },
+        { productId: plain, quantity: "1", hold: true },
+      ]);
+
+      // A child modifier line never gets a ticket item, so the only items are the two PARENT dishes.
+      const items = await courseItemsFor(tx, tabId);
+      expect(items).toHaveLength(2);
+      expect(byLine(items, modified).firedAt).not.toBeNull(); // the modified dish (+ child) fires
+      expect(byLine(items, plain).firedAt).toBeNull(); // the PLAIN dish is the one held
+
+      // Only the fired modified dish printed; the held plain dish and the child modifier print nothing.
+      const jobs = await tx
+        .select({ id: printJobs.id })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, pCocina));
+      expect(jobs).toHaveLength(1);
     });
   });
 });

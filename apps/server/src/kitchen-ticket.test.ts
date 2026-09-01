@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatKitchenTicket } from "./kitchen-ticket.js";
+import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 
 // The formatter is a PURE byte producer (design §3c) — no DB, no container — so these are ordinary
@@ -179,5 +179,61 @@ describe("formatKitchenTicket", () => {
       expect(decodeTicket(bytes)).toContain("PASE");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
+  });
+});
+
+describe("formatCorrectionSlip", () => {
+  it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
+    const bytes = formatCorrectionSlip({
+      kind: "VOID",
+      stationName: "Cocina",
+      tableLabel: "Mesa 6",
+      orderNumber: "A-12",
+      at: new Date(2026, 7, 17, 14, 30).toISOString(),
+      item: { qty: 2, name: "Tiramisu", modifiers: ["extra nata x2"] },
+    });
+
+    const text = decodeTicket(bytes);
+    expect(text).toContain("*** VOID ***");
+    expect(text).toContain("Cocina");
+    expect(text).toContain("Mesa 6");
+    expect(text).toContain("A-12");
+    expect(text).toContain("14:30");
+    expect(text).toContain("2 x Tiramisu");
+    expect(text).toContain("  + extra nata x2");
+
+    expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
+  });
+
+  it("prints a RECALLED header for a recalled slip", () => {
+    const text = decodeTicket(
+      formatCorrectionSlip({
+        kind: "RECALLED",
+        stationName: "Parrilla",
+        tableLabel: "Mesa 2",
+        orderNumber: "A-5",
+        at: new Date(2026, 7, 17, 9, 5).toISOString(),
+        item: { qty: 1, name: "Chips" },
+      }),
+    );
+    expect(text).toContain("*** RECALLED ***");
+    expect(text).not.toContain("VOID");
+    expect(text).toContain("09:05");
+  });
+
+  it("omits the table line entirely when tableLabel is null", () => {
+    const text = decodeTicket(
+      formatCorrectionSlip({
+        kind: "VOID",
+        stationName: "Cocina",
+        tableLabel: null,
+        orderNumber: "A-9",
+        at: new Date(2026, 7, 17, 12, 0).toISOString(),
+        item: { qty: 1, name: "Cafe" },
+      }),
+    );
+    expect(text).toContain("VOID");
+    expect(text).toContain("A-9");
+    expect(text).not.toContain("Mesa");
   });
 });

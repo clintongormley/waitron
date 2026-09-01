@@ -254,6 +254,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     addTabRound: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
+    setLineCourse: vi.fn().mockResolvedValue(undefined),
+    // Coursing corrections (C5): the per-line send/recall/cancel verbs. Each defaults to a resolved void;
+    // a test overrides any with its own spy. The tab's lines are re-read after each (success OR reject).
+    sendLines: vi.fn().mockResolvedValue(undefined),
+    recallLines: vi.fn().mockResolvedValue(undefined),
+    voidLine: vi.fn().mockResolvedValue(undefined),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     // TS-3/TS-4 table actions: move/join/merge/transfer. Each defaults to a resolved void; a test
     // overrides any with its own spy. `getTablesState` above is re-read after each on the success path.
@@ -2079,6 +2085,7 @@ describe("till-app", () => {
         servedAt: null,
         courseId: null,
         firedAt: "2026-08-17T09:59:00.000Z",
+        state: "queued",
       };
       it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue([tabLine]);
@@ -2190,6 +2197,24 @@ describe("till-app", () => {
         ]);
       });
 
+      it("send-round forwards a per-line hold flag verbatim to addTabRound (coursing A3)", async () => {
+        const addTabRound = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          addTabRound,
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        const screen = await toTableOrder(el, openTable);
+        emit(screen, "send-round", {
+          lines: [{ productId: "cafe", quantity: "1", hold: true }],
+        });
+        await flush(el);
+        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
+          { productId: "cafe", quantity: "1", hold: true },
+        ]);
+      });
+
       it("boots the venue courses + fire mode and threads them to the table-order screen", async () => {
         const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
         const { el } = await mountApp({
@@ -2255,6 +2280,64 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
+      it("set-line-course moves a held line's course then reloads its lines", async () => {
+        const setLineCourse = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          setLineCourse,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "set-line-course", { lineNo: 1, courseId: "c2" });
+        await flush(el);
+
+        // Re-filed on the tab's own working order (activeTabId), then re-read so the picker reconciles.
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, "c2");
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("set-line-course clears a line's course, forwarding the explicit null", async () => {
+        const setLineCourse = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          setLineCourse,
+          getTabLines: vi.fn().mockResolvedValue([tabLine]),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "set-line-course", { lineNo: 1, courseId: null });
+        await flush(el);
+
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, null);
+      });
+
+      it("a rejected set-line-course surfaces the banner AND still reloads to reconcile to server truth", async () => {
+        // A raced move of a line the kitchen has just fired rejects `ticket.already_fired`; the handler
+        // must still re-read the tab so the stale picker reconciles to server truth (like its siblings).
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          setLineCourse: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "set-line-course", { lineNo: 1, courseId: "c2" });
+        await flush(el);
+
+        // Non-fatal: the operator stays on the screen and sees the generic banner…
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        // …and the tab is re-read even on the reject, so the picker reconciles to server truth.
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
       it("a failed round/serve/status write surfaces a non-fatal error, leaving the screen up", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -2262,6 +2345,7 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue([tabLine]),
           addTabRound: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
           markLineServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+          setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
           setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -2269,6 +2353,7 @@ describe("till-app", () => {
         for (const [type, detail] of [
           ["send-round", { lines: [{ productId: "cafe", quantity: "1" }] }],
           ["serve-line", { lineNo: 1 }],
+          ["set-line-course", { lineNo: 1, courseId: "c2" }],
           ["set-status", { statusId: "s1" }],
         ] as const) {
           emit(screen, type, detail);
@@ -2293,6 +2378,125 @@ describe("till-app", () => {
 
         // Keyed by the TABLE id "t2" (Ruling FP-F), never the tab's order id "wo-7".
         expect(setTableStatus).toHaveBeenCalledWith("t2", "s1");
+      });
+
+      // ── Coursing corrections (C5): send / recall / cancel line actions ─────────────────────────────
+      it("send-lines fires the held lines on the tab then reloads its lines", async () => {
+        const sendLines = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          sendLines,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "send-lines", { lineNos: [1] });
+        await flush(el);
+
+        // Released on the tab's own working order (activeTabId), then re-read so the drawer reconciles.
+        expect(sendLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("send-lines with an empty list is the send-all (release every held line)", async () => {
+        const sendLines = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          sendLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "send-lines", { lineNos: [] });
+        await flush(el);
+
+        expect(sendLines).toHaveBeenCalledWith("wo-7", []);
+      });
+
+      it("recall-lines un-sends the not-yet-started lines then reloads its lines", async () => {
+        const recallLines = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          recallLines,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "recall-lines", { lineNos: [1] });
+        await flush(el);
+
+        expect(recallLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("void-line cancels the started line then reloads its lines", async () => {
+        const voidLine = vi.fn().mockResolvedValue(undefined);
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          voidLine,
+          getTabLines,
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "void-line", { lineNo: 1 });
+        await flush(el);
+
+        expect(voidLine).toHaveBeenCalledWith("wo-7", 1);
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("a rejected recall-lines surfaces the banner AND still reloads to reconcile to server truth", async () => {
+        // A raced recall of a line the kitchen has just started rejects `ticket.already_started`; the
+        // handler must still re-read the tab so the line flips from Recall to Cancel (server truth).
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          recallLines: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+
+        emit(screen, "recall-lines", { lineNos: [1] });
+        await flush(el);
+
+        // Non-fatal: the operator stays on the screen and sees the generic banner…
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        // …and the tab is re-read even on the reject, so the UI reconciles to server truth.
+        expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("a rejected send-lines / void-line also surfaces the banner and reloads", async () => {
+        const getTabLines = vi.fn().mockResolvedValue([tabLine]);
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines,
+          sendLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+          voidLine: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        for (const [type, detail] of [
+          ["send-lines", { lineNos: [1] }],
+          ["void-line", { lineNo: 1 }],
+        ] as const) {
+          getTabLines.mockClear();
+          emit(screen, type, detail);
+          await flush(el);
+          expect(tableOrder(el)).not.toBeNull();
+          expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+          expect(getTabLines).toHaveBeenCalledTimes(1);
+        }
       });
 
       // ── TS-3/TS-4: move / join / merge / transfer table actions ──────────────────────────────────

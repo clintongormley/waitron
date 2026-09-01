@@ -30,19 +30,30 @@ import { readOrderFlow } from "./till-config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
+  addTabRound,
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
+  fireCourse,
   getHeldOrder,
   listExpoQueue,
   listHeldOrders,
   listStationQueue,
   markCollected,
+  openTab,
   parkOrder,
   placeOrder,
+  recallLines,
+  sendLines,
   sendToPrep,
+  setLineCourse,
   updateHeldOrder,
 } from "./working-order.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
+import { createPrinter } from "@waitron/printing";
+import type { PrintConfig } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
@@ -2264,5 +2275,421 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       code: "working_order.already_collected",
       params: { workingOrderId: id },
     });
+  });
+});
+
+// Coursing editing verbs (Task B1) — the RLS + two-backend properties PGlite CANNOT show for the tab
+// verbs `setLineCourse`/`sendLines`/`recallLines`. PGlite proved their LOGIC (working-order.test.ts) as a
+// single superuser backend; this suite proves (a) cross-tenant CONFINEMENT under FORCE RLS as `app_user` —
+// a foreign tenant's tab id resolves nothing and no row of the other tenant is read or written — and (b)
+// that a `sendLines` racing a `recallLines` on the SAME line serialises via `lockOpenTab`'s FOR UPDATE
+// into one clean serial outcome with no lost update. Every write runs through `withTenant` + `asAppUser`,
+// so RLS is IN FORCE, not bypassed; the owner reads below use `suite.admin` (superuser) deliberately, to
+// witness the isolated state from outside the policy.
+
+/** Insert an active dining table under `cfg`'s tenant + location as the owner and return its id — the
+ *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTenant` (an explicit
+ *  `tenant_id` satisfies the RLS WITH CHECK), the same shape `addTill`/`addNode` above use. */
+async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    insert into dining_tables (tenant_id, location_id, label)
+    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+  return rows[0]!.id;
+}
+
+/** An owner (RLS-bypassing) snapshot of a tab's lines joined to their ticket items, keyed by `line_no`:
+ *  the tab line's `course_id`, the held item's `course_id` snapshot, whether the item has fired, and its
+ *  kitchen state. The witness a cross-tenant call touched NOTHING (before == after) and the winner of the
+ *  race (fired or not). */
+async function tabSnapshot(tabId: string): Promise<
+  {
+    lineNo: number;
+    lineCourse: string | null;
+    itemCourse: string | null;
+    fired: boolean;
+    state: string;
+  }[]
+> {
+  const { rows } = await suite.admin.execute<{
+    line_no: number;
+    line_course: string | null;
+    item_course: string | null;
+    fired: boolean;
+    state: string;
+  }>(sql`
+    select wol.line_no,
+           wol.course_id as line_course,
+           ti.course_id  as item_course,
+           (ti.fired_at is not null) as fired,
+           ti.state
+    from working_order_lines wol
+    join ticket_items ti
+      on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
+    where wol.working_order_id = ${tabId}
+    order by wol.line_no`);
+  return rows.map((r) => ({
+    lineNo: r.line_no,
+    lineCourse: r.line_course,
+    itemCourse: r.item_course,
+    fired: r.fired,
+    state: r.state,
+  }));
+}
+
+/** The `print_jobs` ids belonging to a tenant (owner read) — the before-set the race diffs against to
+ *  find slips enqueued by the two racing verbs. */
+async function tenantJobIds(tenantId: string): Promise<Set<string>> {
+  const { rows } = await suite.admin.execute<{ id: string }>(
+    sql`select id from print_jobs where tenant_id = ${tenantId}`,
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
+/** How many print jobs a tenant holds (owner read) — the witness a refused cross-tenant call enqueued
+ *  nothing under the target tenant. */
+async function tenantJobCount(tenantId: string): Promise<number> {
+  return (await tenantJobIds(tenantId)).size;
+}
+
+/** Count the RECALLED correction slips a tenant gained since `before` — a print job whose decoded ESC/POS
+ *  payload carries the "RECALLED" header `formatCorrectionSlip` writes. A `sendLines` fire enqueues a
+ *  plain kitchen ticket (no such header); only a `recallLines` of a fired line enqueues a RECALLED slip. */
+async function recalledSlipsSince(tenantId: string, before: Set<string>): Promise<number> {
+  const { rows } = await suite.admin.execute<{ id: string; payload: Buffer }>(
+    sql`select id, payload from print_jobs where tenant_id = ${tenantId}`,
+  );
+  return rows.filter((r) => !before.has(r.id) && decodeTicket(r.payload).includes("RECALLED"))
+    .length;
+}
+
+describe("coursing editing verbs — cross-tenant RLS confinement (Task B1)", () => {
+  it("setLineCourse / sendLines / recallLines on ANOTHER tenant's tab throw tab.not_open and touch nothing", async () => {
+    const { cfg: tenantA, cafe, agua } = await setupVenue();
+    const { cfg: tenantB } = await setupVenue(); // a wholly separate venue + tenant
+
+    // Open a tab under tenant A with one FIRED line and one HELD line: café (no course → loose) fires at
+    // round-send as line 1; agua, added `hold: true`, is inserted HELD (line 2) carrying its course
+    // snapshot. So each verb has a target it WOULD change if it wrongly reached A's rows — sendLines a
+    // held line to fire, recallLines a fired line to un-fire, setLineCourse a coursed line to re-course.
+    const tabId = await withTenant(suite.admin, tenantA.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const postres = await createCourse(tx, tenantA, { name: "Postres", displayOrder: 9 });
+      await setProductCourse(tx, tenantA, agua.id, postres.id);
+      const tableId = await addTable(tx, tenantA);
+      const { tabId } = await openTab(tx, tenantA, { tableId });
+      await addTabRound(tx, tenantA, tabId, [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1", hold: true },
+      ]);
+      return tabId;
+    });
+
+    const before = await tabSnapshot(tabId);
+    expect(before).toHaveLength(2);
+    expect(before[0]).toMatchObject({ lineNo: 1, fired: true, state: "queued" });
+    expect(before[1]).toMatchObject({ lineNo: 2, fired: false, state: "queued" });
+    expect(before[1]!.itemCourse).not.toBeNull(); // the held line carries a course to move
+    const jobsBefore = await tenantJobCount(tenantA.tenantId);
+
+    // Under tenant B's `app_user` scope, each verb pointed at tenant A's tab id is refused at
+    // `lockOpenTab`: the tenant-isolation policy hides A's `working_orders` row, so the FOR UPDATE matches
+    // nothing → `tab.not_open`, BEFORE any line/ticket read or write — the same fail-closed code an absent
+    // tab gets, never a distinct "wrong tenant" code that would confirm A's tab exists. `setLineCourse`'s
+    // target course is `null`, so `requireLiveCourse` is skipped and `lockOpenTab` is unambiguously the
+    // ONLY gate that can throw here.
+    await expect(
+      asTenant(tenantB, (tx) => setLineCourse(tx, tenantB, tabId, 2, null)),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
+    await expect(
+      asTenant(tenantB, (tx) => sendLines(tx, tenantB, tabId, [2])),
+    ).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
+    await expect(
+      asTenant(tenantB, (tx) => recallLines(tx, tenantB, tabId, [1])),
+    ).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
+
+    // NON-TOUCH: tenant A's lines + ticket items are byte-identical to the baseline — no course moved,
+    // nothing fired or un-fired — and tenant B's refused calls enqueued NO print job under tenant A.
+    expect(await tabSnapshot(tabId)).toEqual(before);
+    expect(await tenantJobCount(tenantA.tenantId)).toBe(jobsBefore);
+
+    // POSITIVE CONTROL (CLAUDE.md §1 — same state, opposite answer): the SAME `sendLines`, run under
+    // tenant A's OWN scope, DOES fire the held line 2. So the three refusals above are RLS isolation, not a
+    // broken tab or an unreachable id — the reads differ where it matters, not "both empty".
+    await asTenant(tenantA, (tx) => sendLines(tx, tenantA, tabId, [2]));
+    expect((await tabSnapshot(tabId))[1]).toMatchObject({ lineNo: 2, fired: true });
+  });
+});
+
+describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-backend)", () => {
+  it("concurrent sendLines + recallLines on the same held line serialise via FOR UPDATE — one clean winner, no lost update", async () => {
+    const { cfg, cafe } = await setupVenue();
+
+    // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
+    // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
+    const station = await defaultStationId(cfg);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const { id: printerId } = await createPrinter(tx, printCfg, {
+        name: "P-Cocina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
+      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+    });
+
+    // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
+    // default station. Nothing has printed yet.
+    const tabId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const tableId = await addTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      return tabId;
+    });
+    expect(await tabSnapshot(tabId)).toEqual([
+      { lineNo: 1, lineCourse: null, itemCourse: null, fired: false, state: "queued" },
+    ]);
+    const jobsBefore = await tenantJobIds(cfg.tenantId);
+
+    // TWO distinct backends racing the INVERSE verbs on the SAME held line. Load-bearing: distinct backend
+    // PROCESSES — on PGlite they collapse onto one and the FOR UPDATE serialisation never happens (a false
+    // pass), exactly as the concurrent-pay tests above note.
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const pids = await Promise.all(
+        [connA, connB].map(async (db) => {
+          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          return rows[0]!.pid;
+        }),
+      );
+      expect(new Set(pids).size).toBe(2);
+
+      // `sendLines` fires the held line; `recallLines` un-fires a fired-and-queued line. `lockOpenTab`
+      // takes the tab's `working_orders` row FOR UPDATE, so the two cannot interleave: whichever wins the
+      // lock runs to completion and commits first, then the other runs against its committed result. Both
+      // verbs are legal on this line in either order, so BOTH succeed.
+      const results = await Promise.allSettled([
+        withTenant(connA, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await sendLines(tx, cfg, tabId, [1]);
+        }),
+        withTenant(connB, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await recallLines(tx, cfg, tabId, [1]);
+        }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+
+    // The outcome is ONE clean serial result, never a torn interleave: still exactly one ticket item,
+    // still state queued (neither verb moves the kitchen state).
+    const after = await tabSnapshot(tabId);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" });
+
+    // NO-LOST-UPDATE INVARIANT, order-independent (holds for BOTH legal lock orders):
+    //  • send wins the last write  → line FIRED (fired true), send enqueued a kitchen ticket, recall found
+    //    the line still held and enqueued NO recalled slip.
+    //  • recall wins the last write → line HELD (fired false); because recall read the fired line UNDER THE
+    //    LOCK it MUST have enqueued a RECALLED slip.
+    // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the lost
+    // update the FOR UPDATE prevents (recall un-firing off a stale pre-send read, the paper kitchen never
+    // told to pull the printed line) — this assertion fails on that torn state.
+    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
+  });
+});
+
+describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #191, two-backend)", () => {
+  it("concurrent setLineCourse + fireCourse on the same held line never re-courses a fired line — the ticket-item FOR UPDATE serialises them", async () => {
+    const { cfg, cafe } = await setupVenue();
+
+    // A printer on the venue's default station so a fire enqueues a kitchen ticket (the fired line's
+    // paper trail); the invariant below reads the tab snapshot, not paper, but a real fire path is the
+    // faithful racer.
+    const station = await defaultStationId(cfg);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const { id: printerId } = await createPrinter(tx, printCfg, {
+        name: "P-Cocina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
+      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+    });
+
+    // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
+    // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
+    // it out from under the pass.
+    const { postres, otros, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
+      const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
+      await setProductCourse(tx, cfg, cafe.id, postres.id);
+      const tableId = await addTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      return { postres, otros, tabId };
+    });
+    // Baseline: one HELD line in `postres`, nothing fired.
+    expect(await tabSnapshot(tabId)).toEqual([
+      { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
+    ]);
+
+    // TWO distinct backends racing `setLineCourse` (move the held line to `otros`) against `fireCourse`
+    // (fire `postres`, which the held line is in). Load-bearing: distinct backend PROCESSES — on PGlite
+    // they collapse onto one and the serialisation never happens (a false pass), exactly as the
+    // concurrent-pay and sendLines/recallLines races above note. `fireCourse` deliberately does NOT take
+    // `lockOpenTab`; `setLineCourse`'s `FOR UPDATE` on the line's held ticket-item row is what serialises
+    // the two here.
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    let scStatus: "fulfilled" | "rejected";
+    let scReason: unknown;
+    try {
+      const pids = await Promise.all(
+        [connA, connB].map(async (db) => {
+          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          return rows[0]!.pid;
+        }),
+      );
+      expect(new Set(pids).size).toBe(2);
+
+      const [sc, fc] = await Promise.allSettled([
+        withTenant(connA, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await setLineCourse(tx, cfg, tabId, 1, otros.id);
+        }),
+        withTenant(connB, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await fireCourse(tx, cfg, tabId, postres.id);
+        }),
+      ]);
+      // `fireCourse` is legal in either order — it fires the held line (setLineCourse lost the lock) or
+      // matches nothing because the line has moved to `otros` (setLineCourse won) — so it NEVER throws.
+      expect(fc.status).toBe("fulfilled");
+      scStatus = sc.status;
+      scReason = sc.status === "rejected" ? sc.reason : undefined;
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+
+    const after = (await tabSnapshot(tabId))[0]!;
+    expect(after.state).toBe("queued"); // neither verb moves the kitchen state
+
+    // THE INVARIANT (order-independent, holds for BOTH lock orders): a line that FIRED never ends up with a
+    // course changed after firing. Exactly two outcomes, and the ticket-item FOR UPDATE forbids any third:
+    //  • fireCourse won the lock → line FIRED, still in `postres` (course NOT moved), and setLineCourse read
+    //    `fired_at` set UNDER THE LOCK and threw `ticket.already_fired`.
+    //  • setLineCourse won the lock → line re-coursed to `otros` and still HELD; fireCourse then re-read the
+    //    moved row, its `course_id = postres` predicate no longer matched, and it fired nothing.
+    // A fired line sitting in `otros` (course moved post-fire) is precisely the torn state the lock
+    // prevents — this assertion fails on it.
+    if (after.fired) {
+      expect(after.lineCourse).toBe(postres.id);
+      expect(after.itemCourse).toBe(postres.id);
+      expect(scStatus).toBe("rejected");
+      expect(scReason).toMatchObject({
+        code: "ticket.already_fired",
+        params: { workingOrderId: tabId },
+      });
+    } else {
+      expect(after.lineCourse).toBe(otros.id);
+      expect(after.itemCourse).toBe(otros.id);
+      expect(scStatus).toBe("fulfilled");
+    }
+  });
+});
+
+describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191, two-backend)", () => {
+  it("concurrent recallLines + fireCourse on the same held line never un-fires a printed line without a RECALLED slip — the ticket-item FOR UPDATE serialises them", async () => {
+    const { cfg, cafe } = await setupVenue();
+
+    // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
+    // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
+    const station = await defaultStationId(cfg);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const { id: printerId } = await createPrinter(tx, printCfg, {
+        name: "P-Cocina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
+      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+    });
+
+    // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
+    // and `recallLines([1])` targets it. Nothing printed yet.
+    const { postres, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
+      await setProductCourse(tx, cfg, cafe.id, postres.id);
+      const tableId = await addTable(tx, cfg);
+      const { tabId } = await openTab(tx, cfg, { tableId });
+      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      return { postres, tabId };
+    });
+    expect(await tabSnapshot(tabId)).toEqual([
+      { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
+    ]);
+    const jobsBefore = await tenantJobIds(cfg.tenantId);
+
+    // TWO distinct backends racing `recallLines([1])` (un-fire the line) against `fireCourse(postres)`
+    // (fire it). Load-bearing: distinct backend PROCESSES — on PGlite they collapse onto one and the
+    // serialisation never happens (a false pass). `fireCourse` deliberately does NOT take `lockOpenTab`;
+    // `recallLines`' `FOR UPDATE` on the line's held ticket-item row is what serialises the two here. Both
+    // are legal on this line in either order, so BOTH succeed.
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const pids = await Promise.all(
+        [connA, connB].map(async (db) => {
+          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          return rows[0]!.pid;
+        }),
+      );
+      expect(new Set(pids).size).toBe(2);
+
+      const results = await Promise.allSettled([
+        withTenant(connA, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await recallLines(tx, cfg, tabId, [1]);
+        }),
+        withTenant(connB, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await fireCourse(tx, cfg, tabId, postres.id);
+        }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+
+    const after = await tabSnapshot(tabId);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" }); // neither verb moves the kitchen state
+
+    // THE INVARIANT (order-independent, holds for BOTH lock orders): a line that FIRED (and PRINTED) is
+    // never un-fired by recall WITHOUT a RECALLED slip. Exactly two outcomes, and the ticket-item FOR
+    // UPDATE forbids any third:
+    //  • recall won the lock → it read the line HELD, un-fired a no-op, enqueued NO slip; `fireCourse` then
+    //    fired the still-held line and PRINTED it → line FIRED (fired true), no recalled slip (correct: the
+    //    printed ticket stands, nothing to pull).
+    //  • fireCourse won the lock → line FIRED + PRINTED; recall then read it as previously-fired UNDER THE
+    //    LOCK, un-fired it AND enqueued a RECALLED slip → line HELD (fired false) with ≥1 recalled slip.
+    // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the torn state
+    // the lock prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to pull
+    // the ticket `fireCourse` printed) — this assertion fails on it.
+    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });

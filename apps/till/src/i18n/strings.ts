@@ -327,12 +327,33 @@ export const en = {
   "table.status_clear": "No status",
   // KDS-2 (§5b): the round bar's per-line course picker + the waiter-fire drawer section.
   // `table.course_label` labels each round line's course select; `table.course_default` is its
-  // "use the product's default" placeholder (there is no explicit "no course" option). `table.fire_title`
+  // "use the product's default" placeholder (there is no explicit "no course" option). `table.course_none`
+  // is the TAB-line course picker's placeholder (coursing editing A1): re-filing a not-yet-fired tab line
+  // whose courseId is `null` — an explicit "no course", not "the product default". `table.fire_title`
   // heads the held-course section; `table.fire_course` is the per-course fire verb (course name appended).
   "table.course_label": "Course",
   "table.course_default": "Default",
+  "table.course_none": "No course",
+  // `table.hold_label` names each round line's hold toggle (coursing editing A3): ON inserts the line
+  // without firing it (held for a later course fire); OFF (the default) fires it on send.
+  "table.hold_label": "Hold",
   "table.fire_title": "Courses to fire",
   "table.fire_course": "Fire",
+  // Per-line kitchen actions (coursing corrections C5), each gated on the line's kitchen state: a HELD
+  // line (`firedAt === null`) offers `table.send_line` (release it to the kitchen) with a tab-level
+  // `table.send_all` (release every held line at once); a FIRED, not-yet-started line offers
+  // `table.recall_line` (un-send it); a FIRED, STARTED line offers `table.cancel_line` behind the
+  // consequence-naming confirm below. `table.cancel_title` names that confirm (its accessible name),
+  // `table.cancel_started` states the consequence, `table.cancel_confirm` is the destructive button and
+  // `table.cancel_keep` dismisses it without cancelling.
+  "table.send_line": "Send",
+  "table.send_all": "Send all",
+  "table.recall_line": "Recall",
+  "table.cancel_line": "Cancel",
+  "table.cancel_title": "Cancel item?",
+  "table.cancel_started": "The kitchen has started this — cancel and bin it?",
+  "table.cancel_confirm": "Cancel and bin it",
+  "table.cancel_keep": "Keep it",
   // Table actions (TS-3/TS-4): the in-drawer move/join/merge/transfer flow. `table.actions_title` heads
   // the flow and labels its trigger (replacing the old disabled "Move · Split" placeholder). The
   // `table.action_*` keys name the four verbs + the disabled Split placeholder (Back/Cancel reuse the
@@ -583,8 +604,18 @@ export const es: Record<StringKey, string> = {
   "table.status_clear": "Sin estado",
   "table.course_label": "Curso",
   "table.course_default": "Por defecto",
+  "table.course_none": "Sin curso",
+  "table.hold_label": "Retener",
   "table.fire_title": "Cursos por marchar",
   "table.fire_course": "Marchar",
+  "table.send_line": "Enviar",
+  "table.send_all": "Enviar todo",
+  "table.recall_line": "Retirar",
+  "table.cancel_line": "Cancelar",
+  "table.cancel_title": "¿Cancelar plato?",
+  "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
+  "table.cancel_confirm": "Cancelar y tirar",
+  "table.cancel_keep": "Mantener",
   "table.actions_title": "Acciones de mesa",
   "table.action_move": "Mover a mesa",
   "table.action_join": "Unir una mesa",

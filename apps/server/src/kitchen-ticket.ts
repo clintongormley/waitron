@@ -145,3 +145,40 @@ export function formatKitchenTicket(ticket: KitchenTicket): Uint8Array {
 
   return b.feed(FEED_BEFORE_CUT).cut().bytes();
 }
+
+/**
+ * A kitchen "correction" slip for a single already-fired line: the cook already has a copy of the
+ * original ticket (this module's `formatKitchenTicket`), and this slip tells them what changed
+ * without reprinting the whole order. Only two kinds exist — `VOID` (the line was cancelled after
+ * firing) and `RECALLED` (the line was pulled back to held/editable). A course MOVE never produces
+ * one: a course change only ever applies to a held, never-printed line, so there is nothing yet in
+ * the kitchen to correct.
+ */
+export interface CorrectionSlip {
+  kind: "VOID" | "RECALLED";
+  stationName: string;
+  tableLabel: string | null;
+  orderNumber: string;
+  at: string;
+  item: KitchenTicketItem;
+}
+
+/**
+ * Render `slip` to an ESC/POS payload. There is no bold verb (module header note, R-G) so the
+ * `*** VOID ***` / `*** RECALLED ***` asterisks stand in for emphasis. Mirrors
+ * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feed(FEED_BEFORE_CUT)`/`cut()` —
+ * and reuses {@link emitItem} so the item + modifier lines render byte-for-byte like the original
+ * ticket the cook is correcting. `tableLabel` is only printed when non-null (e.g. a bar tab with no
+ * table).
+ */
+export function formatCorrectionSlip(slip: CorrectionSlip): Uint8Array {
+  const b = esc().init();
+
+  b.line(`*** ${slip.kind} ***`);
+  b.line(slip.stationName);
+  if (slip.tableLabel !== null) b.line(slip.tableLabel);
+  b.line(slip.orderNumber).line(hhmm(new Date(slip.at)));
+  emitItem(b, slip.item);
+
+  return b.feed(FEED_BEFORE_CUT).cut().bytes();
+}

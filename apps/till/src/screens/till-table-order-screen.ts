@@ -188,7 +188,12 @@ export class TillTableOrderScreen extends LitElement {
 
       .line {
         display: grid;
-        grid-template-columns: 1fr auto auto auto;
+        /* Up to SIX direct grid children on a pending line: name, qty, line-total, #lineCourse (a course
+           control when a venue has courses configured, else nothing), #lineAction (a Send/Recall/Cancel
+           button when the line offers one, else nothing) and the always-present serve button. Any track
+           whose child renders nothing collapses to 0 width, so sizing to the max keeps the serve button
+           on one row when both optional children render. The narrower .served-line overrides this below. */
+        grid-template-columns: 1fr auto auto auto auto auto;
         align-items: center;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
@@ -196,8 +201,17 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .served-line {
-        grid-template-columns: 1fr auto auto;
+        grid-template-columns: 1fr auto auto auto;
         color: var(--wt-color-text-muted);
+      }
+
+      /* The per-line course control (coursing editing A1): an editable select on a held line, a muted
+         read-only label on a fired one. Capped so a long course name never crowds out the line total. */
+      .line-course {
+        min-width: 0;
+        max-width: 8rem;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .qty {
@@ -270,6 +284,12 @@ export class TillTableOrderScreen extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
+      }
+
+      /* The course name + select group; display:contents so its children stay direct flex items of
+         .round-course (unchanged layout) while the hold switch sits beside them as a sibling. */
+      .round-course-field {
+        display: contents;
       }
 
       .round-course-name {
@@ -360,6 +380,13 @@ export class TillTableOrderScreen extends LitElement {
    */
   @state() private selectedDiet: DietPredicate | null = null;
 
+  /** The FIRED-and-STARTED line the operator is about to CANCEL (coursing corrections C5), captured when
+   * they tap its Cancel action so the consequence-naming confirm can name the dish; `null` when no confirm
+   * is open. Cancelling a started dish bins food, so — unlike Send/Recall — the void only fires once this
+   * is confirmed ({@link #confirmCancel}); dismissing ({@link #dismissCancel}) clears it and dispatches
+   * nothing. Held/queued lines Send/Recall with no confirm. */
+  @state() private cancelLine: TabLine | null = null;
+
   /** Which step of the in-drawer table-action flow (TS-3/TS-4) is showing — `closed` is the resting
    * state (only the "Table actions" trigger visible). The trigger opens the `menu`; a verb pick moves to
    * the target `pick` step (free tables for move/join, other open tabs for merge/transfer — the two are
@@ -387,6 +414,13 @@ export class TillTableOrderScreen extends LitElement {
    * course server-side (`<override> ?? product.course_id`); the picker offers no explicit "no course"
    * option, so a value here is always a real course id, never null. */
   #roundCourses = new WeakMap<OrderLine, string>();
+  /** Per-round-line HOLD flags the waiter toggled (coursing editing A3), keyed by the round line's stable
+   * object identity — a sibling of {@link #roundCourses} with the same lifecycle: a `WeakMap` survives
+   * re-renders and reorders and auto-drops its entries when the round is sent (the line objects become
+   * unreachable). A line ABSENT here (the toggle's default) fires on send by the normal course rule; an
+   * entry set to `true` inserts the line HELD (`fired_at NULL`) regardless of its course. Only ever `true`
+   * — {@link #toggleHold} DELETES the entry when the toggle goes back off, never stores `false`. */
+  #roundHolds = new WeakMap<OrderLine, boolean>();
   /** The pay store fed to `tender-pay` — rebuilt from {@link lines} on every change (see {@link willUpdate}). */
   #payStore?: TabPayStore;
   /** Per-line locked gross, keyed by `lineNo`, memoised from {@link lines} in the SAME
@@ -446,8 +480,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** A line's display name from the catalogue, falling back to the raw id for a product deactivated
-   * since it was added (mirrors the retrieve path's productId-only philosophy). */
-  #nameFor(productId: string): string {
+   * since it was added (mirrors the retrieve path's productId-only philosophy). `null` — a child modifier
+   * line, which has no product — resolves to `""`; the screen never renders a name for such a row (the
+   * per-line action + course picker are guarded off it), so this is only a total-safety fallback. */
+  #nameFor(productId: string | null): string {
+    if (productId === null) return "";
     const product = this.products.find((candidate) => candidate.id === productId);
     return product ? productName(product) : productId;
   }
@@ -463,7 +500,9 @@ export class TillTableOrderScreen extends LitElement {
    * clear the round bar for the next round. An unoverridden line OMITS `courseId`, so the server applies
    * the product's default course (`<override> ?? product.course_id`); a plain line OMITS `options` (never
    * `[]`), which the server reads as no modifiers. `options` carry only the `optionGroupItemId`s — the
-   * server re-resolves each option's price, VAT and name authoritatively. */
+   * server re-resolves each option's price, VAT and name authoritatively. A HELD line (the waiter left its
+   * toggle ON, coursing editing A3) carries `hold: true`, inserting it without firing; an un-held line
+   * OMITS `hold` (never `false`), so the server fires it by the normal course rule. */
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {
       const roundLine: RoundLine = {
@@ -477,6 +516,9 @@ export class TillTableOrderScreen extends LitElement {
       }
       if (line.options !== undefined && line.options.length > 0) {
         roundLine.options = line.options.map(toWireOption);
+      }
+      if (this.#roundHolds.get(line) === true) {
+        roundLine.hold = true;
       }
       return roundLine;
     });
@@ -492,6 +534,20 @@ export class TillTableOrderScreen extends LitElement {
     return this.#roundCourses.get(line) ?? line.product.courseId ?? "";
   }
 
+  /** The `<option>` list every course select shares (the round builder AND the tab-line drawer, coursing
+   * editing A1): a leading placeholder then one option per ACTIVE venue course in `displayOrder`, the
+   * `selected` value pre-marked. The placeholder's meaning is the CALLER's — "use the product default"
+   * for a round line (never sent as a course), "no course" for a tab line (the explicit `null`). */
+  #courseOptions(selected: string, placeholder: string): TemplateResult {
+    return html`<option value="" .selected=${selected === ""}>${placeholder}</option>
+      ${this.courses.map(
+        (course) =>
+          html`<option value=${course.id} .selected=${selected === course.id}>
+            ${course.name}
+          </option>`,
+      )}`;
+  }
+
   /** Record a per-line course pick. `""` (the default placeholder) clears any override so the line falls
    * back to the product default server-side; any other value is an explicit override. `requestUpdate`
    * because {@link #roundCourses} is a `WeakMap`, not a reactive property — the picker must re-render to
@@ -499,6 +555,23 @@ export class TillTableOrderScreen extends LitElement {
   #pickCourse(line: OrderLine, courseId: string): void {
     if (courseId === "") this.#roundCourses.delete(line);
     else this.#roundCourses.set(line, courseId);
+    this.requestUpdate();
+  }
+
+  /** Whether a round line is currently HELD — the waiter's toggle if set, else `false` (the default: a
+   * round line fires on send). Read by the per-line hold switch to reflect its state across re-renders. */
+  #isHeld(line: OrderLine): boolean {
+    return this.#roundHolds.get(line) === true;
+  }
+
+  /** Record a per-line hold toggle. `true` holds the line (inserted but not fired on send); `false` clears
+   * the entry so the line falls back to firing by its course rule — the map only ever stores `true`, never
+   * `false`, so a plain line's wire is `hold`-free. `requestUpdate` because {@link #roundHolds} is a
+   * `WeakMap`, not a reactive property — the switch must re-render to reflect the new state (a
+   * store-triggered re-render reads the same map). Mirrors {@link #pickCourse}. */
+  #toggleHold(line: OrderLine, held: boolean): void {
+    if (held) this.#roundHolds.set(line, true);
+    else this.#roundHolds.delete(line);
     this.requestUpdate();
   }
 
@@ -534,6 +607,239 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(
       new CustomEvent("serve-line", { detail: { lineNo }, bubbles: true, composed: true }),
     );
+  }
+
+  /** Announce a NOT-yet-fired tab line's course move (coursing editing A1) — the app re-files it via
+   * `setLineCourse` then reloads the tab (the SAME dispatch-up-then-`getTabLines` pattern as `serve-line`
+   * and `fire-course`). `courseId` is `string | null` (`null` clears the line to no course), the SAME
+   * shape the client verb takes; keyed by the line's `lineNo`. NON-FISCAL. */
+  #setLineCourse(lineNo: number, courseId: string | null): void {
+    this.dispatchEvent(
+      new CustomEvent("set-line-course", {
+        detail: { lineNo, courseId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Whether `line` has a LIVE, unfired ticket item worth SENDING — the shared predicate the Send button
+   * ({@link #lineAction}) and the Send-all gate ({@link #anyHeld}) both key on, so the two stay in
+   * lockstep. Three exclusions: a CHILD MODIFIER line (`productId === null`) never fires a ticket item of
+   * its own; a ticket-item-less PARENT (`state === null` — a moved/merged line or an openTab-initial line)
+   * has nothing to send (`sendLines` would match no ticket item and no-op); and an already-FIRED line
+   * (`firedAt !== null`) is past sending. */
+  #isSendable(line: TabLine): boolean {
+    return line.productId !== null && line.firedAt === null && line.state !== null;
+  }
+
+  /** The ONE kitchen action a tab line offers (coursing corrections C5), gated on its kitchen state:
+   *  - HELD (`firedAt === null`) → **Send** (`send-lines` with `[lineNo]`), releasing it to the kitchen;
+   *  - FIRED + not started (`firedAt !== null && state === "queued"`) → **Recall** (`recall-lines` with
+   *    `[lineNo]`), un-sending it before the kitchen begins;
+   *  - FIRED + started (`state === "preparing"` / `"ready"`) → **Cancel**, behind the consequence-naming
+   *    confirm (a started dish is binned, so {@link #requestCancel} opens the dialog rather than voiding).
+   *
+   * A CHILD MODIFIER line (`productId === null`) is skipped FIRST: it has no product and never fires a
+   * ticket item of its own (`firedAt`/`state` always null), so it must show no action — without this
+   * guard its null `firedAt` would fall into the HELD branch and paint a meaningless Send on every
+   * option row. The HELD branch also requires a LIVE ticket item (`state !== null`): a parent line can
+   * carry `firedAt === null && state === null` when it has no ticket item to send — a line opened with a
+   * tab's initial round or one moved/merged between tabs (re-inserted under a new id without re-firing).
+   * `sendLines` would match no ticket item for such a line and no-op, so Send would be dead; that shape
+   * falls through to the trailing `nothing` instead. */
+  #lineAction(line: TabLine): TemplateResult | typeof nothing {
+    if (line.productId === null) return nothing;
+    const name = this.#nameFor(line.productId);
+    if (this.#isSendable(line)) {
+      return html`<wt-button
+        class="line-send"
+        size="sm"
+        variant="primary"
+        data-send-line=${line.lineNo}
+        aria-label=${`${t("table.send_line")} · ${name}`}
+        @click=${() => this.#sendLine(line.lineNo)}
+      >
+        ${t("table.send_line")}
+      </wt-button>`;
+    }
+    if (line.state === "queued") {
+      return html`<wt-button
+        class="line-recall"
+        size="sm"
+        variant="secondary"
+        data-recall-line=${line.lineNo}
+        aria-label=${`${t("table.recall_line")} · ${name}`}
+        @click=${() => this.#recallLine(line.lineNo)}
+      >
+        ${t("table.recall_line")}
+      </wt-button>`;
+    }
+    if (line.state === "preparing" || line.state === "ready") {
+      return html`<wt-button
+        class="line-cancel"
+        size="sm"
+        variant="danger"
+        data-cancel-line=${line.lineNo}
+        aria-label=${`${t("table.cancel_line")} · ${name}`}
+        @click=${() => this.#requestCancel(line)}
+      >
+        ${t("table.cancel_line")}
+      </wt-button>`;
+    }
+    return nothing;
+  }
+
+  /** Whether any TOP-LEVEL dish line is still HELD with a LIVE ticket item — gates the tab-level Send-all
+   * affordance. Keyed on the SAME {@link #isSendable} predicate the per-line Send button uses, so the two
+   * stay in lockstep: counting a line no per-line Send would offer would surface a dead Send-all on a tab
+   * with no genuinely-held line. */
+  #anyHeld(): boolean {
+    return this.lines.some((line) => this.#isSendable(line));
+  }
+
+  /** Announce a fire of ONE held line (coursing corrections C5) — the app releases it via `sendLines` then
+   * reloads the tab (the SAME dispatch-up-then-`getTabLines` pattern as `serve-line`/`fire-course`). */
+  #sendLine(lineNo: number): void {
+    this.dispatchEvent(
+      new CustomEvent("send-lines", {
+        detail: { lineNos: [lineNo] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Announce a SEND-ALL — release every held line at once. An empty `lineNos` is the server's send-all
+   * (`sendLines(orderId, [])`), so the detail carries `[]`, not the list of held line numbers. */
+  #sendAll(): void {
+    this.dispatchEvent(
+      new CustomEvent("send-lines", { detail: { lineNos: [] }, bubbles: true, composed: true }),
+    );
+  }
+
+  /** Announce a recall of ONE not-yet-started line — the app un-sends it via `recallLines` then reloads. */
+  #recallLine(lineNo: number): void {
+    this.dispatchEvent(
+      new CustomEvent("recall-lines", {
+        detail: { lineNos: [lineNo] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Open the consequence-naming cancel confirm for a STARTED line (nothing is dispatched yet). */
+  #requestCancel(line: TabLine): void {
+    this.cancelLine = line;
+  }
+
+  /** Confirm the cancel: announce the void of the captured line (the app calls `voidLine` then reloads),
+   * then close the dialog. A no-op if nothing is captured (the dialog cannot confirm while closed). */
+  #confirmCancel(): void {
+    const line = this.cancelLine;
+    if (line === null) return;
+    this.cancelLine = null;
+    this.dispatchEvent(
+      new CustomEvent("void-line", {
+        detail: { lineNo: line.lineNo },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Dismiss the cancel confirm without voiding — the line stays exactly as it was. */
+  #dismissCancel(): void {
+    this.cancelLine = null;
+  }
+
+  /** The cancel confirmation dialog (coursing corrections C5), reusing the shared `wt-dialog` primitive
+   * (the same one the allergen detail + modifier picker use) — NEVER a hand-rolled dialog. Always present,
+   * driven by {@link cancelLine}, so escape/backdrop flows back through `wt-close` into the state rather
+   * than fighting the `.open` binding (the allergen screen's pattern). Names the consequence and the dish;
+   * the destructive Cancel button confirms, "Keep it" dismisses. */
+  #cancelDialog(): TemplateResult {
+    const line = this.cancelLine;
+    return html`<wt-dialog
+      class="cancel-confirm"
+      .open=${line !== null}
+      .heading=${t("table.cancel_title")}
+      @wt-close=${() => this.#dismissCancel()}
+    >
+      <p class="cancel-body">
+        ${t("table.cancel_started")}
+        ${
+          line !== null
+            ? html`<span class="cancel-dish"
+                >${this.#nameFor(line.productId)} ×${this.#displayQty(line.quantity)}</span
+              >`
+            : nothing
+        }
+      </p>
+      <wt-button
+        slot="footer"
+        class="cancel-keep"
+        variant="secondary"
+        data-cancel-dismiss
+        @click=${() => this.#dismissCancel()}
+      >
+        ${t("table.cancel_keep")}
+      </wt-button>
+      <wt-button
+        slot="footer"
+        class="cancel-do"
+        variant="danger"
+        data-cancel-confirm
+        @click=${() => this.#confirmCancel()}
+      >
+        ${t("table.cancel_confirm")}
+      </wt-button>
+    </wt-dialog>`;
+  }
+
+  /** A course id's display name for the READ-ONLY (fired-line) course cell: the "No course" placeholder for
+   * a `null` course, else the active venue course's name, else the raw id for a course DEACTIVATED since the
+   * line was rung (the retrieve path's productId-only philosophy — never blank). */
+  #courseName(courseId: string | null): string {
+    if (courseId === null) return t("table.course_none");
+    return this.courses.find((course) => course.id === courseId)?.name ?? courseId;
+  }
+
+  /** A tab-line course select's value → the wire course id: the `""` placeholder is the explicit
+   * no-course `null`, any other value a real course id (mirrors the client verb's `string | null`). */
+  #courseValue(value: string): string | null {
+    return value === "" ? null : value;
+  }
+
+  /** The per-line COURSE control on a tab line (coursing editing A1), reusing the round builder's course
+   * options ({@link #courseOptions}). A NOT-yet-fired line (`firedAt === null`) gets the EDITABLE picker
+   * bound to its current course (`null` shows the "No course" placeholder); its change re-files the line via
+   * {@link #setLineCourse}. A FIRED line shows its course READ-ONLY — a fired line's course is corrected via
+   * recall (C5), not moved here. Renders nothing when the venue has no courses to pick between, exactly as
+   * the round-builder strip hides itself then — and nothing for a CHILD MODIFIER line (`productId === null`),
+   * which has no course of its own and whose null `firedAt` would otherwise paint an editable picker on
+   * every option row. */
+  #lineCourse(line: TabLine): TemplateResult | typeof nothing {
+    if (this.courses.length === 0 || line.productId === null) return nothing;
+    if (line.firedAt !== null) {
+      return html`<span class="line-course" data-line-course-static=${line.lineNo}
+        >${this.#courseName(line.courseId)}</span
+      >`;
+    }
+    const name = this.#nameFor(line.productId);
+    return html`<select
+      class="line-course"
+      data-line-course=${line.lineNo}
+      aria-label=${`${t("table.course_label")} · ${name}`}
+      @change=${(event: Event) =>
+        this.#setLineCourse(
+          line.lineNo,
+          this.#courseValue((event.target as HTMLSelectElement).value),
+        )}
+    >
+      ${this.#courseOptions(line.courseId ?? "", t("table.course_none"))}
+    </select>`;
   }
 
   #toggleDrawer(): void {
@@ -656,6 +962,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.send_round")}
           </wt-button>
         </div>
+        ${this.#cancelDialog()}
       </section>
     `;
   }
@@ -675,23 +982,31 @@ export class TillTableOrderScreen extends LitElement {
   #roundCourseRow(line: OrderLine, index: number): TemplateResult {
     const name = productName(line.product);
     const selected = this.#selectedCourseId(line);
-    return html`<label class="round-course">
-      <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
-      <select
-        data-round-course=${index}
-        aria-label=${`${t("table.course_label")} · ${name}`}
-        @change=${(event: Event) =>
-          this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
-      >
-        <option value="" .selected=${selected === ""}>${t("table.course_default")}</option>
-        ${this.courses.map(
-          (course) =>
-            html`<option value=${course.id} .selected=${selected === course.id}>
-              ${course.name}
-            </option>`,
-        )}
-      </select>
-    </label>`;
+    // The course name + its select live in their own `<label>` (kept `display: contents` so the row's flex
+    // is unchanged); the hold switch is a SIBLING, not nested in that label — a `<label>` may wrap only its
+    // one control, and the switch carries its own inner label/for. `table.hold_label` names the switch
+    // (product appended, matching the course select's aria-label) so a screen reader can tell the rows apart.
+    return html`<div class="round-course">
+      <label class="round-course-field">
+        <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
+        <select
+          data-round-course=${index}
+          aria-label=${`${t("table.course_label")} · ${name}`}
+          @change=${(event: Event) =>
+            this.#pickCourse(line, (event.target as HTMLSelectElement).value)}
+        >
+          ${this.#courseOptions(selected, t("table.course_default"))}
+        </select>
+      </label>
+      <wt-switch
+        class="round-hold"
+        data-round-hold=${index}
+        .checked=${this.#isHeld(line)}
+        .label=${`${t("table.hold_label")} · ${name}`}
+        @wt-change=${(event: Event) =>
+          this.#toggleHold(line, (event as CustomEvent<{ checked: boolean }>).detail.checked)}
+      ></wt-switch>
+    </div>`;
   }
 
   #drawer(pending: TabLine[]): TemplateResult {
@@ -723,6 +1038,19 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="pending">
       <h2>${t("table.pending_title")}</h2>
       ${
+        this.#anyHeld()
+          ? html`<wt-button
+              class="send-all"
+              size="sm"
+              variant="primary"
+              data-send-all
+              @click=${() => this.#sendAll()}
+            >
+              ${t("table.send_all")}
+            </wt-button>`
+          : nothing
+      }
+      ${
         pending.length === 0
           ? html`<p class="empty">${t("table.none_pending")}</p>`
           : html`<ul>
@@ -738,6 +1066,7 @@ export class TillTableOrderScreen extends LitElement {
       <span class="name">${name}</span>
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
+      ${this.#lineCourse(line)}${this.#lineAction(line)}
       <wt-button
         class="serve"
         size="sm"
@@ -765,6 +1094,7 @@ export class TillTableOrderScreen extends LitElement {
                     <span class="name">${this.#nameFor(line.productId)}</span>
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
+                    ${this.#lineCourse(line)}
                   </li>`,
               )}
             </ul>`

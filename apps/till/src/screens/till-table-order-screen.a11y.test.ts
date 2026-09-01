@@ -26,9 +26,12 @@ const lines: TabLine[] = [
     quantity: "2.000",
     unitPriceGross: "1.50",
     servedAt: null,
-    // A HELD course (fired_at null) so the waiter-fire section is in the a11y scan under `waiter`.
+    // A HELD course (fired_at null) so the waiter-fire section is in the a11y scan under `waiter`. Held
+    // still means the round-send already inserted its ticket item (fireLines does this for every parent
+    // line, fired or held), so `state` is the fresh-insert "queued", not null.
     courseId: "c1",
     firedAt: null,
+    state: "queued",
   },
   {
     lineNo: 2,
@@ -38,6 +41,7 @@ const lines: TabLine[] = [
     servedAt: "2026-08-20T10:00:00.000Z",
     courseId: "c1",
     firedAt: null,
+    state: "queued",
   },
 ];
 
