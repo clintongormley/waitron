@@ -202,11 +202,50 @@ partial scope; the detail for a live thread is under *Open threads*.
 `sync_peers` auth + retention) · SIF topology (`#33`, `node_id` re-key) · device identity-1 · printing
 subsystem (`@waitron/printing` — agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras
 dashboard) · CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding) ·
-localisation (per-user `persons.locale`, live language switch, venue-default derivation).
+localisation (per-user `persons.locale`, live language switch, venue-default derivation) · logging &
+diagnostics foundation (Slice 1 #192 — durable rotating logs, request-id correlation, `debug`
+verbosity + manager diagnostic-mode viewer, `@waitron/diagnostics` client trail + crash capture;
+Slices 2–3 in *Open threads*).
 
 ---
 
 ## Open threads (detail)
+
+### Logging, diagnostics & one-touch bug report (Slice 1 LANDED #192; Slices 2–3 next)
+
+A "report a problem at the touch of a button" system for non-technical staff, feeding a
+**staff → manager → vendor** pipeline. Eventual vendor destination is **GitHub issues**; for now a
+bundle only needs to be **copy-pastable** (no cloud-sync dependency). Spec/plan:
+`docs/superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md` +
+`docs/superpowers/plans/2026-08-31-logging-diagnostics-foundation.md`.
+
+**Slice 1 — logging foundation — LANDED #192.** Server: `debug` level + runtime threshold filtering,
+in-memory verbosity controller (auto-reverting diagnostic mode), rotating disk log sink
+(`<stateDir>/logs`) + tail-bounded reader, request-id middleware (route-pattern logging, never
+bodies/query/concrete paths), error-boundary request-id enrichment, `diagnostics.view` permission +
+three gated `/management-api/diagnostics` endpoints, boot wiring. Client: new zero-dep
+`@waitron/diagnostics` (ring buffer + value-type redaction guard, injected-target crash capture,
+instrumented fetch) wired into till + dashboard, plus a manager-only live-log viewer screen. Redaction
+holds end-to-end; nothing blocks a sale.
+
+**Slice 2 — one-touch bug report (NEXT).** `bug_reports` table (tenant-scoped: FORCE RLS + isolation
+policy + grants; run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding it), a
+capture endpoint that **freezes** a self-contained bundle (client trail `snapshot()` +
+`LogReader.byRequestIds()` + environment), a `wt-report-dialog` + "Report a problem" trigger in the
+till and dashboard chrome, and a copy-pastable GitHub-ready markdown serialiser.
+
+**Slice 3 — triage & forwarding.** Dashboard *Problem reports* screen (list, view, copy, status
+transitions) and automated GitHub-issue creation (needs a stored token in `@waitron/credentials`).
+
+**Deferred hardening carried out of Slice 1 (do in Slice 2, when the trail is actually forwarded):**
+- Enforce a **key-name allowlist** on the client trail's redaction (today it filters by value *type*
+  only — objects/bodies dropped, but an arbitrary secret *string* under any key would pass); and
+  scrub `message`/`stack` captured from rejected Errors.
+- `maskPath` masks UUID + all-numeric path segments only — mask non-UUID/non-numeric PII segments
+  (a slug/email) too before the trail leaves the box.
+- Route the dashboard's boot-probe-fail / post-login / logout screen transitions through the nav
+  trail (Slice 1 logs only `#selectScreen` sidebar clicks).
+- Roll the trail + report button out to `apps/setup`.
 
 ### Sync completion (C2b LANDED #162; rest parked below the demo)
 
