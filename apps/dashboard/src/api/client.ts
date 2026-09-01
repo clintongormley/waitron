@@ -1157,6 +1157,29 @@ export interface SalesPeriodDto {
   topSellers: TopSellerRow[];
 }
 
+// ── Diagnostics (recent logs + runtime verbosity) types ──────────────────────────────────────────
+// LOCAL copies of the server's diagnostics JSON shapes (the `/management-api/diagnostics/*` routes,
+// Task 7), deliberately NOT imported from `apps/server`/`@waitron/*` — a runtime import would drag
+// their barrels + Node builtins into the browser bundle (the #70 rule every shape above follows).
+// These are the CONTRACT the diagnostics viewer screen builds on; the server shapes stay the source
+// of truth, and a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+
+/** One line of `GET /management-api/diagnostics/recent` — a structured log record. `at` (the ISO
+ * instant), `level` (the severity) and `event` (the log key) are always present; `requestId` is set
+ * only when the line belongs to a request (a boot/background line carries none); the open `Record`
+ * tail carries whatever per-event fields the server attached. */
+export type DiagnosticsLine = {
+  at: string;
+  level: string;
+  event: string;
+  requestId?: string;
+} & Record<string, unknown>;
+
+/** `GET /management-api/diagnostics/verbosity` — the node's current log verbosity. `level` is the
+ * floor being emitted; `revertsAt` is the ISO instant a temporary raise expires (null when the level
+ * is the standing default, with no pending revert). */
+export type Verbosity = { level: "debug" | "info"; revertsAt: string | null };
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -2239,6 +2262,30 @@ export class DashboardApi {
       "/management-api/reports/overdue-orders",
       "GET",
     );
+  }
+
+  /** `GET /management-api/diagnostics/recent?limit=` — the node's most recent structured log lines,
+   * newest last (`limit` caps how many, default 200). Backs the diagnostics viewer's log pane. */
+  getRecentLogs(limit = 200): Promise<{ lines: DiagnosticsLine[] }> {
+    return this.#request<{ lines: DiagnosticsLine[] }>(
+      `/management-api/diagnostics/recent?limit=${limit}`,
+      "GET",
+    );
+  }
+
+  /** `GET /management-api/diagnostics/verbosity` — the node's current log level and any pending
+   * revert (see {@link Verbosity}). Backs the diagnostics viewer's verbosity control. */
+  getVerbosity(): Promise<Verbosity> {
+    return this.#request<Verbosity>("/management-api/diagnostics/verbosity", "GET");
+  }
+
+  /** `POST /management-api/diagnostics/verbosity` — raise (or restore) the node's log level for
+   * `ttlMinutes` minutes, after which it reverts to the standing default. */
+  setVerbosity(level: "debug" | "info", ttlMinutes: number): Promise<void> {
+    return this.#request<void>("/management-api/diagnostics/verbosity", "POST", {
+      level,
+      ttlMinutes,
+    });
   }
 
   /**

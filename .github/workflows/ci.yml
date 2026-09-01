@@ -990,6 +990,7 @@ jobs:
           set -- "$@" --filter "!@waitron/printing"
           set -- "$@" --filter "!@waitron/verifactu"
           set -- "$@" --filter "!@waitron/bench-pglite"
+          set -- "$@" --filter "!@waitron/diagnostics"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage

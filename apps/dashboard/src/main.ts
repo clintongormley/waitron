@@ -1,6 +1,8 @@
 import { html, render } from "lit";
 import { applyTokens } from "@waitron/ui";
+import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
 import { DashboardApi } from "./api/client.js";
+import { diag } from "./diagnostics.js";
 import "./dashboard-app.js";
 
 // The browser entry point for the management dashboard. It paints the token layer onto the document
@@ -11,5 +13,14 @@ import "./dashboard-app.js";
 // browser at startup.
 applyTokens(document.documentElement);
 
+// Crash capture + an instrumented fetch feed the one per-session diagnostics trail: window errors and
+// every API round trip land in `diag`, shared with <dashboard-app>'s nav logging via ./diagnostics.js.
+installErrorCapture(window, diag);
+
 const app = document.querySelector<HTMLElement>("#app")!;
-render(html`<dashboard-app .api=${new DashboardApi()}></dashboard-app>`, app);
+render(
+  html`<dashboard-app
+    .api=${new DashboardApi("", createInstrumentedFetch(fetch, diag))}
+  ></dashboard-app>`,
+  app,
+);

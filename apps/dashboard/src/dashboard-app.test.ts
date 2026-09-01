@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
+import { diag } from "./diagnostics.js";
 
 /**
  * Installs a CONTROLLABLE stub for `window.matchMedia`, targeting only the drawer breakpoint
@@ -136,6 +137,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
+    // The diagnostics screen (manager-gated nav) polls these on connect; resolve them so navigating to
+    // it leaves no stray rejection.
+    getRecentLogs: vi.fn().mockResolvedValue({ lines: [] }),
+    getVerbosity: vi.fn().mockResolvedValue({ level: "info", revertsAt: null }),
+    setVerbosity: vi.fn().mockResolvedValue(undefined),
     // The overview screen is the non-staff LANDING (Task 9), so it loads on connect for almost every
     // manager/supervisor/admin session in this suite; resolve it so booting leaves no stray rejection.
     getSalesOverview: vi.fn().mockResolvedValue({
@@ -226,9 +232,9 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The eighteen manager faces the grouped sidebar switches between, every one keeping its `data-test`
- * id. Order is the sidebar's render order (pinned overview+sales, then Menu / Service / Team /
- * Purchasing / Configuration). */
+/** The nineteen manager faces the grouped sidebar switches between (for a manager/admin session —
+ * `diagnostics` is manager-gated), every one keeping its `data-test` id. Order is the sidebar's render
+ * order (pinned overview+sales, then Menu / Service / Team / Purchasing / Configuration). */
 const NAV_SCREENS = [
   "overview",
   "sales",
@@ -248,6 +254,7 @@ const NAV_SCREENS = [
   "receipt",
   "devices",
   "printers",
+  "diagnostics",
 ] as const;
 
 /** The five group-header i18n keys the sidebar renders (the pinned overview+sales group has none). */
@@ -283,6 +290,7 @@ const SCREEN_TAGS = [
   "dashboard-kitchen-screen",
   "dashboard-devices-screen",
   "dashboard-printers-screen",
+  "dashboard-diagnostics-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -674,9 +682,27 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the eighteen manager
-  // faces keeps its `data-test="nav-<screen>"` id, and the active face is marked `aria-current="page"`.
-  it("renders each nav group header and all 17 nav items", async () => {
+  it("records a nav event on the shared diagnostics trail when the screen changes", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    // `diag` is a MODULE SINGLETON shared across every test, so scope the assertion to events appended
+    // after this baseline rather than the total length (which leaks across tests).
+    const before = diag.snapshot().length;
+    navSales(el)!.click();
+    await flush(el);
+    const nav = diag
+      .snapshot()
+      .slice(before)
+      .find((e) => e.event === "nav");
+    expect(nav?.fields.screen).toBe("sales");
+  });
+
+  // The grouped static sidebar (Task 11): every group header renders, every one of the nineteen manager
+  // faces (a manager session sees the gated `diagnostics` too) keeps its `data-test="nav-<screen>"` id,
+  // and the active face is marked `aria-current="page"`.
+  it("renders each nav group header and all nav items", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -686,9 +712,36 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the eighteen manager faces is present by its stable data-test id.
+    // …and every one of the nineteen manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(18);
+    expect(NAV_SCREENS).toHaveLength(19);
+  });
+
+  // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session
+  // must NOT see it, while a `manager` (and `admin`) session does. Proof-by-deletion: dropping the
+  // `.filter((item) => !item.requiresManager || …)` from `#nav()` renders it for the supervisor too,
+  // so the first assertion below goes red.
+  it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p3",
+        role: "supervisor",
+        locale: null,
+        venueLocale: "es-ES",
+      }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el: sup } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(sup);
+    // A supervisor sees the ordinary configuration items but not the gated diagnostics one.
+    expect(navItem(sup, "devices")).toBeTruthy();
+    expect(navItem(sup, "diagnostics")).toBeNull();
+
+    const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(mgr);
+    expect(navItem(mgr, "diagnostics")).toBeTruthy();
   });
 
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {

@@ -39,12 +39,16 @@ export function createErrorBoundary(
     try {
       return await fn();
     } catch (cause) {
+      // `requestId` is a LOG FIELD only — it correlates the line with the request, and is never
+      // added to the error envelope (`cause.params` / the response body stay untouched). Absent
+      // (no request-id middleware seeded it), it is `undefined` and `JSON.stringify` drops it.
+      const requestId = c.get("requestId");
       if (isAppError(cause)) {
         const httpStatus = status[cause.code] ?? 400;
-        log("warn", cause.code, cause.params);
+        log("warn", cause.code, { ...cause.params, requestId });
         return c.json({ error: { code: cause.code, params: cause.params } }, httpStatus);
       }
-      log("error", tag, { errorCode: codeOf(cause) });
+      log("error", tag, { errorCode: codeOf(cause), requestId });
       return c.json({ error: { code: "server.internal" } }, 500);
     }
   };

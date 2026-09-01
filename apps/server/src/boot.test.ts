@@ -501,11 +501,16 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 describe("startServer, against a real container as the deployment role", () => {
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
+    // A throwaway log dir so this real boot's assembled rotating file sink writes somewhere isolated —
+    // the assertion below reads `<logDir>/waitron.log` back to prove the sink is wired into `startServer`
+    // (not just constructable in a unit test), end to end through the tee'd `log`.
+    const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
         ...KEY_ENV,
         DATABASE_URL: databaseUrl,
         WAITRON_HTTP_PORT: String(port),
+        WAITRON_LOG_DIR: logDir,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         // Distinctive and far apart on purpose: a swapped minTickMs/maxTickMs mapping in boot.ts
         // would make the assertion below see 1000, not 94327 — the two values must not be
@@ -570,6 +575,10 @@ describe("startServer, against a real container as the deployment role", () => {
       // 404, which is the proof the route exists. A 404 here would mean `mountTillApi` never ran.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
+      // The request-id middleware is live and wraps every route mounted after it (registered on the
+      // shared app before all the API mounts): this mounted route echoes a generated `x-request-id`
+      // matching the safe charset. Proof `requestIdMiddleware` is mounted, not merely importable.
+      expect(staff.headers.get("x-request-id")).toMatch(/^[A-Za-z0-9._-]+$/);
       expect(await staff.json()).toEqual([]);
 
       // The catalogue write group is mounted on the same app (`mountCatalogueApi` in `boot.ts`). It is
@@ -592,8 +601,17 @@ describe("startServer, against a real container as the deployment role", () => {
       expect((await recovery.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
+
+      // The rotating FILE sink is wired into the assembled logger: `server.listening` is an `info`
+      // event, above the default verbosity, so the tee'd sink appended it to `<logDir>/waitron.log`.
+      // Reading it back proves the file half of the `tee(stdout, fileSink)` is live in a real boot —
+      // the stdout half is what `withCapturedStdout` already observes above.
+      expect(existsSync(join(logDir, "waitron.log"))).toBe(true);
+      const logText = await readFile(join(logDir, "waitron.log"), "utf8");
+      expect(logText).toContain('"event":"server.listening"');
     } finally {
       await server.close();
+      await rm(logDir, { recursive: true, force: true });
     }
 
     // A second, concurrent-in-effect close() (the previous one already resolved, but the guard

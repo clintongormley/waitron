@@ -142,6 +142,17 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "booking.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "booking.manage")).toBe(false);
   });
+  it("grants diagnostics.view to manager and admin only (logging & diagnostics foundation)", () => {
+    // A domain-named diagnostics permission (view recent logs + toggle diagnostic verbosity from the
+    // management dashboard / API), granted to exactly the roles that hold the other manager write gates
+    // — manager and admin — and NEVER to staff or supervisor. Mirrors the other manager-only gates
+    // (person.manage/till.configure): a floor supervisor cannot raise verbosity or read the log tail.
+    expect(PERMISSIONS).toContain("diagnostics.view");
+    expect(roleHasPermission("manager", "diagnostics.view")).toBe(true);
+    expect(roleHasPermission("admin", "diagnostics.view")).toBe(true);
+    expect(roleHasPermission("staff", "diagnostics.view")).toBe(false);
+    expect(roleHasPermission("supervisor", "diagnostics.view")).toBe(false);
+  });
   it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
     // Minting a cloud-mirror bundle hands out a data-access sync token, so it is admin-only — reached via
     // ALL and NEVER placed in the SUPERVISOR/MANAGER sets. Not even a manager holds it (least privilege —

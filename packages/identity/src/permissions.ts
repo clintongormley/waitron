@@ -84,6 +84,8 @@ export const PERMISSIONS = [
   // Minting a cloud-mirror bundle (sync cloud-mirror C2b) — hands out a data-access sync token, so
   // admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
   "mirror.create",
+  // view recent logs + toggle diagnostic verbosity; manager + admin
+  "diagnostics.view",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -116,6 +118,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "device.manage",
   "printer.manage",
   "booking.manage",
+  "diagnostics.view",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
