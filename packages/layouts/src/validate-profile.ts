@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { CARD_CONTRACTS, GRID_MAX_COLUMNS, SALE_CRITICAL_CARDS } from "./card-contract.js";
 import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS } from "./profile.js";
+import { validateThemeOverride } from "./theme.js";
 import type {
   CapabilityFlag,
   CardInstance,
@@ -33,7 +34,9 @@ function isCapabilityFlag(v: unknown): v is CapabilityFlag {
 
 /**
  * Validate an untrusted profile (design §4/§6). Returns it on success; throws `profile.invalid` naming
- * the first rule broken, never echoing an author value (a tab is identified by its numeric index).
+ * the first rule broken, never echoing an author value (a tab is identified by its numeric index). A
+ * present `theme` is validated via `validateThemeOverride` (so a bad theme surfaces as `theme.invalid`,
+ * delegated not re-wrapped) and round-trips on the returned profile.
  */
 export function validateProfile(input: unknown): ProfileDef {
   if (!isPlainObject(input)) throw new AppError("profile.invalid", { reason: "not_object" });
@@ -47,6 +50,7 @@ export function validateProfile(input: unknown): ProfileDef {
   const tabs: TabDef[] = input.tabs.map((raw, tabIndex) => validateTab(raw, tabIndex, seenKeys));
   const profile: ProfileDef = { formFactor: input.formFactor, capabilities, tabs };
   assertSaleCritical(profile, SELLING_FORM_FACTORS);
+  if (input.theme !== undefined) profile.theme = validateThemeOverride(input.theme);
   return profile;
 }
 

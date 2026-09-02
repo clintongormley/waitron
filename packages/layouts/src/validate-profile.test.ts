@@ -407,3 +407,37 @@ describe("validateProfile — sale-critical", () => {
     expect(p.formFactor).toBe("kds");
   });
 });
+
+describe("validateProfile — theme", () => {
+  it("round-trips a valid theme override", () => {
+    const theme = { tokens: { "--wt-color-primary": "#123456" } };
+    const out = validateProfile({
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+      theme,
+    });
+    expect(out.theme).toEqual(theme);
+    expect(out.theme).not.toBe(theme); // validated copy, not the input alias
+  });
+  it("omits theme when absent", () => {
+    const out = validateProfile({
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+    });
+    expect("theme" in out).toBe(false);
+  });
+  it("surfaces an invalid theme as theme.invalid", () => {
+    expect(() =>
+      validateProfile({
+        formFactor: "phone-portrait",
+        capabilities: [],
+        tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+        theme: { tokens: { "--evil": "x" } },
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "theme.invalid", params: { reason: "unknown_token" } }),
+    );
+  });
+});
