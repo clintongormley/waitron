@@ -259,7 +259,8 @@ function splitStatement(statement: string): StatementParts {
 
 // The dispatch table, built once from ENROLLED: 19 entries cover every row of any batch. The delete
 // statement is NOT precomputed — deleteStatementFor is a cheap pure-string helper with no column
-// derivation, and only Group C rows ever delete — so it is built per delete row in applyOneRow.
+// derivation, and only DELETE-capable rows ever delete (Group C's working_orders/working_order_lines
+// and Group E's webauthn_credentials) — so it is built per delete row in applyOneRow.
 const DISPATCH: ReadonlyMap<string, Dispatch> = new Map(
   ENROLLED.map((entry) => [
     entry.table,
