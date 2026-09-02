@@ -602,6 +602,19 @@ export interface DeviceRow {
   enrolledAt: string;
 }
 
+/** One `GET /management-api/profiles` row — a tenant layout profile as the profile picker needs it. The
+ * server answers `{ profiles: [{ id, name, definition }] }`; this is one element. `definition` is the
+ * opaque layout JSON, typed `unknown` DELIBERATELY: the dashboard's device-enrolment picker binds only a
+ * profile's `{ id, name }`, and importing `@waitron/layouts`' real definition type would drag that
+ * package's barrel + Node builtins into the browser bundle (the #70 rule the printing/till shapes follow).
+ * A layout editor that must read the definition parses it at its own edge; a mismatch surfaces as a
+ * runtime shape error a view test catches, not a compile break. */
+export interface LayoutProfile {
+  id: string;
+  name: string;
+  definition: unknown;
+}
+
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
  * per-course fire; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass display
  * surfaces it. Mirrors the server's `FireControl`. */
@@ -1804,11 +1817,39 @@ export class DashboardApi {
   /** `POST /management-api/device-codes` — mint a single-use pairing code, returning the plaintext code
    * ONCE (201). The code is never re-readable (like a passkey challenge handle). `kind` is a `device_kind`
    * value: a `"kds_station"` binds to a station (`stationId` required; a bad/absent/retired station rejects
-   * `{ code: "station.not_found" }`), while a `"handheld"` is station-less (`stationId` omitted). */
-  createDeviceCode(input: { kind: string; stationId?: string; label: string }): Promise<{
+   * `{ code: "station.not_found" }`); a sale-capable `"till"`/`"handheld"` binds to a till (`tillId`
+   * required — the server rejects a missing one `{ code: "device.till_required" }`), while a
+   * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned layout
+   * profile (`layoutProfileId`, any kind) and the till's static hardware (`receiptPrinterId`,
+   * `hasCashDrawer`, `cardProvider` (`none`/`stripe_terminal`/`stripe_on_device`), `cardReaderId`). An
+   * omitted optional binding is left at the server default (`card_provider='none'`, `has_cash_drawer=false`,
+   * others NULL). A well-formed id naming no tenant row rejects `{ code: "device.binding_invalid" }`. */
+  createDeviceCode(input: {
+    kind: string;
+    stationId?: string;
+    tillId?: string;
+    layoutProfileId?: string;
+    receiptPrinterId?: string;
+    hasCashDrawer?: boolean;
+    cardProvider?: string;
+    cardReaderId?: string;
+    label: string;
+  }): Promise<{
     code: string;
   }> {
     return this.#request<{ code: string }>("/management-api/device-codes", "POST", input);
+  }
+
+  /** `GET /management-api/profiles` — this tenant's layout profiles (`till.configure`-gated server-side;
+   * every role that reaches the Devices screen holds it). The server answers `{ profiles: [...] }`; this
+   * unwraps to the array. Each profile's `definition` is the opaque layout JSON — typed `unknown` here
+   * because the dashboard's profile PICKER needs only `{ id, name }`, and importing the real
+   * `@waitron/layouts` definition type would drag that package's barrel + Node builtins into the browser
+   * bundle (the #70 bundle rule the printing/till shapes follow). */
+  listProfiles(): Promise<LayoutProfile[]> {
+    return this.#request<{ profiles: LayoutProfile[] }>("/management-api/profiles", "GET").then(
+      (r) => r.profiles,
+    );
   }
 
   /** `POST /management-api/devices/:id/revoke` — revoke a device (flip `active = false`, instant): the

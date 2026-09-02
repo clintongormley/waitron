@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { DashboardApi, DeviceRow, Station } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceRow,
+  LayoutProfile,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
 
 afterEach(cleanupWidgets);
@@ -52,10 +59,38 @@ const devices: DeviceRow[] = [
   },
 ];
 
+const tills: Till[] = [
+  { id: "t1", label: "Caja 1", locationId: "loc1", receiptPrinterId: null },
+  { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
+];
+
+const profiles: LayoutProfile[] = [
+  { id: "p1", name: "Comedor", definition: { areas: [] } },
+  { id: "p2", name: "Barra", definition: { areas: [] } },
+];
+
+const printers: Printer[] = [
+  {
+    id: "pr1",
+    name: "Cocina",
+    transport: "network_tcp",
+    agentId: null,
+    host: "10.0.0.9",
+    port: 9100,
+    usbPath: null,
+    pollId: null,
+    ticketScope: "station",
+    active: true,
+  },
+];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
+    listTills: vi.fn().mockResolvedValue(tills),
+    listProfiles: vi.fn().mockResolvedValue(profiles),
+    listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -92,6 +127,27 @@ function pickKind(el: DevicesScreen, value: string): void {
   select.dispatchEvent(new Event("change"));
 }
 
+/** Pick a value in one of the native <select>s (till/profile/printer/card-provider) and fire `change`. */
+function pickSelect(el: DevicesScreen, testId: string, value: string): void {
+  const select = q(el, `[data-test=${testId}]`) as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event("change"));
+}
+
+/** Toggle the has-cash-drawer wt-switch by dispatching its composed `wt-change` (the wt-switch contract). */
+function toggleCashDrawer(el: DevicesScreen, checked: boolean): void {
+  q(el, "[data-test=cash-drawer-switch]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+  );
+}
+
+/** Type into the card-reader wt-input by dispatching its composed `wt-change` (the wt-input contract). */
+function typeCardReader(el: DevicesScreen, value: string): void {
+  q(el, "[data-test=card-reader-id]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
 describe("devices-screen", () => {
   it("loads devices and stations on connect and renders a row per device", async () => {
     const api = stubApi();
@@ -100,6 +156,10 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
+    // The generate form's till/profile/hardware pickers are fed from these three list verbs.
+    expect(api.listTills).toHaveBeenCalledTimes(1);
+    expect(api.listProfiles).toHaveBeenCalledTimes(1);
+    expect(api.listPrinters).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=device-row-d1]")).toBeTruthy();
     expect(q(el, "[data-test=device-row-d2]")).toBeTruthy();
   });
@@ -189,32 +249,44 @@ describe("devices-screen", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2);
   });
 
-  // Picking the handheld kind HIDES the station picker (a handheld binds to no station) and mints a
-  // station-less code: the body carries `{ kind: "handheld", label }` with NO stationId. Proven by
-  // deletion: without the kind-gated branch #generate always sends kds_station + stationId.
-  it("generates a handheld code with no station picker", async () => {
+  // Picking the handheld kind HIDES the station picker (a handheld binds to no station) but a handheld is
+  // sale-capable, so the server now REQUIRES a till (device.till_required otherwise): the till picker
+  // shows and the body carries `{ kind: "handheld", tillId, label }` with the seeded first till, NO
+  // stationId, and NO hardware bindings (those are the till kind's). Proven by deletion: drop the
+  // kind-gated till branch and #generate sends no tillId, which the server rejects.
+  it("generates a handheld code — till picker shown (no station, no hardware), tillId sent", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
     pickKind(el, "handheld");
     await el.updateComplete;
-    // The station picker is gone once the kind is a handheld.
+    // The station picker is gone once the kind is a handheld; the till picker takes its place.
     expect(q(el, "[data-test=station-select]")).toBeNull();
+    expect(q(el, "[data-test=till-select]")).toBeTruthy();
+    // A handheld carries no hardware bindings — those pickers are the till kind's only.
+    expect(q(el, "[data-test=receipt-printer-select]")).toBeNull();
+    expect(q(el, "[data-test=cash-drawer-switch]")).toBeNull();
+    expect(q(el, "[data-test=card-provider-select]")).toBeNull();
 
     typeLabel(el, "Waiter phone");
     await el.updateComplete;
     q(el, "[data-test=generate]")!.click();
     await flush(el);
 
-    expect(api.createDeviceCode).toHaveBeenCalledWith({ kind: "handheld", label: "Waiter phone" });
+    // The till seeds to the first (t1); no station, no hardware bindings.
+    expect(api.createDeviceCode).toHaveBeenCalledWith({
+      kind: "handheld",
+      tillId: "t1",
+      label: "Waiter phone",
+    });
     expect(q(el, "[data-test=code-panel]")).toBeTruthy();
     expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
     expect(api.listDevices).toHaveBeenCalledTimes(2);
   });
 
-  // A handheld needs no station, so an empty station set (nothing to bind to) does NOT block a handheld
-  // generate — the station guard applies only to the kds_station kind.
+  // A handheld needs no station, so an empty station set does NOT block a handheld generate — it binds to
+  // a till, not a station. The station guard applies only to the kds_station kind.
   it("generates a handheld code even with no stations configured", async () => {
     const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -227,7 +299,174 @@ describe("devices-screen", () => {
     q(el, "[data-test=generate]")!.click();
     await flush(el);
 
-    expect(api.createDeviceCode).toHaveBeenCalledWith({ kind: "handheld", label: "Waiter phone" });
+    expect(api.createDeviceCode).toHaveBeenCalledWith({
+      kind: "handheld",
+      tillId: "t1",
+      label: "Waiter phone",
+    });
+  });
+
+  // The kind picker offers the till kind (SP-A.2 unified the counter till into the device model).
+  it("offers the till kind in the kind picker", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    const option = q(el, "[data-test=kind-select] option[value=till]");
+    expect(option).toBeTruthy();
+    expect(option!.textContent?.trim()).toBe(t("devices.kind_till", "es-ES"));
+  });
+
+  // The kds_station kind shows the station picker and NEITHER the till NOR the hardware pickers — its
+  // payload is unchanged (station + label only).
+  it("shows the station picker and no till/hardware pickers for a kds_station", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=station-select]")).toBeTruthy();
+    expect(q(el, "[data-test=till-select]")).toBeNull();
+    expect(q(el, "[data-test=receipt-printer-select]")).toBeNull();
+    expect(q(el, "[data-test=cash-drawer-switch]")).toBeNull();
+    expect(q(el, "[data-test=card-provider-select]")).toBeNull();
+  });
+
+  // The till kind shows the till picker AND the hardware pickers (receipt printer, cash-drawer switch,
+  // card-provider select), and hides the station picker.
+  it("shows the till and hardware pickers for a till kind", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "till");
+    await el.updateComplete;
+
+    expect(q(el, "[data-test=station-select]")).toBeNull();
+    expect(q(el, "[data-test=till-select]")).toBeTruthy();
+    expect(q(el, "[data-test=receipt-printer-select]")).toBeTruthy();
+    expect(q(el, "[data-test=cash-drawer-switch]")).toBeTruthy();
+    expect(q(el, "[data-test=card-provider-select]")).toBeTruthy();
+    // The card-reader-id field appears only once the provider is a Stripe Terminal reader.
+    expect(q(el, "[data-test=card-reader-id]")).toBeNull();
+  });
+
+  // The assigned-profile picker is shown for EVERY kind (it is a device-wide binding, not till-only).
+  it("shows the assigned-profile picker for every kind", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=profile-select]")).toBeTruthy(); // kds_station
+    pickKind(el, "handheld");
+    await el.updateComplete;
+    expect(q(el, "[data-test=profile-select]")).toBeTruthy();
+    pickKind(el, "till");
+    await el.updateComplete;
+    expect(q(el, "[data-test=profile-select]")).toBeTruthy();
+  });
+
+  // A till with every optional binding set: the payload carries tillId + the assigned profile + all the
+  // hardware bindings, with the card reader id present because the provider is a Stripe Terminal reader.
+  it("generates a till code with the tillId and every optional binding", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "till");
+    await el.updateComplete;
+    pickSelect(el, "till-select", "t2");
+    pickSelect(el, "profile-select", "p1");
+    pickSelect(el, "receipt-printer-select", "pr1");
+    toggleCashDrawer(el, true);
+    pickSelect(el, "card-provider-select", "stripe_terminal");
+    await el.updateComplete;
+    typeCardReader(el, "reader-123");
+    typeLabel(el, "Caja principal");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).toHaveBeenCalledWith({
+      kind: "till",
+      tillId: "t2",
+      layoutProfileId: "p1",
+      receiptPrinterId: "pr1",
+      hasCashDrawer: true,
+      cardProvider: "stripe_terminal",
+      cardReaderId: "reader-123",
+      label: "Caja principal",
+    });
+    expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
+  });
+
+  // A till with only the required till picked: the optional bindings default (profile none, no printer,
+  // no cash drawer, card provider 'none'), so they are NOT sent — the payload is tillId + label only.
+  it("generates a till code with only the tillId when no optional binding is set", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "till");
+    await el.updateComplete;
+    typeLabel(el, "Caja mínima");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    // The till seeds to the first (t1); no station, no hardware bindings sent.
+    expect(api.createDeviceCode).toHaveBeenCalledWith({
+      kind: "till",
+      tillId: "t1",
+      label: "Caja mínima",
+    });
+  });
+
+  // The card-reader-id field shows ONLY for the stripe_terminal provider; a card provider that needs no
+  // separate reader id (stripe_on_device) sends no cardReaderId even if one was typed then hidden.
+  it("shows the card-reader field only for the stripe_terminal provider", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "till");
+    await el.updateComplete;
+    pickSelect(el, "card-provider-select", "stripe_terminal");
+    await el.updateComplete;
+    expect(q(el, "[data-test=card-reader-id]")).toBeTruthy();
+
+    pickSelect(el, "card-provider-select", "stripe_on_device");
+    await el.updateComplete;
+    expect(q(el, "[data-test=card-reader-id]")).toBeNull();
+
+    typeLabel(el, "Caja TTP");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).toHaveBeenCalledWith({
+      kind: "till",
+      tillId: "t1",
+      cardProvider: "stripe_on_device",
+      label: "Caja TTP",
+    });
+  });
+
+  // The generate guard for sale-capable kinds: a till (or handheld) with no till to bind to is a no-op,
+  // mirroring the kds_station no-station guard. Proven by deletion: drop the till guard and #generate
+  // fires with no tillId, which the server rejects device.till_required.
+  it("does not generate a till code when there are no tills to bind to", async () => {
+    const api = stubApi({ listTills: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickKind(el, "till");
+    await el.updateComplete;
+    typeLabel(el, "Caja");
+    await el.updateComplete;
+    q(el, "[data-test=generate]")!.click();
+    await flush(el);
+
+    expect(api.createDeviceCode).not.toHaveBeenCalled();
   });
 
   it("uses the first station by default when the picker is left untouched", async () => {

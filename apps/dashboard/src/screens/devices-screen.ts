@@ -4,10 +4,26 @@ import { createRef, ref } from "lit/directives/ref.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DeviceRow, Station } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceRow,
+  LayoutProfile,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
+
+/** The card-payment providers the till-hardware picker offers, in render order — mirrors the
+ * `devices.card_provider` text column's accepted values. `none` leads (a till with no integrated card
+ * terminal, the column default), then the two Stripe integrations: `stripe_terminal` (a separate
+ * Stripe Terminal reader, which carries its own reader id) and `stripe_on_device` (Tap to Pay on the
+ * device itself, no separate reader id). The server stores the string as-is; the picker constrains the
+ * choice to these three. */
+const CARD_PROVIDERS: readonly string[] = ["none", "stripe_terminal", "stripe_on_device"];
 
 /**
  * The management dashboard's DEVICES screen (device-identity-1 §5b): manages the venue's always-on
@@ -21,11 +37,18 @@ import type { DashboardApi, DeviceRow, Station } from "../api/client.js";
  *    rendered as-is. A null `stationId` (a future non-station kind) and a station no longer in the active
  *    list (retired) both show a neutral placeholder; a never-authenticated device shows a "Never"
  *    last-seen.
- *  - GENERATES a pairing code: pick a kind + type a label → `api.createDeviceCode({ kind, [stationId], label })`.
- *    A `kds_station` kind binds to a picked station (`stationId` sent); a `handheld` kind is station-less, so
- *    the station picker is hidden and no `stationId` is sent. The returned code is shown ONCE in a prominent,
- *    copyable panel and lives ONLY in component state — it is NOT re-fetchable (like a passkey challenge
- *    handle), so dismissing the panel is final. Generating reloads the device list.
+ *  - GENERATES a pairing code: pick a kind + the kind's bindings + type a label → `api.createDeviceCode(…)`
+ *    (SP-A.2 unified the counter till into the device model). The kind gates the REQUIRED binding: a
+ *    `kds_station` binds to a picked station (`stationId` sent); a sale-capable `till`/`handheld` binds to
+ *    a picked till (`tillId` sent — the server rejects a missing one `device.till_required`), so a station
+ *    picker shows only for `kds_station` and a till picker for `till`/`handheld`. The OPTIONAL bindings are
+ *    an assigned layout profile (`layoutProfileId`, offered for every kind from `api.listProfiles()`) and,
+ *    for a `till`, the static hardware — a receipt printer (`api.listPrinters()`), a has-cash-drawer flag,
+ *    a card provider (`none`/`stripe_terminal`/`stripe_on_device`) and, for `stripe_terminal`, a
+ *    card-reader id — each sent only when set, else the server applies its column default. The returned
+ *    code is shown ONCE in a prominent, copyable panel and lives ONLY in component state — it is NOT
+ *    re-fetchable (like a passkey challenge handle), so dismissing the panel is final. Generating reloads
+ *    the device list.
  *  - REVOKES a device (`api.revokeDevice(id)`) behind a TWO-STEP confirm (the purchase-list idiom): the
  *    first click on a row's Revoke ARMS it (label → confirm prompt), a second click confirms — a revoke
  *    stops a working kitchen screen, so an accidental single click must not fire it. Only ACTIVE devices
@@ -147,11 +170,24 @@ export class DevicesScreen extends LitElement {
   // The venue's ACTIVE kitchen stations — both the generate-code picker's options and the source that
   // resolves a device row's stationId to a display name.
   @state() private stations: Station[] = [];
-  // The generate-code form's fields: the device kind, the picked station (seeded to the first on load)
-  // and the label. `kind` gates the station field — a "kds_station" binds to a station, a "handheld" is
-  // station-less, so its picker is hidden and no stationId is sent.
+  // The venue's tills (the sale-capable till picker's options), layout profiles (the assigned-profile
+  // picker's options, any kind) and printers (the till's receipt-printer picker's options), all
+  // (re)loaded alongside the stations. Feeds for the generate-code form's bindings (SP-A.2 §16).
+  @state() private tills: Till[] = [];
+  @state() private profiles: LayoutProfile[] = [];
+  @state() private printers: Printer[] = [];
+  // The generate-code form's fields. `kind` gates which bindings show: a "kds_station" binds to a
+  // station; a sale-capable "till"/"handheld" binds to a till (REQUIRED); a "till" also carries the
+  // static hardware bindings. The picked station/till seed to the first on load; the optional bindings
+  // default to "unset" ("" / false / "none") and are sent only when set.
   @state() private kind = "kds_station";
   @state() private selectedStation = "";
+  @state() private selectedTill = "";
+  @state() private selectedProfile = "";
+  @state() private selectedPrinter = "";
+  @state() private hasCashDrawer = false;
+  @state() private cardProvider = "none";
+  @state() private cardReaderId = "";
   @state() private label = "";
   // The one-time pairing code, held ONLY here — never re-fetchable. null when no code is being shown.
   @state() private generatedCode: string | null = null;
@@ -162,10 +198,16 @@ export class DevicesScreen extends LitElement {
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
 
-  // A handle to the native station <select>, reconciled to `selectedStation` in `updated()` — a native
-  // select's `.value` bound in the template commits before its <option> children exist, so a non-first
-  // selection would fall back to the first (the login screen documents the same picker bug).
+  // Handles to the native <select>s, reconciled to their state in `updated()` — a native select's
+  // `.value` bound in the template commits before its <option> children exist, so a non-first selection
+  // would fall back to the first (the login screen documents the same picker bug). Each is rendered only
+  // for the kind that shows it, so `updated()` GUARDS every ref access (a ref is undefined when its
+  // select is not in the DOM).
   #stationSelect = createRef<HTMLSelectElement>();
+  #tillSelect = createRef<HTMLSelectElement>();
+  #profileSelect = createRef<HTMLSelectElement>();
+  #printerSelect = createRef<HTMLSelectElement>();
+  #cardProviderSelect = createRef<HTMLSelectElement>();
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -180,6 +222,10 @@ export class DevicesScreen extends LitElement {
    * unhandled `Cannot set properties of undefined`. Setting `.value` imperatively does not loop. */
   override updated(): void {
     if (this.#stationSelect.value) this.#stationSelect.value.value = this.selectedStation;
+    if (this.#tillSelect.value) this.#tillSelect.value.value = this.selectedTill;
+    if (this.#profileSelect.value) this.#profileSelect.value.value = this.selectedProfile;
+    if (this.#printerSelect.value) this.#printerSelect.value.value = this.selectedPrinter;
+    if (this.#cardProviderSelect.value) this.#cardProviderSelect.value.value = this.cardProvider;
   }
 
   /** (Re)load the devices + stations. Called on connect and after every mutation. A rejection anywhere
@@ -190,14 +236,31 @@ export class DevicesScreen extends LitElement {
     this.errorKey = null;
     this.armedRevokeId = null;
     try {
-      const [devices, stations] = await Promise.all([
+      const [devices, stations, tills, profiles, printers] = await Promise.all([
         this.api.listDevices(),
         this.api.listStations(),
+        // The generate form's binding feeds. `listTills`/`listPrinters` are `printer.manage`-gated and
+        // `listProfiles` is `till.configure`-gated, whereas this screen is `device.manage`-gated — but
+        // that mismatch is unreachable: all three permissions sit in the {manager, admin} set
+        // (packages/identity/src/permissions.ts; admin holds ALL), so every user who reaches this screen
+        // holds them (the printers-screen documents the same reuse). A custom-role split is a documented
+        // follow-on — no device.manage-gated list variants (YAGNI).
+        this.api.listTills(),
+        this.api.listProfiles(),
+        this.api.listPrinters(),
       ]);
       this.devices = devices;
       this.stations = stations;
+      this.tills = tills;
+      this.profiles = profiles;
+      this.printers = printers;
+      // Seed the station + till pickers to their first option when still unset, so an operator's own
+      // pick survives a reload (mirrors the station seed; the till is REQUIRED for sale-capable kinds).
       if (stations[0] !== undefined && this.selectedStation === "") {
         this.selectedStation = stations[0].id;
+      }
+      if (tills[0] !== undefined && this.selectedTill === "") {
+        this.selectedTill = tills[0].id;
       }
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -231,31 +294,98 @@ export class DevicesScreen extends LitElement {
     this.selectedStation = (event.target as HTMLSelectElement).value;
   }
 
+  /** Capture the picked till (sale-capable kinds). Same defensive `stopPropagation` as the station picker. */
+  #onTillChange(event: Event): void {
+    event.stopPropagation();
+    this.selectedTill = (event.target as HTMLSelectElement).value;
+  }
+
+  /** Capture the picked assigned layout profile (`""` = none). */
+  #onProfileChange(event: Event): void {
+    event.stopPropagation();
+    this.selectedProfile = (event.target as HTMLSelectElement).value;
+  }
+
+  /** Capture the picked receipt printer for a till (`""` = none). */
+  #onPrinterChange(event: Event): void {
+    event.stopPropagation();
+    this.selectedPrinter = (event.target as HTMLSelectElement).value;
+  }
+
+  /** Capture the picked card provider (`none`/`stripe_terminal`/`stripe_on_device`). The card-reader-id
+   * field shows only for `stripe_terminal`; switching away hides it (and `#generate` then sends no id). */
+  #onCardProviderChange(event: Event): void {
+    event.stopPropagation();
+    this.cardProvider = (event.target as HTMLSelectElement).value;
+  }
+
+  /** Capture the has-cash-drawer switch's composed `wt-change` (`{ checked }`). */
+  #onCashDrawerChange(event: CustomEvent<{ checked: boolean }>): void {
+    event.stopPropagation();
+    this.hasCashDrawer = event.detail.checked;
+  }
+
+  /** The card-reader-id field's composed `wt-change`. `stopPropagation` keeps it inside this shadow. */
+  #onCardReaderChange(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.cardReaderId = event.detail.value;
+  }
+
   /** The label field's composed `wt-change`. `stopPropagation` keeps it inside this screen's shadow. */
   #onLabelChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.label = event.detail.value;
   }
 
-  /** Mint a pairing code for the chosen kind + label, then show it ONCE and reload the list. A blank
-   * label is a no-op — the same blank-name guard the kitchen screen's create uses. A "kds_station" also
-   * needs a picked station (no-op when none configured); a "handheld" is station-less, so it sends no
-   * stationId and the station guard does not apply. On success the code goes into state (never re-fetched)
-   * and the label resets; on rejection the `errorKey` banner shows and the form is left intact for a retry. */
+  /** Mint a pairing code for the chosen kind + bindings + label, then show it ONCE and reload the list.
+   * A blank label is a no-op (the kitchen screen's blank-name guard). The kind gates the required
+   * binding: a `kds_station` needs a picked station (no-op when none configured); a sale-capable
+   * `till`/`handheld` needs a picked till (no-op when none configured — the server rejects a missing one
+   * `device.till_required`). The optional bindings are sent ONLY when set — an assigned layout profile
+   * (any kind), and for a `till` the static hardware (receipt printer, cash-drawer flag, card provider,
+   * and the card-reader id when the provider is `stripe_terminal`); an unset binding is omitted, which
+   * `JSON.stringify` drops, so the server applies its column default. On success the code goes into
+   * state (never re-fetched) and the label resets; on rejection the `errorKey` banner shows and the form
+   * is left intact for a retry. */
   async #generate(): Promise<void> {
     this.errorKey = null;
     const label = this.label.trim();
     if (label === "") return;
     const needsStation = this.kind === "kds_station";
+    const needsTill = this.kind === "till" || this.kind === "handheld";
     if (needsStation && this.selectedStation === "") return;
+    if (needsTill && this.selectedTill === "") return;
+    // Build the payload additively so an unset optional binding is absent (dropped by `JSON.stringify`),
+    // not sent as an empty string the server would treat as a real value.
+    const input: {
+      kind: string;
+      stationId?: string;
+      tillId?: string;
+      layoutProfileId?: string;
+      receiptPrinterId?: string;
+      hasCashDrawer?: boolean;
+      cardProvider?: string;
+      cardReaderId?: string;
+      label: string;
+    } = { kind: this.kind, label };
+    if (needsStation) input.stationId = this.selectedStation;
+    if (needsTill) input.tillId = this.selectedTill;
+    // The assigned profile is a device-wide binding, offered for every kind; sent only when picked.
+    if (this.selectedProfile !== "") input.layoutProfileId = this.selectedProfile;
+    // The static hardware bindings belong to a `till`; each is sent only when set (else the server
+    // default applies: no printer, `has_cash_drawer` false, `card_provider` 'none').
+    if (this.kind === "till") {
+      if (this.selectedPrinter !== "") input.receiptPrinterId = this.selectedPrinter;
+      if (this.hasCashDrawer) input.hasCashDrawer = true;
+      if (this.cardProvider !== "none") input.cardProvider = this.cardProvider;
+      // The card-reader id is a `stripe_terminal`-only field; a non-empty value is sent only while that
+      // provider is picked (switching away hides the field, so a stale id is never sent).
+      if (this.cardProvider === "stripe_terminal" && this.cardReaderId.trim() !== "") {
+        input.cardReaderId = this.cardReaderId.trim();
+      }
+    }
     try {
-      const { code } = await this.api.createDeviceCode({
-        kind: this.kind,
-        // A `kds_station` binds to the picked station; a station-less `handheld` sends `undefined`,
-        // which `JSON.stringify` drops from the wire payload — so the request shape is unchanged.
-        stationId: needsStation ? this.selectedStation : undefined,
-        label,
-      });
+      const { code } = await this.api.createDeviceCode(input);
       this.generatedCode = code;
       this.copied = false;
       this.label = "";
@@ -319,6 +449,63 @@ export class DevicesScreen extends LitElement {
   #lastSeen(iso: string | null): string {
     if (iso === null) return t("devices.last_seen_never");
     return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+  }
+
+  /** The localised label for a card provider (`none`/`stripe_terminal`/`stripe_on_device`). */
+  #cardProviderName(provider: string): string {
+    if (provider === "stripe_terminal") return t("devices.card_provider_stripe_terminal");
+    if (provider === "stripe_on_device") return t("devices.card_provider_stripe_on_device");
+    return t("devices.card_provider_none");
+  }
+
+  /** The `till` kind's static hardware bindings (SP-A.2 §16): a receipt-printer picker (the venue's
+   * ACTIVE printers plus a "none" clear option), a has-cash-drawer switch, a card-provider picker, and —
+   * only when the provider is a Stripe Terminal reader — a card-reader-id field. All optional: an unset
+   * one is not sent and the server applies its column default. The printer list is DELIBERATELY not
+   * filtered to the till's location (the deli is single-location, so every printer is in it); the
+   * server's own binding check is the authority regardless. */
+  #renderTillHardware(): TemplateResult {
+    const activePrinters = this.printers.filter((p) => p.active);
+    return html`<label class="field"
+        >${t("devices.receipt_printer")}
+        <select
+          ${ref(this.#printerSelect)}
+          data-test="receipt-printer-select"
+          @change=${(e: Event) => this.#onPrinterChange(e)}
+        >
+          <option value="">${t("devices.receipt_printer_none")}</option>
+          ${activePrinters.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+        </select>
+      </label>
+      <wt-switch
+        label=${t("devices.has_cash_drawer")}
+        data-test="cash-drawer-switch"
+        .checked=${this.hasCashDrawer}
+        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onCashDrawerChange(e)}
+      ></wt-switch>
+      <label class="field"
+        >${t("devices.card_provider")}
+        <select
+          ${ref(this.#cardProviderSelect)}
+          data-test="card-provider-select"
+          @change=${(e: Event) => this.#onCardProviderChange(e)}
+        >
+          ${CARD_PROVIDERS.map(
+            (provider) =>
+              html`<option value=${provider}>${this.#cardProviderName(provider)}</option>`,
+          )}
+        </select>
+      </label>
+      ${
+        this.cardProvider === "stripe_terminal"
+          ? html`<wt-input
+              label=${t("devices.card_reader")}
+              data-test="card-reader-id"
+              .value=${this.cardReaderId}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCardReaderChange(e)}
+            ></wt-input>`
+          : nothing
+      }`;
   }
 
   #renderDevice(device: DeviceRow): TemplateResult {
@@ -408,6 +595,7 @@ export class DevicesScreen extends LitElement {
             >${t("devices.kind")}
             <select data-test="kind-select" @change=${(e: Event) => this.#onKindChange(e)}>
               <option value="kds_station">${t("devices.kind_kds_station")}</option>
+              <option value="till">${t("devices.kind_till")}</option>
               <option value="handheld">${t("devices.kind_handheld")}</option>
             </select>
           </label>
@@ -425,6 +613,32 @@ export class DevicesScreen extends LitElement {
                 </label>`
               : nothing
           }
+          ${
+            this.kind === "till" || this.kind === "handheld"
+              ? html`<label class="field"
+                  >${t("devices.till")}
+                  <select
+                    ${ref(this.#tillSelect)}
+                    data-test="till-select"
+                    @change=${(e: Event) => this.#onTillChange(e)}
+                  >
+                    ${this.tills.map((till) => html`<option value=${till.id}>${till.label}</option>`)}
+                  </select>
+                </label>`
+              : nothing
+          }
+          <label class="field"
+            >${t("devices.profile")}
+            <select
+              ${ref(this.#profileSelect)}
+              data-test="profile-select"
+              @change=${(e: Event) => this.#onProfileChange(e)}
+            >
+              <option value="">${t("devices.profile_none")}</option>
+              ${this.profiles.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+            </select>
+          </label>
+          ${this.kind === "till" ? this.#renderTillHardware() : nothing}
           <wt-input
             label=${t("devices.label")}
             data-test="code-label"
