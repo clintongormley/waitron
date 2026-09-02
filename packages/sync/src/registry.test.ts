@@ -258,7 +258,6 @@ describe("captureOps match each table's group", () => {
         // NOT — it is suspended, never removed). Always insert+update first, then delete present iff the
         // table is DELETE-capable; the real-PG capture gate asserts the ACTUAL trigger op set
         // (capture.gate.test.ts §6), while this pins the registry shape.
-        expect(entry.captureOps.slice(0, 2)).toEqual(["insert", "update"]);
         const hasDelete = entry.captureOps.includes("delete");
         expect(entry.captureOps).toEqual(
           hasDelete ? ["insert", "update", "delete"] : ["insert", "update"],

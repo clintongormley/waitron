@@ -1276,10 +1276,10 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         sourceEnvironment: "preproduction",
       });
       expect(first.applied).toBe(1);
-      const landed = await postgres.admin.execute<{ n: string }>(
-        sql`select count(*)::text as n from persons where id = ${personId} and tenant_id = ${tenantId}`,
+      const landed = await scalar(
+        sql`select count(*)::text as v from persons where id = ${personId} and tenant_id = ${tenantId}`,
       );
-      expect(landed.rows[0]!.n).toBe("1"); // the app role wrote into the FORCE-RLS table
+      expect(landed).toBe("1"); // the app role wrote into the FORCE-RLS table
 
       // Re-deliver the SAME seq: skipped by the cursor (null-watermark idempotency rests on the seq
       // cursor, NOT ON CONFLICT — an unconditional upsert would otherwise re-run). applied = 0.
@@ -1327,10 +1327,10 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         { subscriberId, localEnvironment: "preproduction", sourceEnvironment: "preproduction" },
       );
       expect(del.applied).toBe(1);
-      const remaining = await postgres.admin.execute<{ n: string }>(
-        sql`select count(*)::text as n from webauthn_credentials where id = ${credId}`,
+      const remaining = await scalar(
+        sql`select count(*)::text as v from webauthn_credentials where id = ${credId}`,
       );
-      expect(remaining.rows[0]!.n).toBe("0");
+      expect(remaining).toBe("0");
     } finally {
       await applier.close();
     }
