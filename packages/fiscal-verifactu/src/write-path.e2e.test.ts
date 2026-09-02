@@ -8,6 +8,7 @@ import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
@@ -467,5 +468,107 @@ describe("line note/doneness are not part of the huella", () => {
     const cols = rows.map((r) => r.column_name);
     expect(cols).not.toContain("note");
     expect(cols).not.toContain("doneness");
+  });
+});
+
+describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () => {
+  // The H2 fiscal receipt for the SP-A.2 device-unification cutover, proven at the REAL
+  // `recordSale` -> `computeHuella` write path (the counterpart to the structural + AEAT-vector proof
+  // in `packages/verifactu/src/huella.test.ts`, "till_id is not part of the huella"). The cutover moved
+  // a sale's `till_id` from an env value to the authenticated device's assigned `tills` row
+  // (`requireSaleTillId`, apps/server); a handheld's `till_id` legitimately changes as a result (spec
+  // §16.4). This block proves that change is inert to the fiscal chain: two FIRST-OF-CHAIN sales that
+  // are byte-for-byte identical EXCEPT for their `till_id` produce the SAME `huella`, the SAME empty
+  // `anterior_huella`, the SAME `secuencia`, the SAME `entorno` and the SAME `node_id` — only the
+  // `sales`/`registros_facturacion` `till_id` snapshot differs. The §5 invariant "never put our own
+  // metadata into a hash", applied to `till_id`.
+  //
+  // Failing case (§16.4): if `till_id` fed the huella, or if it keyed the chain/series instead of
+  // `node_id`, the two records would differ beyond `till_id` — the byte-identity assertion would fail.
+  //
+  // PGlite, deliberately (CLAUDE.md §4): this proves a determinism property of `recordSale`/
+  // `computeHuella` — same inputs bar `till_id` give the same hash and chain position — for which
+  // RLS, the deployment role's privileges and concurrency are all irrelevant. The REAL-Postgres arm of
+  // the receipt (the device-resolution + mutation-control + `node_id`-untouched proofs, which DO run
+  // the app role under RLS through the actual sale route) lives in
+  // `apps/server/src/sale-till-source.receipt.test.ts`.
+  //
+  // Byte-identical huellas need the same NumSerieFactura against the same empty chain, so — exactly as
+  // the `parent_line_id` / note-doneness blocks above — each sale is recorded, its record read back
+  // INSIDE its transaction, and the transaction then ROLLED BACK, reverting `invoice_series.next_number`
+  // and the `cadenas` head so the next call re-allocates the identical `A/1` against the same still-empty
+  // chain. The two tills X and Y share ONE location, so even the (non-hashed) `DescripcionOperacion`
+  // read from the till's location is identical between the runs — the only difference is the `till_id`.
+  const ROLLBACK = new Error("rollback: record captured");
+
+  // A `type` alias, not an `interface`: `tx.execute<T>` constrains `T extends Record<string, unknown>`,
+  // which an object-literal type satisfies (via its implicit index signature) but a named interface
+  // does not — the same shape every other raw `tx.execute<{…}>` call in this file already uses.
+  type RecordSnapshot = {
+    huella: string;
+    anterior_huella: string | null;
+    secuencia: number;
+    entorno: string | null;
+    node_id: string;
+    till_id: string;
+  };
+
+  /** Record one first-of-chain sale ringing `till`, read its whole chain-relevant record back inside
+   *  the transaction, then roll back so the next call re-allocates `A/1` against the same empty chain. */
+  async function recordFor(till: TillId): Promise<RecordSnapshot> {
+    let snapshot: RecordSnapshot | undefined;
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({ tenantId, tillId: till, nodeId, seriesId }),
+      );
+      const { rows } = await tx.execute<RecordSnapshot>(
+        sql`select huella, anterior_huella, secuencia, entorno, node_id, till_id
+            from registros_facturacion where sale_id = ${saleId}`,
+      );
+      snapshot = rows[0]!;
+      // Self-contained guard, mirroring the parent_line_id block's own: prove the till_id ACTUALLY
+      // reached the record as this run's till, so the identity assertion below is not passing because
+      // both runs somehow filed the SAME till_id (which would make the whole comparison vacuous).
+      expect(snapshot.till_id).toBe(till);
+      throw ROLLBACK;
+    }).catch((error) => {
+      if (error !== ROLLBACK) throw error;
+    });
+    return snapshot!;
+  }
+
+  it("files the same huella and chain position for two tills that differ only by id", async () => {
+    // A SECOND till Y in the SAME tenant and location as the seeded till X — the two register ids a
+    // re-homed device would ring against. Inserted on `pg.db` directly (PGlite is a superuser, and this
+    // is fixture setup, not the code under test) so it persists across both rolled-back sales.
+    const { rows: locRows } = await pg.db.execute<{ location_id: string }>(
+      sql`select location_id from tills where id = ${tillId}`,
+    );
+    const { rows: tillYRows } = await pg.db.execute<{ id: string }>(
+      sql`insert into tills (tenant_id, location_id, name)
+          values (${tenantId}, ${locRows[0]!.location_id}, 'Caja 2') returning id`,
+    );
+    const tillX = tillId;
+    const tillY = brandTillId(tillYRows[0]!.id);
+    expect(tillY).not.toBe(tillX);
+
+    const x = await recordFor(tillX);
+    const y = await recordFor(tillY);
+
+    // Only the till_id snapshot moved. The hash, the (empty) predecessor pointer, the sequence, the
+    // environment stamp and the SIF/chain anchor (node_id) are all byte-identical.
+    expect(x.till_id).not.toBe(y.till_id);
+    expect(y.huella).toBe(x.huella);
+    expect(y.anterior_huella).toBe(x.anterior_huella);
+    expect(y.secuencia).toBe(x.secuencia);
+    expect(y.entorno).toBe(x.entorno);
+    expect(y.node_id).toBe(x.node_id);
+    // Both were genuinely the first record of a fresh chain (empty predecessor, secuencia 1) — the
+    // precondition that makes the byte-identity meaningful rather than an accident of a shared chain.
+    expect(x.anterior_huella).toBeNull();
+    expect(x.secuencia).toBe(1);
   });
 });
