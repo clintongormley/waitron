@@ -40,14 +40,15 @@ export function verifyBytes(message: string, signatureB64: string, publicKeyB64:
     // not a thrown error, because the key travels in adversarial input (a document from the wire).
     return false;
   }
-  // Fail-closed defence on the wire boundary, kept per R2. Proven unreachable for ed25519:
-  // node:crypto `verify` returns `false` for malformed/wrong-length signature bytes (empty,
-  // short, and over-long all tested) rather than throwing, once the public key is a valid
-  // KeyObject — so this catch is untestable here and is ignored for coverage rather than
-  // removed, mirroring the unreachable defensive catch in packages/db harness.ts.
-  /* v8 ignore start */
+  // The verify() call below is exercised by the round-trip, tamper, wrong-key and
+  // malformed-signature tests, so it stays under normal coverage measurement. Only the catch is
+  // ignored: it is fail-closed defence on the wire boundary, kept per R2 but proven unreachable for
+  // ed25519 — node:crypto `verify` returns `false` for malformed/wrong-length signature bytes
+  // (empty, short, and over-long all tested) rather than throwing, once the public key is a valid
+  // KeyObject. Mirrors the unreachable defensive catch in packages/db harness.ts.
   try {
     return verify(null, Buffer.from(message, "utf8"), key, Buffer.from(signatureB64, "base64"));
+    /* v8 ignore start -- unreachable catch: ed25519 verify never throws (see comment above) */
   } catch {
     return false;
   }
