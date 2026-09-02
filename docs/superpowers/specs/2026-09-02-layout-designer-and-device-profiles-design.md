@@ -404,7 +404,9 @@ drop-not-migrate principle governs *when SP-B removes it*, not this slice.)
   per-kind station `CHECK` on both device tables.
 - **`devices`** and **`device_pairing_codes`** each gain, stamped at enrol: `layout_profile_id`
   (composite FK → `layout_profiles(tenant_id, id)`, `restrict`, nullable), `till_id` (composite FK →
-  `tills(tenant_id, id)`, `restrict`, nullable — the fiscal identity, §16.4), and static hardware:
+  `tills(tenant_id, id)`, `restrict`, nullable — the fiscal register-snapshot, §16.4; populated for
+  **every sale-capable kind** — `till` AND `handheld`, since both record sales at `/api/sales` — and
+  left NULL for `kds_station`, which rings none), and static hardware:
   `receipt_printer_id` (composite FK → `printers`), `has_cash_drawer` bool, `card_provider` text
   (`none | stripe_terminal | stripe_on_device`), `card_reader_id` text (external reader id; provider
   **credentials stay in the vault**, only the selection lives here). All additive.
@@ -414,16 +416,23 @@ drop-not-migrate principle governs *when SP-B removes it*, not this slice.)
 
 ### 16.4 Fiscal cutover mechanism (H2) — the receipt
 
-A `till` device carries a **`till_id` FK to the existing `tills` row** it operates as, stamped at
-enrol. At sale time `cfg.tillId` resolves **only** from the authenticated till-device's `till_id`;
-the env `WAITRON_TILL_TILL_ID` is **retired as the sale-time source** (kept only for setup/adopt
-seeding). Because `device.till_id` names *the same `tills` row* the env var named, the `till_id`
-written to `sales.till_id` and the fiscal record is the **same uuid** — byte-identical by
-construction. `nodeId` (the SIF / series anchor; the guard is `series.nodeId !== input.nodeId` at
-`packages/core/src/record-sale.ts:239`), `seriesId`, and every huella input are **untouched**;
-`till_id` is confirmed **not** a huella input (the eight-field alta / five-field anulación tuples at
-`packages/verifactu/src/types.ts:197` and `:209` do not include it). Owner decisions: **cut over in
-SP-A.2**, and **drop the env sale-time fallback** (single fiscal-`till_id` source).
+**Every sale-capable device** (`till` and `handheld`) carries a **`till_id` FK to the existing
+`tills` row** it rings against, stamped at enrol (owner decision, 2026-09-02: "any sale-capable device
+carries `till_id`" — `/api/sales` is unfenced against handhelds, `till-api.ts:722-728`, so a handheld
+also writes `till_id` to `registros_facturacion`). At sale time the value passed to `recordSale`
+(today `cfg.tillId` at `till-sale.ts:598` and the other `recordSale` call sites) resolves **only**
+from the authenticated device's `till_id`; the env `WAITRON_TILL_TILL_ID` is **retired as the
+sale-time source** (kept only for setup/adopt seeding). `nodeId` (the SIF / series anchor; the guard
+is `series.nodeId !== input.nodeId` at `packages/core/src/record-sale.ts:239`), `seriesId`, and every
+huella input are **untouched**; `till_id` is confirmed **not** a huella input (the eight-field alta /
+five-field anulación tuples at `packages/verifactu/src/types.ts:197` and `:209` do not include it).
+
+**One intended metadata change, not a regression:** a handheld today stamps the single env till
+(`cfg.tillId`) on its sale; after the cutover it stamps its **assigned** `tills` row. That `till_id`
+value legitimately *changes* for handhelds (a node may now have several tills). This is deliberate —
+the handheld records against the register it is assigned to — and is safe precisely because `till_id`
+is inert to the chain (proven by §16.4(b)). A `till`-kind device assigned the *same* `tills` row the
+env named is byte-identical (§16.4(a)).
 
 **The receipt** (container / mutation, never reading — `CLAUDE.md` §1/§5). State the failing case
 before running each probe: if the device path sourced a *different* `till_id`, or if any device /
@@ -448,9 +457,11 @@ Plus explicit owner sign-off before the PR lands.
 
 ### 16.5 Sale-block risk to preserve (§5 fiscal invariant)
 
-Requiring a till to be an enrolled till-device is a **setup precondition, not a per-sale block** —
-directly analogous to today's boot-time `server.till_config_missing` when `WAITRON_TILL_*` is unset
-(`apps/server/src/till-config.ts`). Once enrolled, sales proceed with nothing blocking them, so
+Requiring every sale-capable device (till and handheld) to be enrolled **with a `till_id`** is a
+**setup precondition, not a per-sale block** — directly analogous to today's boot-time
+`server.till_config_missing` when `WAITRON_TILL_*` is unset (`apps/server/src/till-config.ts`).
+Handhelds already enrol via the pairing-code flow today; the only addition is that enrolment now
+assigns the `tills` row they ring against. Once enrolled, sales proceed with nothing blocking them, so
 "nothing may block a sale" holds. One **new failure mode** to document and mitigate: a lost or cleared
 `waitron_device` cookie (httpOnly, `sameSite:Strict`, 1-year Max-Age — `device-session.ts:21-47`)
 stops sales until re-enrol. Mitigations: the long-lived cookie makes loss rare; SP-C adds the
