@@ -197,7 +197,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first | F3 asesor/XSD confirmations (Debt) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys, email login | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest; PIN-attempt throttle |
+| 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys, email login, config sync flow-down to a read-only secondary (#195) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (**now a hard dep of the TOTP-enrollment slice** — #195 replicates it, see *Onboarding*); PIN-attempt throttle |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |
@@ -279,11 +279,10 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
 interactive session, so "needs supervision" is not a disqualifier — the real question is ready-to-build
 vs gated on an unbuilt foundation or an external dependency:
 
-- **Ready to build now:** (1) **identity-config flow-down** — specced + planned; enrols `persons` +
-  `webauthn_credentials` into the ordered lane, closes the one *verified* failover gap (the cashier is
-  logged out on failover today), touches no fiscal core; refresh the plan's stale table counts first
-  (see *Onboarding* below). (2) **kitchen-sync enrolment** (below) — after a short FK-closure design
-  pass.
+- **Ready to build now:** **kitchen-sync enrolment** (below) — after a short FK-closure design pass.
+  (Identity-config flow-down — the one *verified* failover gap, the cashier being logged out on
+  failover — **LANDED #195**: `persons` + `webauthn_credentials` now flow down the ordered lane; see
+  *What's built → Identity* and the two follow-ups under *Onboarding*.)
 - **Highest-leverage next design pass** (spec-only, unblocks the most): the **membership & rejoin
   wire-protocol** (promotion-failover spec §9 item 1) — gates promote Slice 5 + the conflict watcher,
   and is entangled with both open split-brain seams. Owner-reviewed, since it sets topology direction.
@@ -434,13 +433,25 @@ option** for the cold-restore re-registration path.
 
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
   tenant. Gated on Waitron-cloud infra that does not exist yet.
-- **Identity-config flow-down** (own spec) — `sessions` + the `identity` package are outside the sync
-  set, so a failover **logs the user out today**. Identity *config* must flow to a read-only secondary
-  the way catalogue does; the *session* must not replicate. Re-establishment: PIN-re-prompt v1 →
-  portable signed token later. **Track 2 start-here slice** (mapped 2026-09-01): specced **and** planned
-  (`plans/2026-08-16-identity-config-flow-down.md`), ready to build now — enrols `persons` +
-  `webauthn_credentials` into the ordered lane, keeps `sessions`/`webauthn_challenges` out; refresh the
-  plan's stale table counts (the registry now enrols 17) before dispatch.
+- **Identity-config flow-down — LANDED #195.** `persons` + `webauthn_credentials` now flow down the
+  ordered lane (Group-E no-watermark upsert, capture triggers in `0007_sync_identity_capture.sql`,
+  origin `nodeId` threaded through every identity-config writer incl. the till + me-api locale routes);
+  `sessions`/`management_sessions`/`webauthn_challenges` stay out (proven by deletion). A secondary can
+  now authenticate the venue's people on failover; re-establishment is still **PIN-re-prompt v1** (a
+  portable signed token is a later slice). PR marked needs-owner-review (replicates credential hashes)
+  and landed on owner sign-off. **Two follow-ups the merge left open:**
+  - **`totp_secret` at-rest encryption is now a hard dependency of the TOTP-enrollment slice** (SP5,
+    *Debt*): flow-down means the (currently-always-NULL) plaintext `totp_secret` would replicate to a
+    second box the moment anything writes it — so the enrollment slice **must** land AES-256-GCM at-rest
+    encryption *before* it writes the column. This slice is safe only while the column stays unwritten.
+  - **The onboarding seed-admin `persons` row captures under the all-zero origin** — `venue-apply`
+    provisions under a bare `withTenant` and the seed-admin insert runs before the node's `nodeId` is
+    generated later in the same plan, so that first admin's `sync_log` row is all-zero-origin (bounded:
+    one row per venue). Whether it must be fixed depends on the secondary-bootstrap model — a mirror
+    that adopts a base DB copy (`adoptVenue`/cold-restore) already has the admin (non-issue; residual is
+    one unpruned `sync_log` row); a pure-sync-reconstruction mirror would be missing it. **Owner
+    decision on the bootstrap model pending**; the fix (generate `nodeId` before the seed and thread it)
+    is small if wanted.
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
   venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
   decision**.
