@@ -290,6 +290,23 @@ describe("validateProfile — cards", () => {
     );
     expect(p.tabs[0].cards[0].visibleWhen).toBeUndefined();
   });
+  it("normalises an empty visibleWhen to omitted (absent or empty ⇒ always render)", () => {
+    const p = validateProfile(
+      withCards([{ type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: [] }]),
+    );
+    // Empty must NOT survive as `[]` — a renderer would misread it as "no state matches ⇒ never render".
+    expect(p.tabs[0].cards[0].visibleWhen).toBeUndefined();
+  });
+  it("copies a kept visibleWhen so the result does not alias the input", () => {
+    const input = ["unread"];
+    const p = validateProfile(
+      withCards([
+        { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: input },
+      ]),
+    );
+    expect(p.tabs[0].cards[0].visibleWhen).toEqual(["unread"]);
+    expect(p.tabs[0].cards[0].visibleWhen).not.toBe(input);
+  });
 });
 
 describe("validateProfile — sale-critical", () => {

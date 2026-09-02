@@ -126,7 +126,10 @@ function validateCards(input: unknown, tabIndex: number, columns: number): CardI
       ) {
         throw new AppError("profile.invalid", { reason: "bad_visible_when", tabIndex, card: type });
       }
-      visibleWhen = raw.visibleWhen as string[];
+      // Normalise "absent or empty ⇒ always render" (profile.ts): a valid but EMPTY visibleWhen is
+      // OMITTED, so a renderer can never misread `[]` as "no state matches ⇒ never render". A non-empty
+      // array is copied so the validated card does not alias the untrusted input.
+      if (raw.visibleWhen.length > 0) visibleWhen = [...(raw.visibleWhen as string[])];
     }
     const card: CardInstance = { type, colSpan, rowSpan, config };
     if (visibleWhen !== undefined) card.visibleWhen = visibleWhen;
