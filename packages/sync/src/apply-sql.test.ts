@@ -140,7 +140,11 @@ describe("identity config tables apply as unconditional Group-C upserts (spec §
     expect(SYNC_SCHEMA_TABLES.persons).toBeDefined();
     const stmt = applyStatementFor(persons);
     expect(stmt).toContain("on conflict (id) do update set");
-    expect(stmt).not.toContain("where"); // null watermark → unconditional; monotonicity via seq cursor
+    // null watermark → unconditional; monotonicity via seq cursor. Assert the absence of the WATERMARK
+    // WHERE specifically (`where excluded.<col> > <table>.<col>`), not the substring "where" anywhere —
+    // a future SET column merely CONTAINING "where" would otherwise misfire this. It must still fail if
+    // a watermark WHERE is present (proven by deletion against the payment_policy case above).
+    expect(stmt).not.toMatch(/where\s+excluded\./i);
     // A person is mutable config: pin_hash/password_hash/role/status must all be in the SET list.
     expect(stmt).toContain("pin_hash = excluded.pin_hash");
     expect(stmt).toContain("role = excluded.role");

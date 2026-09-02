@@ -212,9 +212,15 @@ route threads `{ nodeId: cfg.nodeId }` into its `withTenant`
 ([`apps/server/src/catalogue-api.ts:145`](../../../apps/server/src/catalogue-api.ts)), and
 `sync-origin.rls.test.ts` guards that the real API call sites pass it.
 
-Identity config is authored **only** in `apps/server/src/management-api.ts`, whose deps currently
-carry `cfg: { tenantId: string }` — **no `nodeId`** (`management-api.ts:52`). (`me-api.ts` writes only
-workforce/scheduling tables, grep-verified — it needs no change.) This slice adds `nodeId: string` to
+Identity config is authored **mainly** in `apps/server/src/management-api.ts`, whose deps currently
+carry `cfg: { tenantId: string }` — **no `nodeId`** (`management-api.ts:52`).
+(**Correction, 2026-09-02:** the original claim here — "`me-api.ts` writes only workforce/scheduling
+tables, grep-verified — it needs no change" — was FALSE. Both `me-api.ts`'s
+`PUT /management-api/session/me/locale` and `till-api.ts`'s `PUT /api/session/locale` call
+`setPersonLocale`, a `persons` UPDATE, so they capture to `sync_log` and must thread `nodeId` too. The
+fix widened `MeApiDeps.cfg` to `{ tenantId, nodeId }` and added `{ nodeId: deps.cfg.nodeId }` to the
+`asStaff` helper's `withTenant` and to till-api's locale route; guarded in `sync-origin.rls.test.ts`.)
+This slice adds `nodeId: string` to
 `ManagementApiDeps.cfg`, threads `{ nodeId: deps.cfg.nodeId }` into every `withTenant` that wraps an
 identity-config write — `createPerson`, `setRole`/`suspendPerson`/`reactivatePerson`, `resetPin`,
 `setPassword`, `finishPasskeyRegistration`, and `finishPasskeyAuthentication` (the passkey counter
@@ -396,9 +402,11 @@ Re-checkable facts this design rests on:
   `0001_identity_rls.sql`, `0008_silent_mauler.sql`; **no BEFORE triggers** on either
   (`grep CREATE TRIGGER packages/identity/drizzle/*.sql` → none).
 - **`totp_secret` is plaintext and currently unwritten** — `packages/identity/src/schema/persons.ts:42-50`.
-- **Identity config is authored only in `management-api.ts`; its `cfg` lacks `nodeId`** —
+- **Identity config is authored mainly in `management-api.ts`; its `cfg` lacks `nodeId`** —
   `apps/server/src/management-api.ts:52`; the writer call sites are `management-api.ts:312/365/368/371/394/416/564/612`.
-  `me-api.ts` writes only workforce tables.
+  (**Correction, 2026-09-02:** the original "`me-api.ts` writes only workforce tables" was FALSE —
+  `me-api.ts`'s `PUT /management-api/session/me/locale` and till-api's `PUT /api/session/locale` both
+  write `persons.locale` via `setPersonLocale`, so they thread `nodeId` too; see the §5 correction.)
 - **The catalogue origin-attribution precedent** — `apps/server/src/catalogue-api.ts:145`,
   proven at `apps/server/src/sync-origin.rls.test.ts`.
 </content>

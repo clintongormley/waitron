@@ -1030,7 +1030,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // routes gate on the MANAGEMENT session (requireManagementSession + resolveManagementSession), never
   // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Same minimal deps
   // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
-  mountMeApi(app, { db, cfg: { tenantId: till.tenantId }, venueLocale }, log);
+  mountMeApi(
+    app,
+    // `nodeId` is THIS node's origin id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
+    // receive) — `PUT /management-api/session/me/locale` writes `persons.locale` (a sync-enrolled table),
+    // so its capture must stamp a real origin rather than the all-zero uuid.
+    { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId }, venueLocale },
+    log,
+  );
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
   // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
   // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),

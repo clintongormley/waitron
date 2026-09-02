@@ -542,10 +542,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c);
       const body = await readJsonBody<{ locale?: unknown }>(c);
       const locale = typeof body.locale === "string" ? body.locale : "";
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
-      });
+      // `persons` is a sync-enrolled table (identity config flow-down), so `setPersonLocale`'s UPDATE is
+      // captured to `sync_log`, stamped with `app.node_id` as its origin. Thread this till's `nodeId` so
+      // the write records a REAL origin — a bare 3-arg withTenant leaves it the all-zero uuid, which
+      // `source.ts` never delivers and `retention.ts` never prunes (unbounded log growth).
+      await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.body(null, 204);
     }),
   );

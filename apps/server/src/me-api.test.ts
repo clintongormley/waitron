@@ -65,9 +65,19 @@ const suite = usePgliteDb({
 // `boot.ts` derives it via `readVenueLocale`; the me routes only carry it through.
 const VENUE_LOCALE = "en-GB";
 
+// A fixed sentinel node id: this hermetic suite runs on PGlite WITHOUT the sync migrations, so no
+// `persons` capture trigger fires and no test here asserts a sync origin — the value only has to be
+// present so the widened `MeApiDeps.cfg` (`{ tenantId, nodeId }`) is satisfied. The origin-attribution
+// proof for this route lives in `sync-origin.rls.test.ts` (real Postgres, manifest template).
+const NODE_ID = "11111111-1111-4111-8111-111111111111";
+
 function mountApp(): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.db, cfg: { tenantId }, venueLocale: VENUE_LOCALE }, noopLog);
+  mountMeApi(
+    app,
+    { db: suite.db, cfg: { tenantId, nodeId: NODE_ID }, venueLocale: VENUE_LOCALE },
+    noopLog,
+  );
   return app;
 }
 
