@@ -35,6 +35,12 @@ describe("acceptMembershipDocument", () => {
       reason: "not_newer",
     });
   });
+  it("treats a held term of 0 as held, not as nothing held (=== null, not falsy)", () => {
+    expect(acceptMembershipDocument(doc(0, "A", a.privateKey), 0, trust)).toEqual({
+      accepted: false,
+      reason: "not_newer",
+    });
+  });
   it("rejects an untrusted document as invalid, carrying the verify failure", () => {
     expect(acceptMembershipDocument(doc(9, "A", a.privateKey), 1, {})).toEqual({
       accepted: false,
