@@ -78,6 +78,18 @@ describe("verifyMembershipDocument", () => {
       reason: "malformed",
     });
   });
+
+  it("rejects a document carrying more than MAX_ENDORSEMENTS (8) endorsements as malformed", () => {
+    // The length cap fires on the array size regardless of endorsement content, so trivially-shaped
+    // but structurally-valid entries suffice. 9 (MAX_ENDORSEMENTS + 1) must be rejected before any
+    // signature or trust is consulted; 8 stays structurally acceptable.
+    const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
+    const doc = {
+      ...signed(body(1), "A", generateNodeKeyPair().privateKey),
+      endorsements: Array.from({ length: 9 }, () => endorsement),
+    };
+    expect(verifyMembershipDocument(doc, {})).toEqual({ valid: false, reason: "malformed" });
+  });
 });
 
 // The structural guards reject adversarial input as data (never throw). Each case below is a

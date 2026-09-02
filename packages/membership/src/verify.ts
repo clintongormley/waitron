@@ -19,7 +19,19 @@ const STANDINGS: readonly NodeStanding[] = [
   "evicted",
 ];
 
+// Structural cap on how many endorsements a document may carry. Spec §2 caps the topology at 3
+// nodes (2 local + 1 cloud), so a legitimate document needs only a couple of endorsements; 8 is
+// generous headroom. The bound stops an adversarial document from the (future) network surface
+// forcing an unbounded number of Ed25519 verifications. Raising it later is a widen, not a
+// breaking change.
+const MAX_ENDORSEMENTS = 8;
+
 export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey: string): string {
+  // signerNodeId is deliberately NOT part of the signed bytes (bodyToCanonical covers only term +
+  // nodes): it merely selects which trusted key to verify against. A mutated signerNodeId therefore
+  // yields bad_signature, because the signature must still verify against the selected key — so it
+  // is authenticated TRANSITIVELY, not directly. Do not "fix" this by folding signerNodeId (or, for
+  // endorsements, endorsedBy) into the signed payload; that would change the wire format.
   return signBytes(bodyMessage(body), signerPrivateKey);
 }
 
@@ -66,6 +78,7 @@ function isDocument(v: unknown): v is SignedMembershipDocument {
   const d = v as Record<string, unknown>;
   if (typeof d.signerNodeId !== "string" || typeof d.signature !== "string") return false;
   if (!Array.isArray(d.endorsements) || !d.endorsements.every(isEndorsement)) return false;
+  if (d.endorsements.length > MAX_ENDORSEMENTS) return false;
   const b = d.body as Record<string, unknown> | undefined;
   if (b === undefined || typeof b !== "object" || b === null) return false;
   if (typeof b.term !== "number" || !Number.isInteger(b.term)) return false;

@@ -38,6 +38,21 @@ describe("resolveSignerKey", () => {
     expect(resolveSignerKey("B", [tampered], trust)).toBeNull();
   });
 
+  it("resolves a 2-hop chain given in reverse dependency order (multi-pass fixpoint)", () => {
+    // A is trusted at setup; B is endorsed by A; C is endorsed by B. The endorsements are listed in
+    // REVERSE dependency order, so resolving C requires the loop to admit B on pass 1 and then C on
+    // pass 2 — exercising the second pass of the `while (changed)` fixpoint that ordered inputs skip.
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const c = generateNodeKeyPair();
+    const trust: TrustSet = { A: a.publicKey };
+    const endorsements = [
+      endorseKey("C", c.publicKey, "B", b.privateKey),
+      endorseKey("B", b.publicKey, "A", a.privateKey),
+    ];
+    expect(resolveSignerKey("C", endorsements, trust)).toBe(c.publicKey);
+  });
+
   it("does not loop on a cyclic endorsement set", () => {
     const b = generateNodeKeyPair();
     const c = generateNodeKeyPair();
