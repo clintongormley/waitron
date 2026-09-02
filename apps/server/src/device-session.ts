@@ -1,7 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError } from "@waitron/shared";
+import { AppError, tillId } from "@waitron/shared";
+import type { TillId } from "@waitron/shared";
 import { asAppUser, devices, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { getProfile } from "@waitron/layouts";
@@ -197,6 +198,40 @@ export async function requireDevice(
   const device = await tryReadDevice(deps, c);
   if (device === null) throw new AppError("device.unauthorized", {});
   return device;
+}
+
+/**
+ * Resolve the `till_id` a SALE files under from the AUTHENTICATED enrolled device (SP-A.2 §16.4/§16.5 —
+ * the H2 fiscal cutover). Before this, a sale's till came from `cfg.tillId` (env `WAITRON_TILL_TILL_ID`);
+ * now it comes from the device the request carries, so a re-homed or re-profiled box files under the till
+ * its OWN enrolment names, never a stale env value. The four sale routes (`/api/sales`, `/api/pay`,
+ * `/api/working-orders/:id/place`, `/api/working-orders/:id/collect`) call this once and thread the
+ * result into a per-request `saleCfg = { ...cfg, tillId }`. Only `tillId` changes: `nodeId`/`seriesId`
+ * STAY `cfg` (a {@link DeviceBinding} carries no node/series — the SIF/chain key is the node, not the
+ * device).
+ *
+ * Modelled on {@link requireDevice}/{@link assertDeviceCapability}: it reads the binding via
+ * {@link tryReadDevice} (RLS as `app_user`) and fails CLOSED. Both refusals are documented SETUP
+ * preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous to the
+ * boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a setup fault
+ * surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):
+ *  - No `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
+ *    device-auth code (an ordinary env-only till is no longer a sellable box on its own).
+ *  - A device with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
+ *    `device.till_required` — the mint-time twin (Task 12) reused: a till-less device cannot ring a sale.
+ *
+ * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard (UUID-validated,
+ * `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the env value it replaces
+ * (`till-config.ts`).
+ */
+export async function requireSaleTillId(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+): Promise<TillId> {
+  const device = await tryReadDevice(deps, c);
+  if (device === null) throw new AppError("device.unauthorized", {});
+  if (device.tillId === null) throw new AppError("device.till_required", {});
+  return tillId(device.tillId);
 }
 
 /**

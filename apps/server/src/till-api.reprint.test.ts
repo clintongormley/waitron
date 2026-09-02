@@ -21,6 +21,8 @@ import type { TenantId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
@@ -152,11 +154,34 @@ async function openSession(db: Database): Promise<string> {
 
 let app: Hono;
 let cookie: string;
+// SP-A.2 cutover: `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so
+// `placeAndFire` carries a `till`-device cookie (bound to `cfg.tillId`, the venue's own till, so the
+// order behaves exactly as pre-cutover). One enrolment for the file — this suite never deletes devices.
+let tillDeviceCookie: string;
+
+/** Enrol a REAL `till` device bound to `cfg.tillId` and return its `waitron_device=…` cookie. */
+async function enrolTillDeviceCookie(db: Database): Promise<string> {
+  const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Counter till",
+    });
+  });
+  const dev = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
 
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), noopLog);
   cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 });
 
 /** Park + place an order carrying `CAFE`, which FIRES it (placeOrder → fireLines). Returns the order id. */
@@ -170,7 +195,7 @@ async function placeAndFire(): Promise<string> {
   expect(park.status).toBe(200);
   const place = await app.request(`/api/working-orders/${id}/place`, {
     method: "POST",
-    headers: { cookie },
+    headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
   });
   expect(place.status).toBe(200);
   return id;

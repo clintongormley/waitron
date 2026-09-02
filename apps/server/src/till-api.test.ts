@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -60,6 +60,12 @@ let aguaProduct: { id: string; catalogueId: string };
 // `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
 // products drawn from every accessible catalogue, not just the default one.
 let cervezaProduct: { id: string; catalogueId: string };
+// SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) now resolve `till_id` from
+// the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
+// (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
+// route body rather than being refused `device.unauthorized`. (The device gate itself is proven over
+// real Postgres in `till-api.rls.test.ts`; here it is just the setup a place/cancel test needs.)
+let tillDeviceCookie: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -146,6 +152,16 @@ const suite = usePgliteDb({
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
+
+// SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) resolve `till_id` from the
+// authenticated enrolled device. The describe blocks whose happy-path tests drive a sale route enrol a
+// fresh `till` device (bound to `cfg.tillId`) in a `beforeEach` — fresh EACH test because the
+// `GET /api/till` profile tests `delete from devices` for the shared tenant, so a once-only device would
+// not survive to a later describe. No profile needed: place/collect run `assertNotHandheld`, not the
+// capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.rls.test.ts`).
+async function enrolSaleTillDevice(): Promise<void> {
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, null);
+}
 
 /** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
@@ -1418,6 +1434,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 // tested here too, for the same reason; its FISCAL happy path needs a real backend and lives in
 // `till-api.rls.test.ts`.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
+  beforeEach(enrolSaleTillDevice);
   it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1431,7 +1448,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
 
     const placed = await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
     // `prepay` files nothing at placing (Task 8's dispatch) — just the bare transition result.
@@ -1456,11 +1473,16 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
 
+    // The re-place carries the device cookie too, so it reaches `placeOrder`'s open-only guard
+    // (`working_order.not_open`) rather than being short-circuited by the sale-time device gate.
     const rePlace = await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
     });
     expect(rePlace.status).toBe(409);
     expect(await rePlace.json()).toMatchObject({
@@ -1544,6 +1566,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
 // real-Postgres's job (`working-order.rls.test.ts`). `placeOrder`'s OWN fire seeds ticket items with no
 // fiscal write under this suite's `prepay` cfg (only `invoice_first`/Mode T dispatch a fiscal doc).
 describe("KDS-1 station-display operate routes", () => {
+  beforeEach(enrolSaleTillDevice);
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
   async function defaultStation(
     app: Hono,
@@ -1560,7 +1583,10 @@ describe("KDS-1 station-display operate routes", () => {
   async function placeFired(app: Hono, cookie: string, label?: string): Promise<string> {
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }], label });
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
     return id;
   }
 
@@ -1701,7 +1727,10 @@ describe("KDS-1 station-display operate routes", () => {
       ],
       label: "Mesa 9",
     });
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
     const cocina = await defaultStation(app, cookie);
 
     const advance = (order: string, station: string, to: string) =>
@@ -1783,13 +1812,17 @@ describe("/api/working-orders/:id/collect (malformed id — the fiscal happy pat
 });
 
 describe("/api/working-orders/:id/cancel", () => {
+  beforeEach(enrolSaleTillDevice);
   it("POST cancels a PLACED order (placed → abandoned) given a reason", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
 
     const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
       method: "POST",
@@ -1811,7 +1844,10 @@ describe("/api/working-orders/:id/cancel", () => {
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
-    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+    await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+    });
 
     const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
       method: "POST",

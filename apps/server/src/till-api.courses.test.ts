@@ -25,6 +25,8 @@ import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -204,11 +206,35 @@ type QueueGroup = { orderId: string; items: QueueItem[] };
 
 let app: Hono;
 let cookie: string;
+// SP-A.2 cutover: `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so
+// `placeOrder` below carries a `till`-device cookie (bound to `cfg.tillId`). One enrolment for the file
+// — this suite never deletes devices, so it persists. (The device gate itself is proven over real
+// Postgres in `till-api.rls.test.ts`; here it is just the setup a place needs.)
+let tillDeviceCookie: string;
+
+/** Enrol a REAL `till` device bound to `cfg.tillId` and return its `waitron_device=…` cookie. */
+async function enrolTillDeviceCookie(db: Database): Promise<string> {
+  const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Counter till",
+    });
+  });
+  const dev = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
 
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
   cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 });
 
 /** The seeded default station "Cocina", read back through `GET /api/stations`. */
@@ -257,7 +283,7 @@ async function placeOrder(descriptions: string[]): Promise<string> {
   expect(park.status).toBe(200);
   const place = await app.request(`/api/working-orders/${id}/place`, {
     method: "POST",
-    headers: { cookie },
+    headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
   });
   expect(place.status).toBe(200);
   return id;

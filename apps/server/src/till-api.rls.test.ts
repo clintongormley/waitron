@@ -36,6 +36,7 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { createStation } from "./kitchen.js";
 
 // Real Postgres, not PGlite: this drives `POST /api/sales` and the `/api/working-orders` routes
 // through the HTTP surface to a GENUINE chained fiscal record written by the app role under RLS.
@@ -243,6 +244,48 @@ function apiDepsWithCardProvider(
   };
 }
 
+/**
+ * Enrol a REAL `till`-kind device in `cfg`'s tenant, BOUND TO THE VENUE'S OWN TILL (`cfg.tillId`), and
+ * return the `waitron_device=<id>.<token>` cookie a booting till device carries. SP-A.2 cutover: a sale
+ * route now resolves `till_id` from THIS device (`requireSaleTillId`), so the device's till IS the venue
+ * till and every sale's fiscal record is byte-identical to the pre-cutover env-till (the same `till_id`,
+ * and `nodeId`/`seriesId` still come from cfg). An optional `layoutProfileId` binds a stored profile —
+ * the `/api/pay` tests need one declaring `integrated-card-payment` so `assertDeviceCapability` passes.
+ * The mint→redeem runs on the app role under the tenant (the production enrol path), so the scrypt hash
+ * actually verifies and `tryReadDevice` resolves a genuine binding rather than a miss.
+ */
+async function enrolTillCookie(
+  cfg: TillConfig,
+  layoutProfileId: string | null = null,
+): Promise<string> {
+  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      label: "Counter till",
+    });
+  });
+  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
+/** Insert a stored `till` layout profile (its capabilities include `integrated-card-payment` and
+ *  `open-cash-drawer`) for the tenant and return its id, so a pay-capable till device can bind it — the
+ *  same direct `layout_profiles` insert the capability-firewall test below uses. */
+async function createTillProfile(cfg: TillConfig): Promise<string> {
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Counter till', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+    returning id`);
+  return prof.rows[0]!.id;
+}
+
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
@@ -274,11 +317,15 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
+    // SP-A.2 cutover: the sale resolves its till from the enrolled device, so the box carries a
+    // `waitron_device` cookie for a till bound to THIS venue's own till — the resolved till equals the
+    // env `cfg.tillId`, keeping the fiscal record below byte-identical to the pre-cutover sale.
+    const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. Ring a sale with that cookie: 2 × 1.50 = 3.00 total, 5.00 tendered → 2.00 change.
     const saleRes = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [{ productId: each.id, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
@@ -340,6 +387,9 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
+    // SP-A.2 cutover: an enrolled till device bound to the venue's own till (resolved till == env
+    // `cfg.tillId`), so both sales below file the same chain the pre-cutover env-till would.
+    const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. The operator sees the menu: GET /api/products returns `{ menus, products }` for the seeded
     // catalogue. The sale lines are built FROM `products`, exactly as the real till does (it never
@@ -367,7 +417,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // for each (findings §14: the base imponible split per rate is mandatory once rates mix).
     const saleRes = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
           { productId: jamon.id, quantity: "0.200" },
@@ -401,7 +451,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // same app — invoice A/2.
     const secondRes = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
           { productId: jamon.id, quantity: "0.200" },
@@ -443,6 +493,99 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   });
 });
 
+// The H2 fiscal cutover (SP-A.2 §16.4/§16.5): a sale's `till_id` now resolves from the AUTHENTICATED
+// enrolled device (`requireSaleTillId`), not env. These two negatives pin the fail-closed setup
+// preconditions; every happy-path sale test in this file carries a till-device cookie so the resolved
+// till equals the venue till and the fiscal record is unchanged.
+describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () => {
+  it("refuses POST /api/sales with NO device cookie — 401 device.unauthorized, filing nothing", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // A valid operator session but NO `waitron_device` cookie — an ordinary env-only till, which after
+    // the cutover is no longer a sellable box on its own. Prove-by-deletion: revert `saleCfg` → `deps.cfg`
+    // at `POST /api/sales` (drop the `requireSaleTillId` resolve) and this same request 200s + files one.
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
+    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(registros).toHaveLength(0);
+  });
+
+  it("refuses POST /api/sales from a device with no till (a kds_station) — 400 device.till_required", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // A `kds_station` binds a live station and NO till (`kindRequiresTill` is false), so its
+    // `devices.till_id` is null — `requireSaleTillId` refuses it `device.till_required`: a till-less
+    // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
+    // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
+    // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
+    const station = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createStation(tx, cfg, { name: "Pase", isDefault: false });
+    });
+    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return generatePairingCode(tx, cfg, {
+        kind: "kds_station",
+        stationId: station.id,
+        label: "Pantalla",
+      });
+    });
+    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return enrolDevice(tx, cfg, { code });
+    });
+    const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
+    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(registros).toHaveLength(0);
+  });
+});
+
 describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", () => {
   it("parks an order, retrieves it, pays it via POST /api/sales, and a replay refiles nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -459,6 +602,9 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     });
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie")!;
+    // SP-A.2 cutover: the pay + replay below resolve their till from this enrolled till device (bound to
+    // the venue's own till), so the filed record and the replay are byte-identical to the pre-cutover sale.
+    const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. Park an order (client-minted id, its own idempotency key) with 2 × 1.50. Fresh tenant+node
     //    per test, so the allocated order number is deterministically 1.
@@ -486,7 +632,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     //    order (not a fresh walk-up). 2 × 1.50 = 3.00 total, 5.00 tendered → 2.00 change.
     const pay = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
         lines: [{ productId: each.id, quantity: "2" }],
@@ -524,7 +670,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     //    retrieve (spec §3): invoice numbers are never reused, so a double filing is unrepairable.
     const replay = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
         lines: [{ productId: each.id, quantity: "2" }],
@@ -579,10 +725,15 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(login.status).toBe(200);
       const cookie = login.headers.get("set-cookie")!;
 
+      // SP-A.2 cutover: /api/pay resolves its till from the enrolled device AND runs the
+      // integrated-card-payment capability firewall, so this device carries the venue's own till (so the
+      // filed record is unchanged) AND a stored `till` profile declaring that capability.
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie },
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           id: workingOrderId,
           lines: [{ productId: each.id, quantity: "1" }],
@@ -630,10 +781,13 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       });
       const cookie = login.headers.get("set-cookie")!;
 
+      // SP-A.2 cutover: an enrolled till device with a capability-bearing profile (see the capture test).
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie },
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           id: workingOrderId,
           lines: [{ productId: each.id, quantity: "1" }],
@@ -676,9 +830,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       });
       const cookie = login.headers.get("set-cookie")!;
 
+      // SP-A.2 cutover: the empty-basket fault is a genuine 400 AFTER the device gate + capability
+      // firewall pass, so this device carries the venue's till and a capability-bearing profile too.
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       const payRes = await app.request("/api/pay", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie },
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({ id: randomUUID(), lines: [] }),
       });
 
@@ -720,6 +877,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     });
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie")!;
+    // SP-A.2 cutover: place + collect are sale routes now, so the box is an enrolled till device bound to
+    // the venue's own till (resolved till == env `cfg.tillId`, so the record filed at collect is unchanged).
+    const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. Park then PLACE: 2 × 1.50 = 3.00. Mode T files NO fiscal doc at placing.
     const workingOrderId = randomUUID();
@@ -735,7 +895,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(park.status).toBe(200);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie: `${cookie}; ${deviceCookie}` },
     });
     expect(placed.status).toBe(200);
     expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
@@ -855,7 +1015,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     // fiscal write this real-Postgres suite exists to prove.
     const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
     });
     expect(collect.status).toBe(200);
@@ -907,12 +1067,15 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie")!;
 
+    // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
+    const deviceCookie = await enrolTillCookie(cfg);
+
     // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
     // `place` step at all, since Mode P never places.
     const workingOrderId = randomUUID();
     const sale = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
         lines: [{ productId: each.id, quantity: "1" }],
@@ -1002,12 +1165,14 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
       body: JSON.stringify({ personId: operatorId, pin: "5555" }),
     });
     const cookie = login.headers.get("set-cookie")!;
+    // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
+    const deviceCookie = await enrolTillCookie(cfg);
 
     // Walk-up settle (open → settled in one tx) → send to prep → the line is on the default station's queue.
     const workingOrderId = randomUUID();
     await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         workingOrderId,
         lines: [{ productId: each.id, quantity: "1" }],
@@ -1247,16 +1412,21 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect(paymentRows.rows[0]!.payment_ref).toMatch(/^manual-/);
   });
 
-  it("allows a sale from an ordinary till — operator session, NO device cookie — 200", async () => {
+  it("allows a sale from an enrolled TILL device (not a handheld) — operator session + till-device cookie — 200", async () => {
+    // The counterpart to the handheld cases: a `till`-kind device is NOT refused, and post-cutover its
+    // enrolled `till_id` (the venue's own till) is what the sale files under. (Pre-cutover this was an
+    // ordinary env-till with no device cookie; the cutover retires that path — the no-cookie sale is now
+    // refused `device.unauthorized`, pinned by the cutover negative test near the top of this file.)
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
+    const deviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, operatorId);
     const res = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [{ productId: each.id, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
@@ -1343,10 +1513,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
   // screens must be fenced too — they file a CHAINED fiscal record, the unrecoverable one (CLAUDE.md
   // §5). `POST /:id/place` files a deferred invoice in a Mode-I (invoice-first) venue; `POST /:id/collect`
   // files the immediate sale (Mode T) or settles the deferred invoice (Mode I). Each test drives a REAL
-  // order end to end: the handheld is refused 403 having filed NOTHING, then the ordinary till (session
-  // only, no device cookie) completes the same order and files exactly one chained record — so removing
-  // the `assertNotHandheld` guard flips the handheld case to a 200 that files the record the guard exists
-  // to prevent (prove-by-deletion).
+  // order end to end: the handheld is refused 403 having filed NOTHING, then an enrolled TILL device
+  // (post-cutover a sale route resolves its till from the device, not env) completes the same order and
+  // files exactly one chained record — so removing the `assertNotHandheld` guard flips the handheld case
+  // to a 200 that files the record the guard exists to prevent (prove-by-deletion).
   it("refuses a handheld PLACE (Mode I) with 403, filing nothing; an ordinary till places and files one record", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice — the fiscal write the
@@ -1387,10 +1557,13 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     });
     expect(afterRefused.length).toBe(0);
 
-    // The ordinary till (no device cookie) places the SAME order and files exactly one deferred invoice.
+    // An enrolled TILL device (venue's own till) places the SAME order and files exactly one deferred
+    // invoice — post-cutover a place resolves its till from the device, not env (the record is unchanged
+    // because the device's till equals the venue till).
+    const tillDeviceCookie = await enrolTillCookie(cfg);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
       method: "POST",
-      headers: { cookie: sessionPair },
+      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
@@ -1414,6 +1587,9 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(modeCfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
+    // A separate TILL device (venue's own till) for the place-setup + collect completion — both are sale
+    // routes post-cutover and resolve their till from the enrolled device, not env.
+    const tillDeviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, operatorId);
 
     // Park + place a real order as the ordinary till (Mode T files nothing at placing).
@@ -1426,7 +1602,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect(park.status).toBe(200);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
       method: "POST",
-      headers: { cookie: sessionPair },
+      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
 
@@ -1444,10 +1620,13 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     });
     expect(afterRefused.length).toBe(0);
 
-    // The ordinary till collects the SAME order and files exactly one chained record.
+    // An enrolled till device collects the SAME order and files exactly one chained record.
     const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${sessionPair}; ${tillDeviceCookie}`,
+      },
       body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
     });
     expect(collect.status).toBe(200);
@@ -1479,7 +1658,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, operatorId);
 
-    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel.
+    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel. Place is a
+    // sale route post-cutover, so its completion carries an enrolled till device (the venue's own till);
+    // cancel is NOT a sale route (stays env), so the cancel calls below need no device cookie.
+    const tillDeviceCookie = await enrolTillCookie(cfg);
     const workingOrderId = randomUUID();
     const park = await app.request("/api/working-orders", {
       method: "POST",
@@ -1489,7 +1671,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect(park.status).toBe(200);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
       method: "POST",
-      headers: { cookie: sessionPair },
+      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
 

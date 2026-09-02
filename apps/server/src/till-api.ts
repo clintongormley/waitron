@@ -85,7 +85,12 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertDeviceCapability, assertNotHandheld, tryReadDevice } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  assertNotHandheld,
+  requireSaleTillId,
+  tryReadDevice,
+} from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -158,6 +163,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // both node-keyed, record-sale.ts:79-82.) `assertNotHandheld` refuses it server-side even if the client
   // is bypassed. 403: authenticated but forbidden.
   "device.forbidden_action": 403,
+  // The SP-A.2 sale-time device gate (§16.4/§16.5): a sale route resolves its `till_id` from the
+  // authenticated enrolled device (`requireSaleTillId`) — a SETUP precondition, not a per-sale block. A
+  // request carrying no `waitron_device` cookie is refused `device.unauthorized` (401, the device-auth
+  // status), and an authenticated device with no till (a `kds_station`, which rings no sale)
+  // `device.till_required` (400, the validation status). Same codes AND same statuses `device-api.ts`'s
+  // own map assigns them — this fiscal surface does not diverge from that sibling.
+  "device.unauthorized": 401,
+  "device.till_required": 400,
   "session.not_open": 401,
   "session.required": 401,
   // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
@@ -763,9 +776,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
+      // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
+      // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
+      // carries no node/series. `recordTillSale` reads `cfg.tillId` unchanged, now the device's via `saleCfg`.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        deps.cfg,
+        saleCfg,
         body,
         personId,
       );
@@ -810,9 +827,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (deps.cardProvider === undefined) {
         throw new Error("/api/pay: no integrated card provider configured");
       }
+      // SP-A.2 §16.4 cutover: the integrated pay's `till_id` comes from the AUTHENTICATED device, not env
+      // (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). Resolved AFTER the capability
+      // firewall + provider guard so those refusals keep their existing status; the reader-identity till
+      // (`provider.collect`) moves to the same device till, consistent with the fiscal record it files.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
       const outcome = await payWorkingOrderIntegrated(
         { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
-        deps.cfg,
+        saleCfg,
         body,
         personId,
       );
@@ -941,9 +963,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // device cookie and passes.
       await assertNotHandheld(deps, c, "place");
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      // SP-A.2 §16.4 cutover: a Mode-I place files a deferred chained invoice under the AUTHENTICATED
+      // device's `till_id`, not env (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). The
+      // place-amendment `capturedByTillId` moves to the same device till, consistent with that invoice.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        deps.cfg,
+        saleCfg,
         id,
         personId,
       );
@@ -1285,9 +1311,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertNotHandheld(deps, c, "collect");
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await c.req.json<{ tender: TillTender }>();
+      // SP-A.2 §16.4 cutover: collect settles under the AUTHENTICATED device's `till_id`, not env — Mode T
+      // files `recordSale` immediate, Mode I settles the deferred invoice. Only `tillId` changes;
+      // `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        deps.cfg,
+        saleCfg,
         { id, lines: [], tender: body.tender },
         personId,
       );

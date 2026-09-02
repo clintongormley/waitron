@@ -39,6 +39,8 @@ import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
 
@@ -297,13 +299,40 @@ async function login(app: Hono, operatorId: string): Promise<string> {
   return res.headers.get("set-cookie")!;
 }
 
+/** Enrol a REAL `till`-kind device bound to the venue's own till (`cfg.tillId`) and return the
+ *  `waitron_device=<id>.<token>` cookie. SP-A.2 cutover: `POST /api/sales` resolves its till from the
+ *  enrolled device, and the device's till IS the venue till, so the filed record is unchanged. */
+async function enrolTillCookie(cfg: TillConfig): Promise<string> {
+  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Counter till",
+    });
+  });
+  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the id the till holds after a sale —
- *  `#store.id`; the reprint route keys on it), and return that id. */
-async function ringSale(app: Hono, cookie: string, productId: string): Promise<string> {
+ *  `#store.id`; the reprint route keys on it), and return that id. Carries a till-device cookie so the
+ *  post-cutover sale route resolves its till (SP-A.2 §16.4). */
+async function ringSale(
+  app: Hono,
+  cfg: TillConfig,
+  cookie: string,
+  productId: string,
+): Promise<string> {
+  const deviceCookie = await enrolTillCookie(cfg);
   const workingOrderId = randomUUID();
   const res = await app.request("/api/sales", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie },
+    headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
     body: JSON.stringify({
       workingOrderId,
       lines: [{ productId, quantity: "1" }],
@@ -340,7 +369,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, operatorId);
 
-    const workingOrderId = await ringSale(app, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
     // The filed sale exists, but mode 'never' enqueued no auto job.
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
@@ -376,7 +405,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, operatorId);
-    const workingOrderId = await ringSale(app, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
 
     for (let i = 0; i < 2; i++) {
       const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
@@ -415,7 +444,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, operatorId);
-    const workingOrderId = await ringSale(app, cookie, each.id);
+    const workingOrderId = await ringSale(app, cfg, cookie, each.id);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
       method: "POST",
