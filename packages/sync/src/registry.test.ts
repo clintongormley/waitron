@@ -5,13 +5,16 @@ import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
  * The enrolment registry is pinned here against spec §2's fourteen commercial-lane tables
  * (docs/superpowers/specs/2026-08-08-sync-slice1-commercial-outbox-spec.md) plus the three
  * table-service tables the C1 slice enrols
- * (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md) — seventeen in all.
+ * (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md), plus the two
+ * identity-config tables this slice enrols
+ * (docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md) — nineteen in all.
  * This table encodes the spec INDEPENDENTLY of registry.ts, so the two must agree — a registry.ts
  * that drifts from it fails here rather than shipping a wrong apply mode. The ops per group are grant
  * facts, cited in the spec to the migration that set each grant. Groups A–C match
  * packages/sync/drizzle/0000_sync_outbox.sql's capture triggers exactly (Group A AFTER INSERT, Group B
  * AFTER INSERT OR UPDATE, Group C AFTER INSERT OR UPDATE OR DELETE); Group D's capture triggers
- * (AFTER INSERT OR UPDATE) are in packages/sync/drizzle/0006_enrol_table_service.sql; this unit suite
+ * (AFTER INSERT OR UPDATE) are in packages/sync/drizzle/0006_enrol_table_service.sql; the two
+ * identity-config tables' capture triggers are added by a later task in this slice. This unit suite
  * pins only the registry shape.
  */
 const SPEC: Record<
@@ -162,14 +165,33 @@ const SPEC: Record<
     captureOps: ["insert", "update"],
     lane: "ordered",
   },
+  // Identity CONFIG flow-down (spec §3): mutable, NO watermark column → Group C mechanism
+  // (watermark-upsert with null watermark; monotonicity from the seq cursor under single-writer).
+  // persons holds no DELETE grant (suspended, never removed — 0001_identity_rls.sql), so insert+update
+  // only; webauthn_credentials holds DELETE (a passkey is revoked — 0008_silent_mauler.sql), so it
+  // captures the delete too (revocation MUST propagate to the secondary).
+  persons: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
+  webauthn_credentials: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update", "delete"],
+    lane: "ordered",
+  },
 };
 
 const byName = new Map(ENROLLED.map((e) => [e.table, e]));
 
-describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen)", () => {
-  it("has exactly seventeen rows, no duplicates", () => {
-    expect(ENROLLED).toHaveLength(17);
-    expect(byName.size).toBe(17);
+describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen) plus §3's two identity-config (nineteen)", () => {
+  it("has exactly nineteen rows, no duplicates", () => {
+    expect(ENROLLED).toHaveLength(19);
+    expect(byName.size).toBe(19);
   });
 
   it("enrols exactly the spec §2 table set", () => {
@@ -193,11 +215,11 @@ describe("the fast lane carries exactly payments and payment_refunds (spec §4b)
   it("tablesForLane('fast') is exactly {payments, payment_refunds}", () => {
     expect(new Set(tablesForLane("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
   });
-  it("tablesForLane('ordered') is the remaining fifteen enrolled tables", () => {
+  it("tablesForLane('ordered') is the remaining seventeen enrolled tables", () => {
     const fast = new Set(["payments", "payment_refunds"]);
     const expected = ENROLLED.filter((e) => !fast.has(e.table)).map((e) => e.table);
     expect(tablesForLane("ordered").sort()).toEqual(expected.sort());
-    expect(tablesForLane("ordered")).toHaveLength(15);
+    expect(tablesForLane("ordered")).toHaveLength(17);
   });
   it("every enrolled table carries a lane, and the two lanes partition ENROLLED", () => {
     expect(tablesForLane("fast").length + tablesForLane("ordered").length).toBe(ENROLLED.length);
@@ -231,8 +253,12 @@ describe("captureOps match each table's group", () => {
       } else {
         // Group C (DELETE-capable: working_orders, working_order_lines) captures insert/update/delete;
         // Group D (deactivate-only: dining_tables, floor_zones, table_service_statuses) captures
-        // insert/update. delete is present iff the table is DELETE-capable; the real-PG capture gate
-        // asserts the ACTUAL trigger op set (capture.gate.test.ts §6), while this pins the registry shape.
+        // insert/update; Group E / identity CONFIG (spec §3) captures insert/update, plus delete IFF the
+        // table holds the DELETE grant (webauthn_credentials does — a passkey is revoked; persons does
+        // NOT — it is suspended, never removed). Always insert+update first, then delete present iff the
+        // table is DELETE-capable; the real-PG capture gate asserts the ACTUAL trigger op set
+        // (capture.gate.test.ts §6), while this pins the registry shape.
+        expect(entry.captureOps.slice(0, 2)).toEqual(["insert", "update"]);
         const hasDelete = entry.captureOps.includes("delete");
         expect(entry.captureOps).toEqual(
           hasDelete ? ["insert", "update", "delete"] : ["insert", "update"],
@@ -279,6 +305,9 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     ["floor_zones", "dining_tables"],
     ["table_service_statuses", "dining_tables"],
     ["dining_tables", "working_orders"],
+    // Identity CONFIG (spec §3): webauthn_credentials.person_id → persons (webauthn_credentials_person_fk,
+    // webauthn-credentials.ts). persons itself FKs only tenants (unenrolled), so it is a rank-0 root.
+    ["persons", "webauthn_credentials"],
   ];
   for (const [parent, child] of PARENT_CHILD) {
     it(`${parent}.fkRank < ${child}.fkRank`, () => {
