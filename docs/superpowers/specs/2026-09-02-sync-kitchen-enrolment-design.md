@@ -7,9 +7,10 @@
 The application-level sync outbox captures every committed row of the enrolled "commercial" tables
 into `sync_log`; a subscriber pulls the rows past its cursor and re-applies them in seq order,
 idempotently ([registry.ts](../../../packages/sync/src/registry.ts),
-[app-level-sync design](2026-08-02-app-level-sync-design.md)). The ordered lane now carries nineteen
-tables: spec §2's fourteen commercial, C1's three table-service (`dining_tables`/`floor_zones`/
-`table_service_statuses`, #153), and identity-config's two (`persons`/`webauthn_credentials`, #195).
+[app-level-sync design](2026-08-02-app-level-sync-design.md)). **Before this slice** the ordered lane
+carried nineteen tables: spec §2's fourteen commercial, C1's three table-service
+(`dining_tables`/`floor_zones`/`table_service_statuses`, #153), and identity-config's two
+(`persons`/`webauthn_credentials`, #195). This slice adds three more (twenty-two).
 
 The KDS (kitchen display) tables — `kitchen_stations`, `kitchen_courses`, `ticket_items` — were built
 single-writer-per-row (KDS-1 for stations/tickets, KDS-2 for courses) but are **not enrolled**: no capture trigger, no apply
