@@ -131,7 +131,9 @@ function validateCards(input: unknown, tabIndex: number, columns: number): CardI
       // array is copied so the validated card does not alias the untrusted input.
       if (raw.visibleWhen.length > 0) visibleWhen = [...(raw.visibleWhen as string[])];
     }
-    const card: CardInstance = { type, colSpan, rowSpan, config };
+    // Both `config` (shallow-copied here) and a non-empty `visibleWhen` (copied above) are copied so the
+    // validated card never aliases the untrusted input — a later mutation of the input cannot reach it.
+    const card: CardInstance = { type, colSpan, rowSpan, config: { ...config } };
     if (visibleWhen !== undefined) card.visibleWhen = visibleWhen;
     return card;
   });

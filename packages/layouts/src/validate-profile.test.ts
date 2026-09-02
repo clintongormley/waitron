@@ -323,6 +323,26 @@ describe("validateProfile — cards", () => {
     expect(p.tabs[0].cards[0].visibleWhen).toEqual(["unread"]);
     expect(p.tabs[0].cards[0].visibleWhen).not.toBe(input);
   });
+  it("does not alias the input card config", () => {
+    // kds (non-selling) so a single product-grid card is enough — a till would throw missing_required
+    // before returning, never reaching the aliasing assertion (assertSaleCritical fires only for till).
+    const input = {
+      formFactor: "kds",
+      capabilities: [],
+      tabs: [
+        {
+          key: "t",
+          title: "T",
+          columns: 12,
+          cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } }],
+        },
+      ],
+    };
+    const out = validateProfile(input);
+    expect(out.tabs[0].cards[0].config).not.toBe(input.tabs[0].cards[0].config);
+    (input.tabs[0].cards[0].config as Record<string, unknown>).columns = 999;
+    expect(out.tabs[0].cards[0].config.columns).toBe(4);
+  });
 });
 
 describe("validateProfile — sale-critical", () => {
