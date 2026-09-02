@@ -255,6 +255,33 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
   );
 }
 
+/** Seed a layout profile for the venue (owner SQL) — a real `(tenant_id, id)` a device binding can name. */
+async function seedProfile(cfg: TillConfig): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Perfil A', ${JSON.stringify({ formFactor: "tablet" })}::jsonb)
+    returning id`);
+  return rows[0]!.id;
+}
+
+/** Seed a `cloud_poll` printer for the venue (owner SQL) — needs only a poll id, so no print agent has
+ *  to be seeded to satisfy the transport CHECK. A real `(tenant_id, id)` a device binding can name. */
+async function seedPrinter(cfg: TillConfig): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into printers (tenant_id, location_id, name, transport, poll_id)
+    values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
+    returning id`);
+  return rows[0]!.id;
+}
+
+/** The enrolled device row's binding columns, read as the superuser (RLS bypassed). */
+async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
+  const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
+    select till_id, layout_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
+    from devices where id = ${deviceId}`);
+  return rows[0]!;
+}
+
 function mountApp(cfg: TillConfig, enrolRateLimiter?: EnrolRateLimiter): Hono {
   const app = new Hono();
   // `enrolRateLimiter` omitted → mountDeviceApi builds the DEFAULT (generous 30/min) limiter, which no
@@ -293,7 +320,7 @@ function deviceCookieFrom(res: Response): string {
 async function enrolWithCode(
   app: Hono,
   managerCookie: string,
-  codeBody: { kind: string; stationId?: string; label: string },
+  codeBody: { kind: string; stationId?: string; tillId?: string; label: string },
 ): Promise<{ deviceId: string; jar: string }> {
   const codeRes = await send(app, "POST", "/management-api/device-codes", {
     cookie: managerCookie,
@@ -322,13 +349,15 @@ function enrolAt(
   });
 }
 
-/** Mint a HANDHELD pairing code (no station — Task 2: `kindRequiresStation("handheld")` is false), then
- *  enrol a device with it (unauth). Returns the device id + the cookie jar. */
+/** Mint a HANDHELD pairing code (no station — Task 2: `kindRequiresStation("handheld")` is false; but a
+ *  handheld IS sale-capable, so it carries the venue's till_id — SP-A.2 §16.4), then enrol a device with
+ *  it (unauth). Returns the device id + the cookie jar. */
 function enrolHandheld(
   app: Hono,
   managerCookie: string,
+  tillId: string,
 ): Promise<{ deviceId: string; jar: string }> {
-  return enrolWithCode(app, managerCookie, { kind: "handheld", label: "Waiter phone" });
+  return enrolWithCode(app, managerCookie, { kind: "handheld", tillId, label: "Waiter phone" });
 }
 
 describe("Device API over real Postgres", () => {
@@ -672,6 +701,29 @@ describe("Device API over real Postgres", () => {
       error: { code: "station.not_found" },
     });
 
+    // A malformed (non-uuid) tillId on a sale-capable kind → request-shape 400 naming the field, BEFORE
+    // the verb's gate — the route screens the SHAPE of a present binding (a non-uuid would 22P02 at the
+    // bare-uuid column). An absent binding is passed through as null, not screened (proven elsewhere).
+    const badTill = await post({ kind: "till", tillId: "not-a-uuid", label: "P" });
+    expect(badTill.status).toBe(400);
+    expect(
+      (await badTill.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "tillId" } } });
+
+    // A non-boolean hasCashDrawer → request-shape 400 naming the field.
+    const badDrawer = await post({
+      kind: "till",
+      tillId: venue.cfg.tillId,
+      hasCashDrawer: "yes",
+      label: "P",
+    });
+    expect(badDrawer.status).toBe(400);
+    expect(
+      (await badDrawer.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "hasCashDrawer" } },
+    });
+
     // A missing label → request-shape 400 naming the field.
     const noLabel = await post({ kind: "kds_station", stationId: venue.defaultStationId });
     expect(noLabel.status).toBe(400);
@@ -710,20 +762,87 @@ describe("Device API over real Postgres", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "kind" } } });
   });
 
-  it("mints a handheld code with no station", async () => {
+  it("mints a handheld code with no station (but WITH a till — it is sale-capable)", async () => {
     // A `handheld` code binds to no station (Task 2: `kindRequiresStation("handheld")` is false), so a
-    // body carrying just `{ kind, label }` and NO `stationId` mints a code — the route makes the station
-    // conditional on the kind. THE PROOF: reverting the route to the unconditional
-    // `requireBodyUuid(body.stationId, …)` rejects this missing station as `management.request_invalid`
-    // (400), flipping the assertion red; restoring the conditional turns it green again.
+    // body carrying NO `stationId` mints a code — the route makes the station conditional on the kind.
+    // THE PROOF: reverting the route to the unconditional `requireBodyUuid(body.stationId, …)` rejects
+    // this missing station as `management.request_invalid` (400), flipping the assertion red; restoring
+    // the conditional turns it green again. A handheld IS sale-capable, so the body carries a `tillId`
+    // (SP-A.2 §16.4) — omitting it would be `device.till_required`, exercised by the gate test below.
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
     const res = await send(app, "POST", "/management-api/device-codes", {
       cookie: venue.managerCookie,
-      body: { kind: "handheld", label: "Waiter phone" },
+      body: { kind: "handheld", tillId: venue.cfg.tillId, label: "Waiter phone" },
     });
     expect(res.status).toBe(201);
     expect((await res.json()).code).toEqual(expect.any(String));
+  });
+
+  it("device-codes reads the binding fields and enrolment stamps them; the gate + FK map to 400", async () => {
+    // The route reads the profile/till/hardware body fields and passes them to generatePairingCode; the
+    // enrolled device carries them (SP-A.2 §16). Proven end to end through HTTP: mint a `till` code with
+    // every binding, enrol, and read the device row back. Then the two failure mappings the route's
+    // STATUS map owns: the till gate (device.till_required) and the binding-FK translation
+    // (device.binding_invalid) both surface as 400.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const profileId = await seedProfile(venue.cfg);
+    const printerId = await seedPrinter(venue.cfg);
+
+    const codeRes = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        layoutProfileId: profileId,
+        receiptPrinterId: printerId,
+        hasCashDrawer: true,
+        cardProvider: "sumup",
+        cardReaderId: "reader-xyz",
+        label: "Caja 1",
+      },
+    });
+    expect(codeRes.status).toBe(201);
+    const { code } = (await codeRes.json()) as { code: string };
+    const enrol = await send(app, "POST", "/api/device/enrol", { body: { code } });
+    expect(enrol.status).toBe(200);
+    const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
+    expect(await deviceBindings(deviceId)).toMatchObject({
+      till_id: venue.cfg.tillId,
+      layout_profile_id: profileId,
+      receipt_printer_id: printerId,
+      has_cash_drawer: true,
+      card_provider: "sumup",
+      card_reader_id: "reader-xyz",
+    });
+
+    // The till gate through the route: a sale-capable `till` code with no till_id → 400 till_required.
+    const noTill = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: { kind: "till", label: "Caja 2" },
+    });
+    expect(noTill.status).toBe(400);
+    expect((await noTill.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device.till_required" },
+    });
+
+    // The binding-FK translation through the route: a nonexistent layout_profile_id → 400 binding_invalid.
+    const badProfile = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        layoutProfileId: randomUUID(),
+        label: "Caja 3",
+      },
+    });
+    expect(badProfile.status).toBe(400);
+    expect(
+      (await badProfile.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+    });
   });
 
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
@@ -806,7 +925,7 @@ describe("Device API over real Postgres", () => {
     // station, so `stationId` is null.
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
-    const { deviceId, jar } = await enrolHandheld(app, venue.managerCookie);
+    const { deviceId, jar } = await enrolHandheld(app, venue.managerCookie, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
@@ -821,7 +940,7 @@ describe("Device API over real Postgres", () => {
     // branch is now genuinely reachable and tested, no longer ignored.
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
-    const { jar } = await enrolHandheld(app, venue.managerCookie);
+    const { jar } = await enrolHandheld(app, venue.managerCookie, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

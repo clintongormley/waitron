@@ -1112,6 +1112,8 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       return generatePairingCode(tx, cfg, {
         kind: "handheld",
         stationId: null,
+        // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the venue's own till.
+        tillId: cfg.tillId,
         label: "Waiter phone",
       });
     });

@@ -162,7 +162,13 @@ async function enrolHandheldFixture(): Promise<{
 }> {
   const { cfg } = await setupStation();
   const { code } = await asApp(suite.admin, cfg, (tx) =>
-    generatePairingCode(tx, cfg, { kind: "handheld", stationId: null, label: "Waiter phone" }),
+    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till.
+    generatePairingCode(tx, cfg, {
+      kind: "handheld",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Waiter phone",
+    }),
   );
   const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
   return { cfg, deviceId: dev.deviceId, token: dev.token };
