@@ -12,6 +12,10 @@ import type { CardType } from "./profile.js";
 // Likewise for the profile/theme families (SP-A.1): on 2026-09-02
 //   grep -rn '"profile\.\|"theme\.' packages/**/src/errors.ts apps/server/src/errors.ts
 // printed no match, so `profile.invalid` and `theme.invalid` collide with no existing sibling.
+// And for the two leaves the SP-A.2 management API adds under the profile family: on 2026-09-02
+//   grep -rn 'profile\.not_found\|profile\.name_taken' packages/*/src/errors.ts apps/server/src/errors.ts
+// matched only `profile.invalid`'s own declaration below, so `profile.not_found` and
+// `profile.name_taken` collide with no existing sibling either.
 //
 // PARAM RULE (CLAUDE.md §1, the house's dominant defect class): every param NAMES the problem and
 // NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `widget` only
@@ -21,6 +25,10 @@ import type { CardType } from "./profile.js";
 // numeric index locating a tab, never the author-supplied tab key or title; `card` only ever carries
 // a valid CardType enum value, the same guard as `widget`; `token` only ever names an allowlisted
 // `--wt-*` token, never an arbitrary/unknown one. A config VALUE never enters these params.
+// `profile.not_found` and `profile.name_taken` carry NO params BY DESIGN: a not-found leaf must not
+// echo the caller-supplied id (unlike the `station.not_found`-style siblings that do), and a taken
+// name must never echo the offending author value (§1) — the fact of the collision is the whole
+// message, so the management API maps them to 404 / 409 on the code alone.
 declare module "@waitron/shared" {
   interface ErrorParams {
     // A LayoutDef failed validateLayout. `reason` says which rule:
@@ -90,6 +98,14 @@ declare module "@waitron/shared" {
       card?: CardType;
       configKey?: string;
     };
+    // A GET-by-id on the management profile surface named no profile the tenant owns (an absent id, or
+    // another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) — the
+    // management API answers 404 on the code alone.
+    "profile.not_found": Record<string, never>;
+    // A profile create/update collided on the per-tenant `layout_profiles_tenant_name_key` unique — a
+    // duplicate name. `profile-store.ts` translates the driver's 23505 into this so a duplicate returns
+    // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
+    "profile.name_taken": Record<string, never>;
     // A ThemeOverride failed validateThemeOverride. `reason`:
     //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;

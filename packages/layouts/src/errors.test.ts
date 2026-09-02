@@ -59,6 +59,18 @@ describe("the layout / receipt error codes carry their declared params", () => {
     });
   });
 
+  it("constructs profile.not_found with no params", () => {
+    const error = new AppError("profile.not_found", {});
+    expect(error.code).toBe("profile.not_found");
+    expect(error.params).toEqual({});
+  });
+
+  it("constructs profile.name_taken with no params", () => {
+    const error = new AppError("profile.name_taken", {});
+    expect(error.code).toBe("profile.name_taken");
+    expect(error.params).toEqual({});
+  });
+
   it("constructs theme.invalid with a reason and a policy maxLength", () => {
     const error = new AppError("theme.invalid", {
       reason: "too_long",

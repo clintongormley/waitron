@@ -36,7 +36,18 @@ import {
   suspendPerson,
   type PersonRoleValue,
 } from "@waitron/identity";
-import { getLayout, putLayout, putReceipt } from "@waitron/layouts";
+import {
+  createProfile,
+  deleteProfile,
+  getLayout,
+  getProfile,
+  getTenantTheme,
+  listProfiles,
+  putLayout,
+  putReceipt,
+  putTenantTheme,
+  updateProfile,
+} from "@waitron/layouts";
 import {
   clearPlacement,
   createStatus,
@@ -199,6 +210,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // covers them, but they are listed explicitly as the house style requires (see this map's doc).
   "layout.invalid": 400,
   "receipt.invalid": 400,
+  // Layout-profile CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
+  // `requireProfileId`) that names no profile the tenant owns → 404 (`profile.not_found`); a duplicate
+  // profile name collides on the `(tenant, name)` unique, translated from 23505 by `profile-store.ts`
+  // → 409 (`profile.name_taken`), the same conflict shape a taken station/zone name has. An invalid
+  // `definition`/`theme` payload is refused by the store's validator → 400 (`profile.invalid` /
+  // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
+  // default already covers the two 400s, but they are listed explicitly as the house style requires.
+  "profile.not_found": 404,
+  "profile.name_taken": 409,
+  "profile.invalid": 400,
+  "theme.invalid": 400,
   "shared.invalid_id": 400,
   // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
   // PATCH/DELETE routes) names no status → 404 (`status.not_found`); a duplicate label collides on the
@@ -323,6 +345,19 @@ function requireStationId(id: string): string {
  */
 function requireCourseId(id: string): string {
   if (!isUuid(id)) throw new AppError("course.not_found", { courseId: id });
+  return id;
+}
+
+/**
+ * Screen a `/management-api/profiles/:id` path param as a UUID, returning it. A malformed id passed
+ * into a `uuid` column would `22P02` → an opaque 500, so refusing it here as `profile.not_found` turns
+ * that 500 into a clean 404 — the same screen the sibling `require*Id` helpers apply. UNLIKE those
+ * siblings it echoes NO id: `profile.not_found` carries no params by design (errors.ts), so a
+ * well-formed-but-absent id (the GET-by-id 404 below) and a malformed one give the identical 404 body.
+ * Shared by the GET, PUT and DELETE `:id` profile routes.
+ */
+function requireProfileId(id: string): string {
+  if (!isUuid(id)) throw new AppError("profile.not_found", {});
   return id;
 }
 
@@ -838,6 +873,181 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           receipt,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Layout profiles + tenant theme (Task 11) ──────────────────────────────────────────────────────
+  // The dashboard's reusable-layout-profile CRUD and the tenant's base theme (design §4/§9, SP-A.2
+  // §16.3). All routes are gated (`requireManagementSession` first, 401 before any DB work) and every
+  // DB touch runs `withTenant` + `asAppUser`, so RLS scopes the profile/theme rows and the authorize
+  // gate to this dashboard's own tenant. The READS (`GET /profiles`, `/profiles/:id`, `/theme`) carry
+  // their own explicit `authorizeManager(..., "till.configure")` — `listProfiles`/`getProfile`/
+  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/layout`) — while the WRITES
+  // delegate the gate to the store fns (`createProfile`/`updateProfile`/`deleteProfile`/`putTenantTheme`,
+  // proven by-deletion in the store rls suites). A malformed body field is refused as
+  // `management.request_invalid` naming the FIELD before the store call, the layout/receipt shape.
+
+  // The tenant's profiles, for the editor list. Gated on `till.configure` via the explicit
+  // `authorizeManager` (the read fns do not gate). Returns `{ profiles: [{id,name,definition}] }`.
+  app.get("/management-api/profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const profiles = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return listProfiles(tx, deps.cfg.tenantId);
+      });
+      return c.json({ profiles });
+    }),
+  );
+
+  // One profile by id, or 404 `profile.not_found`. `:id` screened by `requireProfileId` (malformed →
+  // the same 404). Gated on `till.configure` via the explicit `authorizeManager`.
+  app.get("/management-api/profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireProfileId(c.req.param("id"));
+      const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return getProfile(tx, deps.cfg.tenantId, id);
+      });
+      if (profile === undefined) throw new AppError("profile.not_found", {});
+      return c.json(profile);
+    }),
+  );
+
+  // Create a profile. Body { name, definition }; a non-object body or a non-string `name` or an absent
+  // `definition` → `management.request_invalid` naming the FIELD; `createProfile` then enforces
+  // `till.configure`, validates the definition (400 `profile.invalid`) and translates a duplicate name
+  // to 409 `profile.name_taken`. Returns the new id at 201, matching every other create route.
+  app.post("/management-api/profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string") {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      if (!("definition" in body)) {
+        throw new AppError("management.request_invalid", { field: "definition" });
+      }
+      // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow `body.name` HERE, but that
+      // narrowing does not survive into the `withTenant` closure (TS resets a captured property to its
+      // declared type), so the closure reads these — the create-person/create-status pattern above.
+      const { name, definition } = body;
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          name,
+          definition,
+        });
+      });
+      return c.json(result, 201);
+    }),
+  );
+
+  // Replace a profile's name + definition. Same body-screen as POST; `updateProfile` enforces
+  // `till.configure`, validates (400 `profile.invalid`) and maps a duplicate name to 409. An absent id
+  // is a silent no-op (the update matches zero rows, no `.returning()` check), the same shape the staff
+  // mutations take — the editor only PUTs ids it listed. → 204.
+  app.put("/management-api/profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireProfileId(c.req.param("id"));
+      const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string") {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      if (!("definition" in body)) {
+        throw new AppError("management.request_invalid", { field: "definition" });
+      }
+      const { name, definition } = body;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await updateProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          id,
+          name,
+          definition,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Delete a profile. `:id` screened by `requireProfileId`; `deleteProfile` enforces `till.configure`.
+  // An absent id is a silent no-op (matches zero rows). → 204.
+  app.delete("/management-api/profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireProfileId(c.req.param("id"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await deleteProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          id,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // The tenant's authored theme override, or `{ theme: null }` when it has never picked one
+  // (`getTenantTheme` returns undefined → JSON null; the client falls back to the design-system
+  // defaults). Gated on `till.configure` via the explicit `authorizeManager` (the read fn does not gate).
+  app.get("/management-api/theme", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const theme = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return getTenantTheme(tx, deps.cfg.tenantId);
+      });
+      return c.json({ theme: theme ?? null });
+    }),
+  );
+
+  // Author (create or replace) the tenant's base theme. Body { theme }; a non-object body or an absent
+  // `theme` key → `management.request_invalid` naming the FIELD; `putTenantTheme` then enforces
+  // `till.configure` and validates the override (400 `theme.invalid`, fail-closed on an un-allowlisted
+  // token) before the upsert. The body is coerced to `{}` by `readJsonBody` so a `null`/malformed body
+  // hits the same field screen rather than TypeError-ing → 500. → 204.
+  app.put("/management-api/theme", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ theme?: unknown }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body) || !("theme" in body)) {
+        throw new AppError("management.request_invalid", { field: "theme" });
+      }
+      const { theme } = body;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await putTenantTheme(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          theme,
         });
       });
       return c.body(null, 204);

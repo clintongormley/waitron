@@ -236,6 +236,70 @@ describe("layout profile store under real row-level security", () => {
     expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
   });
 
+  it("translates a duplicate name to profile.name_taken (23505 → clean 409), no second row", async () => {
+    // The per-tenant `layout_profiles_tenant_name_key` unique fires on the SECOND create with the same
+    // name; profile-store catches the driver's 23505 and re-throws it as the domain profile.name_taken
+    // (the Phase-3 reviewer's flagged gap — a duplicate must not surface as a raw 500). Real Postgres,
+    // not PGlite: PGlite serialises and reports no constraint, so the constraint-targeted translation
+    // is only genuinely exercised here.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    await asApp(tenantId, (tx) =>
+      createProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Twin",
+        definition: phoneProfile("First"),
+      }),
+    );
+    const code = await codeOf(() =>
+      asApp(tenantId, (tx) =>
+        createProfile(tx, {
+          managementSessionId: session,
+          tenantId,
+          name: "Twin",
+          definition: phoneProfile("Second"),
+        }),
+      ),
+    );
+    expect(code).toBe("profile.name_taken");
+    expect(await rowCount(tenantId)).toBe(1); // the duplicate never landed
+  });
+
+  it("translates a duplicate name on UPDATE to profile.name_taken", async () => {
+    // Renaming one profile onto another's name trips the same unique on the UPDATE path.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    await asApp(tenantId, (tx) =>
+      createProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Keep",
+        definition: phoneProfile("A"),
+      }),
+    );
+    const { id: second } = await asApp(tenantId, (tx) =>
+      createProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Move",
+        definition: phoneProfile("B"),
+      }),
+    );
+    const code = await codeOf(() =>
+      asApp(tenantId, (tx) =>
+        updateProfile(tx, {
+          managementSessionId: session,
+          tenantId,
+          id: second,
+          name: "Keep", // collides with the first profile's name
+          definition: phoneProfile("B2"),
+        }),
+      ),
+    );
+    expect(code).toBe("profile.name_taken");
+  });
+
   it("keeps one tenant's profiles invisible to another — RLS isolation", async () => {
     const tenantA = await seedTenant(suite.admin);
     const tenantB = await seedTenant(suite.admin);
