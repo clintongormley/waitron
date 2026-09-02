@@ -1051,6 +1051,7 @@ jobs:
           set -- "$@" --filter "!@waitron/scheduler"
           set -- "$@" --filter "!@waitron/purchasing"
           set -- "$@" --filter "!@waitron/sync"
+          set -- "$@" --filter "!@waitron/membership"
           set -- "$@" --filter "!@waitron/tunnel"
           set -- "$@" --filter "!@waitron/migrations"
           set -- "$@" --filter "!@waitron/fiscal"

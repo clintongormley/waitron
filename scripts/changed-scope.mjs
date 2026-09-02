@@ -216,6 +216,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/scheduler",
   "@waitron/purchasing",
   "@waitron/sync",
+  "@waitron/membership",
   "@waitron/tunnel",
   "@waitron/migrations",
   "@waitron/fiscal",
