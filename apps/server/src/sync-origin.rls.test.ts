@@ -22,6 +22,7 @@ import {
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
+import { mountManagementApi } from "./management-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 
 // Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
@@ -177,6 +178,50 @@ async function productUpdateOrigin(tenantId: string): Promise<string | null> {
         order by seq desc limit 1`,
   );
   return r.rows[0]?.v ?? null;
+}
+
+/** Mounts the management API for one tenant under a given producing node id. `secureCookies:false`
+ * (loopback, no TLS) and the loopback passkey RP config mirror `boot.ts`'s dev defaults — this suite
+ * exercises only the identity-config WRITE routes (createPerson), not the passkey ceremonies. */
+function mountMgmt(tenantId: string, nodeId: string): Hono {
+  const app = new Hono();
+  mountManagementApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId, nodeId },
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost:5191",
+    },
+    noopLog,
+  );
+  return app;
+}
+
+/** The origin_id captured for this tenant's most recent `persons` write (RLS-bypassing admin read).
+ * `setupVenue` seeds a manager persons row (op=insert, origin all-zero, no node id supplied) before the
+ * API's createPerson runs, so `seq desc limit 1` reads the API write specifically — the same
+ * most-recent-write convention `catalogueOrigin` uses. (The route is `/staff` but the enrolled table,
+ * and thus the sync_log `table_name`, is `persons`.) */
+async function personOrigin(tenantId: string): Promise<string | null> {
+  const r = await suite.admin.execute<{ v: string | null }>(
+    sql`select origin_id::text as v from sync_log
+        where table_name = 'persons' and tenant_id = ${tenantId}
+        order by seq desc limit 1`,
+  );
+  return r.rows[0]?.v ?? null;
+}
+
+/** POST a new person via the manager cookie, asserting 201 — the persons INSERT it captures is read
+ * back separately via `personOrigin`. */
+async function postPerson(app: Hono, cookie: string, displayName: string): Promise<void> {
+  const res = await app.request("/management-api/staff", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ displayName, role: "staff", pin: "1234" }),
+  });
+  expect(res.status).toBe(201);
 }
 
 /** Mounts the recipe API for one tenant under a given producing node id. */
@@ -340,5 +385,23 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     const zeroApp = mountRecipeApp(zeroVenue.tenantId, ZERO);
     await putRecipe(zeroApp, zeroVenue.managerCookie, zeroSeed.productId, [zeroSeed.ingredientId]);
     expect(await productUpdateOrigin(zeroVenue.tenantId)).toBe(ZERO);
+  });
+
+  it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero without the fix)", async () => {
+    // Guard-by-deletion: with fix B, management-api threads { nodeId: cfg.nodeId } into the createPerson
+    // withTenant, so the enrolled `persons` INSERT captures NODE_C. Revert (drop the 4th arg) and
+    // app.node_id is unset → capture falls back to the all-zero origin → this expect fails. (The route
+    // is `/management-api/staff`; the enrolled table it writes is `persons`.)
+    const venue = await setupVenue();
+    const app = mountMgmt(venue.tenantId, NODE_C);
+    await postPerson(app, venue.managerCookie, "Ada");
+    expect(await personOrigin(venue.tenantId)).toBe(NODE_C);
+
+    // Control (the two directions visibly differ, CLAUDE.md §1): the SAME path under the all-zero node
+    // id captures the all-zero origin — so the captured origin tracks cfg.nodeId, not a constant.
+    const zeroVenue = await setupVenue();
+    const zeroApp = mountMgmt(zeroVenue.tenantId, ZERO);
+    await postPerson(zeroApp, zeroVenue.managerCookie, "Grace");
+    expect(await personOrigin(zeroVenue.tenantId)).toBe(ZERO);
   });
 });

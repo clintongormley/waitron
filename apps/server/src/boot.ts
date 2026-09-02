@@ -946,7 +946,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId },
+      // `nodeId` is THIS node's origin id (the same `till.nodeId` the adjacent `mountCatalogueApi`
+      // receives — one source of truth), threaded so each identity-config write's `withTenant` stamps
+      // `sync_log.origin_id` with this node rather than the all-zero sentinel (sync origin attribution).
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       // The venue's own config (tenant + location) the FP-1 zone/table config routes scope to — the
       // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
       // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only tenant + location

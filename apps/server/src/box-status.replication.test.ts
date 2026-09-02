@@ -120,7 +120,7 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId },
+      cfg: { tenantId, nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",

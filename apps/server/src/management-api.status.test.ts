@@ -99,7 +99,9 @@ function mountApp(tenantId: string): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId },
+      // The all-zero node id (the capture default): this suite exercises the staff-status routes, not
+      // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
+      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
