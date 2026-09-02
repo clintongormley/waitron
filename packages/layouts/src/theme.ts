@@ -5,16 +5,23 @@ import type { ThemeOverride } from "./profile.js";
 /**
  * The `--wt-*` tokens a theme override may set (design §9). An ALLOWLIST, fail-closed: a theme can only
  * touch chrome tokens, never an arbitrary CSS custom property, so it can never smuggle a property the
- * design system does not expose. Extend as the design system exposes more themeable tokens.
+ * design system does not expose.
+ *
+ * PROVISIONAL SET. Every name here is a REAL token verified against the design-system registry
+ * (`packages/ui/src/tokens/{colors,structure}.css`) on 2026-09-02 — nothing renders these in SP-A.1,
+ * so the DEFINITIVE themeable subset (and a cross-package consistency test sourcing it from that
+ * registry) is finalised in the theme-editor slice, where the owner decides which tokens are exposed.
+ * Do NOT hand-add a name without confirming it exists in that registry — an earlier draft allowlisted
+ * four tokens that never existed (`--wt-color-primary-text`, `--wt-color-surface-text`,
+ * `--wt-color-accent`, bare `--wt-radius`), gating against phantoms.
  */
 export const THEMEABLE_TOKENS: readonly string[] = [
   "--wt-color-primary",
-  "--wt-color-primary-text",
+  "--wt-color-on-primary",
   "--wt-color-surface",
-  "--wt-color-surface-text",
-  "--wt-color-accent",
+  "--wt-color-text",
   "--wt-color-danger",
-  "--wt-radius",
+  "--wt-radius-md",
   "--wt-font-family",
 ];
 
