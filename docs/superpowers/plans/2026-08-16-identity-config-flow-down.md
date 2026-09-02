@@ -9,7 +9,8 @@ Thread `nodeId` origin attribution through the identity-config writers. After th
 can authenticate the venue's people on failover; session re-establishment stays PIN-re-prompt v1.
 
 **Architecture:** Enrolment = one `ENROLLED` row + one `sync_capture()` trigger per table, exactly as
-the 14 commercial tables enrol. The two config tables carry **no `updated_at`**, so they use Group C's
+the 17 already-enrolled tables (14 commercial + C1's 3 dining: floor_zones, table_service_statuses,
+dining_tables) enrol. The two config tables carry **no `updated_at`**, so they use Group C's
 mechanism (`mode: "watermark-upsert"`, `watermarkColumn: null`, unconditional upsert, monotonicity
 from the seq cursor). Capture runs as the writing `app_user` (not `SECURITY DEFINER`); apply writes as
 `app_user` under `withTenant(..., app.sync_apply='on')` — the app-level path that (unlike native
@@ -42,7 +43,7 @@ PGlite (hermetic unit suites), Vitest, pnpm workspace.
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: two new `EnrolledTable` rows in `ENROLLED`; `tablesForLane("ordered")` now returns 14 tables.
+- Produces: two new `EnrolledTable` rows in `ENROLLED`; `tablesForLane("ordered")` now returns 17 tables (15 today + the 2 new).
 
 **Steps:**
 
@@ -70,10 +71,12 @@ PGlite (hermetic unit suites), Vitest, pnpm workspace.
   },
 ```
 
-- [ ] **1.2 (failing test)** Update the counts and partition in `registry.test.ts`:
-  - `it("has exactly fourteen rows, no duplicates")` → rename to `sixteen`; `expect(ENROLLED).toHaveLength(16)` and `expect(byName.size).toBe(16)`.
-  - The `describe("ENROLLED carries exactly spec §2's fourteen …")` title → `… §2's fourteen commercial + §3's two identity-config tables`.
-  - In the fast/ordered partition `describe`: `tablesForLane("ordered")).toHaveLength(12)` → `14`; the "remaining twelve" comment → "remaining fourteen".
+- [ ] **1.2 (failing test)** Update the counts and partition in `registry.test.ts`. (Counts corrected
+  for the current post-C1 baseline: 17 enrolled today → 19 after this slice; ordered 15 → 17. The plan
+  was drafted pre-C1 against a 14→16 baseline — the numbers below are the live ones.)
+  - `it("has exactly seventeen rows, no duplicates")` → rename to `nineteen`; `expect(ENROLLED).toHaveLength(19)` and `expect(byName.size).toBe(19)`.
+  - The `describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen)")` title → append `plus §3's two identity-config (nineteen)`.
+  - In the fast/ordered partition `describe`: `tablesForLane("ordered")).toHaveLength(15)` → `17`; the "remaining fifteen" title/comment → "remaining seventeen".
 
 - [ ] **1.3 (failing test)** Relax the group invariant in `describe("captureOps match each table's group")`, else-branch:
 
@@ -128,7 +131,7 @@ PGlite (hermetic unit suites), Vitest, pnpm workspace.
   },
 ```
 
-  Also update the module-header comment (line 1) and the `fkRank levels` comment block to say "sixteen … fourteen commercial + two identity-config" and add `persons`/`webauthn_credentials` to the level-0/level-1 lists.
+  Also update the module-header comment (line 1, currently "seventeen") and the `fkRank levels` comment block to say "nineteen … seventeen (14 commercial + 3 C1 dining) + two identity-config" and add `persons`/`webauthn_credentials` to the level-0/level-1 lists.
 
 - [ ] **1.7 (run → pass)** `pnpm --filter @waitron/sync test registry` — green.
 - [ ] **1.8 (commit)** `git commit -s -m "feat(sync): enrol identity config tables (persons, webauthn_credentials) in the ordered lane registry"`
@@ -209,7 +212,7 @@ import { persons, webauthnCredentials } from "@waitron/identity/src/schema/index
   webauthn_credentials: webauthnCredentials,
 ```
 
-  Update the header comment "Covers all fourteen" → "Covers all sixteen".
+  Update the header comment (currently "Covers all seventeen") → "Covers all nineteen".
 
 - [ ] **2.5 (run → pass)** `pnpm --filter @waitron/sync test apply-sql` and `pnpm --filter @waitron/sync typecheck` — green.
 - [ ] **2.6 (commit)** `git commit -s -m "feat(sync): register persons + webauthn_credentials drizzle objects for apply, depend on @waitron/identity"`
@@ -739,16 +742,17 @@ it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero with
 
 - [ ] **7.1 (dated pointer, not rewrite — CLAUDE.md §6)** Add a dated note at #86 §4a and §14's "14
   commercial / identity absent" lines, e.g.:
-  `> **Update 2026-08-16:** identity **config** now flows down — persons + webauthn_credentials are enrolled in the ordered lane (16 enrolled: 14 commercial + 2 identity-config). The ephemeral auth tables (sessions, management_sessions, webauthn_challenges) remain out, by design. See docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md.`
+  `> **Update 2026-08-16:** identity **config** now flows down — persons + webauthn_credentials are enrolled in the ordered lane (19 enrolled: 17 commercial+dining = 14 commercial + 3 C1 dining, plus 2 identity-config). The ephemeral auth tables (sessions, management_sessions, webauthn_challenges) remain out, by design. See docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md.`
   Do NOT edit the original prose (historical record).
 
-- [ ] **7.2 (comment counts)** Update the "14/fourteen" comments in `@waitron/sync` that describe the
-  *enrolled total* (`registry.ts:1`, `index.ts:11`, `migrations.ts:5`, `apply-sql.ts:36`) to
-  "sixteen … fourteen commercial + two identity-config". Leave comments that describe the *commercial
-  subset* specifically (e.g. `capture.gate.test.ts`, `apply.gate.test.ts` headers about "the 14 capture
-  triggers over the enrolled COMMERCIAL tables") accurate as-is, or amend to "+ 2 identity-config".
-  These are comments, not load-bearing assertions — the only pinned count assertion lives in
-  `registry.test.ts` (Task 1).
+- [ ] **7.2 (comment counts)** Update the enrolled-**total** count comments in `@waitron/sync` — the
+  ones that currently say "seventeen" (`registry.ts:1`, `index.ts:11`, `apply-sql.ts:39`) — to
+  "nineteen … 17 commercial+dining + 2 identity-config". (`migrations.ts` carries no enrolled-total
+  count — leave it.) Grep the package for any other "seventeen"/"17" enrolled-total mention and bump it
+  too. Leave comments that describe the *commercial subset* specifically (e.g. `capture.gate.test.ts`,
+  `apply.gate.test.ts` headers about "the capture triggers over the enrolled COMMERCIAL tables")
+  accurate as-is, or amend to "+ 2 identity-config". These are comments, not load-bearing assertions —
+  the only pinned count assertion lives in `registry.test.ts` (Task 1).
 
 - [ ] **7.3 (self-review against the spec)** Re-read the spec §2 table and confirm: exactly
   `persons` + `webauthn_credentials` enrolled; exactly `sessions`/`management_sessions`/`webauthn_challenges`
