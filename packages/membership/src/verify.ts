@@ -27,28 +27,24 @@ const STANDINGS: readonly NodeStanding[] = [
 const MAX_ENDORSEMENTS = 8;
 
 export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey: string): string {
-  // signerNodeId is deliberately NOT part of the signed bytes (bodyToCanonical covers only term +
-  // nodes): it merely selects which trusted key to verify against. A mutated signerNodeId therefore
-  // yields bad_signature, because the signature must still verify against the selected key — so it
-  // is authenticated TRANSITIVELY, not directly. Do not "fix" this by folding signerNodeId (or, for
-  // endorsements, endorsedBy) into the signed payload; that would change the wire format.
+  // signerNodeId is deliberately NOT part of the signed bytes (bodyMessage covers the whole body —
+  // term + nodes — and nothing else): it merely selects which trusted key to verify against. A
+  // mutated signerNodeId is always rejected — as untrusted_signer or endorsement_invalid if it
+  // resolves to no trusted key, or as bad_signature if it resolves to a DIFFERENT trusted key —
+  // because the signature must still verify against whichever key it selects; it is authenticated
+  // TRANSITIVELY, not directly. Do not "fix" this by folding signerNodeId (or, for endorsements,
+  // endorsedBy) into the signed payload; that would change the wire format.
   return signBytes(bodyMessage(body), signerPrivateKey);
 }
 
-/** The exact bytes a document signature covers. */
+/**
+ * The exact bytes a document signature covers: the canonicalized WHOLE body (spec §3). The strict
+ * key-count guards in isNode/isDocument guarantee a verified body carries only its declared fields,
+ * so signing `body` directly is byte-identical to the old hand-picked projection for any valid body
+ * while making it impossible for a future-added, unsigned field to slip through verify unsigned.
+ */
 function bodyMessage(body: MembershipDocumentBody): string {
-  return canonicalize(bodyToCanonical(body));
-}
-
-function bodyToCanonical(body: MembershipDocumentBody): CanonicalValue {
-  return {
-    term: body.term,
-    nodes: body.nodes.map((n) => ({
-      nodeId: n.nodeId,
-      contactUrl: n.contactUrl,
-      standing: n.standing,
-    })),
-  };
+  return canonicalize(body as unknown as CanonicalValue);
 }
 
 // Note: typeof [] === "object", so isRecord([]) is true — the per-field checks below (and the
@@ -57,13 +53,19 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object";
 }
 
+// Each guard also asserts an exact own-key COUNT after the required fields check, so an object
+// carrying an EXTRA (unsigned) field is rejected as malformed. This is what makes "a verified
+// document IS exactly its signed content" true: bodyMessage signs the whole body, and these guards
+// guarantee the body (and its nodes) hold nothing beyond the fields that were signed. Object.keys
+// returns only own enumerable keys, which is exactly the shape of JSON-parsed wire input.
 function isNode(v: unknown): v is MembershipNode {
   if (!isRecord(v)) return false;
   return (
     typeof v.nodeId === "string" &&
     typeof v.contactUrl === "string" &&
     typeof v.standing === "string" &&
-    STANDINGS.includes(v.standing as NodeStanding)
+    STANDINGS.includes(v.standing as NodeStanding) &&
+    Object.keys(v).length === 3 // nodeId, contactUrl, standing — no extra keys
   );
 }
 
@@ -73,7 +75,8 @@ function isEndorsement(v: unknown): v is Endorsement {
     typeof v.nodeId === "string" &&
     typeof v.publicKey === "string" &&
     typeof v.endorsedBy === "string" &&
-    typeof v.signature === "string"
+    typeof v.signature === "string" &&
+    Object.keys(v).length === 4 // nodeId, publicKey, endorsedBy, signature — no extra keys
   );
 }
 
@@ -87,7 +90,13 @@ function isDocument(v: unknown): v is SignedMembershipDocument {
   // `=== undefined` arm needed.
   if (!isRecord(b)) return false;
   if (typeof b.term !== "number" || !Number.isInteger(b.term)) return false;
+  // Unlike `endorsements` (capped at MAX_ENDORSEMENTS above), `nodes.length` is intentionally NOT
+  // capped in Slice 1. Spec §2 is a 3-node topology, but the exact bound DURING a node-replacement
+  // transition (old + new + cloud simultaneously) is a Slice-2/3 design question — deferred
+  // deliberately rather than guessed at here.
   if (!Array.isArray(b.nodes) || !b.nodes.every(isNode)) return false;
+  if (Object.keys(b).length !== 2) return false; // body: term, nodes — no extra keys
+  if (Object.keys(v).length !== 4) return false; // document: body, signerNodeId, signature, endorsements
   return true;
 }
 

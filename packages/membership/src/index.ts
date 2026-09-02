@@ -17,7 +17,11 @@ export type { CanonicalValue } from "./canonicalize.js";
 
 export { generateNodeKeyPair, signBytes, verifyBytes } from "./crypto.js";
 
-export { endorseKey, resolveSignerKey } from "./endorsement.js";
+// resolveSignerKey is deliberately NOT re-exported: it is O(n²) over its endorsement list and, unlike
+// the document path (capped at MAX_ENDORSEMENTS in verify.ts's isDocument), takes an uncapped list.
+// Nothing outside this package needs it — verify.ts imports it directly from ./endorsement.js — so
+// keeping it off the Slice-1 public surface avoids handing callers an uncapped entry point.
+export { endorseKey } from "./endorsement.js";
 
 export { signDocumentBody, verifyMembershipDocument } from "./verify.js";
 

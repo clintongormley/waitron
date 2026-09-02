@@ -9,6 +9,8 @@ export interface MembershipNode {
 
 /** The signed payload. `term` is the monotonic membership generation (design §3). */
 export interface MembershipDocumentBody {
+  // A JS `number` here — safe, as a per-edit counter never approaches 2^53. The Slice-2 storage
+  // boundary uses `bigint`; reconcile the two there.
   readonly term: number;
   readonly nodes: readonly MembershipNode[];
 }

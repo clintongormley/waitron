@@ -53,6 +53,18 @@ describe("resolveSignerKey", () => {
     expect(resolveSignerKey("C", endorsements, trust)).toBe(c.publicKey);
   });
 
+  it("does not let an endorsement re-bind a setup-trusted key to a rogue key", () => {
+    // A is anchored at setup. A self-endorsement (signed by A's real key, so it verifies) tries to
+    // swap A's key for a rogue one. The `trusted.has(e.nodeId) → continue` guard protects setup
+    // anchors: A is already trusted, so the endorsement is skipped and A keeps its setup key. Pins
+    // that guard — without it a validly-signed endorsement could overwrite a setup anchor.
+    const a = generateNodeKeyPair();
+    const rogue = generateNodeKeyPair();
+    const trust: TrustSet = { A: a.publicKey };
+    const attack = endorseKey("A", rogue.publicKey, "A", a.privateKey);
+    expect(resolveSignerKey("A", [attack], trust)).toBe(a.publicKey);
+  });
+
   it("does not loop on a cyclic endorsement set", () => {
     const b = generateNodeKeyPair();
     const c = generateNodeKeyPair();

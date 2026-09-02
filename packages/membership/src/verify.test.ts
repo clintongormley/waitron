@@ -73,6 +73,24 @@ describe("verifyMembershipDocument", () => {
     });
   });
 
+  it("rejects an honestly-signed document with a field injected into a node after signing", () => {
+    // The reviewer's runtime repro: sign a valid document, then inject an unsigned field into a
+    // node. The signature still verifies against the (unchanged) canonical body, but strict-shape
+    // validation rejects the extra key as malformed BEFORE the signature is consulted — so the
+    // injected field can never reach the caller with valid:true.
+    const a = generateNodeKeyPair();
+    const trust: TrustSet = { A: a.publicKey };
+    const doc = signDoc(sampleBody(1), "A", a.privateKey);
+    const injected = {
+      ...doc,
+      body: { ...doc.body, nodes: [{ ...doc.body.nodes[0], rogue: "unsigned" }] },
+    } as unknown as SignedMembershipDocument;
+    expect(verifyMembershipDocument(injected, trust)).toEqual({
+      valid: false,
+      reason: "malformed",
+    });
+  });
+
   it("rejects a document carrying more than MAX_ENDORSEMENTS (8) endorsements as malformed", () => {
     // The length cap fires on the array size regardless of endorsement content, so trivially-shaped
     // but structurally-valid entries suffice. 9 (MAX_ENDORSEMENTS + 1) must be rejected before any
@@ -157,6 +175,21 @@ describe("verifyMembershipDocument structural validation", () => {
       "endorsement signature not a string",
       { ...valid, endorsements: [{ nodeId: "B", publicKey: "k", endorsedBy: "A" }] },
     ],
+    // strict-shape: an EXTRA (unsigned) key at ANY level is rejected, so a verified document is
+    // exactly its signed content (spec §3). Without these the guards accept an injected field.
+    [
+      "node with an extra field",
+      { ...valid, body: { ...validBody, nodes: [{ ...validNode, extra: 1 }] } },
+    ],
+    [
+      "endorsement with an extra field",
+      {
+        ...valid,
+        endorsements: [{ nodeId: "B", publicKey: "k", endorsedBy: "A", signature: "s", extra: 1 }],
+      },
+    ],
+    ["body with an extra field", { ...valid, body: { ...validBody, extra: 1 } }],
+    ["document with an extra top-level field", { ...valid, extra: 1 }],
   ];
 
   it.each(malformed)("rejects %s as malformed", (_label, doc) => {
