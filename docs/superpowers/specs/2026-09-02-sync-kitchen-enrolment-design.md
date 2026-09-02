@@ -160,7 +160,14 @@ and no cycle (§2), the key structural difference from C1.
   `working_order_lines` DELETE, the `ticket_items_line_fk … ON DELETE CASCADE` constraint — present on
   the subscriber's schema by the same migration — removes the child `ticket_items` rows locally,
   reproducing the primary's cascade. So no `ticket_items` DELETE need be captured, and capturing
-  insert+update is complete.
+  insert+update is complete. This rests on the invariant that a `ticket_items` INSERT never parks
+  ahead of its line's DELETE: all of its parents precede it in the stream — `nodes` present by
+  construction (below), `kitchen_stations`/`kitchen_courses`/`working_order_lines` enrolled at
+  strictly lower `fkRank` and so committed (and captured) at a lower seq — so by the time the line's
+  DELETE arrives the child is already present locally for the cascade to remove. A parked
+  `ticket_items` INSERT would require an absent earlier-enrolled or present-by-construction parent —
+  the precondition under which the whole ordered lane is already stalled (§1), not a state reachable
+  in a healthy single-origin stream.
 - **`nodes` present by construction.** `ticket_items.node_id` resolves on the subscriber because the
   operator flow copied the primary's `nodes` rows at adoption (§2). This is the same guarantee C1's
   config parents (`tenants`, `locations`) rely on.

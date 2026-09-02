@@ -6,16 +6,19 @@ import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
  * (docs/superpowers/specs/2026-08-08-sync-slice1-commercial-outbox-spec.md) plus the three
  * table-service tables the C1 slice enrols
  * (docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md), plus the two
- * identity-config tables this slice enrols
- * (docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md) — nineteen in all.
+ * identity-config tables the identity slice enrols
+ * (docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md), plus the three kitchen KDS
+ * tables the kitchen-sync slice enrols
+ * (docs/superpowers/specs/2026-09-02-sync-kitchen-enrolment-design.md) — twenty-two in all.
  * This table encodes the spec INDEPENDENTLY of registry.ts, so the two must agree — a registry.ts
  * that drifts from it fails here rather than shipping a wrong apply mode. The ops per group are grant
  * facts, cited in the spec to the migration that set each grant. Groups A–C match
  * packages/sync/drizzle/0000_sync_outbox.sql's capture triggers exactly (Group A AFTER INSERT, Group B
  * AFTER INSERT OR UPDATE, Group C AFTER INSERT OR UPDATE OR DELETE); Group D's capture triggers
  * (AFTER INSERT OR UPDATE) are in packages/sync/drizzle/0006_enrol_table_service.sql; the two
- * identity-config tables' capture triggers are in packages/sync/drizzle/0007_sync_identity_capture.sql.
- * This unit suite pins only the registry shape.
+ * identity-config tables' capture triggers are in packages/sync/drizzle/0007_sync_identity_capture.sql;
+ * the three kitchen KDS tables' capture triggers (AFTER INSERT OR UPDATE) are in
+ * packages/sync/drizzle/0008_enrol_kitchen.sql. This unit suite pins only the registry shape.
  */
 const SPEC: Record<
   string,
