@@ -96,10 +96,12 @@ export function normalizePairingCode(input: string): string {
   return input.toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
 }
 
-/** Whether a device kind binds a kitchen station. A `kds_station` is an always-on screen tied to one
- * station; a `handheld` is a roving, location-wide waiter device (spec §D2) and carries none. This is
- * the code-side twin of the Task-1 DB CHECK (`0076`, `kds_station ⇒ station_id NOT NULL`,
- * `handheld ⇒ station_id NULL`): a kind added here that requires a station must gain that CHECK too. */
+/** Whether a device kind binds a kitchen station. ONLY a `kds_station` (an always-on screen tied to
+ * one station) does; a `handheld` (a roving, location-wide waiter device, spec §D2) and a `till` (a
+ * first-class till device that rings sales under its node's SIF, SP-A.2 §16) both carry none. This is
+ * the code-side twin of the DB CHECK, rewritten in SP-A.2 to `(device_kind = 'kds_station') =
+ * (station_id IS NOT NULL)` so it names only `kds_station` and admits every other kind with a NULL
+ * station: a kind added here that requires a station must extend that CHECK too. */
 export function kindRequiresStation(kind: DeviceKind): boolean {
   return kind === "kds_station";
 }

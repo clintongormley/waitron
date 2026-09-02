@@ -18,6 +18,7 @@ import {
   encodePairingCode,
   enrolDevice,
   generatePairingCode,
+  kindRequiresStation,
   normalizePairingCode,
 } from "./device.js";
 import "./errors.js";
@@ -235,5 +236,16 @@ describe("normalizePairingCode", () => {
     expect(normalizePairingCode("ABCD-EFGH")).toBe("ABCDEFGH"); // hyphen stripped
     expect(normalizePairingCode("ABCD EFGH")).toBe("ABCDEFGH"); // space stripped
     expect(normalizePairingCode("  ab-cd ef-gh ")).toBe("ABCDEFGH"); // combined
+  });
+});
+
+describe("kindRequiresStation", () => {
+  it("only kds_station binds a station; handheld and till carry none", () => {
+    // The code-side twin of the per-kind station CHECK. A kds_station is an always-on screen tied to
+    // one station; a handheld is a roving, location-wide waiter device and a till is a first-class till
+    // device that rings sales under its node's SIF (spec §16) — neither binds a station.
+    expect(kindRequiresStation("kds_station")).toBe(true);
+    expect(kindRequiresStation("handheld")).toBe(false);
+    expect(kindRequiresStation("till")).toBe(false);
   });
 });

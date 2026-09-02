@@ -14,14 +14,16 @@ import { locations, tenants } from "./tenants.js";
  * The KIND of device a `devices` row represents (device-identity-1, §2a). `kds_station` — an
  * always-on kitchen screen — binds to one kitchen station; `handheld` — a roving waiter phone that
  * takes tableside orders (handheld-tableside-ordering spec §2, §8a) — is location-wide and binds to
- * NO station. It is a pgEnum, not a text check, so trusting the till device itself, or a
- * customer-facing display, is an ADDITIVE enum value later rather than a destructive migration
+ * NO station; `till` — a first-class till device (SP-A.2 §16) — binds NO station either and rings
+ * sales under its node's SIF. It is a pgEnum, not a text check, so adding a further kind (e.g. a
+ * customer-facing display) is an ADDITIVE enum value later rather than a destructive migration
  * (spec §0, §9). Both `devices` and `device_pairing_codes` carry a column of this type, so
- * drizzle-kit emits `CREATE TYPE device_kind` once. The per-kind station rule (kds_station ⇒ a
- * station, handheld ⇒ none) is a hand-written CHECK on both tables (drizzle-kit models no raw
- * CHECKs); a future kind must add its own clause there.
+ * drizzle-kit emits `CREATE TYPE device_kind` once. The per-kind station rule (ONLY kds_station ⇒ a
+ * station; every other kind ⇒ none) is a hand-written CHECK on both tables (drizzle-kit models no raw
+ * CHECKs), written `(device_kind = 'kds_station') = (station_id IS NOT NULL)` so it names only
+ * `kds_station` and no other kind's literal — a future station-binding kind must extend that clause.
  */
-export const deviceKind = pgEnum("device_kind", ["kds_station", "handheld"]);
+export const deviceKind = pgEnum("device_kind", ["kds_station", "handheld", "till"]);
 
 /**
  * An always-on trusted DEVICE (device-identity-1) — a physical screen that enrols ONCE via a pairing
