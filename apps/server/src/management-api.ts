@@ -95,10 +95,10 @@ import type { Logger } from "./logger.js"; // the same Logger till-api.ts's rout
 export interface ManagementApiDeps {
   db: Database;
   /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTenant` below. `nodeId` is this
-   * node's origin id, threaded into every identity-config write's `withTenant` so the enrolled
-   * `persons`/`webauthn_credentials` INSERT/UPDATE the capture trigger records carries a real
-   * `sync_log.origin_id` rather than the all-zero sentinel (design §4d(B); sync origin attribution —
-   * proven end-to-end by `sync-origin.rls.test.ts`). */
+   * node's origin id, threaded into every identity-config write's `withTenant` so that the `sync_log`
+   * row the capture trigger records for each enrolled `persons`/`webauthn_credentials` INSERT/UPDATE
+   * carries a real `origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
+   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
   cfg: { tenantId: string; nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope

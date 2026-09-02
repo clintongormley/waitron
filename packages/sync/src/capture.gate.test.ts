@@ -14,7 +14,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 // INSERT-only grant, the sync_tailer read path and echo suppression under a genuine non-superuser
 // role — PGlite connects as a superuser and bypasses all of it, so it is a false pass here
 // (CLAUDE.md §4). The whole migration manifest runs (now including `sync` last), so the container
-// carries sync_log + sync_capture + the 17 capture triggers over the enrolled commercial tables.
+// carries sync_log + sync_capture + the 19 capture triggers over the enrolled tables (17 commercial+dining + 2 identity-config).
 // The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
 // RLS actually applies to it — is now created once in src/testing/global-setup.ts and shared across
 // the gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the

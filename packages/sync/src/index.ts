@@ -8,8 +8,9 @@
 // manifest.test.ts, which pins the journal-table name against this descriptor).
 export { SYNC_MIGRATIONS } from "./migrations.js";
 
-// The enrolment registry — the audit surface for "what crosses the wire" (the seventeen commercial
-// tables, their apply mode, conflict key, watermark and capture ops).
+// The enrolment registry — the audit surface for "what crosses the wire" (the nineteen enrolled
+// tables — 17 commercial+dining + 2 identity-config — their apply mode, conflict key, watermark and
+// capture ops).
 export { ENROLLED, tablesForLane } from "./registry.js";
 export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js";
 

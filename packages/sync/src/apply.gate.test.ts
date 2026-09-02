@@ -11,7 +11,7 @@ import { applyBatch, type SyncLogRow } from "./apply.js";
 // non-BYPASSRLS role, so FORCE ROW LEVEL SECURITY's WITH CHECK actually fences each write to its
 // own tenant — PGlite connects as a superuser and bypasses all of it, a false pass (CLAUDE.md §4).
 // The whole migration manifest runs (including `sync` last), so the container carries sync_log +
-// sync_cursor + sync_capture + the 17 capture triggers over the enrolled commercial tables.
+// sync_cursor + sync_capture + the 19 capture triggers over the enrolled tables (17 commercial+dining + 2 identity-config).
 // The apply worker's role sync_applier — a LOGIN member of BOTH app_user (INSERT/UPDATE/DELETE on the
 // enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor), the sanctioned path that
 // never widens app_user to reach sync_cursor (spec §7; CLAUDE.md §3), non-superuser so FORCE RLS
