@@ -209,6 +209,31 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     });
   });
 
+  it("PUT to an unknown (well-formed) id → 404 profile.not_found (no silent no-op)", async () => {
+    const app = mountApp(tenantId);
+    const res = await app.request(`/management-api/profiles/${randomUUID()}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ name: uniqueName("Ghost"), definition: phoneProfile("None") }),
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "profile.not_found" },
+    });
+  });
+
+  it("DELETE an unknown (well-formed) id → 404 profile.not_found (no silent no-op)", async () => {
+    const app = mountApp(tenantId);
+    const res = await app.request(`/management-api/profiles/${randomUUID()}`, {
+      method: "DELETE",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "profile.not_found" },
+    });
+  });
+
   it("GET by a MALFORMED id → 404 profile.not_found (the requireProfileId screen)", async () => {
     const app = mountApp(tenantId);
     const res = await app.request("/management-api/profiles/not-a-uuid", {

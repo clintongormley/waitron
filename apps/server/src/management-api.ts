@@ -962,8 +962,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Replace a profile's name + definition. Same body-screen as POST; `updateProfile` enforces
   // `till.configure`, validates (400 `profile.invalid`) and maps a duplicate name to 409. An absent id
-  // is a silent no-op (the update matches zero rows, no `.returning()` check), the same shape the staff
-  // mutations take — the editor only PUTs ids it listed. → 204.
+  // (matched zero rows via `.returning`) → 404 `profile.not_found`, the by-id config-CRUD idiom the
+  // sibling zone/table/status verbs use — so a PUT to a since-deleted profile is a 404, not a masked
+  // "saved" 204. → 204 on success.
   app.put("/management-api/profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -994,7 +995,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Delete a profile. `:id` screened by `requireProfileId`; `deleteProfile` enforces `till.configure`.
-  // An absent id is a silent no-op (matches zero rows). → 204.
+  // An absent id (matched zero rows via `.returning`) → 404 `profile.not_found`, mirroring the
+  // deactivate* sibling verbs. → 204 on success.
   app.delete("/management-api/profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

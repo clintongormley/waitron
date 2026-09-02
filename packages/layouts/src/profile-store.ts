@@ -117,7 +117,14 @@ export async function createProfile(
   }
 }
 
-/** Replace a profile's name + definition in place. Manager/admin only (`till.configure`). */
+/**
+ * Replace a profile's name + definition in place. Manager/admin only (`till.configure`). An absent id
+ * (or another tenant's row, RLS-hidden) throws `profile.not_found` — the by-id config-CRUD idiom the
+ * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
+ * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
+ * a 404, never a masked "saved" 204 (e.g. a PUT to a profile another session just deleted). A name
+ * collision throws `profile.name_taken` (see `asNameTaken`).
+ */
 export async function updateProfile(
   tx: Transaction,
   input: {
@@ -133,17 +140,27 @@ export async function updateProfile(
     permission: "till.configure",
   });
   const definition = validateProfile(input.definition);
+  let updated: { id: string }[];
   try {
-    await tx
+    updated = await tx
       .update(layoutProfiles)
       .set({ name: input.name, definition, updatedAt: sql`now()` })
-      .where(and(eq(layoutProfiles.tenantId, input.tenantId), eq(layoutProfiles.id, input.id)));
+      .where(and(eq(layoutProfiles.tenantId, input.tenantId), eq(layoutProfiles.id, input.id)))
+      .returning({ id: layoutProfiles.id });
   } catch (error) {
     asNameTaken(error);
   }
+  if (updated.length === 0) {
+    throw new AppError("profile.not_found", {});
+  }
 }
 
-/** Delete a profile. Manager/admin only (`till.configure`). No definition to validate. */
+/**
+ * Delete a profile. Manager/admin only (`till.configure`). No definition to validate. An absent id (or
+ * another tenant's row, RLS-hidden) throws `profile.not_found`, read back via `.returning({ id })` —
+ * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
+ * use, so a DELETE that matched zero rows is a 404 rather than a silent success.
+ */
 export async function deleteProfile(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; id: string },
@@ -152,9 +169,13 @@ export async function deleteProfile(
     managementSessionId: input.managementSessionId,
     permission: "till.configure",
   });
-  await tx
+  const deleted = await tx
     .delete(layoutProfiles)
-    .where(and(eq(layoutProfiles.tenantId, input.tenantId), eq(layoutProfiles.id, input.id)));
+    .where(and(eq(layoutProfiles.tenantId, input.tenantId), eq(layoutProfiles.id, input.id)))
+    .returning({ id: layoutProfiles.id });
+  if (deleted.length === 0) {
+    throw new AppError("profile.not_found", {});
+  }
 }
 
 /**

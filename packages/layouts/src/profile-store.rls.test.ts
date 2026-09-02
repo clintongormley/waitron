@@ -171,6 +171,42 @@ describe("layout profile store under real row-level security", () => {
     expect(await rowCount(tenantId)).toBe(0);
   });
 
+  it("throws profile.not_found when updating an id the tenant does not own", async () => {
+    // The write-path no-row guard: `.returning({ id })` comes back empty, so updateProfile throws
+    // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check
+    // and this call resolves, failing the assertion. A well-formed uuid that names no row of this
+    // tenant (an absent profile, or another tenant's row RLS hides) hits it.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const code = await codeOf(() =>
+      asApp(tenantId, (tx) =>
+        updateProfile(tx, {
+          managementSessionId: session,
+          tenantId,
+          id: "00000000-0000-4000-8000-000000000000",
+          name: "Ghost",
+          definition: phoneProfile("None"),
+        }),
+      ),
+    );
+    expect(code).toBe("profile.not_found");
+  });
+
+  it("throws profile.not_found when deleting an id the tenant does not own", async () => {
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const code = await codeOf(() =>
+      asApp(tenantId, (tx) =>
+        deleteProfile(tx, {
+          managementSessionId: session,
+          tenantId,
+          id: "00000000-0000-4000-8000-000000000000",
+        }),
+      ),
+    );
+    expect(code).toBe("profile.not_found");
+  });
+
   it("returns the built-in default for a form factor with no stored profile", async () => {
     const fresh = await seedTenant(suite.admin);
     const result = await asApp(fresh, (tx) => getProfileForFormFactor(tx, fresh, "kds"));
