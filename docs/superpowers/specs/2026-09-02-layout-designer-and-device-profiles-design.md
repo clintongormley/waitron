@@ -1,7 +1,8 @@
 # Layout designer & device profiles — design
 
 - **Date:** 2026-09-02
-- **Status:** Design approved (owner), pre-planning. Fiscal touchpoints owner-gated (H2) — see §7.
+- **Status:** Design approved (owner). SP-A.1 landed (#194). SP-A.2 slice resolutions added
+  2026-09-02 — see §16 — now pre-plan. Fiscal touchpoints owner-gated (H2) — see §7 and §16.
 - **Topic:** A visual, HA-Sections-style layout designer; reusable **layout profiles** carrying
   abilities; unification of tills into the enrolled-device model with per-device hardware binding;
   and a dev-only per-tab device switcher.
@@ -358,3 +359,134 @@ detail to plan next; SP-B/SP-C are outlined and will be specced when reached.
   `2026-07-30-sumup-card-present-provider-design.md`.
 - Backlog: sub-projects SP1 (design system), SP7 (counter POS), SP12 (KDS/devices), SP10/11
   (tabs/floor); `Debt → SumUp`, `Debt → Cross-cutting (handheld layout/face-set editor)`.
+
+---
+
+## 16. SP-A.2 slice — resolutions (2026-09-02, pre-plan)
+
+Brainstorming for the SP-A.2 implementation plan resolved the open points below. Recorded here (with
+receipts, per `CLAUDE.md` §1) so the plan can cite them; this section refines §4–§13, it does not
+replace them. All owner decisions were taken 2026-09-02.
+
+### 16.1 Slice shape — one H2-gated unit
+
+SP-A.2 is the **full** device-unification slice per the backlog, **not** the finer A.2 (persistence)
+/ A.3 (device) split the SP-A.1 plan's "does NOT do" proposed. It bundles: the `layout_profiles` +
+`tenant_themes` tables, the store service, the management API, the `till` device kind, the
+device→profile FK, static per-device hardware bindings, the enrolment extension, server-side
+capability enforcement, theme storage, **and the fiscal `till_id` cutover** — one slice, H2-gated,
+nothing lands without the §16.4 receipt and owner sign-off. (Owner decision. The SP-A.1 plan's
+"does NOT do" text describing an A.2/A.3 split is superseded by this.)
+
+### 16.2 `till_layouts` stays until SP-B
+
+The old widget model is **not** removed in SP-A.2. `till_layouts`, `WIDGET_TYPES`, `validateLayout`,
+the counter render (`apps/till/src/screens/till-counter-screen.ts`, which reads it via `getLayout`),
+and `GET /api/till`'s `layout`/`receipt` fields all remain — the counter still renders from the
+widget model until the SP-B rendering swap. SP-A.2 **adds** `layout_profiles` + `tenant_themes`
+alongside it. (Corrects an in-session claim that `till_layouts` is dropped in this slice; §13's
+drop-not-migrate principle governs *when SP-B removes it*, not this slice.)
+
+### 16.3 Schema (`@waitron/db`)
+
+- **`layout_profiles`** — `id` uuid pk; `tenant_id` → `tenants.id` (`onDelete restrict`); `name` text;
+  the whole `ProfileDef` (form factor, tabs, capabilities, optional theme) as one **validated jsonb**
+  `definition` — the opaque-jsonb precedent from `packages/db/src/schema/layouts.ts` (`till_layouts`),
+  which avoids the `@waitron/layouts` ↔ `@waitron/db` dependency cycle by validating shape on write
+  and storing opaque jsonb. `updated_at`. `UNIQUE(tenant_id, name)` and `UNIQUE(tenant_id, id)` (the
+  latter is the composite-FK target for `devices.layout_profile_id`).
+- **`tenant_themes`** — `tenant_id` pk; `theme` jsonb; `updated_at`. The one-per-tenant **base**
+  theme; the per-profile **override** lives inside a profile's `definition.theme`. get-with-default
+  returns "no override" when the row is absent (no backfill).
+- **`device_kind` enum** — add `"till"` (additive `ALTER TYPE … ADD VALUE`, hand-written migration —
+  the enum comment at `packages/db/src/schema/devices.ts:13-24` already anticipates this). Update
+  `kindRequiresStation` (`apps/server/src/device.ts:103`) so `till` needs no station, and extend the
+  per-kind station `CHECK` on both device tables.
+- **`devices`** and **`device_pairing_codes`** each gain, stamped at enrol: `layout_profile_id`
+  (composite FK → `layout_profiles(tenant_id, id)`, `restrict`, nullable), `till_id` (composite FK →
+  `tills(tenant_id, id)`, `restrict`, nullable — the fiscal identity, §16.4), and static hardware:
+  `receipt_printer_id` (composite FK → `printers`), `has_cash_drawer` bool, `card_provider` text
+  (`none | stripe_terminal | stripe_on_device`), `card_reader_id` text (external reader id; provider
+  **credentials stay in the vault**, only the selection lives here). All additive.
+- Both new tenant tables carry **FORCE RLS + a `_tenant_isolation` policy + `app_user` grants** in the
+  paired `--custom` migration (`.enableRLS()` alone is insufficient — `CLAUDE.md` §3). Run
+  `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding them.
+
+### 16.4 Fiscal cutover mechanism (H2) — the receipt
+
+A `till` device carries a **`till_id` FK to the existing `tills` row** it operates as, stamped at
+enrol. At sale time `cfg.tillId` resolves **only** from the authenticated till-device's `till_id`;
+the env `WAITRON_TILL_TILL_ID` is **retired as the sale-time source** (kept only for setup/adopt
+seeding). Because `device.till_id` names *the same `tills` row* the env var named, the `till_id`
+written to `sales.till_id` and the fiscal record is the **same uuid** — byte-identical by
+construction. `nodeId` (the SIF / series anchor; the guard is `series.nodeId !== input.nodeId` at
+`packages/core/src/record-sale.ts:239`), `seriesId`, and every huella input are **untouched**;
+`till_id` is confirmed **not** a huella input (the eight-field alta / five-field anulación tuples at
+`packages/verifactu/src/types.ts:197` and `:209` do not include it). Owner decisions: **cut over in
+SP-A.2**, and **drop the env sale-time fallback** (single fiscal-`till_id` source).
+
+**The receipt** (container / mutation, never reading — `CLAUDE.md` §1/§5). State the failing case
+before running each probe: if the device path sourced a *different* `till_id`, or if any device /
+profile / hardware code perturbed `nodeId` or the series, the records would **differ** — that is what
+each probe below must be able to show, not just confirm the pass:
+
+- **(a) Cross-baseline byte-identity.** Record a sale for one `tills` row X on the **pre-change build**
+  (env sources `till_id = X`) and on the **post-change build** (a till-device with `till_id = X`), in a
+  container against real Postgres. The two `registros_facturacion` rows — `huella`, `huella_anterior`,
+  the canonical string, the whole chain — are **byte-identical**. The FAILING case that makes this
+  meaningful: a build where `device.till_id ≠ X` (see (b)) produces a *different* `sales.till_id`, so
+  the probe distinguishes the two.
+- **(b) Mutation control.** Force `device.till_id` to a *different* `tills` row and re-record: **only**
+  `sales.till_id` and the record's `till_id` snapshot change; the `huella` / chain / series /
+  installation number do **not** (confirms `till_id` is inert to the chain, consistent with
+  `types.ts:197/209`).
+- **(c) `nodeId` untouched.** Trace every `nodeId` producer from the sale handler down and prove — by
+  a test that fails when the device path is made to influence `nodeId` — that no device / profile /
+  hardware code path feeds it.
+
+Plus explicit owner sign-off before the PR lands.
+
+### 16.5 Sale-block risk to preserve (§5 fiscal invariant)
+
+Requiring a till to be an enrolled till-device is a **setup precondition, not a per-sale block** —
+directly analogous to today's boot-time `server.till_config_missing` when `WAITRON_TILL_*` is unset
+(`apps/server/src/till-config.ts`). Once enrolled, sales proceed with nothing blocking them, so
+"nothing may block a sale" holds. One **new failure mode** to document and mitigate: a lost or cleared
+`waitron_device` cookie (httpOnly, `sameSite:Strict`, 1-year Max-Age — `device-session.ts:21-47`)
+stops sales until re-enrol. Mitigations: the long-lived cookie makes loss rare; SP-C adds the
+device-reset route (wiring the currently-orphaned `clearDeviceCookie`, `device-session.ts:53`) and the
+dev per-tab switcher. Recorded, not a blocker.
+
+### 16.6 Server-side capability enforcement
+
+Generalise the hardcoded `assertNotHandheld(action)` firewall (`device-session.ts:183`; called after
+`requireSession` at six fenced routes — pay/place/reprint/drawer/collect/cancel,
+`apps/server/src/till-api.ts:765,912,1136,1192,1253,1279`) into a **profile-capability check**: each
+fenced route names the `CapabilityFlag` it requires (e.g. `POST /api/pay` → `integrated-card-payment`,
+drawer-open → `open-cash-drawer`), checked against the authenticated device's **profile**
+capabilities. The built-in **handheld default profile omits those flags**, so existing handheld
+behaviour is preserved — pinned by a proven-by-deletion test. Person-role permission checks (layer 1,
+§5) are unchanged: a present card never bypasses its role check.
+
+### 16.7 SP-A.1 deferrals — folded in
+
+- **(a)** `validateProfile` folds in `validateThemeOverride` so a profile's `theme` **round-trips**
+  (today it is dropped) — required for per-profile theme storage (§9, §16.3).
+- **(b)** dedicated `profile.invalid` reasons: `bad_capabilities` (a bad capability flag, replacing the
+  `not_object` overload) and `bad_tab` (a non-array `cards`). New leaf reasons under the existing
+  `profile.invalid` code (`packages/layouts/src/errors.ts:75-91`); the code itself is never renamed.
+- **(c)** keep the **provisional seven** `THEMEABLE_TOKENS` and add a **cross-package consistency
+  guard** that sources/verifies every entry against the real `packages/ui/src/tokens/{colors,
+  structure}.css` registry (turning today's dated-comment check in `packages/layouts/src/theme.ts`
+  into an enforced test); defer the "which tokens are exposed" expansion to the theme-editor slice,
+  where a visual editor can validate them. (Owner decision.)
+- **(d)** `validateProfile` **defensively copies** the returned card `config` (today it copies
+  `visibleWhen` only; `config` still aliases the input).
+
+### 16.8 Reader model = static only
+
+SP-A.2 builds **only** the static per-device hardware binding (§16.3). The reader-as-first-class-
+networked-device model and the exclusive transient link are deferred **wholly** to the NFC follow-on
+(§8) — the static `card_provider` / `card_reader_id` columns are additive, so nothing about that model
+is foreclosed. (Owner decision, tightening §8's "models … transient" to "does not foreclose
+transient".)
