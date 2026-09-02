@@ -36,4 +36,40 @@ describe("the layout / receipt error codes carry their declared params", () => {
     expect(error.code).toBe("receipt.invalid");
     expect(error.params).toEqual({ reason: "too_long", field: "footerMessage", maxLength: 200 });
   });
+
+  it("constructs profile.invalid with a reason and a numeric tabIndex", () => {
+    const error = new AppError("profile.invalid", { reason: "bad_tab", tabIndex: 2 });
+    expect(error.code).toBe("profile.invalid");
+    expect(error.params).toEqual({ reason: "bad_tab", tabIndex: 2 });
+  });
+
+  it("constructs profile.invalid with the optional card (a CardType) + configKey context", () => {
+    const error = new AppError("profile.invalid", {
+      reason: "bad_config",
+      tabIndex: 0,
+      card: "product-grid",
+      configKey: "columns",
+    });
+    expect(error.code).toBe("profile.invalid");
+    expect(error.params).toEqual({
+      reason: "bad_config",
+      tabIndex: 0,
+      card: "product-grid",
+      configKey: "columns",
+    });
+  });
+
+  it("constructs theme.invalid with a reason and a policy maxLength", () => {
+    const error = new AppError("theme.invalid", {
+      reason: "too_long",
+      token: "--wt-color-primary",
+      maxLength: 64,
+    });
+    expect(error.code).toBe("theme.invalid");
+    expect(error.params).toEqual({
+      reason: "too_long",
+      token: "--wt-color-primary",
+      maxLength: 64,
+    });
+  });
 });
