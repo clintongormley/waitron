@@ -25,6 +25,7 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { DEFAULT_PROFILES } from "@waitron/layouts";
 import { MANUAL_PROVIDER } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -1293,6 +1294,50 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       expect((await res.json()).error.code).toBe("device.forbidden_action");
     },
   );
+
+  // SP-A.2 §16 (Task 14): the handheld firewall on `/api/pay` and `/api/drawer/open` is now the
+  // GENERALISED capability firewall — a device is refused unless its ASSIGNED profile declares the
+  // required flag, not merely because its kind is `handheld`. This drives the capability path directly:
+  // a device carrying the phone-portrait default profile (`capabilities: []`) is refused `/api/pay`
+  // even though its kind is not consulted. Prove-by-deletion: remove
+  // `assertDeviceCapability(deps, c, "integrated-card-payment", "pay")` from `/api/pay` and this request
+  // proceeds past the fence (a `card.*`/id error, never the 403 the fence exists to raise).
+  it("refuses /api/pay from a device whose assigned profile LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // Author a capability-less profile (phone-portrait default) and enrol a device bound to it.
+    const prof = await suite.admin.execute<{ id: string }>(sql`
+      insert into layout_profiles (tenant_id, name, definition)
+      values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_PROFILES["phone-portrait"])}::jsonb)
+      returning id`);
+    const layoutProfileId = prof.rows[0]!.id;
+    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return generatePairingCode(tx, cfg, {
+        kind: "handheld",
+        stationId: null,
+        tillId: cfg.tillId,
+        layoutProfileId,
+        label: "Waiter phone",
+      });
+    });
+    const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return enrolDevice(tx, cfg, { code });
+    });
+    const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+    const sessionPair = await loginOperator(app, operatorId);
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
+      body: JSON.stringify({ id: randomUUID() }),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("device.forbidden_action");
+  });
 
   // C1 (whole-branch review): the two ORDER-SETTLEMENT routes a handheld reaches through its own order
   // screens must be fenced too — they file a CHAINED fiscal record, the unrecoverable one (CLAUDE.md

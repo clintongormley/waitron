@@ -4,6 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError } from "@waitron/shared";
 import { asAppUser, devices, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { getProfile } from "@waitron/layouts";
+import type { CapabilityFlag } from "@waitron/layouts";
 import { verifySecret } from "@waitron/identity";
 // Side-effect only: keeps this host's `device.unauthorized` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-session.ts` follows for its host `session.required`
@@ -219,4 +221,63 @@ export async function assertNotHandheld(
 ): Promise<void> {
   const device = await tryReadDevice(deps, c);
   if (device?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+}
+
+/**
+ * The profile-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of
+ * {@link assertNotHandheld} from a hardcoded KIND check to a DECLARED capability. A route that requires
+ * a server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`; opening
+ * the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard, on the SAME
+ * request, so the fence holds even if the client were bypassed — the identical placement and reasoning
+ * as `assertNotHandheld`, which it replaces on those two routes. It guards UNRECOVERABLE fiscal records
+ * (CLAUDE.md §5), so it fails CLOSED: any device that cannot be shown to hold the capability is refused
+ * with `device.forbidden_action` naming the attempted `action`.
+ *
+ * The branches, in order:
+ *  1. No device cookie (`tryReadDevice` → `null`) — an ordinary env-configured/legacy till, which
+ *     authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
+ *     `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less till.
+ *  2. A device with NO assigned profile (`layoutProfileId === null`) declares no capabilities at all —
+ *     refused. (This is the path the old handheld, which carried no profile, now falls down.)
+ *  3. Resolve the assigned profile via `getProfile` under the SAME `withTenant` + `asAppUser` scope
+ *     `tryReadDevice` uses, so RLS scopes the read to this tenant. A bound-but-missing profile is
+ *     unreachable (the `(tenant_id, layout_profile_id)` FK is RESTRICT — see `devices.ts`); treated
+ *     defensively as no-capability.
+ *  4. Whether the profile's declared `capabilities` include the required flag decides pass vs refuse.
+ *
+ * A handheld carrying a capability-less profile (e.g. the phone-portrait default, `capabilities: []`)
+ * is therefore still refused pay + drawer — the handheld-firewall behaviour is PRESERVED, now enforced
+ * by the capability rather than by the kind.
+ */
+export async function assertDeviceCapability(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+  capability: CapabilityFlag,
+  action: string,
+): Promise<void> {
+  const device = await tryReadDevice(deps, c);
+  // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
+  if (device === null) return;
+  // (2) No assigned profile ⇒ no declared capabilities ⇒ refuse.
+  if (device.layoutProfileId === null) {
+    throw new AppError("device.forbidden_action", { action });
+  }
+  const layoutProfileId = device.layoutProfileId;
+  // (3) Resolve the profile in the SAME tx shape `tryReadDevice` uses (RLS as `app_user`).
+  const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return getProfile(tx, deps.cfg.tenantId, layoutProfileId);
+  });
+  // Defensive only: the `(tenant_id, layout_profile_id)` composite FK on `devices` is RESTRICT
+  // (schema/devices.ts), so a bound profile always resolves — this branch is unreachable in practice,
+  // hence the v8-ignore rather than a contrived test that would have to defeat the FK.
+  /* v8 ignore start */
+  if (profile === undefined) {
+    throw new AppError("device.forbidden_action", { action });
+  }
+  /* v8 ignore stop */
+  // (4) The declared capability set is the source of truth.
+  if (!profile.definition.capabilities.includes(capability)) {
+    throw new AppError("device.forbidden_action", { action });
+  }
 }

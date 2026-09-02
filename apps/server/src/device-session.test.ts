@@ -17,8 +17,10 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
+import type { CapabilityFlag } from "@waitron/layouts";
 import {
   DEVICE_COOKIE,
+  assertDeviceCapability,
   assertNotHandheld,
   clearDeviceCookie,
   readDeviceCookie,
@@ -246,6 +248,57 @@ async function probeAssert(
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
+/** Enrol a REAL handheld carrying an ASSIGNED profile whose capabilities are `[]` (the phone-portrait
+ * default) — the generalised stand-in for the old hardcoded handheld: a device that reaches a fenced
+ * route but whose profile declares NEITHER `integrated-card-payment` NOR `open-cash-drawer`, so the
+ * capability firewall refuses it exactly as `assertNotHandheld` refused it by kind. The profile row is
+ * inserted on the admin connection (RLS bypassed) — pure setup, the `enrolTillDeviceFixture` shape. */
+async function enrolHandheldWithProfileFixture(): Promise<{
+  cfg: TillConfig;
+  deviceId: string;
+  token: string;
+}> {
+  const { cfg } = await setupStation();
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_PROFILES["phone-portrait"])}::jsonb)
+    returning id`);
+  const layoutProfileId = prof.rows[0]!.id;
+  const { code } = await asApp(suite.admin, cfg, (tx) =>
+    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It carries
+    // the phone-portrait profile, whose `capabilities: []` grant neither fenced flag.
+    generatePairingCode(tx, cfg, {
+      kind: "handheld",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      label: "Waiter phone",
+    }),
+  );
+  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  return { cfg, deviceId: dev.deviceId, token: dev.token };
+}
+
+/** Run `assertDeviceCapability` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no
+ * throw), or the thrown code + params when it refuses. */
+async function probeCapability(
+  cfg: TillConfig,
+  cookieValue: string | null,
+  capability: CapabilityFlag,
+  action: string,
+): Promise<{ ok: true } | { ok: false; code: string; params: unknown }> {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
+    await assertDeviceCapability(deps, c, capability, action);
+    return c.body(null, 204);
+  });
+  if (res.status === 204) return { ok: true };
+  return {
+    ok: false,
+    code: isAppError(thrown) ? thrown.code : String(thrown),
+    params: isAppError(thrown) ? thrown.params : undefined,
+  };
+}
+
 const COOKIE_VALUE = "11111111-1111-4111-8111-111111111111.token_ABC-123";
 
 describe("device cookie helpers", () => {
@@ -422,5 +475,66 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
     // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
     // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
     expect(await probeAssert(cfg, "not-a-uuid.sometoken")).toEqual({ ok: true });
+  });
+});
+
+describe("assertDeviceCapability (real Postgres)", () => {
+  it("refuses a device whose assigned profile LACKS the capability, naming the action", async () => {
+    // The phone-portrait profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
+    // deletion: drop the `!capabilities.includes(...)` check in `assertDeviceCapability` and these pass.
+    const { cfg, deviceId, token } = await enrolHandheldWithProfileFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "drawer_open" } });
+  });
+
+  it("passes a device whose assigned profile HAS the capability", async () => {
+    // The `till` fixture's profile is `DEFAULT_PROFILES.till`, which declares BOTH flags.
+    const { cfg, deviceId, token } = await enrolTillDeviceFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: true });
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+    ).toEqual({ ok: true });
+  });
+
+  it("refuses a device with NO assigned profile (layoutProfileId null)", async () => {
+    // A kds_station enrolled with no profile assigned declares no capabilities at all → refused before
+    // any profile read. Prove-by-deletion: drop the `layoutProfileId === null` guard and this throws
+    // elsewhere instead of the clean 403.
+    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
+  });
+
+  it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
+    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
+    // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5). Prove-by-deletion: drop the
+    // `device === null` early return and this throws instead of passing.
+    const { cfg } = await enrolDeviceFixture();
+    expect(await probeCapability(cfg, null, "integrated-card-payment", "pay")).toEqual({
+      ok: true,
+    });
+    expect(await probeCapability(cfg, null, "open-cash-drawer", "drawer_open")).toEqual({
+      ok: true,
+    });
+  });
+
+  it("preserves the handheld firewall: a handheld (profile caps []) is still blocked from pay + drawer", async () => {
+    // The behaviour `assertNotHandheld` enforced by KIND is now enforced by CAPABILITY: a handheld's
+    // capability-less profile carries neither flag, so pay and drawer are refused exactly as before —
+    // but via the capability, not the device kind.
+    const { cfg, deviceId, token } = await enrolHandheldWithProfileFixture();
+    expect(
+      (await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
+    ).toBe(false);
+    expect(
+      (await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open")).ok,
+    ).toBe(false);
   });
 });

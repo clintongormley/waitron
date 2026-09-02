@@ -85,7 +85,7 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertNotHandheld, tryReadDevice } from "./device-session.js";
+import { assertDeviceCapability, assertNotHandheld, tryReadDevice } from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -785,13 +785,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): integrated card pay settles at the fixed till — a handheld never
-      // settles THROUGH pay (it may settle a cash or manual-card sale on `/api/sales`, node-keyed, but not
-      // the INTEGRATED card leg here — that drives a real reader). A handheld cookie throws
-      // `device.forbidden_action` (403) here, before the provider
-      // guard and any fiscal write, so the fence holds even if the client were bypassed. An ordinary
-      // till carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "pay");
+      // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
+      // device's assigned profile to declare `integrated-card-payment`. This generalises the old
+      // hardcoded handheld check — a handheld carries a capability-less profile (or none), so it is
+      // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
+      // write, so the fence holds even if the client were bypassed. An ordinary till carries no device
+      // cookie and passes. (A handheld may still settle a cash or manual-card sale on `/api/sales`,
+      // node-keyed, which runs NO capability guard — only the INTEGRATED leg here is fenced.)
+      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay");
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
       // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
@@ -1215,10 +1216,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): a handheld has no cash drawer to open — refused
-      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries no
-      // device cookie and passes.
-      await assertNotHandheld(deps, c, "drawer_open");
+      // Capability firewall (SP-A.2 §16): opening the cash drawer requires the device's assigned
+      // profile to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
+      // handheld carries a capability-less profile (or none) and so has no drawer to open, refused
+      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries
+      // no device cookie and passes.
+      await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open");
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
