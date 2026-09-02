@@ -90,6 +90,20 @@ describe("verifyMembershipDocument", () => {
     };
     expect(verifyMembershipDocument(doc, {})).toEqual({ valid: false, reason: "malformed" });
   });
+
+  it("passes a document carrying exactly MAX_ENDORSEMENTS (8) endorsements through the length gate", () => {
+    // The other half of the boundary: 8 must clear the cap so a `>` → `>=` off-by-one would be
+    // caught. These trivially-shaped endorsements don't chain to a trusted signer, so verification
+    // still fails — but for a NON-length reason, never "malformed" on account of the count.
+    const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
+    const doc = {
+      ...signed(body(1), "A", generateNodeKeyPair().privateKey),
+      endorsements: Array.from({ length: 8 }, () => endorsement),
+    };
+    const result = verifyMembershipDocument(doc, {});
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).not.toBe("malformed");
+  });
 });
 
 // The structural guards reject adversarial input as data (never throw). Each case below is a
