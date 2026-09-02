@@ -50,6 +50,13 @@
       "when": 1786492800006,
       "tag": "0006_enrol_table_service",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786492800007,
+      "tag": "0007_sync_identity_capture",
+      "breakpoints": true
     }
   ]
 }
