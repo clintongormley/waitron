@@ -114,6 +114,40 @@ describe("verifyMembershipDocument", () => {
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).not.toBe("malformed");
   });
+
+  // Build a body carrying `count` structurally-valid nodes, each with a distinct nodeId so the
+  // strict per-node shape is never the reason for rejection — only the length gate is under test.
+  const bodyWithNodes = (count: number) => ({
+    term: 1,
+    nodes: Array.from({ length: count }, (_, i) => ({
+      nodeId: `N${i}`,
+      contactUrl: "https://n",
+      standing: "serving-primary" as const,
+    })),
+  });
+
+  it("rejects a document carrying more than MAX_NODES (8) nodes as malformed", () => {
+    // 9 (MAX_NODES + 1) valid nodes must be rejected by the length gate before any per-node scan,
+    // signature or trust is consulted — a memory/DoS bound, not a topology assertion.
+    const doc = {
+      ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
+      body: bodyWithNodes(9),
+    };
+    expect(verifyMembershipDocument(doc, {})).toEqual({ valid: false, reason: "malformed" });
+  });
+
+  it("passes a document carrying exactly MAX_NODES (8) nodes through the length gate", () => {
+    // The other half of the boundary: 8 must clear the cap so a `>` → `>=` off-by-one would be
+    // caught. These nodes are structurally valid, so verification fails only for a NON-length
+    // reason (the signer isn't trusted), never "malformed" on account of the node count.
+    const doc = {
+      ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
+      body: bodyWithNodes(8),
+    };
+    const result = verifyMembershipDocument(doc, {});
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).not.toBe("malformed");
+  });
 });
 
 // The structural guards reject adversarial input as data (never throw). Each case below is a
@@ -136,6 +170,7 @@ describe("verifyMembershipDocument structural validation", () => {
     ["body non-object", { ...valid, body: 5 }],
     ["term not a number", { ...valid, body: { ...validBody, term: "1" } }],
     ["term not an integer", { ...valid, body: { ...validBody, term: 1.5 } }],
+    ["term negative", { ...valid, body: { ...validBody, term: -1 } }],
     ["nodes not an array", { ...valid, body: { ...validBody, nodes: "x" } }],
     // per-node guard (isNode)
     ["node null", { ...valid, body: { ...validBody, nodes: [null] } }],

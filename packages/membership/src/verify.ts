@@ -26,6 +26,13 @@ const STANDINGS: readonly NodeStanding[] = [
 // breaking change.
 const MAX_ENDORSEMENTS = 8;
 
+// Structural cap on how many nodes a document's body may list. This is a memory/DoS BOUND with
+// generous headroom, NOT a topology assertion: spec §2 is a 3-node topology (2 local + 1 cloud),
+// and a node-replacement transition may transiently list a few more (an evicted old node alongside
+// its replacement). 8 sits well above any legitimate count while rejecting an unbounded adversarial
+// array; the exact serving-node policy stays a Slice-2/3 concern.
+const MAX_NODES = 8;
+
 export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey: string): string {
   // signerNodeId is deliberately NOT part of the signed bytes (bodyMessage covers the whole body —
   // term + nodes — and nothing else): it merely selects which trusted key to verify against. A
@@ -83,18 +90,17 @@ function isEndorsement(v: unknown): v is Endorsement {
 function isDocument(v: unknown): v is SignedMembershipDocument {
   if (!isRecord(v)) return false;
   if (typeof v.signerNodeId !== "string" || typeof v.signature !== "string") return false;
-  if (!Array.isArray(v.endorsements) || !v.endorsements.every(isEndorsement)) return false;
-  if (v.endorsements.length > MAX_ENDORSEMENTS) return false;
+  if (!Array.isArray(v.endorsements)) return false;
+  if (v.endorsements.length > MAX_ENDORSEMENTS) return false; // fail fast before the per-item scan
+  if (!v.endorsements.every(isEndorsement)) return false;
   const b = v.body;
   // typeof undefined !== "object", so isRecord also rejects a missing body — no separate
   // `=== undefined` arm needed.
   if (!isRecord(b)) return false;
-  if (typeof b.term !== "number" || !Number.isInteger(b.term)) return false;
-  // Unlike `endorsements` (capped at MAX_ENDORSEMENTS above), `nodes.length` is intentionally NOT
-  // capped in Slice 1. Spec §2 is a 3-node topology, but the exact bound DURING a node-replacement
-  // transition (old + new + cloud simultaneously) is a Slice-2/3 design question — deferred
-  // deliberately rather than guessed at here.
-  if (!Array.isArray(b.nodes) || !b.nodes.every(isNode)) return false;
+  if (typeof b.term !== "number" || !Number.isInteger(b.term) || b.term < 0) return false;
+  if (!Array.isArray(b.nodes)) return false;
+  if (b.nodes.length > MAX_NODES) return false; // fail fast before the per-item scan
+  if (!b.nodes.every(isNode)) return false;
   if (Object.keys(b).length !== 2) return false; // body: term, nodes — no extra keys
   if (Object.keys(v).length !== 4) return false; // document: body, signerNodeId, signature, endorsements
   return true;
