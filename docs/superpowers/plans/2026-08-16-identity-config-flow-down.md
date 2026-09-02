@@ -678,7 +678,7 @@ it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero with
   const venue = await provisionVenue(); // the file's existing venue-provision helper
   const app = mountMgmt(venue.tenantId, NODE_C);
   const cookie = await managerCookie(app, venue); // the file's existing helper
-  const res = await app.request("/management-api/persons", {
+  const res = await app.request("/management-api/staff", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({ displayName: "Ada", pin: "1234", role: "staff" }),
@@ -689,7 +689,7 @@ it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero with
   const zeroVenue = await provisionVenue();
   const zeroApp = mountMgmt(zeroVenue.tenantId, ZERO);
   const zeroCookie = await managerCookie(zeroApp, zeroVenue);
-  await zeroApp.request("/management-api/persons", {
+  await zeroApp.request("/management-api/staff", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: zeroCookie },
     body: JSON.stringify({ displayName: "Grace", pin: "1234", role: "staff" }),
