@@ -130,7 +130,7 @@ function mountApp(venue: VenueResult): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId: venue.tenantId },
+      cfg: { tenantId: venue.tenantId, nodeId: venue.nodeId },
       // The venue's own config (tenant + location) the zone/table config routes scope to.
       venueCfg: tillConfigFromVenue(venue),
       secureCookies: false,

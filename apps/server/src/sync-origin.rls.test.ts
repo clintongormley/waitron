@@ -11,7 +11,14 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { recordIncidentOnce } from "@waitron/core";
 import { createCatalogue, createProduct } from "@waitron/catalogue";
 import { createIngredient } from "@waitron/recipes";
-import { decimal, tenantId as brandTenantId } from "@waitron/shared";
+import {
+  decimal,
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import {
   DEFAULT_SETTLEMENT_LAG_MS,
   insertCapturedPayment,
@@ -19,9 +26,14 @@ import {
   type ReversalFn,
   type SettlementReportSource,
 } from "@waitron/payments";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
+import { mountManagementApi } from "./management-api.js";
+import { mountTillApi } from "./till-api.js";
+import { mountMeApi } from "./me-api.js";
+import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 
 // Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
@@ -75,6 +87,14 @@ interface Venue {
   tenantId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */
   managerCookie: string;
+  /** The seeded manager's `persons.id` — the login the till locale route logs in as (PIN "1234"), and
+   * the row both locale routes UPDATE (so their captured `persons` op=update is this person's). */
+  managerId: string;
+  /** The provisioned venue's till / series / location ids, for building a `TillConfig` (the node id is
+   * overridden per test with NODE_C / ZERO — the locale route sets no fiscal chain). */
+  tillId: string;
+  seriesId: string;
+  locationId: string;
 }
 
 /** Stand up a fresh provisioned venue (as the owner), then — as the app role under the tenant — seed a
@@ -111,7 +131,7 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin },
   );
 
-  const managerSid = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, managerId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -120,10 +140,18 @@ async function setupVenue(): Promise<Venue> {
       tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
-    return managerSession.id;
+    return { managerSid: managerSession.id, managerId: mgr.rows[0]!.id };
   });
 
-  return { tenantId: venue.tenantId, managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}` };
+  return {
+    tenantId: venue.tenantId,
+    managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
+    managerId,
+    tillId: venue.tillId,
+    // planVenue emits the standard series first, then the rectificative one.
+    seriesId: venue.seriesIds[0]!,
+    locationId: venue.locationId,
+  };
 }
 
 /** Mounts the catalogue API for one tenant under a given producing node id. */
@@ -177,6 +205,120 @@ async function productUpdateOrigin(tenantId: string): Promise<string | null> {
         order by seq desc limit 1`,
   );
   return r.rows[0]?.v ?? null;
+}
+
+/** Mounts the management API for one tenant under a given producing node id. `secureCookies:false`
+ * (loopback, no TLS) and the loopback passkey RP config mirror `boot.ts`'s dev defaults — this suite
+ * exercises only the identity-config WRITE routes (createPerson), not the passkey ceremonies. */
+function mountMgmt(tenantId: string, nodeId: string): Hono {
+  const app = new Hono();
+  mountManagementApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId, nodeId },
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost:5191",
+    },
+    noopLog,
+  );
+  return app;
+}
+
+/** The origin_id captured for this tenant's most recent `persons` write (RLS-bypassing admin read).
+ * `setupVenue` seeds a manager persons row (op=insert, origin all-zero, no node id supplied) before the
+ * API's createPerson runs, so `seq desc limit 1` reads the API write specifically — the same
+ * most-recent-write convention `catalogueOrigin` uses. (The route is `/staff` but the enrolled table,
+ * and thus the sync_log `table_name`, is `persons`.) */
+async function personOrigin(tenantId: string): Promise<string | null> {
+  const r = await suite.admin.execute<{ v: string | null }>(
+    sql`select origin_id::text as v from sync_log
+        where table_name = 'persons' and tenant_id = ${tenantId}
+        order by seq desc limit 1`,
+  );
+  return r.rows[0]?.v ?? null;
+}
+
+/** POST a new person via the manager cookie, asserting 201 — the persons INSERT it captures is read
+ * back separately via `personOrigin`. */
+async function postPerson(app: Hono, cookie: string, displayName: string): Promise<void> {
+  const res = await app.request("/management-api/staff", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ displayName, role: "staff", pin: "1234" }),
+  });
+  expect(res.status).toBe(201);
+}
+
+/** The origin_id captured for this tenant's most recent `persons` op=UPDATE — the row a locale write
+ * mutates (`setPersonLocale` does `update persons set locale`). Filtered to op='update' so it reads the
+ * locale route's write specifically, past `setupVenue`'s seed INSERT (op=insert, origin all-zero). */
+async function personUpdateOrigin(tenantId: string): Promise<string | null> {
+  const r = await suite.admin.execute<{ v: string | null }>(
+    sql`select origin_id::text as v from sync_log
+        where table_name = 'persons' and op = 'update' and tenant_id = ${tenantId}
+        order by seq desc limit 1`,
+  );
+  return r.rows[0]?.v ?? null;
+}
+
+// The till locale route mounts the full TillApiDeps, but the locale write touches neither the fiscal
+// backend nor the clock (only `POST /api/sales|pay` do), so these stubs are never invoked — a cast is
+// enough, and any accidental use throws rather than silently passing.
+const stubBackend = {} as unknown as FiscalBackend;
+const stubClock = {} as unknown as TrustedClock;
+
+/** Mounts the till API for one venue under a given producing node id. The fiscal ids come from the
+ * provisioned venue (real `tillId`/`seriesId`/`locationId`, so login's `sessions` FK to `tills`
+ * resolves), and `nodeId` is the id under test — the locale route is the only route this test drives,
+ * and it sets no fiscal chain, so the node id need not match the venue's own. */
+function mountTill(venue: Venue, nodeId: string): Hono {
+  const app = new Hono();
+  const cfg: TillConfig = {
+    tenantId: brandTenantId(venue.tenantId),
+    tillId: brandTillId(venue.tillId),
+    nodeId: brandNodeId(nodeId),
+    seriesId: brandSeriesId(venue.seriesId),
+    locationId: brandLocationId(venue.locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+  mountTillApi(
+    app,
+    {
+      db: suite.admin,
+      backend: stubBackend,
+      clock: stubClock,
+      cfg,
+      secureCookies: false,
+      venueLocale: LOCALE,
+    },
+    noopLog,
+  );
+  return app;
+}
+
+/** Log the seeded manager (PIN "1234") in through the till's `POST /api/session` and return the
+ * session cookie the operator-scoped locale route reads. */
+async function tillLogin(app: Hono, personId: string): Promise<string> {
+  const res = await app.request("/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ personId, pin: "1234" }),
+  });
+  expect(res.status).toBe(200);
+  return res.headers.get("set-cookie")!;
+}
+
+/** Mounts the "me" (staff self-service) API for one tenant under a given producing node id. */
+function mountMe(tenantId: string, nodeId: string): Hono {
+  const app = new Hono();
+  mountMeApi(app, { db: suite.admin, cfg: { tenantId, nodeId }, venueLocale: LOCALE }, noopLog);
+  return app;
 }
 
 /** Mounts the recipe API for one tenant under a given producing node id. */
@@ -340,5 +482,83 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     const zeroApp = mountRecipeApp(zeroVenue.tenantId, ZERO);
     await putRecipe(zeroApp, zeroVenue.managerCookie, zeroSeed.productId, [zeroSeed.ingredientId]);
     expect(await productUpdateOrigin(zeroVenue.tenantId)).toBe(ZERO);
+  });
+
+  it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero without the fix)", async () => {
+    // Guard-by-deletion: with fix B, management-api threads { nodeId: cfg.nodeId } into the createPerson
+    // withTenant, so the enrolled `persons` INSERT captures NODE_C. Revert (drop the 4th arg) and
+    // app.node_id is unset → capture falls back to the all-zero origin → this expect fails. (The route
+    // is `/management-api/staff`; the enrolled table it writes is `persons`.)
+    const venue = await setupVenue();
+    const app = mountMgmt(venue.tenantId, NODE_C);
+    await postPerson(app, venue.managerCookie, "Ada");
+    expect(await personOrigin(venue.tenantId)).toBe(NODE_C);
+
+    // Control (the two directions visibly differ, CLAUDE.md §1): the SAME path under the all-zero node
+    // id captures the all-zero origin — so the captured origin tracks cfg.nodeId, not a constant.
+    const zeroVenue = await setupVenue();
+    const zeroApp = mountMgmt(zeroVenue.tenantId, ZERO);
+    await postPerson(zeroApp, zeroVenue.managerCookie, "Grace");
+    expect(await personOrigin(zeroVenue.tenantId)).toBe(ZERO);
+  });
+
+  it("the till locale write (PUT /api/session/locale) captures persons UPDATE origin = cfg.nodeId (all-zero without the fix)", async () => {
+    // Finding 1: `setPersonLocale` does a `persons` UPDATE, which the sync_capture trigger records —
+    // but till-api's locale route ran a BARE 3-arg withTenant, so app.node_id was unset and capture
+    // fell back to the all-zero origin (a write that never replicates and never prunes). Guard-by-
+    // deletion: with the fix the route threads { nodeId: cfg.nodeId }, so the UPDATE captures NODE_C;
+    // drop the 4th arg and app.node_id is unset → all-zero → this expect fails.
+    const venue = await setupVenue();
+    const app = mountTill(venue, NODE_C);
+    const cookie = await tillLogin(app, venue.managerId);
+    const res = await app.request("/api/session/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ locale: LOCALE }),
+    });
+    expect(res.status).toBe(204);
+    expect(await personUpdateOrigin(venue.tenantId)).toBe(NODE_C);
+
+    // Control (the two directions visibly differ, CLAUDE.md §1): the SAME path under the all-zero node
+    // id captures the all-zero origin — so the captured origin tracks cfg.nodeId, not a constant.
+    const zeroVenue = await setupVenue();
+    const zeroApp = mountTill(zeroVenue, ZERO);
+    const zeroCookie = await tillLogin(zeroApp, zeroVenue.managerId);
+    const zeroRes = await zeroApp.request("/api/session/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: zeroCookie },
+      body: JSON.stringify({ locale: LOCALE }),
+    });
+    expect(zeroRes.status).toBe(204);
+    expect(await personUpdateOrigin(zeroVenue.tenantId)).toBe(ZERO);
+  });
+
+  it("the me-api locale write (PUT /management-api/session/me/locale) captures persons UPDATE origin = deps.nodeId (all-zero without the fix)", async () => {
+    // Finding 1, second writer: me-api's `PUT /management-api/session/me/locale` also calls
+    // `setPersonLocale` (a `persons` UPDATE), via the shared `asStaff` helper — whose `withTenant` had
+    // NO nodeId (MeApiDeps.cfg was `{ tenantId }`), so the enrolled write captured the all-zero origin.
+    // Guard-by-deletion: with the fix `asStaff` threads { nodeId: deps.cfg.nodeId }, so the UPDATE
+    // captures NODE_C; drop it (or the cfg field) and capture falls back to all-zero → this fails.
+    const venue = await setupVenue();
+    const app = mountMe(venue.tenantId, NODE_C);
+    const res = await app.request("/management-api/session/me/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: venue.managerCookie },
+      body: JSON.stringify({ locale: LOCALE }),
+    });
+    expect(res.status).toBe(204);
+    expect(await personUpdateOrigin(venue.tenantId)).toBe(NODE_C);
+
+    // Control (the two directions visibly differ, CLAUDE.md §1): the SAME path under the all-zero node
+    // id captures the all-zero origin — so the captured origin tracks deps.nodeId, not a constant.
+    const zeroVenue = await setupVenue();
+    const zeroApp = mountMe(zeroVenue.tenantId, ZERO);
+    const zeroRes = await zeroApp.request("/management-api/session/me/locale", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: zeroVenue.managerCookie },
+      body: JSON.stringify({ locale: LOCALE }),
+    });
+    expect(zeroRes.status).toBe(204);
+    expect(await personUpdateOrigin(zeroVenue.tenantId)).toBe(ZERO);
   });
 });

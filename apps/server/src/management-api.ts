@@ -94,7 +94,12 @@ import type { Logger } from "./logger.js"; // the same Logger till-api.ts's rout
  */
 export interface ManagementApiDeps {
   db: Database;
-  cfg: { tenantId: string };
+  /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTenant` below. `nodeId` is this
+   * node's origin id, threaded into every identity-config write's `withTenant` so that the `sync_log`
+   * row the capture trigger records for each enrolled `persons`/`webauthn_credentials` INSERT/UPDATE
+   * carries a real `origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
+   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
+  cfg: { tenantId: string; nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
    * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
@@ -597,17 +602,22 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, role, pin, email } = body;
-      const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return createPerson(tx, {
-          tenantId: deps.cfg.tenantId,
-          managementSessionId: sessionId,
-          displayName,
-          role,
-          pin,
-          email,
-        });
-      });
+      const created = await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          return createPerson(tx, {
+            tenantId: deps.cfg.tenantId,
+            managementSessionId: sessionId,
+            displayName,
+            role,
+            pin,
+            email,
+          });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.json(created, 201);
     }),
   );
@@ -662,21 +672,26 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (email !== undefined && typeof email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        if (role !== undefined) {
-          await setRole(tx, { managementSessionId: sessionId, personId: id, role });
-        }
-        if (status === "suspended") {
-          await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
-        }
-        if (status === "active") {
-          await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
-        }
-        if (typeof email === "string") {
-          await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
-        }
-      });
+      await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          if (role !== undefined) {
+            await setRole(tx, { managementSessionId: sessionId, personId: id, role });
+          }
+          if (status === "suspended") {
+            await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
+          }
+          if (status === "active") {
+            await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
+          }
+          if (typeof email === "string") {
+            await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
+          }
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.body(null, 204);
     }),
   );
@@ -695,10 +710,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "pin" });
       }
       const { pin } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
-      });
+      await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.body(null, 204);
     }),
   );
@@ -717,10 +737,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "password" });
       }
       const { password } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
-      });
+      await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.body(null, 204);
     }),
   );
@@ -1672,17 +1697,22 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return finishPasskeyRegistration(tx, {
-          managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
-          challengeHandle,
-          response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
-        });
-      });
+      const out = await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          return finishPasskeyRegistration(tx, {
+            managementSessionId: sessionId,
+            tenantId: deps.cfg.tenantId,
+            challengeHandle,
+            response: response as never,
+            rpId: deps.rpId,
+            origin: deps.origin,
+          });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       return c.json(out);
     }),
   );
@@ -1721,16 +1751,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return finishPasskeyAuthentication(tx, {
-          tenantId: deps.cfg.tenantId,
-          challengeHandle,
-          response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
-        });
-      });
+      const session = await withTenant(
+        deps.db,
+        deps.cfg.tenantId,
+        async (tx) => {
+          await asAppUser(tx);
+          return finishPasskeyAuthentication(tx, {
+            tenantId: deps.cfg.tenantId,
+            challengeHandle,
+            response: response as never,
+            rpId: deps.rpId,
+            origin: deps.origin,
+          });
+        },
+        { nodeId: deps.cfg.nodeId },
+      );
       setManagementCookie(c, session.id, deps.secureCookies);
       return c.json({ personId: session.personId });
     }),

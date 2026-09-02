@@ -11,7 +11,7 @@ import { applyBatch, type SyncLogRow } from "./apply.js";
 // non-BYPASSRLS role, so FORCE ROW LEVEL SECURITY's WITH CHECK actually fences each write to its
 // own tenant — PGlite connects as a superuser and bypasses all of it, a false pass (CLAUDE.md §4).
 // The whole migration manifest runs (including `sync` last), so the container carries sync_log +
-// sync_cursor + sync_capture + the 17 capture triggers over the enrolled commercial tables.
+// sync_cursor + sync_capture + the 19 capture triggers over the enrolled tables (17 commercial+dining + 2 identity-config).
 // The apply worker's role sync_applier — a LOGIN member of BOTH app_user (INSERT/UPDATE/DELETE on the
 // enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor), the sanctioned path that
 // never widens app_user to reach sync_cursor (spec §7; CLAUDE.md §3), non-superuser so FORCE RLS
@@ -1237,6 +1237,137 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       expect(await tableStatusId()).toBeNull();
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n); // cursor advanced past both
       expect(await syncLogCount()).toBe(before); // echo suppressed — apply captured no new sync_log row
+    } finally {
+      await applier.close();
+    }
+  });
+});
+
+describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
+  it("applies a persons row as app_user, seq-cursor idempotent", async () => {
+    await setEnv("preproduction");
+    const tenantId = await seedTenant(postgres.admin);
+    // Mint the exact row_image the capture trigger would write, then remove the row so apply re-creates
+    // it — proving the app-role apply writes into a FORCE-RLS table (native logical apply cannot).
+    const seeded = await postgres.admin.execute<{ id: string; img: string }>(sql`
+      with ins as (
+        insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'Ada', 'hash', 'staff') returning *
+      ) select id::text as id, to_jsonb(ins.*)::text as img from ins`);
+    const personId = seeded.rows[0]!.id;
+    const rowImage = seeded.rows[0]!.img;
+    await postgres.admin.execute(sql`delete from persons where id = ${personId}`);
+
+    const subscriberId = uuid();
+    const originId = uuid();
+    const row: SyncLogRow = {
+      seq: 1n,
+      originId,
+      table: "persons",
+      op: "insert",
+      tenantId,
+      rowImage,
+    };
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const first = await applyBatch(applier, [row], {
+        subscriberId,
+        localEnvironment: "preproduction",
+        sourceEnvironment: "preproduction",
+      });
+      expect(first.applied).toBe(1);
+      const landed = await scalar(
+        sql`select count(*)::text as v from persons where id = ${personId} and tenant_id = ${tenantId}`,
+      );
+      expect(landed).toBe("1"); // the app role wrote into the FORCE-RLS table
+
+      // Re-deliver the SAME seq: skipped by the cursor (null-watermark idempotency rests on the seq
+      // cursor, NOT ON CONFLICT — an unconditional upsert would otherwise re-run). applied = 0.
+      const second = await applyBatch(applier, [row], {
+        subscriberId,
+        localEnvironment: "preproduction",
+        sourceEnvironment: "preproduction",
+      });
+      expect(second.applied).toBe(0);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("applies a webauthn_credentials delete (removes the mirror row)", async () => {
+    await setEnv("preproduction");
+    const tenantId = await seedTenant(postgres.admin);
+    const person = await postgres.admin.execute<{ id: string }>(
+      sql`insert into persons (tenant_id, display_name, pin_hash, role)
+          values (${tenantId}, 'Ada', 'hash', 'staff') returning id`,
+    );
+    const personId = person.rows[0]!.id;
+    const cred = await postgres.admin.execute<{ id: string; img: string }>(sql`
+      with ins as (
+        insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key)
+        values (${tenantId}, ${personId}, 'cred-1', 'pk-1') returning *
+      ) select id::text as id, to_jsonb(ins.*)::text as img from ins`);
+    const credId = cred.rows[0]!.id;
+    const subscriberId = uuid();
+    const originId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const del = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "webauthn_credentials",
+            op: "delete",
+            tenantId,
+            rowImage: cred.rows[0]!.img,
+          },
+        ],
+        { subscriberId, localEnvironment: "preproduction", sourceEnvironment: "preproduction" },
+      );
+      expect(del.applied).toBe(1);
+      const remaining = await scalar(
+        sql`select count(*)::text as v from webauthn_credentials where id = ${credId}`,
+      );
+      expect(remaining).toBe("0");
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("refuses a persons row_image whose tenant_id differs from the batch tenant (WITH CHECK fence)", async () => {
+    // The FORCE-RLS WITH CHECK holds under the app role (CLAUDE.md §4): a row claiming tenant B applied
+    // under tenant A is a 42501, which propagates (not a 23503 defer) — it never lands. Mirrors
+    // apply.gate.test.ts's existing cross-tenant fence test.
+    await setEnv("preproduction");
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    const seeded = await postgres.admin.execute<{ id: string; img: string }>(sql`
+      with ins as (
+        insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${b}, 'Mallory', 'hash', 'staff') returning *
+      ) select id::text as id, to_jsonb(ins.*)::text as img from ins`);
+    await postgres.admin.execute(sql`delete from persons where id = ${seeded.rows[0]!.id}`);
+    // Claim it belongs to tenant A (the batch tenant) though the image carries tenant B.
+    const row: SyncLogRow = {
+      seq: 1n,
+      originId: uuid(),
+      table: "persons",
+      op: "insert",
+      tenantId: a,
+      rowImage: seeded.rows[0]!.img,
+    };
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const err = await captureError(() =>
+        applyBatch(applier, [row], {
+          subscriberId: uuid(),
+          localEnvironment: "preproduction",
+          sourceEnvironment: "preproduction",
+        }),
+      );
+      expect(pgErrorCode(err)).toBe("42501");
     } finally {
       await applier.close();
     }

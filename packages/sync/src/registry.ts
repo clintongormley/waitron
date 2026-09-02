@@ -1,12 +1,15 @@
-// The enrolment registry for the commercial-lane sync outbox: the seventeen tenant-scoped, non-fiscal
-// tables an apply mode is registered for. This is the audit surface for "what crosses the wire" — the
+// The enrolment registry for the app-level sync outbox: the tenant-scoped, non-fiscal tables an
+// apply mode is registered for — nineteen in all = 17 (14 commercial + 3 C1 dining) + 2 identity-config.
+// This is the audit surface for "what crosses the wire" — the
 // fiscal lane is deliberately absent (spec §1). The fourteen slice-1 rows each carry a capture trigger
 // in packages/sync/drizzle/0000_sync_outbox.sql and match spec §2 and those triggers exactly; the three
 // C1 table-service rows (dining_tables, floor_zones, table_service_statuses) carry their capture triggers
 // in packages/sync/drizzle/0006_enrol_table_service.sql and add no grants (the tables already hold
 // SELECT/INSERT/UPDATE — 0044/0048/0052; spec
-// docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). registry.test.ts pins
-// both agreements.
+// docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). The two identity-config
+// rows (persons, webauthn_credentials) flow the venue's people DOWN so a secondary can authenticate them
+// on failover (spec docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md); their capture triggers
+// are in packages/sync/drizzle/0007_sync_identity_capture.sql. registry.test.ts pins all these agreements.
 
 /** insert-only → `ON CONFLICT DO NOTHING`; watermark-upsert → `ON CONFLICT DO UPDATE SET …`. */
 export type SyncMode = "insert-only" | "watermark-upsert";
@@ -46,11 +49,13 @@ export interface EnrolledTable {
 //   working_orders → {working_order_lines, payments, sales}; sales → {sale_lines, tenders,
 //   sale_settlements, sale_substitutions, sale_voids}; payments → payment_refunds;
 //   catalogues → categories → products; payment_policy standalone.
+// The identity-config closure (spec §3): persons → webauthn_credentials
+// (webauthn_credentials.person_id); persons FKs only tenants (unenrolled), so it is its own root.
 // The dining_tables.tab_id → working_orders back-edge is a nullable pointer set by a later UPDATE and
 // is deliberately NOT ranked (a static rank cannot encode the dining_tables ↔ working_orders cycle;
 // runtime correctness rests on seq-ascending apply, not fkRank — see spec §5).
-// Level 0: floor_zones, table_service_statuses, catalogues, payment_policy.
-// Level 1: dining_tables, categories.
+// Level 0: floor_zones, table_service_statuses, catalogues, payment_policy, persons.
+// Level 1: dining_tables, categories, webauthn_credentials.
 // Level 2: working_orders, products.
 // Level 3: working_order_lines, sales, payments.
 // Level 4: sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids, payment_refunds.
@@ -226,6 +231,34 @@ export const ENROLLED: readonly EnrolledTable[] = [
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert", "update"],
+    fkRank: 1,
+    lane: "ordered",
+  },
+
+  // Group E — identity CONFIG flowing DOWN to a read-only secondary (spec §3). Mutable, NO watermark
+  // column (persons/webauthn_credentials carry no updated_at), so — like Group C — the upsert is
+  // UNCONDITIONAL and monotonicity rests on the seq cursor under the single-writer-per-row invariant
+  // (identity config is authored on the PRIMARY only). persons holds no DELETE grant (a person is
+  // suspended, never removed — packages/identity/drizzle/0001_identity_rls.sql:17-20), so it captures
+  // insert+update only; webauthn_credentials holds DELETE (a passkey is revoked outright —
+  // 0008_silent_mauler.sql:32-33), so its revocation MUST propagate and it captures insert+update+delete.
+  // Both ride the ORDERED lane (config, not the payments fast lane). fkRank: persons is a root (FK
+  // only to tenants, unenrolled) = 0; webauthn_credentials FKs persons = 1.
+  {
+    table: "persons",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+  },
+  {
+    table: "webauthn_credentials",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update", "delete"],
     fkRank: 1,
     lane: "ordered",
   },

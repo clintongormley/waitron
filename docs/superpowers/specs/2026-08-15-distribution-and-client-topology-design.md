@@ -210,6 +210,12 @@ path stops B double-applying it — the pattern the payments design already uses
   `payment_policy` are among the 14; `registry.ts:104-143`). So the failover spec's "config flows
   down" is *partly* built; **identity is the gap.**
 
+> **Update 2026-08-16:** identity **config** now flows down — persons + webauthn_credentials are
+> enrolled in the ordered lane (19 enrolled: 17 commercial+dining = 14 commercial + 3 C1 dining, plus
+> 2 identity-config). The ephemeral auth tables (sessions, management_sessions, webauthn_challenges)
+> remain out, by design. See
+> [docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md](2026-08-16-identity-config-flow-down-design.md).
+
 This splits into two problems, handled oppositely:
 
 **a. Identity *config* must reach B — [open], and a real not-yet-built piece.** `persons` and their
@@ -568,6 +574,11 @@ trust the prose:
 - **Sync captures 14 commercial tables; identity is absent** —
   [`packages/sync/src/registry.ts:39-164`](../../../packages/sync/src/registry.ts); count pinned at
   [`registry.test.ts:126`](../../../packages/sync/src/registry.test.ts).
+  > **Update 2026-08-16:** identity **config** now flows down — persons + webauthn_credentials are
+  > enrolled in the ordered lane (19 enrolled: 17 commercial+dining = 14 commercial + 3 C1 dining,
+  > plus 2 identity-config). The ephemeral auth tables (sessions, management_sessions,
+  > webauthn_challenges) remain out, by design. See
+  > [docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md](2026-08-16-identity-config-flow-down-design.md).
 - **Catalogue config is in the sync set** — `registry.ts:104-143`.
 - **Sessions are DB-row opaque UUIDs, validated by lookup each request** —
   [`packages/identity/src/schema/sessions.ts:14`](../../../packages/identity/src/schema/sessions.ts);

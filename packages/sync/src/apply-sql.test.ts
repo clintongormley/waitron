@@ -104,7 +104,7 @@ describe("the DO UPDATE SET list is the schema's columns minus the conflict key 
 });
 
 describe("SYNC_SCHEMA_TABLES covers every enrolled table, and the watermark tables carry their column", () => {
-  it("has a drizzle object for all seventeen enrolled tables", () => {
+  it("has a drizzle object for all nineteen enrolled tables", () => {
     for (const e of ENROLLED) {
       expect(SYNC_SCHEMA_TABLES[e.table]).toBeDefined();
     }
@@ -129,6 +129,32 @@ describe("SYNC_SCHEMA_TABLES covers every enrolled table, and the watermark tabl
         expect(cols).toContain(e.watermarkColumn);
       }
     }
+  });
+});
+
+describe("identity config tables apply as unconditional Group-C upserts (spec §3)", () => {
+  const persons = ENROLLED.find((e) => e.table === "persons")!;
+  const creds = ENROLLED.find((e) => e.table === "webauthn_credentials")!;
+
+  it("persons is registered and its upsert is UNCONDITIONAL (no watermark WHERE)", () => {
+    expect(SYNC_SCHEMA_TABLES.persons).toBeDefined();
+    const stmt = applyStatementFor(persons);
+    expect(stmt).toContain("on conflict (id) do update set");
+    // null watermark → unconditional; monotonicity via seq cursor. Assert the absence of the WATERMARK
+    // WHERE specifically (`where excluded.<col> > <table>.<col>`), not the substring "where" anywhere —
+    // a future SET column merely CONTAINING "where" would otherwise misfire this. It must still fail if
+    // a watermark WHERE is present (proven by deletion against the payment_policy case above).
+    expect(stmt).not.toMatch(/where\s+excluded\./i);
+    // A person is mutable config: pin_hash/password_hash/role/status must all be in the SET list.
+    expect(stmt).toContain("pin_hash = excluded.pin_hash");
+    expect(stmt).toContain("role = excluded.role");
+  });
+
+  it("webauthn_credentials is registered and builds a Group-C delete", () => {
+    expect(SYNC_SCHEMA_TABLES.webauthn_credentials).toBeDefined();
+    expect(deleteStatementFor(creds)).toBe(
+      "delete from webauthn_credentials where id = ($1->>'id')::uuid",
+    );
   });
 });
 

@@ -100,7 +100,18 @@ async function seedShift(
 
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.admin, cfg: { tenantId }, venueLocale: "es-ES" }, noopLog);
+  // A fixed sentinel node id: this suite proves the me routes' RLS + session-identity properties, not
+  // sync origin attribution (that is `sync-origin.rls.test.ts`), and no test here reads `sync_log`, so
+  // the value only has to satisfy the widened `MeApiDeps.cfg` (`{ tenantId, nodeId }`).
+  mountMeApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      venueLocale: "es-ES",
+    },
+    noopLog,
+  );
   return app;
 }
 
