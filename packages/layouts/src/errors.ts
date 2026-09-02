@@ -2,12 +2,16 @@
 // declaring a fresh ambient one — the idiom packages/identity, packages/catalogue use.
 import "@waitron/shared";
 import type { WidgetType } from "./types.js";
+import type { CardType } from "./profile.js";
 
 // @waitron/layouts's contribution to the shared error registry, by declaration merging — the
 // DOMAIN-CONCEPT, lowercase, dot-namespaced convention, never the package name (CLAUDE.md §3). Grep
 // receipt for minting these two fresh families: on 2026-08-11
 //   grep -rn '"layout\.\|"receipt\.\|"till\.' packages/**/src/errors.ts apps/server/src/errors.ts
 // printed no match, so `layout.invalid` and `receipt.invalid` collide with no existing sibling.
+// Likewise for the profile/theme families (SP-A.1): on 2026-09-02
+//   grep -rn '"profile\.\|"theme\.' packages/**/src/errors.ts apps/server/src/errors.ts
+// printed no match, so `profile.invalid` and `theme.invalid` collide with no existing sibling.
 //
 // PARAM RULE (CLAUDE.md §1, the house's dominant defect class): every param NAMES the problem and
 // NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `widget` only
@@ -49,6 +53,51 @@ declare module "@waitron/shared" {
     "receipt.invalid": {
       reason: "not_object" | "not_string" | "too_long" | "unknown_field";
       field?: "headerSubtitle" | "footerMessage";
+      maxLength?: number;
+    };
+    // A ProfileDef failed validateProfile. `reason` says which rule:
+    //   not_object      — input (or a tab/card) was not a plain object;
+    //   bad_form_factor — `formFactor` was not a FormFactor;
+    //   no_tabs         — `tabs` was not a non-empty array;
+    //   bad_tab         — a tab was malformed (missing/blank key or title, over-long title);
+    //   duplicate_tab   — two tabs shared a `key`;
+    //   bad_columns     — a tab's `columns` was not an integer in 1..GRID_MAX_COLUMNS;
+    //   unknown_card    — a card was not an object, or its `type` was not a CardType (NOT echoed);
+    //   bad_span        — a card's colSpan/rowSpan was out of range for its tab;
+    //   bad_config      — a card's config had a key outside its contract or a value it rejected;
+    //   bad_visible_when— a card's visibleWhen was not a subset of the card's declared states;
+    //   missing_required— a sale-critical card was absent from a selling profile.
+    // `tabIndex` (numeric, never the author-supplied key) locates the tab; `card` names the card only
+    // when it is a valid CardType; `configKey` names the offending config key.
+    "profile.invalid": {
+      reason:
+        | "not_object"
+        | "bad_form_factor"
+        | "no_tabs"
+        | "bad_tab"
+        | "duplicate_tab"
+        | "bad_columns"
+        | "unknown_card"
+        | "bad_span"
+        | "bad_config"
+        | "bad_visible_when"
+        | "missing_required";
+      tabIndex?: number;
+      card?: CardType;
+      configKey?: string;
+    };
+    // A ThemeOverride failed validateThemeOverride. `reason`:
+    //   not_object    — input, or its `tokens`, was not a plain object;
+    //   bad_tokens    — `tokens` was missing or not a plain object;
+    //   unknown_token — a token name outside the THEMEABLE_TOKENS allowlist (the name is NOT echoed,
+    //                   fail-closed: an un-allowlisted CSS property must never reach the stylesheet);
+    //   bad_value     — an allowlisted token's value was not a string, or failed the charset guard;
+    //   too_long      — a value exceeded `maxLength` chars (the length is NOT echoed).
+    // `token` names the offending token ONLY when it is allowlisted (bad_value / too_long); `maxLength`
+    // is the policy cap.
+    "theme.invalid": {
+      reason: "not_object" | "bad_tokens" | "unknown_token" | "bad_value" | "too_long";
+      token?: string;
       maxLength?: number;
     };
   }
