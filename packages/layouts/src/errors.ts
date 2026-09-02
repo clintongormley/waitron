@@ -17,8 +17,10 @@ import type { CardType } from "./profile.js";
 // NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `widget` only
 // ever carries a valid WidgetType enum value (so an *unknown* widget's arbitrary `type` string can
 // never reach it — it stays `undefined` in that case); `configKey` / `field` carry a key/field NAME,
-// never its value; `maxLength` is the policy cap, never the length that breached it. A config VALUE
-// never enters these params.
+// never its value; `maxLength` is the policy cap, never the length that breached it. `tabIndex` is a
+// numeric index locating a tab, never the author-supplied tab key or title; `card` only ever carries
+// a valid CardType enum value, the same guard as `widget`; `token` only ever names an allowlisted
+// `--wt-*` token, never an arbitrary/unknown one. A config VALUE never enters these params.
 declare module "@waitron/shared" {
   interface ErrorParams {
     // A LayoutDef failed validateLayout. `reason` says which rule:
@@ -56,7 +58,8 @@ declare module "@waitron/shared" {
       maxLength?: number;
     };
     // A ProfileDef failed validateProfile. `reason` says which rule:
-    //   not_object      — input (or a tab/card) was not a plain object;
+    //   not_object      — input (or a tab/card) was not a plain object, or `capabilities` was not an
+    //                     array of known capability flags;
     //   bad_form_factor — `formFactor` was not a FormFactor;
     //   no_tabs         — `tabs` was not a non-empty array;
     //   bad_tab         — a tab was malformed (missing/blank key or title, over-long title);
@@ -87,7 +90,7 @@ declare module "@waitron/shared" {
       configKey?: string;
     };
     // A ThemeOverride failed validateThemeOverride. `reason`:
-    //   not_object    — input, or its `tokens`, was not a plain object;
+    //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;
     //   unknown_token — a token name outside the THEMEABLE_TOKENS allowlist (the name is NOT echoed,
     //                   fail-closed: an un-allowlisted CSS property must never reach the stylesheet);

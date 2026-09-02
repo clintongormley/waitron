@@ -21,7 +21,7 @@ export type {
 } from "./profile.js";
 export { CARD_CONTRACTS, SALE_CRITICAL_CARDS, GRID_MAX_COLUMNS } from "./card-contract.js";
 export type { CardContract } from "./card-contract.js";
-// validateProfile / MAX_TAB_TITLE_LENGTH are already re-exported above.
+// MAX_TAB_TITLE_LENGTH / validateProfile are already re-exported above.
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export { DEFAULT_PROFILES } from "./default-profiles.js";
 
