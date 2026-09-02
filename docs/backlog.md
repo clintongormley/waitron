@@ -279,10 +279,11 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
 interactive session, so "needs supervision" is not a disqualifier — the real question is ready-to-build
 vs gated on an unbuilt foundation or an external dependency:
 
-- **Ready to build now:** **kitchen-sync enrolment** (below) — after a short FK-closure design pass.
-  (Identity-config flow-down — the one *verified* failover gap, the cashier being logged out on
-  failover — **LANDED #195**: `persons` + `webauthn_credentials` now flow down the ordered lane; see
-  *What's built → Identity* and the two follow-ups under *Onboarding*.)
+- **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
+  pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
+  `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
+  the two follow-ups under *Onboarding*). With both landed, the remaining Track-2 items are a design pass
+  (membership & rejoin) or foundation-gated (reserved-SIF) — no pure ready-to-build code slice is queued.
 - **Highest-leverage next design pass** (spec-only, unblocks the most): the **membership & rejoin
   wire-protocol** (promotion-failover spec §9 item 1) — gates promote Slice 5 + the conflict watcher,
   and is entangled with both open split-brain seams. Owner-reviewed, since it sets topology direction.
@@ -309,9 +310,16 @@ vs gated on an unbuilt foundation or an external dependency:
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
   far; a separate owner-reviewed slice.
-- **Kitchen-sync enrolment** — enrol `kitchen_stations` / `ticket_items` when the multi-node/cloud-mirror
-  kitchen-sync slice lands (both were built single-writer-per-row). The `dining_tables` HARD GATE is
-  closed by C1 (#153).
+- **Kitchen-sync enrolment — LANDED #196.** Enrolled the KDS FK closure onto the ordered lane. The
+  closure turned out to be **three** tables, not the two named here: `kitchen_stations`, `kitchen_courses`
+  (forced in by the KDS-2 course FKs) and `ticket_items`. Hard gate closed — enrolled
+  `categories`/`products`/`working_order_lines` carry `station_id`/`course_id` FKs into the kitchen config
+  tables, so a routed-menu row would have `23503`-parked and stalled the ordered lane (the C1 shape).
+  Same Group-D shape as C1 (no watermark, no delete; `ticket_items` removal rides the
+  `working_order_lines` `ON DELETE CASCADE`, reproduced on the subscriber); no new grants; no FK cycle
+  (`ticket_items` is an FK leaf). Spec:
+  [kitchen-enrolment](superpowers/specs/2026-09-02-sync-kitchen-enrolment-design.md). The `dining_tables`
+  HARD GATE remains closed by C1 (#153).
 
 ### Reporting fiscal remainder (parked)
 
