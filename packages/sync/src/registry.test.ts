@@ -184,14 +184,43 @@ const SPEC: Record<
     captureOps: ["insert", "update", "delete"],
     lane: "ordered",
   },
+  // Group F — kitchen KDS closure (spec 2026-09-02-sync-kitchen-enrolment-design.md §3): mutable, NO
+  // watermark column → the Group-C/D mechanism (watermark-upsert with null watermark; monotonicity from
+  // the seq cursor under single-writer-per-row). None holds a DELETE grant — stations/courses deactivate
+  // via `active`, ticket_items is only ever removed by the working_order_lines line-FK CASCADE
+  // (ticket_items_line_fk, 0055_kds1_stations_tickets_rls.sql:64-66), never a captured delete — so all
+  // three capture insert+update only (app-role grant SELECT/INSERT/UPDATE, no DELETE:
+  // 0055_kds1_stations_tickets_rls.sql:20,37, 0058_kds2_courses_fire_rls.sql:24). Ordered lane (KDS
+  // config, not the payments fast lane).
+  kitchen_stations: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
+  kitchen_courses: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
+  ticket_items: {
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    lane: "ordered",
+  },
 };
 
 const byName = new Map(ENROLLED.map((e) => [e.table, e]));
 
-describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen) plus §3's two identity-config (nineteen)", () => {
-  it("has exactly nineteen rows, no duplicates", () => {
-    expect(ENROLLED).toHaveLength(19);
-    expect(byName.size).toBe(19);
+describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice's three (seventeen) plus §3's two identity-config (nineteen) plus the kitchen KDS closure's three (twenty-two)", () => {
+  it("has exactly twenty-two rows, no duplicates", () => {
+    expect(ENROLLED).toHaveLength(22);
+    expect(byName.size).toBe(22);
   });
 
   it("enrols exactly the spec §2 table set", () => {
@@ -215,11 +244,11 @@ describe("the fast lane carries exactly payments and payment_refunds (spec §4b)
   it("tablesForLane('fast') is exactly {payments, payment_refunds}", () => {
     expect(new Set(tablesForLane("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
   });
-  it("tablesForLane('ordered') is the remaining seventeen enrolled tables", () => {
+  it("tablesForLane('ordered') is the remaining twenty enrolled tables", () => {
     const fast = new Set(["payments", "payment_refunds"]);
     const expected = ENROLLED.filter((e) => !fast.has(e.table)).map((e) => e.table);
     expect(tablesForLane("ordered").sort()).toEqual(expected.sort());
-    expect(tablesForLane("ordered")).toHaveLength(17);
+    expect(tablesForLane("ordered")).toHaveLength(20);
   });
   it("every enrolled table carries a lane, and the two lanes partition ENROLLED", () => {
     expect(tablesForLane("fast").length + tablesForLane("ordered").length).toBe(ENROLLED.length);
@@ -307,6 +336,27 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     // Identity CONFIG (spec §3): webauthn_credentials.person_id → persons (webauthn_credentials_person_fk,
     // webauthn-credentials.ts). persons itself FKs only tenants (unenrolled), so it is a rank-0 root.
     ["persons", "webauthn_credentials"],
+    // Kitchen KDS closure (spec 2026-09-02-sync-kitchen-enrolment-design.md §2/§4). DIRECTION: the
+    // kitchen config table is the PARENT — the enrolled categories/products/working_order_lines rows
+    // carry FKs pointing INTO it — so the rank-0 kitchen roots rank strictly before those enrolled
+    // children. FK receipts (each an ADD CONSTRAINT in the paired --custom RLS migration):
+    //   categories.station_id → kitchen_stations (categories_station_fk, 0055_kds1_stations_tickets_rls.sql:49),
+    //   products.station_id → kitchen_stations (products_station_fk, 0055_kds1_stations_tickets_rls.sql:52),
+    //   products.course_id → kitchen_courses (products_course_fk, 0058_kds2_courses_fire_rls.sql:34),
+    //   working_order_lines.course_id → kitchen_courses (working_order_lines_course_fk, 0058_kds2_courses_fire_rls.sql:39).
+    // ticket_items (rank 4) is the leaf child of all three:
+    //   ticket_items.station_id → kitchen_stations (ticket_items_station_fk, 0055_kds1_stations_tickets_rls.sql:71),
+    //   ticket_items.course_id → kitchen_courses (ticket_items_course_fk, 0058_kds2_courses_fire_rls.sql:44),
+    //   ticket_items.working_order_line_id → working_order_lines (ticket_items_line_fk, 0055_kds1_stations_tickets_rls.sql:64).
+    // No back-edge, no cycle: nothing (enrolled or not) points back at ticket_items (spec §2), so unlike
+    // C1's dining_tables ↔ working_orders cycle no edge is excluded from the fkRank hint.
+    ["kitchen_stations", "categories"],
+    ["kitchen_stations", "products"],
+    ["kitchen_courses", "products"],
+    ["kitchen_courses", "working_order_lines"],
+    ["kitchen_stations", "ticket_items"],
+    ["kitchen_courses", "ticket_items"],
+    ["working_order_lines", "ticket_items"],
   ];
   for (const [parent, child] of PARENT_CHILD) {
     it(`${parent}.fkRank < ${child}.fkRank`, () => {

@@ -57,6 +57,13 @@
       "when": 1786492800007,
       "tag": "0007_sync_identity_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786492800008,
+      "tag": "0008_enrol_kitchen",
+      "breakpoints": true
     }
   ]
 }

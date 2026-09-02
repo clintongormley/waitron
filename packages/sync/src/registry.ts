@@ -1,5 +1,7 @@
 // The enrolment registry for the app-level sync outbox: the tenant-scoped, non-fiscal tables an
-// apply mode is registered for — nineteen in all = 17 (14 commercial + 3 C1 dining) + 2 identity-config.
+// apply mode is registered for — twenty-two in all = 17 (14 commercial + 3 C1 dining) + 2 identity-config
+// + 3 kitchen KDS (kitchen_stations, kitchen_courses, ticket_items — spec
+// docs/superpowers/specs/2026-09-02-sync-kitchen-enrolment-design.md).
 // This is the audit surface for "what crosses the wire" — the
 // fiscal lane is deliberately absent (spec §1). The fourteen slice-1 rows each carry a capture trigger
 // in packages/sync/drizzle/0000_sync_outbox.sql and match spec §2 and those triggers exactly; the three
@@ -9,7 +11,11 @@
 // docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). The two identity-config
 // rows (persons, webauthn_credentials) flow the venue's people DOWN so a secondary can authenticate them
 // on failover (spec docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md); their capture triggers
-// are in packages/sync/drizzle/0007_sync_identity_capture.sql. registry.test.ts pins all these agreements.
+// are in packages/sync/drizzle/0007_sync_identity_capture.sql. The three kitchen KDS rows (kitchen_stations,
+// kitchen_courses, ticket_items) enrol the routed-menu FK closure so a subscriber does not stall the
+// ordered lane on a routed product/ticket; their capture triggers are in
+// packages/sync/drizzle/0008_enrol_kitchen.sql and add no grants (the tables already hold
+// SELECT/INSERT/UPDATE — 0055/0058). registry.test.ts pins all these agreements.
 
 /** insert-only → `ON CONFLICT DO NOTHING`; watermark-upsert → `ON CONFLICT DO UPDATE SET …`. */
 export type SyncMode = "insert-only" | "watermark-upsert";
@@ -51,14 +57,22 @@ export interface EnrolledTable {
 //   catalogues → categories → products; payment_policy standalone.
 // The identity-config closure (spec §3): persons → webauthn_credentials
 // (webauthn_credentials.person_id); persons FKs only tenants (unenrolled), so it is its own root.
+// The kitchen KDS closure (spec 2026-09-02-sync-kitchen-enrolment-design.md §2/§4): the kitchen config
+// tables are PARENTS of already-enrolled children — kitchen_stations → {categories, products,
+// ticket_items} (categories/products/ticket_items .station_id), kitchen_courses → {products,
+// working_order_lines, ticket_items} (their .course_id) — plus ticket_items → nothing (an FK leaf:
+// nothing enrolled or un-enrolled points back at it, so unlike C1's dining_tables there is NO cycle and
+// no excluded back-edge). ticket_items also FKs working_order_lines (working_order_line_id, CASCADE).
 // The dining_tables.tab_id → working_orders back-edge is a nullable pointer set by a later UPDATE and
 // is deliberately NOT ranked (a static rank cannot encode the dining_tables ↔ working_orders cycle;
 // runtime correctness rests on seq-ascending apply, not fkRank — see spec §5).
-// Level 0: floor_zones, table_service_statuses, catalogues, payment_policy, persons.
+// Level 0: floor_zones, table_service_statuses, catalogues, payment_policy, persons, kitchen_stations,
+//          kitchen_courses.
 // Level 1: dining_tables, categories, webauthn_credentials.
 // Level 2: working_orders, products.
 // Level 3: working_order_lines, sales, payments.
-// Level 4: sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids, payment_refunds.
+// Level 4: sale_lines, tenders, sale_settlements, sale_substitutions, sale_voids, payment_refunds,
+//          ticket_items.
 export const ENROLLED: readonly EnrolledTable[] = [
   // Group A — append-only → insert-only apply. Captured AFTER INSERT (spec §2).
   {
@@ -260,6 +274,49 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
     fkRank: 1,
+    lane: "ordered",
+  },
+
+  // Group F — kitchen KDS closure (spec docs/superpowers/specs/2026-09-02-sync-kitchen-enrolment-design.md).
+  // The runtime-mutable FK closure of the kitchen-display tables, enrolled onto the ORDERED lane so a
+  // routed menu does not stall it: categories/products/working_order_lines already carry FKs pointing
+  // INTO kitchen_stations/kitchen_courses (categories_station_fk/products_station_fk 0055:49,52;
+  // products_course_fk/working_order_lines_course_fk 0058:34,39), so an absent kitchen parent parks an
+  // enrolled child on 23503 and halts the lane (spec §1). Mutable with NO watermark column
+  // (created_at only; ticket_items runs real state UPDATEs queued→preparing→ready) → Group C/D
+  // mechanism: unconditional upsert, monotonicity from the seq cursor under single-writer-per-row
+  // (kitchen config authored on the primary; a ticket's lifecycle written by the node owning the line).
+  // NO delete grant on any of the three (SELECT/INSERT/UPDATE only — 0055:20,37, 0058:24): stations/
+  // courses deactivate via `active`, ticket_items is removed only by the working_order_lines line-FK
+  // CASCADE (ticket_items_line_fk … ON DELETE CASCADE, 0055:64-66), reproduced on the subscriber by the
+  // same migration — so no ticket_items DELETE is captured and insert+update is complete (spec §5).
+  // fkRank: kitchen_stations/kitchen_courses are FK roots (config parents only) = 0; ticket_items is a
+  // leaf child of working_order_lines(3), kitchen_stations(0), kitchen_courses(0) = 4. No cycle to break.
+  {
+    table: "kitchen_stations",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+  },
+  {
+    table: "kitchen_courses",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+  },
+  {
+    table: "ticket_items",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert", "update"],
+    fkRank: 4,
     lane: "ordered",
   },
 ];

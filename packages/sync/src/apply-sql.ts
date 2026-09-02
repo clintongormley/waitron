@@ -14,6 +14,8 @@ import {
   categories,
   diningTables,
   floorZones,
+  kitchenCourses,
+  kitchenStations,
   products,
   saleLines,
   saleSettlements,
@@ -22,6 +24,7 @@ import {
   sales,
   tableServiceStatuses,
   tenders,
+  ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -41,7 +44,7 @@ import type { EnrolledTable } from "./registry.js";
  * The Drizzle schema object for every enrolled table, keyed by physical table name. The column list
  * for a watermark upsert's `DO UPDATE SET` is derived from these at build time via
  * `getTableColumns`, so it can never drift from the schema the way a hand-maintained array would
- * (CLAUDE.md §2). Covers all nineteen so apply-sql.test.ts can assert completeness against ENROLLED.
+ * (CLAUDE.md §2). Covers all twenty-two so apply-sql.test.ts can assert completeness against ENROLLED.
  */
 export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   sales,
@@ -63,6 +66,9 @@ export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   table_service_statuses: tableServiceStatuses,
   persons,
   webauthn_credentials: webauthnCredentials,
+  kitchen_stations: kitchenStations,
+  kitchen_courses: kitchenCourses,
+  ticket_items: ticketItems,
 };
 
 /** The physical DB-column names of an enrolled table, in schema-definition order. */
