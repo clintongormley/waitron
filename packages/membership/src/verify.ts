@@ -51,36 +51,41 @@ function bodyToCanonical(body: MembershipDocumentBody): CanonicalValue {
   };
 }
 
+// Note: typeof [] === "object", so isRecord([]) is true — the per-field checks below (and the
+// Array.isArray guards on nodes/endorsements) do the array-vs-plain-object discrimination.
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object";
+}
+
 function isNode(v: unknown): v is MembershipNode {
-  if (v === null || typeof v !== "object") return false;
-  const n = v as Record<string, unknown>;
+  if (!isRecord(v)) return false;
   return (
-    typeof n.nodeId === "string" &&
-    typeof n.contactUrl === "string" &&
-    typeof n.standing === "string" &&
-    STANDINGS.includes(n.standing as NodeStanding)
+    typeof v.nodeId === "string" &&
+    typeof v.contactUrl === "string" &&
+    typeof v.standing === "string" &&
+    STANDINGS.includes(v.standing as NodeStanding)
   );
 }
 
 function isEndorsement(v: unknown): v is Endorsement {
-  if (v === null || typeof v !== "object") return false;
-  const e = v as Record<string, unknown>;
+  if (!isRecord(v)) return false;
   return (
-    typeof e.nodeId === "string" &&
-    typeof e.publicKey === "string" &&
-    typeof e.endorsedBy === "string" &&
-    typeof e.signature === "string"
+    typeof v.nodeId === "string" &&
+    typeof v.publicKey === "string" &&
+    typeof v.endorsedBy === "string" &&
+    typeof v.signature === "string"
   );
 }
 
 function isDocument(v: unknown): v is SignedMembershipDocument {
-  if (v === null || typeof v !== "object") return false;
-  const d = v as Record<string, unknown>;
-  if (typeof d.signerNodeId !== "string" || typeof d.signature !== "string") return false;
-  if (!Array.isArray(d.endorsements) || !d.endorsements.every(isEndorsement)) return false;
-  if (d.endorsements.length > MAX_ENDORSEMENTS) return false;
-  const b = d.body as Record<string, unknown> | undefined;
-  if (b === undefined || typeof b !== "object" || b === null) return false;
+  if (!isRecord(v)) return false;
+  if (typeof v.signerNodeId !== "string" || typeof v.signature !== "string") return false;
+  if (!Array.isArray(v.endorsements) || !v.endorsements.every(isEndorsement)) return false;
+  if (v.endorsements.length > MAX_ENDORSEMENTS) return false;
+  const b = v.body;
+  // typeof undefined !== "object", so isRecord also rejects a missing body — no separate
+  // `=== undefined` arm needed.
+  if (!isRecord(b)) return false;
   if (typeof b.term !== "number" || !Number.isInteger(b.term)) return false;
   if (!Array.isArray(b.nodes) || !b.nodes.every(isNode)) return false;
   return true;

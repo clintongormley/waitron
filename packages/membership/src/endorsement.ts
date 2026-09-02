@@ -2,7 +2,15 @@ import { canonicalize } from "./canonicalize.js";
 import { signBytes, verifyBytes } from "./crypto.js";
 import type { Endorsement, TrustSet } from "./types.js";
 
-/** The exact bytes an endorsement signs: the (nodeId, publicKey) pair it vouches for. */
+/**
+ * The exact bytes an endorsement signs: the (nodeId, publicKey) pair it vouches for.
+ *
+ * `endorsedBy` is DELIBERATELY excluded from the signed bytes — it only names which trusted key
+ * vouches, and is authenticated TRANSITIVELY, because the endorsement's signature must verify
+ * against the endorser's key (resolveSignerKey looks that key up by endorsedBy). Do not "fix" this
+ * by folding endorsedBy into the canonicalized payload; that would change the wire format. (Mirrors
+ * the equivalent note on signDocumentBody in verify.ts about signerNodeId.)
+ */
 function endorsementMessage(nodeId: string, publicKey: string): string {
   return canonicalize({ nodeId, publicKey });
 }

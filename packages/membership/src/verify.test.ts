@@ -1,40 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "./crypto.js";
+import { sampleBody, signDoc } from "./document-fixtures.js";
 import { endorseKey } from "./endorsement.js";
 import { signDocumentBody, verifyMembershipDocument } from "./verify.js";
-import type { MembershipDocumentBody, SignedMembershipDocument, TrustSet } from "./types.js";
-
-function body(term: number): MembershipDocumentBody {
-  return { term, nodes: [{ nodeId: "A", contactUrl: "https://a", standing: "serving-primary" }] };
-}
-function signed(
-  b: MembershipDocumentBody,
-  signerNodeId: string,
-  priv: string,
-): SignedMembershipDocument {
-  return { body: b, signerNodeId, signature: signDocumentBody(b, priv), endorsements: [] };
-}
+import type { SignedMembershipDocument, TrustSet } from "./types.js";
 
 describe("verifyMembershipDocument", () => {
+  // Shared across the two MAX_ENDORSEMENTS boundary cases: the length gate fires on array size
+  // regardless of content, so a single trivially-shaped entry serves both.
+  const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
+
   it("accepts a document signed by a directly-trusted primary", () => {
     const a = generateNodeKeyPair();
     const trust: TrustSet = { A: a.publicKey };
-    const r = verifyMembershipDocument(signed(body(1), "A", a.privateKey), trust);
+    const r = verifyMembershipDocument(signDoc(sampleBody(1), "A", a.privateKey), trust);
     expect(r.valid).toBe(true);
     if (r.valid) expect(r.term).toBe(1);
   });
 
   it("rejects an unknown signer as untrusted_signer", () => {
     const a = generateNodeKeyPair();
-    const r = verifyMembershipDocument(signed(body(1), "A", a.privateKey), {}); // empty trust
+    const r = verifyMembershipDocument(signDoc(sampleBody(1), "A", a.privateKey), {}); // empty trust
     expect(r).toEqual({ valid: false, reason: "untrusted_signer" });
   });
 
   it("rejects a tampered body as bad_signature", () => {
     const a = generateNodeKeyPair();
     const trust: TrustSet = { A: a.publicKey };
-    const doc = signed(body(1), "A", a.privateKey);
-    const tampered = { ...doc, body: body(2) }; // signature no longer matches the body
+    const doc = signDoc(sampleBody(1), "A", a.privateKey);
+    const tampered = { ...doc, body: sampleBody(2) }; // signature no longer matches the body
     expect(verifyMembershipDocument(tampered, trust)).toEqual({
       valid: false,
       reason: "bad_signature",
@@ -46,9 +40,9 @@ describe("verifyMembershipDocument", () => {
     const b = generateNodeKeyPair();
     const trust: TrustSet = { A: a.publicKey };
     const doc: SignedMembershipDocument = {
-      body: body(2),
+      body: sampleBody(2),
       signerNodeId: "B",
-      signature: signDocumentBody(body(2), b.privateKey),
+      signature: signDocumentBody(sampleBody(2), b.privateKey),
       endorsements: [endorseKey("B", b.publicKey, "A", a.privateKey)],
     };
     expect(verifyMembershipDocument(doc, trust).valid).toBe(true);
@@ -61,9 +55,9 @@ describe("verifyMembershipDocument", () => {
     const a = generateNodeKeyPair();
     const b = generateNodeKeyPair();
     const doc: SignedMembershipDocument = {
-      body: body(2),
+      body: sampleBody(2),
       signerNodeId: "B",
-      signature: signDocumentBody(body(2), b.privateKey),
+      signature: signDocumentBody(sampleBody(2), b.privateKey),
       endorsements: [endorseKey("B", b.publicKey, "A", a.privateKey)],
     };
     expect(verifyMembershipDocument(doc, {})).toEqual({
@@ -83,9 +77,8 @@ describe("verifyMembershipDocument", () => {
     // The length cap fires on the array size regardless of endorsement content, so trivially-shaped
     // but structurally-valid entries suffice. 9 (MAX_ENDORSEMENTS + 1) must be rejected before any
     // signature or trust is consulted; 8 stays structurally acceptable.
-    const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
     const doc = {
-      ...signed(body(1), "A", generateNodeKeyPair().privateKey),
+      ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 9 }, () => endorsement),
     };
     expect(verifyMembershipDocument(doc, {})).toEqual({ valid: false, reason: "malformed" });
@@ -95,9 +88,8 @@ describe("verifyMembershipDocument", () => {
     // The other half of the boundary: 8 must clear the cap so a `>` → `>=` off-by-one would be
     // caught. These trivially-shaped endorsements don't chain to a trusted signer, so verification
     // still fails — but for a NON-length reason, never "malformed" on account of the count.
-    const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
     const doc = {
-      ...signed(body(1), "A", generateNodeKeyPair().privateKey),
+      ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 8 }, () => endorsement),
     };
     const result = verifyMembershipDocument(doc, {});

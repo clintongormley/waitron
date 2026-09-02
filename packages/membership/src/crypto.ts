@@ -28,29 +28,18 @@ export function signBytes(message: string, privateKeyB64: string): string {
 }
 
 export function verifyBytes(message: string, signatureB64: string, publicKeyB64: string): boolean {
-  let key;
   try {
-    key = createPublicKey({
+    const key = createPublicKey({
       key: Buffer.from(publicKeyB64, "base64"),
       format: "der",
       type: "spki",
     });
-  } catch {
-    // A malformed public key means we cannot trust the message — treat as a failed verification,
-    // not a thrown error, because the key travels in adversarial input (a document from the wire).
-    return false;
-  }
-  // The verify() call below is exercised by the round-trip, tamper, wrong-key and
-  // malformed-signature tests, so it stays under normal coverage measurement. Only the catch is
-  // ignored: it is fail-closed defence on the wire boundary, kept per R2 but proven unreachable for
-  // ed25519 — node:crypto `verify` returns `false` for malformed/wrong-length signature bytes
-  // (empty, short, and over-long all tested) rather than throwing, once the public key is a valid
-  // KeyObject. Mirrors the unreachable defensive catch in packages/db harness.ts.
-  try {
     return verify(null, Buffer.from(message, "utf8"), key, Buffer.from(signatureB64, "base64"));
-    /* v8 ignore start -- unreachable catch: ed25519 verify never throws (see comment above) */
   } catch {
+    // Fail closed on any malformed wire input — a bad public key (createPublicKey throws) or,
+    // defensively, a throwing verify() on some runtime. Both mean "cannot trust this" → false. The
+    // key travels in adversarial input (a document from the wire), so this is a data failure, not a
+    // thrown error. The malformed-public-key test exercises this catch, so it stays covered.
     return false;
   }
-  /* v8 ignore stop */
 }
