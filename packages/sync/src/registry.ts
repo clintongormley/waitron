@@ -9,7 +9,7 @@
 // docs/superpowers/specs/2026-08-27-sync-cloud-mirror-c1-enrolment-design.md). The two identity-config
 // rows (persons, webauthn_credentials) flow the venue's people DOWN so a secondary can authenticate them
 // on failover (spec docs/superpowers/specs/2026-08-16-identity-config-flow-down-design.md); their capture triggers
-// are added by a later task. registry.test.ts pins all these agreements.
+// are in packages/sync/drizzle/0007_sync_identity_capture.sql. registry.test.ts pins all these agreements.
 
 /** insert-only → `ON CONFLICT DO NOTHING`; watermark-upsert → `ON CONFLICT DO UPDATE SET …`. */
 export type SyncMode = "insert-only" | "watermark-upsert";

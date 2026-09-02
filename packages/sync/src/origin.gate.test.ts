@@ -84,7 +84,7 @@ describe("withTenant threads app.node_id into sync_log.origin_id", () => {
     }
   });
 
-  it("stamps a persons write's origin_id with the node id (4-arg), all-zero on the plain form", async () => {
+  it("stamps the origin_id of a persons write with the node id (4-arg), all-zero on the plain form", async () => {
     const awareT = await seedTenant(postgres.admin);
     const plainT = await seedTenant(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");

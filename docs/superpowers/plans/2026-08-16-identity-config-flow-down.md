@@ -747,8 +747,9 @@ it("a createPerson write captures sync_log.origin_id = cfg.nodeId (all-zero with
 
 - [ ] **7.2 (comment counts)** Update the enrolled-**total** count comments in `@waitron/sync` — the
   ones that currently say "seventeen" (`registry.ts:1`, `index.ts:11`, `apply-sql.ts:39`) — to
-  "nineteen … 17 commercial+dining + 2 identity-config". (`migrations.ts` carries no enrolled-total
-  count — leave it.) Grep the package for any other "seventeen"/"17" enrolled-total mention and bump it
+  "nineteen … 17 commercial+dining + 2 identity-config". (`migrations.ts`'s docstring carries an
+  enrolled-total-adjacent "17 capture triggers" count too — bump it to nineteen; the grep step below
+  catches it.) Grep the package for any other "seventeen"/"17" enrolled-total mention and bump it
   too. Leave comments that describe the *commercial subset* specifically (e.g. `capture.gate.test.ts`,
   `apply.gate.test.ts` headers about "the capture triggers over the enrolled COMMERCIAL tables")
   accurate as-is, or amend to "+ 2 identity-config". These are comments, not load-bearing assertions —

@@ -14,8 +14,8 @@ import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
  * packages/sync/drizzle/0000_sync_outbox.sql's capture triggers exactly (Group A AFTER INSERT, Group B
  * AFTER INSERT OR UPDATE, Group C AFTER INSERT OR UPDATE OR DELETE); Group D's capture triggers
  * (AFTER INSERT OR UPDATE) are in packages/sync/drizzle/0006_enrol_table_service.sql; the two
- * identity-config tables' capture triggers are added by a later task in this slice. This unit suite
- * pins only the registry shape.
+ * identity-config tables' capture triggers are in packages/sync/drizzle/0007_sync_identity_capture.sql.
+ * This unit suite pins only the registry shape.
  */
 const SPEC: Record<
   string,
