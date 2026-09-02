@@ -59,10 +59,26 @@ describe("validateProfile — structure", () => {
     expect(validateProfile(noCaps).capabilities).toEqual([]);
   });
   it("rejects capabilities that are not an array", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: "act-as-kds" }))).toBe("not_object");
+    expect(reason(() => validateProfile({ ...ok, capabilities: "act-as-kds" }))).toBe(
+      "bad_capabilities",
+    );
   });
   it("rejects an unknown capability flag", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: ["fly"] }))).toBe("not_object");
+    expect(reason(() => validateProfile({ ...ok, capabilities: ["fly"] }))).toBe(
+      "bad_capabilities",
+    );
+  });
+  it("rejects a non-array capabilities with bad_capabilities", () => {
+    expect(() => validateProfile({ formFactor: "till", capabilities: "x", tabs: [] })).toThrowError(
+      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+    );
+  });
+  it("rejects an unknown capability flag with bad_capabilities", () => {
+    expect(() =>
+      validateProfile({ formFactor: "till", capabilities: ["nope"], tabs: [] }),
+    ).toThrowError(
+      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+    );
   });
   it("rejects empty tabs", () => {
     expect(reason(() => validateProfile({ ...ok, tabs: [] }))).toBe("no_tabs");

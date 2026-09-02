@@ -58,8 +58,8 @@ declare module "@waitron/shared" {
       maxLength?: number;
     };
     // A ProfileDef failed validateProfile. `reason` says which rule:
-    //   not_object      — input (or a tab/card) was not a plain object, or `capabilities` was not an
-    //                     array of known capability flags;
+    //   not_object      — input (or a tab/card) was not a plain object;
+    //   bad_capabilities— `capabilities` was not an array of known capability flags;
     //   bad_form_factor — `formFactor` was not a FormFactor;
     //   no_tabs         — `tabs` was not a non-empty array;
     //   bad_tab         — a tab was malformed (missing/blank key or title, over-long title);
@@ -75,6 +75,7 @@ declare module "@waitron/shared" {
     "profile.invalid": {
       reason:
         | "not_object"
+        | "bad_capabilities"
         | "bad_form_factor"
         | "no_tabs"
         | "bad_tab"

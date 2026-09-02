@@ -53,7 +53,7 @@ export function validateProfile(input: unknown): ProfileDef {
 function validateCapabilities(input: unknown): CapabilityFlag[] {
   if (input === undefined) return [];
   if (!Array.isArray(input) || !input.every(isCapabilityFlag)) {
-    throw new AppError("profile.invalid", { reason: "not_object" });
+    throw new AppError("profile.invalid", { reason: "bad_capabilities" });
   }
   return input as CapabilityFlag[];
 }
