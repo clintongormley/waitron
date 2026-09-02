@@ -483,6 +483,12 @@ whose worst case is a detectable double-bill, never a corrupted chain.
 1. **Membership & rejoin wire-protocol (§3.5).** How the node list is versioned and propagated, how a
    device trusts a newer list, how the returning node's rejoin-as-secondary is sequenced, and how a
    witness may safely supply *current* membership (§3.3).
+   > **Design resolved 2026-09-02** by
+   > [membership-and-rejoin-wire-protocol](2026-09-02-membership-and-rejoin-wire-protocol-design.md): a
+   > signed, self-verifying membership document (`term` + per-node identity keys chained from setup),
+   > distributed over `/sync-api/hello`; a demote-never-promote witness rule; a drain-then-restore rejoin;
+   > and primary-wins + a conflict surface for the shared/config class. Design only — the tooling is still
+   > to build.
 2. **What "promotion" actually executes** — the ordered runbook a human's "make this primary" triggers.
    §3.5 fixes the fencing steps (physically neutralise the old node; evict from serving but keep as a
    replication source); the rest of the sequence remains to assemble: claim the singletons,

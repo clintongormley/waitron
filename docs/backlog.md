@@ -284,9 +284,15 @@ vs gated on an unbuilt foundation or an external dependency:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
   the two follow-ups under *Onboarding*). With both landed, the remaining Track-2 items are a design pass
   (membership & rejoin) or foundation-gated (reserved-SIF) — no pure ready-to-build code slice is queued.
-- **Highest-leverage next design pass** (spec-only, unblocks the most): the **membership & rejoin
-  wire-protocol** (promotion-failover spec §9 item 1) — gates promote Slice 5 + the conflict watcher,
-  and is entangled with both open split-brain seams. Owner-reviewed, since it sets topology direction.
+- **Membership & rejoin wire-protocol — DESIGN LANDED 2026-09-02** (owner-review pending). Spec:
+  [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md).
+  Resolves promotion-failover §9 item 1: a signed, self-verifying membership document (`term` + per-node
+  identity keys chained from setup, stored in a new `node_membership` singleton), distributed over
+  `/sync-api/hello`; a demote-never-promote witness rule; a drain-then-restore rejoin (re-add, not
+  fast-forward, gated on the disposal guard); and primary-wins + a conflict surface for the shared/config
+  class. Topology scoped to max 3 (2 local + 1 cloud); forgery-resistant signing rooted by a chain from
+  setup (break-glass NOT pulled in). **Next:** an implementation plan → build (unblocks promote Slice 5 +
+  the conflict watcher).
 - **Foundation-first, then its dependents (fiscal-adjacent, owner-gated):** **reserved-SIF staging**
   mints the installation number + disjoint series → unblocks promote **Slice 3**, the C2a promote
   action, and starting the primary-only workers on promotion.
