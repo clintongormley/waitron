@@ -77,14 +77,29 @@ pre-production). The owner inserted this ahead of resuming Track-2 infra. Design
 
 Decomposition + order **A → C → B** (each its own spec → plan):
 
-- **SP-A — device & profile foundation** — data model (profiles/tabs/grid/card catalogue + contract),
-  `till` device kind, per-device hardware bindings (static; modelled for transient NFC readers),
-  enrolment extension, two-layer abilities + three visibility axes, built-in default profiles, theme
-  storage (tenant + per-profile). Reworks `@waitron/layouts`. **NEXT.**
+- **SP-A.1 — profile & card data model — LANDED #194.** Pure `@waitron/layouts` logic: form factors +
+  12-card catalogue + capability flags, per-card contract registry (config/permission/capability/
+  visibility-states/spans; `SALE_CRITICAL_CARDS` derived), fail-closed `validateProfile` +
+  CSS-injection-safe `validateThemeOverride`, built-in default profiles, `profile.invalid`/`theme.invalid`
+  error families. No DB/API/rendering/device/fiscal (those are later slices). Plan:
+  [sp-a1-data-model](superpowers/plans/2026-09-02-layout-profiles-sp-a1-data-model.md).
+- **SP-A.2 — device unification & hardware (NEXT for track A; H2-gated).** `till` device kind, device→profile
+  FK + per-device hardware bindings (static; modelled for transient NFC readers), enrolment extension,
+  server-side enforcement of the profile capability flags + card required-permission/capability, theme
+  storage (tenant + per-profile). **Carries the fiscal §7 gate** — verify by container that `till_id`/`node_id`
+  consumers are untouched + owner sign-off before landing. **Fold in the SP-A.1 deferrals below.**
+  - *SP-A.1 deferrals to resolve in SP-A.2:* (a) decide whether `validateProfile` folds in
+    `validateThemeOverride` so a profile's `theme` round-trips (today it is dropped); (b) add a dedicated
+    `bad_capabilities` error reason (cleaner than the current `not_object` overload for a bad capability
+    flag, and `bad_tab` for a non-array `cards`); (c) source `THEMEABLE_TOKENS` from the real
+    `packages/ui/src/tokens` registry with a cross-package consistency test + the owner's decision on which
+    tokens are themeable (SP-A.1 ships a provisional verified-real set); (d) defensively copy the returned
+    card `config` (SP-A.1 copies `visibleWhen` but `config` still aliases the input).
 - **SP-C — dev per-tab device switcher** — per-tab `sessionStorage` identity + dev-only override header
   + a device-reset route. Small; unblocks side-by-side testing.
 - **SP-B — grid editor + rendering** — the HA-Sections editor UI + making screens render from grid
-  profiles (wrap the bespoke floor/KDS/table-order screens as cards; phased). The schedule risk.
+  profiles (wrap the bespoke floor/KDS/table-order screens as cards; phased). The schedule risk. Removes
+  the old widget model (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 

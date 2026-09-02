@@ -136,9 +136,10 @@ No dev affordance exists.
   **span** (columns × rows), reordered by drag, **reflowing** to fewer columns on a narrower viewport.
   No stored pixel range; **form-factor + editor preview sizes** stand in for "what size is this for".
 - **Card** — the universal unit. "Big" cards fill a tab (floor plan, table-layout editor, KDS board,
-  expo/pass, table order, held orders); "small" cards share a grid (product grid, basket, total,
-  tender/pay, prep queue, notifications). A big card is just a card with a full-tab span — no separate
-  concept.
+  expo/pass, table order); "small" cards share a grid (product grid, basket, total, tender/pay, prep
+  queue, held orders, notifications). A big card is just a card with a full-tab span — no separate
+  concept. (Implementation note, SP-A.1: `held-orders` is a small aside card — its `card-contract`
+  default span is 4 wide, not full-tab.)
 
 One device is assigned **one** profile (form-factor is a guardrail, not a runtime selector — devices
 are used in a fixed orientation and do not switch profiles by size).
