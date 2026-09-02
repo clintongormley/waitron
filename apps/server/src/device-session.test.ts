@@ -7,6 +7,7 @@ import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { DEFAULT_PROFILES } from "@waitron/layouts";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -91,6 +92,54 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId };
 }
 
+/** The profile/till/hardware bindings a device enrolled with NONE assigned surfaces — every binding is
+ * the column default. A `kds_station` (like `enrolDeviceFixture`'s) binds no till, no profile and no
+ * hardware, so `tryReadDevice` carries these back verbatim. Spread into the expected binding so the new
+ * SP-A.2 fields are pinned alongside the pre-existing `deviceId`/`kind`/`stationId`. */
+const NO_BINDINGS = {
+  tillId: null,
+  layoutProfileId: null,
+  receiptPrinterId: null,
+  hasCashDrawer: false,
+  cardProvider: "none",
+  cardReaderId: null,
+} as const;
+
+/** Enrol a REAL `till` device carrying a NON-NULL profile + hardware binding (SP-A.2 §16) — a layout
+ * profile the manager authored, the seeded till, a cash drawer, and an integrated card reader. Proves
+ * `tryReadDevice` carries every new binding column back off the row, not just the null defaults. The
+ * profile row is inserted on the admin connection (RLS bypassed) — pure setup, the `setupStation` shape;
+ * `receiptPrinterId` is left null so the fixture needs no `printers` row (the composite FK skips a NULL). */
+async function enrolTillDeviceFixture(): Promise<{
+  cfg: TillConfig;
+  deviceId: string;
+  token: string;
+  layoutProfileId: string;
+}> {
+  const { cfg } = await setupStation();
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+    returning id`);
+  const layoutProfileId = prof.rows[0]!.id;
+  const { code } = await asApp(suite.admin, cfg, (tx) =>
+    // A `till` is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It also
+    // carries the assigned profile + the hardware trio (cash drawer + integrated card reader).
+    generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      hasCashDrawer: true,
+      cardProvider: "stripe_terminal",
+      cardReaderId: "reader_ABC",
+      label: "Counter till",
+    }),
+  );
+  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  return { cfg, deviceId: dev.deviceId, token: dev.token, layoutProfileId };
+}
+
 /** Flip `active = false` on the superuser connection — the revocation a `device.manage` route performs.
  * Run as the admin (RLS bypassed) for pure test setup, the `device.test.ts` `expirePairingCodes` shape. */
 async function revoke(deviceId: string): Promise<void> {
@@ -106,9 +155,7 @@ async function lastSeenAt(deviceId: string): Promise<string | null> {
   return rows[0]!.last_seen_at;
 }
 
-type ProbeResult =
-  | { ok: true; binding: { deviceId: string; kind: string; stationId: string | null } }
-  | { ok: false; code: string };
+type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: string };
 
 /**
  * The shared one-route scaffold every guard probe runs behind (the `management-session.test.ts`
@@ -144,10 +191,7 @@ async function probe(cfg: TillConfig, cookieValue: string | null): Promise<Probe
     c.json(await requireDevice(deps, c)),
   );
   if (res.status === 200) {
-    return {
-      ok: true,
-      binding: (await res.json()) as { deviceId: string; kind: string; stationId: string | null },
-    };
+    return { ok: true, binding: (await res.json()) as DeviceBinding };
   }
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
@@ -266,9 +310,32 @@ describe("requireDevice (real Postgres)", () => {
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(cfg, `${deviceId}.${token}`);
-    expect(result).toEqual({ ok: true, binding: { deviceId, kind: "kds_station", stationId } });
+    expect(result).toEqual({
+      ok: true,
+      binding: { deviceId, kind: "kds_station", stationId, ...NO_BINDINGS },
+    });
 
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
+  });
+
+  it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16)", async () => {
+    const { cfg, deviceId, token, layoutProfileId } = await enrolTillDeviceFixture();
+    // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
+    // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo.
+    expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
+      ok: true,
+      binding: {
+        deviceId,
+        kind: "till",
+        stationId: null,
+        tillId: cfg.tillId,
+        layoutProfileId,
+        receiptPrinterId: null,
+        hasCashDrawer: true,
+        cardProvider: "stripe_terminal",
+        cardReaderId: "reader_ABC",
+      },
+    });
   });
 
   it("rejects a WRONG token with device.unauthorized and does not touch last_seen_at", async () => {
@@ -319,6 +386,7 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
       deviceId,
       kind: "kds_station",
       stationId,
+      ...NO_BINDINGS,
     });
     // Every point where `requireDevice` throws `device.unauthorized`, the core returns `null`: no dot,
     // empty, empty selector, empty token, non-uuid selector, unknown id, wrong token.

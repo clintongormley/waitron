@@ -198,7 +198,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
-      return c.json({ deviceId: device.deviceId, kind: device.kind, stationId: device.stationId });
+      // Echo the binding verbatim, incl. the SP-A.2 §16 profile/till/hardware fields so the client can
+      // (SP-B) boot into its assigned profile + hardware. All non-secret config — the reader's
+      // credentials stay in the vault and never ride this response.
+      return c.json({
+        deviceId: device.deviceId,
+        kind: device.kind,
+        stationId: device.stationId,
+        tillId: device.tillId,
+        layoutProfileId: device.layoutProfileId,
+        receiptPrinterId: device.receiptPrinterId,
+        hasCashDrawer: device.hasCashDrawer,
+        cardProvider: device.cardProvider,
+        cardReaderId: device.cardReaderId,
+      });
     }),
   );
 

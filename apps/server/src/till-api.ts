@@ -14,7 +14,7 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout } from "@waitron/layouts";
+import { getLayout, getProfile } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -85,7 +85,7 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertNotHandheld } from "./device-session.js";
+import { assertNotHandheld, tryReadDevice } from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -587,6 +587,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(id)` filter selects exactly that row.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
+      // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
+      // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. An ordinary
+      // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); a
+      // device with an assigned `layoutProfileId` gets its profile resolved and surfaced (SP-A.2 §16.3).
+      // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
+      const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg }, c);
       // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
       // runs inside the same `withTenant` + `asAppUser` block (RLS scopes both to this till's tenant),
       // never a second connection. `getLayout` does not authorize — this boot read is deliberately
@@ -626,6 +632,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
+        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), resolved in the SAME tx only when
+        // a device cookie named a device carrying a non-null `layoutProfileId`. `getProfile` returns
+        // `undefined` for an absent/foreign id (RLS-scoped + tenant-filtered), which surfaces below as an
+        // ABSENT `profile` key rather than `null`.
+        const profile =
+          device?.layoutProfileId != null
+            ? await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId)
+            : undefined;
         return {
           issuer: row,
           bumpMode: loc?.bumpMode,
@@ -633,6 +647,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           courses,
           layout: definition,
           receipt,
+          profile,
         };
       });
       /* v8 ignore start */
@@ -687,6 +702,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
         layout: boot.layout,
         receipt: boot.receipt,
+        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), the resolved `ProfileDef`. Present
+        // ONLY when a device cookie named a device with a resolvable `layoutProfileId`; the key is ABSENT
+        // (never `null`) otherwise, so a request with no device cookie is byte-for-byte unchanged.
+        // ADDITIVE — the counter still renders from `layout`/`receipt` above until SP-B.
+        ...(boot.profile !== undefined ? { profile: boot.profile.definition } : {}),
       });
     }),
   );

@@ -7,7 +7,7 @@ import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
-import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
+import { DEFAULT_LAYOUT, DEFAULT_PROFILES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
@@ -30,6 +30,8 @@ import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -249,6 +251,32 @@ async function closeSession(db: Database, id: string): Promise<void> {
     await asAppUser(tx);
     await endSession(tx, id);
   });
+}
+
+/** Enrol a REAL `till` device for the seeded tenant via the Task 3 mint→redeem path (the only way to
+ * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
+ * `layoutProfileId`. Runs the mint + redeem on the app role under the tenant — the production enrol
+ * path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till` is
+ * sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). */
+async function enrolTillDeviceCookie(
+  db: Database,
+  layoutProfileId: string | null,
+): Promise<string> {
+  const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      label: "Counter till",
+    });
+  });
+  const dev = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
 describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
@@ -854,6 +882,66 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(authoredReceipt);
     } finally {
       await suite.db.execute(sql`delete from till_layouts where tenant_id = ${cfg.tenantId}`);
+    }
+  });
+
+  it("GET /api/till surfaces the calling device's assigned profile when it carries a layoutProfileId (SP-A.2 §16.3)", async () => {
+    // Additive boot read: a booting device (device cookie present) whose device has an assigned layout
+    // profile gets the resolved ProfileDef under `profile`, ALONGSIDE the unchanged layout/receipt (the
+    // counter still renders from layout/receipt until SP-B). Seed a profile, enrol a `till` device bound
+    // to it, and prove `GET /api/till` resolves + returns it. Cleaned up in `finally` so the shared-tenant
+    // no-cookie assertion above stays order-independent (CLAUDE.md §4).
+    const prof = await suite.db.execute<{ id: string }>(sql`
+      insert into layout_profiles (tenant_id, name, definition)
+      values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+      returning id`);
+    const layoutProfileId = prof.rows[0]!.id;
+    try {
+      const cookie = await enrolTillDeviceCookie(suite.db, layoutProfileId);
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        profile: unknown;
+        layout: LayoutDef;
+        receipt: ReceiptConfig;
+      };
+      // The resolved ProfileDef, verbatim (the `getProfile` definition).
+      expect(body.profile).toEqual(DEFAULT_PROFILES.till);
+      // The pre-existing boot fields are UNCHANGED — the tenant authored no widget layout, so both stay
+      // the built-in defaults. The profile is additive, NOT a replacement for layout/receipt (SP-B).
+      expect(body.layout).toEqual(DEFAULT_LAYOUT);
+      expect(body.receipt).toEqual(DEFAULT_RECEIPT);
+    } finally {
+      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from layout_profiles where tenant_id = ${cfg.tenantId}`);
+    }
+  });
+
+  it("GET /api/till OMITS `profile` for a device whose layoutProfileId is null", async () => {
+    // A device cookie whose device carries NO assigned profile resolves nothing: the `profile` key is
+    // ABSENT (never null), and every pre-existing boot field is unchanged. This is the device-present,
+    // profile-absent branch — distinct from the no-cookie exact-shape assertion above.
+    try {
+      const cookie = await enrolTillDeviceCookie(suite.db, null);
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("profile");
+      // The rest of the payload is intact — issuer identity + card fields + default layout still present.
+      expect(body).toMatchObject({
+        venueName: "Test SL",
+        cardProvider: "none",
+        layout: DEFAULT_LAYOUT,
+        receipt: DEFAULT_RECEIPT,
+      });
+    } finally {
+      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
     }
   });
 });

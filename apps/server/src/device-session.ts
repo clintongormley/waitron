@@ -62,11 +62,25 @@ export function readDeviceCookie(c: Context): string | null {
 
 /** The identity a `requireDevice` call resolves the cookie to: which device it is, what KIND it is, and
  * the single station it is bound to (NULL only for a future non-station kind). The device-authenticated
- * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's. */
+ * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
+ *
+ * SP-A.2 §16 widened this with the device's assigned PROFILE + TILL + static HARDWARE bindings, all read
+ * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them and the client
+ * can (SP-B) boot into its profile. `tillId` — the `tills` row a sale-capable device rings against
+ * (§16.4; NULL for a `kds_station`). `layoutProfileId` — the assigned layout profile (§16.3; NULL when
+ * unassigned). The hardware trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`,
+ * `cardProvider` (config token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a
+ * credential; the reader's secrets stay in the vault, never on this row. */
 export interface DeviceBinding {
   deviceId: string;
   kind: DeviceKind;
   stationId: string | null;
+  tillId: string | null;
+  layoutProfileId: string | null;
+  receiptPrinterId: string | null;
+  hasCashDrawer: boolean;
+  cardProvider: string;
+  cardReaderId: string | null;
 }
 
 /**
@@ -119,6 +133,14 @@ export async function tryReadDevice(
         tokenHash: devices.tokenHash,
         kind: devices.deviceKind,
         stationId: devices.stationId,
+        // The profile/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
+        // boot reads echo them without a second query. All non-secret config, never credentials.
+        tillId: devices.tillId,
+        layoutProfileId: devices.layoutProfileId,
+        receiptPrinterId: devices.receiptPrinterId,
+        hasCashDrawer: devices.hasCashDrawer,
+        cardProvider: devices.cardProvider,
+        cardReaderId: devices.cardReaderId,
       })
       .from(devices)
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
@@ -145,7 +167,17 @@ export async function tryReadDevice(
           sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
         ),
       );
-    return { deviceId, kind: row.kind, stationId: row.stationId };
+    return {
+      deviceId,
+      kind: row.kind,
+      stationId: row.stationId,
+      tillId: row.tillId,
+      layoutProfileId: row.layoutProfileId,
+      receiptPrinterId: row.receiptPrinterId,
+      hasCashDrawer: row.hasCashDrawer,
+      cardProvider: row.cardProvider,
+      cardReaderId: row.cardReaderId,
+    };
   });
 }
 

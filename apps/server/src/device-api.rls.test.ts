@@ -931,6 +931,51 @@ describe("Device API over real Postgres", () => {
     expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
   });
 
+  it("GET /api/device/me echoes the device's assigned profile + till + hardware bindings (SP-A.2 §16)", async () => {
+    // The boot probe echoes every binding the device carries so the client can (SP-B) boot into its
+    // profile + hardware. Enrol a `till` with a FULL binding and assert the WHOLE shape with `toEqual`:
+    // a null default (a plain kds_station) would pass a partial match even if a field were dropped, so
+    // this pins the populated case exactly. Additive — the pre-existing `deviceId`/`kind`/`stationId`
+    // are unchanged, the SP-A.2 fields are added alongside.
+    const venue = await setupVenue();
+    const app = mountApp(venue.cfg);
+    const profileId = await seedProfile(venue.cfg);
+    const printerId = await seedPrinter(venue.cfg);
+    const codeRes = await send(app, "POST", "/management-api/device-codes", {
+      cookie: venue.managerCookie,
+      body: {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        layoutProfileId: profileId,
+        receiptPrinterId: printerId,
+        hasCashDrawer: true,
+        cardProvider: "sumup",
+        cardReaderId: "reader-xyz",
+        label: "Caja 1",
+      },
+    });
+    expect(codeRes.status).toBe(201);
+    const { code } = (await codeRes.json()) as { code: string };
+    const enrol = await send(app, "POST", "/api/device/enrol", { body: { code } });
+    expect(enrol.status).toBe(200);
+    const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
+    const jar = deviceCookieFrom(enrol);
+
+    const res = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      deviceId,
+      kind: "till",
+      stationId: null,
+      tillId: venue.cfg.tillId,
+      layoutProfileId: profileId,
+      receiptPrinterId: printerId,
+      hasCashDrawer: true,
+      cardProvider: "sumup",
+      cardReaderId: "reader-xyz",
+    });
+  });
+
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
     // I4 (whole-branch review): before the handheld kind existed, EVERY device was a `kds_station`,
     // always station-bound, so `GET /api/device/station`'s `stationId === null` branch was unreachable
