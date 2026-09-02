@@ -227,9 +227,9 @@ Postgres, the `app_login` non-superuser probe role, the full migration manifest 
 
 **Files:**
 - `packages/sync/src/capture-identity.gate.test.ts` (new — failing test first)
-- `packages/sync/drizzle/0003_sync_identity_capture.sql` (new — impl)
+- `packages/sync/drizzle/0007_sync_identity_capture.sql` (new — impl)  ← NOTE: 0007, not 0003 (plan drafted pre-0003..0006; highest existing sync migration is now 0006_enrol_table_service, idx 6)
 - `packages/sync/drizzle/meta/_journal.json` (edit — impl)
-- `packages/sync/drizzle/meta/0003_snapshot.json` (new — impl)
+- `packages/sync/drizzle/meta/0007_snapshot.json` (new — impl)
 
 **Interfaces:**
 - Consumes: the migration manifest (`manifestSets`), the `app_login` probe role, `withTenant`.
@@ -400,7 +400,7 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
 
 - [ ] **3.2 (run → fail)** `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/sync test capture-identity` — the persons/webauthn assertions fail (no triggers → 0 rows). The exclusion assertions already pass (never a trigger), which is correct — do not treat that as green.
 
-- [ ] **3.3 (minimal impl — SQL)** Create `packages/sync/drizzle/0003_sync_identity_capture.sql`:
+- [ ] **3.3 (minimal impl — SQL)** Create `packages/sync/drizzle/0007_sync_identity_capture.sql`:
 
 ```sql
 -- Hand-written custom migration for @waitron/sync (this package has NO drizzle.config.ts — its
@@ -441,18 +441,18 @@ CREATE TRIGGER webauthn_credentials_capture AFTER INSERT OR UPDATE OR DELETE ON 
 
 ```json
     {
-      "idx": 3,
+      "idx": 7,
       "version": "7",
-      "when": 1786492800003,
-      "tag": "0003_sync_identity_capture",
+      "when": 1786492800007,
+      "tag": "0007_sync_identity_capture",
       "breakpoints": true
     }
 ```
 
-- [ ] **3.5 (minimal impl — snapshot)** Create `drizzle/meta/0003_snapshot.json` chained off `0002`'s
+- [ ] **3.5 (minimal impl — snapshot)** Create `drizzle/meta/0007_snapshot.json` chained off `0006`'s
   `id` (an empty-tables snapshot, inert at apply time but kept for folder self-consistency — copy
-  `0002_snapshot.json` verbatim, then set a fresh random `id` and set `prevId` to `0002`'s `id`
-  (`2c8e3fa4-4d7b-4029-9c3e-7f2b4e5d6f32`); all of `tables`/`enums`/`policies`/etc. stay `{}`).
+  `0006_snapshot.json` verbatim, then set a fresh random `id` and set `prevId` to `0006`'s `id`
+  (`52149cf9-f5e5-4c71-baac-371e46cf021d`); all of `tables`/`enums`/`policies`/etc. stay `{}`).
 
 - [ ] **3.6 (run → pass)** `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/sync test capture-identity` — all four cases green. Also run `pnpm --filter @waitron/sync test:coverage` to confirm the whole package (unfiltered) is green (a name-filtered run misses cross-cutting suites — CLAUDE.md §2).
 
