@@ -1,5 +1,5 @@
-// The enrolment registry for the app-level sync outbox: the nineteen tenant-scoped, non-fiscal
-// tables an apply mode is registered for — nineteen in all = 17 (14 commercial + 3 C1 dining) + 2 identity-config.
+// The enrolment registry for the app-level sync outbox: the tenant-scoped, non-fiscal tables an
+// apply mode is registered for — nineteen in all = 17 (14 commercial + 3 C1 dining) + 2 identity-config.
 // This is the audit surface for "what crosses the wire" — the
 // fiscal lane is deliberately absent (spec §1). The fourteen slice-1 rows each carry a capture trigger
 // in packages/sync/drizzle/0000_sync_outbox.sql and match spec §2 and those triggers exactly; the three

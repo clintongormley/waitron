@@ -199,7 +199,7 @@ describe("ENROLLED carries exactly spec §2's fourteen tables plus the C1 slice'
   });
 
   for (const [table, spec] of Object.entries(SPEC)) {
-    it(`${table} carries the spec §2 mode, conflict key, watermark, capture ops and lane`, () => {
+    it(`${table} carries its spec-defined (§2/§3) mode, conflict key, watermark, capture ops and lane`, () => {
       const e = byName.get(table);
       if (e === undefined) throw new Error(`registry is missing enrolled table ${table}`);
       expect(e.mode).toBe(spec.mode);
