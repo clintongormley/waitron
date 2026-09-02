@@ -51,6 +51,7 @@ export {
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
 export { tillLayouts } from "./schema/layouts.js";
+export { layoutProfiles } from "./schema/layout-profiles.js";
 export { tableServiceStatuses } from "./schema/table-service-statuses.js";
 export { bookingStatus, bookings } from "./schema/bookings.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";

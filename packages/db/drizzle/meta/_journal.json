@@ -617,6 +617,20 @@
       "when": 1788207353448,
       "tag": "0087_clever_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1788369159551,
+      "tag": "0088_stiff_iron_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1788369166770,
+      "tag": "0089_normal_ted_forrester",
+      "breakpoints": true
     }
   ]
 }
