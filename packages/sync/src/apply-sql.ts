@@ -30,13 +30,18 @@ import {
 // atop packages/payments/src/schema/index.ts). @waitron/payments declares no `exports` map, so a
 // subpath import resolves, the same way test files reach its ./testing/fake-provider.js.
 import { paymentPolicy, paymentRefunds, payments } from "@waitron/payments/src/schema/index.js";
+// Deep import into @waitron/identity: its schema table objects are exported from ./schema/index.js.
+// The package declares no `exports` map, so a subpath import resolves (same as @waitron/payments's
+// schema, above). Deliberately NOT the package barrel — that loads identity's auth runtime
+// (@simplewebauthn/server, login, passkey) the apply path never uses.
+import { persons, webauthnCredentials } from "@waitron/identity/src/schema/index.js";
 import type { EnrolledTable } from "./registry.js";
 
 /**
  * The Drizzle schema object for every enrolled table, keyed by physical table name. The column list
  * for a watermark upsert's `DO UPDATE SET` is derived from these at build time via
  * `getTableColumns`, so it can never drift from the schema the way a hand-maintained array would
- * (CLAUDE.md §2). Covers all seventeen so apply-sql.test.ts can assert completeness against ENROLLED.
+ * (CLAUDE.md §2). Covers all nineteen so apply-sql.test.ts can assert completeness against ENROLLED.
  */
 export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   sales,
@@ -56,6 +61,8 @@ export const SYNC_SCHEMA_TABLES: Record<string, Table> = {
   dining_tables: diningTables,
   floor_zones: floorZones,
   table_service_statuses: tableServiceStatuses,
+  persons,
+  webauthn_credentials: webauthnCredentials,
 };
 
 /** The physical DB-column names of an enrolled table, in schema-definition order. */
