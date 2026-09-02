@@ -66,6 +66,28 @@ believable demo restaurant: two menus (~44 products with per-dish images), a flo
 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
 Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
 
+### Layout designer & device profiles (NEW — owner-inserted 2026-09-02, spec approved)
+
+A visual, HA-Sections-style **layout designer** with reusable **layout profiles** (tabs → grid →
+cards), unification of **tills into the enrolled-device model** (a `till` device kind; hardware binds
+per-device; **fiscal SIF/chain stays on the node** — H2-gated, verify-by-container + owner sign-off),
+and a dev-only **per-tab device switcher**. Replaces the narrow per-tenant `till_layouts` (dropped,
+pre-production). The owner inserted this ahead of resuming Track-2 infra. Design:
+[layout-designer-and-device-profiles](superpowers/specs/2026-09-02-layout-designer-and-device-profiles-design.md).
+
+Decomposition + order **A → C → B** (each its own spec → plan):
+
+- **SP-A — device & profile foundation** — data model (profiles/tabs/grid/card catalogue + contract),
+  `till` device kind, per-device hardware bindings (static; modelled for transient NFC readers),
+  enrolment extension, two-layer abilities + three visibility axes, built-in default profiles, theme
+  storage (tenant + per-profile). Reworks `@waitron/layouts`. **NEXT.**
+- **SP-C — dev per-tab device switcher** — per-tab `sessionStorage` identity + dev-only override header
+  + a device-reset route. Small; unblocks side-by-side testing.
+- **SP-B — grid editor + rendering** — the HA-Sections editor UI + making screens render from grid
+  profiles (wrap the bespoke floor/KDS/table-order screens as cards; phased). The schedule risk.
+- **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
+  SumUp questions) · community profile sharing.
+
 ### Product work still open (beneath the two tracks)
 
 The demo Phase-0/Phase-1 Tier-A/B/C build is finished (git history); what remains is the open
