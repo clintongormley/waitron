@@ -74,7 +74,7 @@ Cross-package list edits (Task 1): `scripts/changed-scope.mjs`, `.github/workflo
   - `type VerifyResult = { valid: true; term: number; signerNodeId: string; nodes: MembershipNode[] } | { valid: false; reason: VerifyFailure }`
   - `type VerifyFailure = "malformed" | "untrusted_signer" | "bad_signature" | "endorsement_invalid"`
   - `type AcceptResult = { accepted: true; document: SignedMembershipDocument } | { accepted: false; reason: "invalid"; failure: VerifyFailure } | { accepted: false; reason: "not_newer" }`
-  - Error code `membership.key_invalid` with params `{ operation: "sign" | "verify" | "generate" }`.
+  - Error code `membership.key_invalid` with params `{ operation: "sign" }` (only `signBytes` throws it — see R2 below).
 
 - [ ] **Step 1: Scaffold the package files**
 
@@ -207,8 +207,8 @@ describe("membership error registry", () => {
 
 - [ ] **Step 4: Run it, verify it fails**
 
-Run: `pnpm --filter @waitron/membership test errors`
-Expected: FAIL — `membership.key_invalid` is not a declared `ErrorParams` code (TS error / no such code).
+Run: `pnpm --filter @waitron/membership typecheck`
+Expected: FAIL — `membership.key_invalid` is not a declared `ErrorParams` code, so `new AppError("membership.key_invalid", …)` is a compile error. **Note (R2/CLAUDE.md §4):** `vitest run` would NOT fail here — esbuild strips types, so the runtime constructibility test passes even without the declaration. The compile check is the real fail-first signal; the runtime `errors.test.ts` is a constructibility smoke mirroring the `@waitron/layouts` convention.
 
 - [ ] **Step 5: Write `src/errors.ts` and `src/index.ts`**
 
@@ -220,8 +220,9 @@ import "@waitron/shared";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
-    // Thrown only for malformed key material — a programmer error, never adversarial input.
-    "membership.key_invalid": { operation: "sign" | "verify" | "generate" };
+    // Thrown only when signing with malformed private-key material — our own key, a programmer
+    // error, never adversarial input. Verification never throws (it fails closed on wire data).
+    "membership.key_invalid": { operation: "sign" };
   }
 }
 ```
@@ -376,7 +377,7 @@ git commit -s -m "feat(membership): deterministic canonical serialization"
   - `function generateNodeKeyPair(): NodeKeyPair`
   - `function signBytes(message: string, privateKeyB64: string): string` (base64 signature)
   - `function verifyBytes(message: string, signatureB64: string, publicKeyB64: string): boolean`
-  - Malformed key material throws `AppError("membership.key_invalid", { operation })`; a wrong-but-well-formed key makes `verifyBytes` return `false` (not throw).
+  - Only `signBytes` throws — `AppError("membership.key_invalid", { operation: "sign" })` on malformed private-key material. `generateNodeKeyPair` does not wrap `generateKeyPairSync` (a fixed valid algorithm does not throw — no dead catch). `verifyBytes` **never throws**: a malformed public key or signature (both arrive in wire data) makes it return `false`, failing closed.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -433,15 +434,13 @@ import type { NodeKeyPair } from "./types.js";
 import "./errors.js";
 
 export function generateNodeKeyPair(): NodeKeyPair {
-  try {
-    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-    return {
-      publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
-      privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
-    };
-  } catch {
-    throw new AppError("membership.key_invalid", { operation: "generate" });
-  }
+  // No try/catch: generateKeyPairSync("ed25519") does not throw for this fixed, supported algorithm,
+  // so a catch here would be untestable dead code (R2). Only signing (below) can hit a bad key.
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  return {
+    publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
+    privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
+  };
 }
 
 export function signBytes(message: string, privateKeyB64: string): string {
