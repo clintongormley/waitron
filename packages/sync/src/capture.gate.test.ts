@@ -14,7 +14,8 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 // INSERT-only grant, the sync_tailer read path and echo suppression under a genuine non-superuser
 // role — PGlite connects as a superuser and bypasses all of it, so it is a false pass here
 // (CLAUDE.md §4). The whole migration manifest runs (now including `sync` last), so the container
-// carries sync_log + sync_capture + the 19 capture triggers over the enrolled tables (17 commercial+dining + 2 identity-config).
+// carries sync_log + sync_capture + the 22 capture triggers over the enrolled tables
+// (17 commercial+dining + 2 identity-config + 3 kitchen KDS).
 // The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
 // RLS actually applies to it — is now created once in src/testing/global-setup.ts and shared across
 // the gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
@@ -409,6 +410,117 @@ describe("the generic capture trigger over the commercial lane", () => {
       const set = events.rows.filter((r) => r.tbl === table).map((r) => r.event);
       // Exactly {INSERT, UPDATE}: the AFTER INSERT OR UPDATE op set. toEqual pins it, so a captured
       // DELETE (a third event row) fails here — no delete captured (deactivate-only).
+      expect(set).toEqual(["INSERT", "UPDATE"]);
+    }
+  });
+
+  it("the kitchen KDS triggers capture an app-role insert (kitchen_stations/kitchen_courses/ticket_items)", async () => {
+    // Failing case: the 0008 enrolment migration is absent, so no capture trigger attaches to the three
+    // kitchen tables and an app-role insert lands NO sync_log row — a routed-menu mirror would never see
+    // its stations/courses/tickets. Control in the other direction: each insert produces exactly one
+    // op='insert' sync_log row carrying the app.node_id origin, in seq order.
+    const base = await seedBase(postgres.admin);
+    // ticket_items FK parents seeded as admin (they are only reference rows for the item under test): a
+    // node (ticket_items.node_id, 0055_kds1_stations_tickets_rls.sql:57), a product, a working_order and
+    // its line (ticket_items.working_order_line_id CASCADE FK, 0055_kds1_stations_tickets_rls.sql:64).
+    const node = await postgres.admin.execute<{ id: string }>(
+      sql`insert into nodes (tenant_id, location_id, name)
+          values (${base.tenantId}, ${base.locationId}, 'Node') returning id`,
+    );
+    const nodeId = node.rows[0]!.id;
+    const prod = await postgres.admin.execute<{ id: string }>(
+      sql`insert into products
+            (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+          values (${base.tenantId}, ${base.catalogueId}, '{"en":"Coffee"}'::jsonb, 'each', '1.30', 'general')
+          returning id`,
+    );
+    const productId = prod.rows[0]!.id;
+    const order = await postgres.admin.execute<{ id: string }>(
+      sql`insert into working_orders (tenant_id, till_id, order_number, status)
+          values (${base.tenantId}, ${base.tillId}, 1, 'open') returning id`,
+    );
+    const orderId = order.rows[0]!.id;
+    const line = await postgres.admin.execute<{ id: string }>(
+      sql`insert into working_order_lines
+            (tenant_id, working_order_id, line_no, product_id, descriptions,
+             quantity, unit_price, unit_price_gross, vat_rate, line_total)
+          values (${base.tenantId}, ${orderId}, 1, ${productId}, '{"en":"Coffee"}'::jsonb,
+                  '1.000', '1.30', '1.43', '10.00', '1.30') returning id`,
+    );
+    const lineId = line.rows[0]!.id;
+
+    const app = await postgres.pg.connectAs("app_login", "app_pw");
+    try {
+      // station → course → ticket_item as the app role, so each capture fires under the writing role
+      // (not SECURITY DEFINER) and records origin = app.node_id. ticket_items references the station,
+      // course, node and line above (all its NOT-NULL FK parents present), so its INSERT succeeds.
+      const [station, course, item] = [
+        "44444444-4444-4444-8444-444444444444",
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666",
+      ];
+      await withTenantNode(app, base.tenantId, NODE_A, async (tx) => {
+        await tx.execute(
+          sql`insert into kitchen_stations (id, tenant_id, location_id, name)
+              values (${station}, ${base.tenantId}, ${base.locationId}, 'Cocina')`,
+        );
+        await tx.execute(
+          sql`insert into kitchen_courses (id, tenant_id, location_id, name)
+              values (${course}, ${base.tenantId}, ${base.locationId}, 'Entrantes')`,
+        );
+        await tx.execute(
+          sql`insert into ticket_items
+                (id, tenant_id, node_id, working_order_id, working_order_line_id, station_id, course_id, state)
+              values (${item}, ${base.tenantId}, ${nodeId}, ${orderId}, ${lineId}, ${station}, ${course}, 'queued')`,
+        );
+      });
+      const captured = await postgres.admin.execute<{
+        table_name: string;
+        op: string;
+        origin_id: string;
+      }>(
+        sql`select table_name, op, origin_id from sync_log
+            where tenant_id = ${base.tenantId}
+              and table_name in ('kitchen_stations','kitchen_courses','ticket_items')
+            order by seq`,
+      );
+      expect(captured.rows.map((r) => r.table_name)).toEqual([
+        "kitchen_stations",
+        "kitchen_courses",
+        "ticket_items",
+      ]);
+      for (const r of captured.rows) {
+        expect(r.op).toBe("insert");
+        expect(r.origin_id).toBe(NODE_A); // the app.node_id GUC, verbatim
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("the three kitchen KDS capture triggers fire on {INSERT, UPDATE} and NOT DELETE (spec §6)", async () => {
+    // Spec §3: none of the three holds a DELETE grant (SELECT/INSERT/UPDATE only —
+    // 0055_kds1_stations_tickets_rls.sql:20,37, 0058_kds2_courses_fire_rls.sql:24); stations/courses
+    // deactivate via `active`, ticket_items is removed only by the line-FK CASCADE (never a captured
+    // delete). So 0008 declares them AFTER INSERT OR UPDATE and a DELETE must never be captured.
+    // information_schema.triggers carries one row per (trigger, event_manipulation), so a captured
+    // DELETE would surface as a third event row. Read as the superuser admin (it sees every trigger).
+    const triggers: [table: string, trigger: string][] = [
+      ["kitchen_stations", "kitchen_stations_capture"],
+      ["kitchen_courses", "kitchen_courses_capture"],
+      ["ticket_items", "ticket_items_capture"],
+    ];
+    const events = await postgres.admin.execute<{ tbl: string; event: string }>(
+      sql`select event_object_table as tbl, event_manipulation as event
+          from information_schema.triggers
+          where trigger_schema = 'public'
+            and event_object_table in ('kitchen_stations', 'kitchen_courses', 'ticket_items')
+            and trigger_name in ('kitchen_stations_capture', 'kitchen_courses_capture', 'ticket_items_capture')
+          order by event_object_table, event_manipulation`,
+    );
+    for (const [table] of triggers) {
+      const set = events.rows.filter((r) => r.tbl === table).map((r) => r.event);
+      // Exactly {INSERT, UPDATE}: a captured DELETE (a third event row) would fail this toEqual.
       expect(set).toEqual(["INSERT", "UPDATE"]);
     }
   });

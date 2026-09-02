@@ -11,7 +11,8 @@ import { applyBatch, type SyncLogRow } from "./apply.js";
 // non-BYPASSRLS role, so FORCE ROW LEVEL SECURITY's WITH CHECK actually fences each write to its
 // own tenant — PGlite connects as a superuser and bypasses all of it, a false pass (CLAUDE.md §4).
 // The whole migration manifest runs (including `sync` last), so the container carries sync_log +
-// sync_cursor + sync_capture + the 19 capture triggers over the enrolled tables (17 commercial+dining + 2 identity-config).
+// sync_cursor + sync_capture + the 22 capture triggers over the enrolled tables
+// (17 commercial+dining + 2 identity-config + 3 kitchen KDS).
 // The apply worker's role sync_applier — a LOGIN member of BOTH app_user (INSERT/UPDATE/DELETE on the
 // enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor), the sanctioned path that
 // never widens app_user to reach sync_cursor (spec §7; CLAUDE.md §3), non-superuser so FORCE RLS
@@ -243,6 +244,90 @@ function workingOrderImage(b: Base, orderNumber: number, over: Image = {}): Imag
     settled_at: null,
     delivery_table_id: null,
     collected_at: null,
+    ...over,
+  };
+}
+
+// The kitchen KDS closure this slice enrols (spec 2026-09-02-sync-kitchen-enrolment-design.md §2/§3).
+// Each helper lists EVERY column of its table (to_jsonb captures all; jsonb_populate_record fills an
+// absent key with NULL, so an omitted NOT NULL column would fail the apply). Columns verified against
+// the live Drizzle schema (kitchen-stations.ts, kitchen-courses.ts, ticket-items.ts).
+function kitchenStationImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    location_id: b.locationId,
+    name: "Cocina",
+    display_order: 0,
+    warm_after_minutes: 5,
+    overdue_after_minutes: 10,
+    forgotten_after_minutes: 15,
+    is_default: false,
+    active: true,
+    created_at: "2026-09-02T10:00:00+00:00",
+    ...over,
+  };
+}
+function kitchenCourseImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    location_id: b.locationId,
+    name: "Entrantes",
+    display_order: 0,
+    active: true,
+    created_at: "2026-09-02T10:00:00+00:00",
+    ...over,
+  };
+}
+// A routed product: station_id/course_id set via `over` point at an enrolled kitchen parent (spec §1's
+// 23503 gate). All the nullable jsonb columns (allergens/diet/…) travel as NULL, exactly as to_jsonb
+// of a freshly-seeded product captures them.
+function productImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    catalogue_id: b.catalogueId,
+    category_id: null,
+    station_id: null,
+    course_id: null,
+    descriptions: { en: "Coffee" },
+    pricing_unit: "each",
+    unit_price: "1.30",
+    vat_class: "general",
+    active: true,
+    image: null,
+    allergens: null,
+    manual_allergens: null,
+    recipe_derivation: null,
+    diet_derivation: null,
+    diet_override: null,
+    diet: null,
+    created_at: "2026-09-02T10:00:00+00:00",
+    updated_at: "2026-09-02T10:00:00+00:00",
+    ...over,
+  };
+}
+// A fired kitchen ticket item. Its NOT NULL FK columns (working_order_id/working_order_line_id/
+// station_id) MUST be supplied via `over`; node_id defaults to the seeded node. Verified against
+// ticket-items.ts (the queued_at default + the nullable lifecycle timestamps).
+function ticketItemImage(b: Base, over: Image = {}): Image {
+  return {
+    id: uuid(),
+    tenant_id: b.tenantId,
+    node_id: b.nodeId,
+    working_order_id: null,
+    working_order_line_id: null,
+    station_id: null,
+    state: "queued",
+    queued_at: "2026-09-02T10:00:00+00:00",
+    preparing_at: null,
+    ready_at: null,
+    course_id: null,
+    fired_at: null,
+    away_at: null,
+    note: null,
+    doneness: null,
     ...over,
   };
 }
@@ -1237,6 +1322,164 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       expect(await tableStatusId()).toBeNull();
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n); // cursor advanced past both
       expect(await syncLogCount()).toBe(before); // echo suppressed — apply captured no new sync_log row
+    } finally {
+      await applier.close();
+    }
+  });
+});
+
+describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
+  it("a routed products row applies with no park once its kitchen closure is enrolled", async () => {
+    // Failing case (proven by deletion): comment out the kitchen_stations (or kitchen_courses) entry in
+    // ENROLLED and re-run — applyBatch throws sync.table_not_enrolled on that kitchen row (DISPATCH has
+    // no entry), so the whole batch fails. Restore → this passes. That is spec §1's hard gate made a
+    // test: a menu whose products are routed to a station/course would stall the ordered lane if the
+    // kitchen parents were not enrolled.
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const station = kitchenStationImage(b);
+      const course = kitchenCourseImage(b);
+      const product = productImage(b, { station_id: station.id, course_id: course.id });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "kitchen_stations",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(station),
+        },
+        {
+          seq: 2n,
+          originId,
+          table: "kitchen_courses",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(course),
+        },
+        {
+          seq: 3n,
+          originId,
+          table: "products",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(product),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 3, deferred: 0 }); // all three landed, nothing parked
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n); // cursor advanced past them
+      // The routed product is present AND still points at the mirrored station + course.
+      const routed = await postgres.admin.execute<{ station: string; course: string }>(
+        sql`select station_id::text as station, course_id::text as course
+            from products where id = ${product.id as string}`,
+      );
+      expect(routed.rows[0]).toEqual({ station: station.id, course: course.id });
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("a ticket_items row lands once its kitchen closure + line are present", async () => {
+    // The KDS operational row the mirror exists to show. Its FK closure: node_id → nodes (present by
+    // construction, seeded), working_order_line_id → working_order_lines (CASCADE FK), station_id →
+    // kitchen_stations, course_id → kitchen_courses. The station + course arrive on the ordered lane
+    // (enrolled here); the line + its order are seeded as admin reference rows (working_order_lines is
+    // itself enrolled Group C, but this case isolates ticket_items' apply).
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const woId = await seedWorkingOrder(b, 1);
+      const productId = await seedProduct(b);
+      const lineId = await seedLine(b, woId, productId, 1);
+      const station = kitchenStationImage(b);
+      const course = kitchenCourseImage(b);
+      const item = ticketItemImage(b, {
+        working_order_id: woId,
+        working_order_line_id: lineId,
+        station_id: station.id,
+        course_id: course.id,
+      });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "kitchen_stations",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(station),
+        },
+        {
+          seq: 2n,
+          originId,
+          table: "kitchen_courses",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(course),
+        },
+        {
+          seq: 3n,
+          originId,
+          table: "ticket_items",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(item),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 3, deferred: 0 }); // station, course and item all landed
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n);
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from ticket_items where id = ${item.id as string}`,
+        ),
+      ).toBe("1"); // the item is on the mirror
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("negative control: a routed products row whose station is never applied parks on 23503 and holds the cursor", async () => {
+    // The mirror image of spec §1: enrolling kitchen_stations is FORCED because a routed product whose
+    // station parent is absent → 23503 → park, stalling the whole ordered lane. Models an ABSENT FK
+    // PARENT (the 23503 park path), NOT the literal "not enrolled" case — that is the inline
+    // proven-by-deletion in the first test, which throws sync.table_not_enrolled.
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const missingStationId = uuid(); // a kitchen_station that is NEVER applied
+      const product = productImage(b, { station_id: missingStationId });
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "products",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(product),
+        },
+      ];
+      const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
+
+      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent kitchen_stations parent
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from products where id = ${product.id as string}`,
+        ),
+      ).toBe("0"); // never inserted
     } finally {
       await applier.close();
     }

@@ -104,7 +104,7 @@ describe("the DO UPDATE SET list is the schema's columns minus the conflict key 
 });
 
 describe("SYNC_SCHEMA_TABLES covers every enrolled table, and the watermark tables carry their column", () => {
-  it("has a drizzle object for all nineteen enrolled tables", () => {
+  it("has a drizzle object for all twenty-two enrolled tables", () => {
     for (const e of ENROLLED) {
       expect(SYNC_SCHEMA_TABLES[e.table]).toBeDefined();
     }
