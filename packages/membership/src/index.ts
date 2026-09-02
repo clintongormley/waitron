@@ -12,6 +12,9 @@ export type {
   AcceptResult,
 } from "./types.js";
 
+export { canonicalize } from "./canonicalize.js";
+export type { CanonicalValue } from "./canonicalize.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel (reachability rule, packages/shared/src/errors.ts).
 import "./errors.js";
