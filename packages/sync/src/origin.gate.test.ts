@@ -83,4 +83,31 @@ describe("withTenant threads app.node_id into sync_log.origin_id", () => {
       await probe.close();
     }
   });
+
+  it("stamps a persons write's origin_id with the node id (4-arg), all-zero on the plain form", async () => {
+    const awareT = await seedTenant(postgres.admin);
+    const plainT = await seedTenant(postgres.admin);
+    const probe = await postgres.pg.connectAs("app_login", "app_pw");
+    const insertPerson = (t: string) =>
+      sql`insert into persons (tenant_id, display_name, pin_hash, role)
+          values (${t}, 'Ada', 'hash', 'staff')`;
+    const originFor = async (t: string) => {
+      const r = await postgres.admin.execute<{ n: string; origin: string | null }>(
+        sql`select count(*)::text as n, max(origin_id::text) as origin
+            from sync_log where table_name = 'persons' and tenant_id = ${t}`,
+      );
+      return r.rows[0]!;
+    };
+    try {
+      await withTenant(probe, awareT, (tx) => tx.execute(insertPerson(awareT)), { nodeId: NODE_A });
+      await withTenant(probe, plainT, (tx) => tx.execute(insertPerson(plainT)));
+      const aware = await originFor(awareT);
+      const plain = await originFor(plainT);
+      expect(aware.origin).toBe(NODE_A);
+      expect(plain.origin).toBe(ZERO);
+      expect(aware.origin).not.toBe(plain.origin); // the two paths visibly differ (CLAUDE.md §1)
+    } finally {
+      await probe.close();
+    }
+  });
 });
