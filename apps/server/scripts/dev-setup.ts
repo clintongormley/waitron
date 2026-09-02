@@ -18,10 +18,19 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { createPostgresDb, type Database } from "@waitron/db";
+import { asAppUser, createPostgresDb, withTenant, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
+import { generatePairingCode } from "../src/device.js";
+import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
@@ -411,6 +420,46 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   return { reused: false, env };
 }
 
+/**
+ * Mint a single-use `till`-kind pairing code bound to the provisioned till (SP-A.2 device unification),
+ * so the dev can enrol the counter till against the server (its sale routes now require a
+ * `waitron_device` cookie carrying the till's id — Task 15a). The code is minted on EVERY `dev:setup`
+ * run, fresh venue OR idempotent reuse: a code is single-use and expires in 15 minutes, so a stale
+ * unredeemed one simply lapses — always handing the dev a fresh valid code is the point.
+ *
+ * Runs as `app_user` inside a `withTenant` tx, exactly as the device-api enrol-code route does — the
+ * running POS mints codes, not the provisioning owner. `generatePairingCode`'s per-kind gate requires a
+ * `till` (a sale-capable kind) to carry a non-null `till_id` (else `device.till_required`), so the
+ * provisioned till's id is passed; the enrolled device then rings against that real register. The
+ * `TillConfig` is assembled from the written `.env` — `generatePairingCode` reads only `tenantId` +
+ * `locationId` off it for a `till` mint (no station lookup), but the whole shape is branded for type
+ * safety. Returns the plaintext code ONCE for the CLI to print (never stored in plaintext).
+ */
+export async function mintTillPairingCode(db: Database, env: DevEnv): Promise<{ code: string }> {
+  const cfg: TillConfig = {
+    tenantId: brandTenantId(env.WAITRON_TILL_TENANT_ID),
+    tillId: brandTillId(env.WAITRON_TILL_TILL_ID),
+    nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID),
+    seriesId: brandSeriesId(env.WAITRON_TILL_SERIES_ID),
+    locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID),
+    locale: env.WAITRON_TILL_LOCALE,
+    invoiceLocales: [env.WAITRON_TILL_LOCALE],
+    // Display-side only; a pairing-code mint reads neither. Fixed to the demo's cash-only defaults.
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      label: "Caja 1",
+      tillId: cfg.tillId,
+    });
+  });
+}
+
 /** The CLI entrypoint: resolve `apps/server/.env`, run `devSetup`, print a human summary. */
 async function main(): Promise<void> {
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
@@ -424,6 +473,17 @@ async function main(): Promise<void> {
     envPath,
     log: (line) => void console.log(line),
   });
+
+  // Mint a fresh `till` pairing code on EVERY run (fresh venue OR reuse) so the dev can enrol the
+  // counter till, whose sale routes now require a device cookie (SP-A.2 Task 15a). Its own connection —
+  // `devSetup` has already closed the one it provisioned with — closed in the `finally`.
+  const db = await createPostgresDb(result.env.DATABASE_URL);
+  let pairing: { code: string };
+  try {
+    pairing = await mintTillPairingCode(db, result.env);
+  } finally {
+    await db.close();
+  }
 
   console.log("");
   console.log(
@@ -447,6 +507,9 @@ async function main(): Promise<void> {
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
+  console.log("");
+  console.log(`  Enrol the till at http://localhost:5190 with pairing code: ${pairing.code}`);
+  console.log("  (single-use, expires in 15 minutes — re-run `pnpm dev:setup` for a fresh one)");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

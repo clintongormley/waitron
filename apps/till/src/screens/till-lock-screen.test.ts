@@ -357,6 +357,27 @@ describe("till-lock-screen", () => {
     expect(query(el, "[data-setup-handheld]")).toBeNull();
   });
 
+  // Till (SP-A.2 device unification): the roster view carries a THIRD set-up affordance beside the
+  // kitchen-display + waiter-handheld ones, so a FRESH counter can reach the till enrol view; it emits
+  // `setup-till`, which the app turns into the till enrol screen. Same roster-only placement.
+  it("emits setup-till from the till set-up affordance (roster view)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const spy = vi.fn();
+    el.addEventListener("setup-till", spy);
+    click(el, "[data-setup-till]");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("hides the till set-up affordance in PIN mode (roster view only, like setup-device)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(query(el, "[data-setup-till]")).not.toBeNull();
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    expect(query(el, "[data-setup-till]")).toBeNull();
+  });
+
   // §C2 containment/identity: an ALREADY-ENROLLED device (a handheld, or a KDS) returns to the lock
   // screen on every logout and cold boot. It must NOT see the device-setup affordances — tapping "Set
   // up as kitchen display" would take the enrolled phone into the KDS enrol view, where any valid
@@ -371,6 +392,7 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(query(el, "[data-setup-device]")).toBeNull();
     expect(query(el, "[data-setup-handheld]")).toBeNull();
+    expect(query(el, "[data-setup-till]")).toBeNull();
     // The roster login is untouched — an enrolled handheld's waiter still picks their name and PINs in.
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
   });
@@ -386,5 +408,6 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(query(el, "[data-setup-device]")).not.toBeNull();
     expect(query(el, "[data-setup-handheld]")).not.toBeNull();
+    expect(query(el, "[data-setup-till]")).not.toBeNull();
   });
 });

@@ -313,6 +313,9 @@ const station = (el: TillApp) =>
 /** The handheld enrol screen (handheld-tableside Task 8), present only while `handheldEnrolling` is set;
  * queried by tag (its class is not imported here — the app only needs to know it is mounted). */
 const handheldEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-handheld-enrol-screen");
+/** The till enrol screen (SP-A.2 device unification), present only while `tillEnrolling` is set; queried
+ * by tag (its class is not imported here — the app only needs to know it is mounted). */
+const tillEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-enrol-screen");
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
@@ -763,6 +766,85 @@ describe("till-app", () => {
     expect(handheldEnrol(el)).toBeNull();
     expect(lock(el)).not.toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+    // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
+    expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
+  });
+
+  // Till enrol (SP-A.2 device unification): an enrolled `till` device behaves like a normal operator
+  // till — STAYS on lock, the operator PIN-logs-in and lands on the counter — but it holds the device
+  // cookie the sale routes require, so it is marked device-enrolled and the lock-screen setup
+  // affordances hide (§C2).
+  it("boots an ENROLLED till device onto the lock screen, marked enrolled, and lands on the counter after login", async () => {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "till", stationId: null, tillId: "t1" }),
+    });
+    await flush(el);
+    // A till waits on the lock screen, like a normal operator till — never the station (it is not a KDS).
+    expect(lock(el)).not.toBeNull();
+    expect(station(el)).toBeNull();
+    expect((el as unknown as { tillEnrolled: boolean }).tillEnrolled).toBe(true);
+    // Not a handheld and not a KDS — neither mode flips, and the KDS station prefetch never runs.
+    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    // Marked device-enrolled, so the lock screen hides its setup affordances (§C2).
+    expect(lock(el)!.deviceEnrolled).toBe(true);
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-till]")).toBeNull();
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-device]")).toBeNull();
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-handheld]")).toBeNull();
+    // A device 401 is the only not-a-device case; a resolved `till` must NOT surface a boot error.
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    // After login the operator lands on the COUNTER (a till is a sale-capable POS, not a handheld floor).
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("a normal operator till (401 identity probe) is NOT till-enrolled and still shows the setup affordances", async () => {
+    // The default stub's getDeviceIdentity rejects `device.unauthorized` — the expected not-a-device case.
+    const { el } = await mountApp();
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { tillEnrolled: boolean }).tillEnrolled).toBe(false);
+    // A fresh (un-enrolled) browser still offers all three setup affordances so a first enrolment works.
+    expect(lock(el)!.deviceEnrolled).toBe(false);
+    expect(lock(el)!.shadowRoot!.querySelector("[data-setup-till]")).not.toBeNull();
+  });
+
+  it("the set-up-till affordance opens the till enrol view (lock screen gone)", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    // The lock screen emits `setup-till`; the app overlays the till enrol screen so a fresh counter can
+    // pair itself, and the lock screen it replaces is no longer rendered.
+    emit(lock(el)!, "setup-till");
+    await flush(el);
+    expect(tillEnrol(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+  });
+
+  it("a redeemed till enrol re-boots into the enrolled-till shell (till-enrolled, back on the lock screen)", async () => {
+    const { el } = await mountApp({
+      // The FIRST boot (at mount) is a normal 401 — not-a-device. AFTER enrol the cookie is set, so the
+      // re-boot's SECOND identity probe resolves `till`.
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "d1", kind: "till", stationId: null, tillId: "t1" }),
+    });
+    await flush(el);
+    emit(lock(el)!, "setup-till");
+    await flush(el);
+    expect(tillEnrol(el)).not.toBeNull();
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `till-enrolled`.
+    emit(tillEnrol(el)!, "till-enrolled");
+    await flush(el);
+    // The re-boot read the fresh cookie as `till`: the enrol view is gone, the app is back on the lock
+    // screen (a till waits for the PIN login), and it is marked device-enrolled.
+    expect(tillEnrol(el)).toBeNull();
+    expect(lock(el)).not.toBeNull();
+    expect((el as unknown as { tillEnrolled: boolean }).tillEnrolled).toBe(true);
     // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
     expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
   });

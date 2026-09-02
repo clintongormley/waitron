@@ -20,6 +20,7 @@ import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-handheld-enrol-screen.js";
+import "./screens/till-enrol-screen.js";
 import "./screens/till-expo-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
@@ -230,6 +231,26 @@ export class TillApp extends LitElement {
    * `handheld` cookie routes the app into the phone shell.
    */
   @state() private handheldEnrolling = false;
+  /**
+   * Whether this browser is an enrolled sale-capable TILL device (SP-A.2 device unification) — a counter
+   * that holds the `waitron_device` cookie its sale routes now require, as opposed to a `kds_station`
+   * display ({@link deviceMode}), a `handheld` phone ({@link handheldMode}), or an un-enrolled browser.
+   * Set `true` by {@link #boot} when the device probe's {@link DeviceIdentity.kind} is `till`. A till STAYS
+   * on the lock screen exactly like a normal operator till (the operator PIN-logs-in and lands on the
+   * counter) — the ONLY behavioural effect is that it marks the browser device-enrolled, so the lock
+   * screen's setup affordances hide (fed into `deviceEnrolled`, §C2: an enrolled till must not offer
+   * re-enrolment as a KDS/handheld). Default `false` keeps a browser with no device cookie unchanged.
+   */
+  @state() private tillEnrolled = false;
+  /**
+   * Whether the lock screen's "set up this till" affordance has opened the till ENROL view (SP-A.2
+   * device unification) — the sale-capable twin of {@link handheldEnrolling}, for a FRESH counter that
+   * holds no device cookie yet. Set `true` by {@link #onSetupTill}; while set, `render` shows
+   * `<till-enrol-screen>` in place of the normal screen. Cleared by {@link #onTillEnrolled} once the code
+   * is redeemed, which then re-runs {@link #boot} so the now-set `till` cookie is read back on the next
+   * probe (marking the browser enrolled).
+   */
+  @state() private tillEnrolling = false;
   /**
    * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
    * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
@@ -558,12 +579,19 @@ export class TillApp extends LitElement {
     // no-device case both legitimately stay on `lock`).
     this.handheldMode = false;
     this.deviceMode = false;
+    this.tillEnrolled = false;
     this.#setScreen("lock");
     try {
       const identity = await this.api.getDeviceIdentity();
       if (identity.kind === "handheld") {
         // Stay on `lock`; the waiter PIN-logs-in, then `#onLoggedIn` lands them on the floor.
         this.handheldMode = true;
+      } else if (identity.kind === "till") {
+        // A sale-capable enrolled TILL (SP-A.2): behaves like a normal operator till — STAYS on `lock`
+        // for the operator PIN login, then lands on the counter — but it holds the device cookie the
+        // sale routes now require, so mark it device-enrolled. That flag feeds `deviceEnrolled`, hiding
+        // the lock screen's setup affordances (§C2), and binds no station, so nothing is prefetched.
+        this.tillEnrolled = true;
       } else if (identity.kind === "kds_station") {
         // Prefetch the bound station's queue and hand it to the station screen as `.initialDeviceStation`,
         // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — the
@@ -1028,6 +1056,31 @@ export class TillApp extends LitElement {
    */
   async #onHandheldEnrolled(): Promise<void> {
     this.handheldEnrolling = false;
+    await this.#boot();
+  }
+
+  /**
+   * Route a FRESH counter into the till enrol view from the lock screen's "set up this till" affordance
+   * (SP-A.2 device unification) — the sale-capable twin of {@link #onSetupHandheld}. State-only switch:
+   * while `tillEnrolling` is set, `render` shows `<till-enrol-screen>` instead of the lock screen, so the
+   * operator can pair the counter with a code. Like the handheld path this does NOT touch `screen` — the
+   * enrol screen is an overlay on the boot state, and a successful enrol re-boots into the enrolled-till
+   * shell rather than navigating within this session.
+   */
+  #onSetupTill(): void {
+    this.errorKey = undefined;
+    this.tillEnrolling = true;
+  }
+
+  /**
+   * The till enrol view redeemed a pairing code (SP-A.2 device unification): the device cookie is now
+   * set, so leave the enrol view and re-run {@link #boot}. The boot's device probe reads the fresh cookie
+   * as `till`, sets {@link tillEnrolled}, and keeps the app on the lock screen for the operator to
+   * PIN-log-in. Re-boot (not a bare state flip) so the counter picks up its enrolled-till state exactly
+   * as a cold load of an already-enrolled till would, one code path for both.
+   */
+  async #onTillEnrolled(): Promise<void> {
+    this.tillEnrolling = false;
     await this.#boot();
   }
 
@@ -1761,6 +1814,8 @@ export class TillApp extends LitElement {
         @setup-device=${() => this.#onSetupDevice()}
         @setup-handheld=${() => this.#onSetupHandheld()}
         @handheld-enrolled=${() => void this.#onHandheldEnrolled()}
+        @setup-till=${() => this.#onSetupTill()}
+        @till-enrolled=${() => void this.#onTillEnrolled()}
         @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
@@ -1812,10 +1867,17 @@ export class TillApp extends LitElement {
         ${
           this.handheldEnrolling
             ? html`<till-handheld-enrol-screen .api=${this.api}></till-handheld-enrol-screen>`
-            : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
-              // the whole screen subtree, repainting every child in the new language (the screens hold no
-              // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
-              keyed(currentLocale(), this.#renderScreen())
+            : // The till enrol view (SP-A.2 device unification) overlays the boot/lock state when the
+              // lock screen's "set up this till" affordance opened it — a FRESH counter pairing itself.
+              // Its till-enrolled event (wired above) re-boots into the enrolled-till shell. Shown ahead
+              // of the normal screen, exactly like the handheld enrol view, so it takes precedence over
+              // whatever screen the boot left set.
+              this.tillEnrolling
+              ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
+              : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
+                // the whole screen subtree, repainting every child in the new language (the screens hold no
+                // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+                keyed(currentLocale(), this.#renderScreen())
         }
       </div>
     `;
@@ -1825,11 +1887,11 @@ export class TillApp extends LitElement {
     switch (this.screen) {
       case "lock":
         // `deviceEnrolled` gates the lock screen's device-setup affordances (§C2): an already-enrolled
-        // device — a handheld (which STAYS on lock) or a KDS — must not offer "set up as kitchen
-        // display", or a waiter could re-enrol an in-service phone as a KDS and escape the shell.
+        // device — a handheld or a till (both STAY on lock) or a KDS — must not offer "set up as kitchen
+        // display", or a waiter could re-enrol an in-service device as a KDS and escape the shell.
         return html`<till-lock-screen
           .api=${this.api}
-          .deviceEnrolled=${this.handheldMode || this.deviceMode}
+          .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
         ></till-lock-screen>`;
       case "counter":
         return html`<till-counter-screen

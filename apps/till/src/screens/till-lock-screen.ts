@@ -131,13 +131,15 @@ export class TillLockScreen extends LitElement {
       }
 
       .setup-device,
-      .setup-handheld {
+      .setup-handheld,
+      .setup-till {
         width: 100%;
       }
 
-      /* Space the handheld twin off the kitchen-display affordance above it so the two full-width
-         secondary buttons read as a stack of choices, not one control. */
-      .setup-handheld {
+      /* Space the handheld + till twins off the affordance above each so the full-width secondary
+         buttons read as a stack of choices, not one control. */
+      .setup-handheld,
+      .setup-till {
         margin-top: var(--wt-space-2);
       }
     `,
@@ -265,6 +267,14 @@ export class TillLockScreen extends LitElement {
                 >
                   ${t("device.setup_handheld")}
                 </wt-button>
+                <wt-button
+                  class="setup-till"
+                  data-setup-till
+                  variant="secondary"
+                  @click=${() => this.#setupTill()}
+                >
+                  ${t("device.setup_till")}
+                </wt-button>
               `
         }
         <!-- Pre-login language chooser (per-user-language-preference). It only EMITS a bubbling,
@@ -290,6 +300,14 @@ export class TillLockScreen extends LitElement {
    * operator logging in never sees it. */
   #setupHandheld(): void {
     this.dispatchEvent(new CustomEvent("setup-handheld", { bubbles: true, composed: true }));
+  }
+
+  /** Route a FRESH counter into the till enrol view (SP-A.2 device unification) — the sale-capable twin
+   * of {@link #setupHandheld}: emit a composed, bubbling `setup-till` the app turns into the till enrol
+   * screen. Kept in roster mode beside the kitchen-display + waiter-handheld affordances, off the PIN
+   * view, so an operator logging in never sees it. */
+  #setupTill(): void {
+    this.dispatchEvent(new CustomEvent("setup-till", { bubbles: true, composed: true }));
   }
 
   #renderRoster() {
