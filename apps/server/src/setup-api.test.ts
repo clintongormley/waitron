@@ -177,6 +177,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   calls: string[];
   provisionRequests: ProvisionRequest[];
   provision: ReturnType<typeof vi.fn>;
+  establishIdentity: ReturnType<typeof vi.fn>;
   sealAeat: ReturnType<typeof vi.fn>;
   persistTrading: ReturnType<typeof vi.fn>;
   requestRestart: ReturnType<typeof vi.fn>;
@@ -187,6 +188,9 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     provisionRequests.push(req);
     calls.push("provision");
     return makeVenueResult();
+  });
+  const establishIdentity = vi.fn(async () => {
+    calls.push("establishIdentity");
   });
   const sealAeat = vi.fn(async () => {
     calls.push("sealAeat");
@@ -200,6 +204,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const deps: SetupDeps = {
     environment: "preproduction",
     provision,
+    establishIdentity,
     sealAeat,
     persistTrading,
     requestRestart,
@@ -207,7 +212,16 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
     ...overrides,
   };
-  return { deps, calls, provisionRequests, provision, sealAeat, persistTrading, requestRestart };
+  return {
+    deps,
+    calls,
+    provisionRequests,
+    provision,
+    establishIdentity,
+    sealAeat,
+    persistTrading,
+    requestRestart,
+  };
 }
 
 async function postProvision(app: Hono, body: unknown): Promise<Response> {
@@ -227,7 +241,15 @@ const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unkno
 describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate, latch", () => {
   it("provisions a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
-    const { deps, calls, provisionRequests, sealAeat, requestRestart, persistTrading } = makeDeps();
+    const {
+      deps,
+      calls,
+      provisionRequests,
+      establishIdentity,
+      sealAeat,
+      requestRestart,
+      persistTrading,
+    } = makeDeps();
     mountSetup(app, deps, noopLog);
 
     const res = await postProvision(app, demoBody());
@@ -237,9 +259,13 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
-    expect(calls).toEqual(["provision", "persistTrading"]);
+    expect(calls).toEqual(["provision", "establishIdentity", "persistTrading"]);
     await tick();
-    expect(calls).toEqual(["provision", "persistTrading", "requestRestart"]);
+    expect(calls).toEqual(["provision", "establishIdentity", "persistTrading", "requestRestart"]);
+
+    // Membership identity is established for the freshly-minted node (design §4), after provision
+    // returns and before the trading config is persisted — with the VenueResult's tenant + node ids.
+    expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
 
     // Demo → no AEAT cert seal, and the demo/live fork stamped preproduction.
     expect(sealAeat).not.toHaveBeenCalled();
@@ -331,8 +357,15 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(provisionRequests[0].environment).toBe("production");
     expect(sealAeat).toHaveBeenCalledTimes(1);
     expect(sealAeat.mock.calls[0]).toEqual([TENANT_ID, CERT]);
-    // The seal runs AFTER provision mints the tenant and BEFORE the trading config is persisted.
-    expect(calls).toEqual(["provision", "sealAeat", "persistTrading", "requestRestart"]);
+    // The seal runs AFTER provision mints the tenant and BEFORE the trading config is persisted;
+    // identity establishment sits between provision and the seal (design §4).
+    expect(calls).toEqual([
+      "provision",
+      "establishIdentity",
+      "sealAeat",
+      "persistTrading",
+      "requestRestart",
+    ]);
   });
 
   // Symmetric to the cert-required gate above: the AEAT signing cert is meaningful ONLY for a LIVE
@@ -620,6 +653,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   // box is up but not ready to provision. Also covers each arm of the synchronous deps gate.
   it.each([
     ["provision"],
+    ["establishIdentity"],
     ["sealAeat"],
     ["persistTrading"],
     ["requestRestart"],

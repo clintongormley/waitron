@@ -8,7 +8,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // A signed document at `term`, signed by node "A" with a generated identity key. The trust set maps
 // "A" → that public key, so verifyMembershipDocument passes; an EMPTY trust set makes the same
-// document untrusted_signer — the inert-seam production behaviour.
+// document untrusted_signer — a bare node with no stamped public_key (an un-provisioned node).
 const kp = generateNodeKeyPair();
 const doc = (term: number) => signedMembershipDoc(term, { keyPair: kp });
 const TRUST: TrustSet = { A: kp.publicKey };
@@ -30,7 +30,7 @@ describe("membership adoption", () => {
     expect((await readNodeMembership(pg.db))?.body.term).toBe(2);
   });
 
-  it("adoptMembership rejects an untrusted signer (the empty-trust-set production no-op)", async () => {
+  it("adoptMembership rejects an untrusted signer (a bare node with no stamped public_key)", async () => {
     const outcome = await adoptMembership({ db: pg.db, trustSet: EMPTY }, doc(9));
     expect(outcome).toEqual({ accepted: false, reason: "invalid", failure: "untrusted_signer" });
     expect(await readNodeMembership(pg.db)).toBeNull(); // nothing persisted

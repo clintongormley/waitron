@@ -15,12 +15,15 @@ import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// The HONEST end-to-end consume proof (design §5), the composition boot's empty-seam wiring is quiet
-// about: a document held on the SOURCE is advertised on its peer-authenticated /sync-api/hello, the
-// SUBSCRIBER's REAL runSyncPull (Task 1) drains that peer, hands the advertised document to the REAL
-// adoptMembership (Task 2 — the accept fence + term-guarded persist), and the row lands in the
-// subscriber's OWN node_membership. It wires the real modules directly (NOT through boot's inert `{}`
-// seam) with a FIXTURE trust set, so it exercises the mechanism boot keeps dormant until Slice 4.
+// The HONEST end-to-end consume proof (design §5): a document held on the SOURCE is advertised on its
+// peer-authenticated /sync-api/hello, the SUBSCRIBER's REAL runSyncPull (Task 1) drains that peer,
+// hands the advertised document to the REAL adoptMembership (Task 2 — the accept fence + term-guarded
+// persist), and the row lands in the subscriber's OWN node_membership. It wires the real modules
+// directly with a FIXTURE trust set, so the accept fence is driven from both directions here with a
+// signer key held in-process. Since Slice 4, boot supplies this trust set for real
+// (readMembershipTrustSet over nodes.public_key), so this suite mirrors the live mechanism rather than
+// standing in for a dormant seam — a bare node with no stamped key yields an empty trust set (the
+// untrusted control below), a provisioned/adopted one yields `{self}`/`{primary}`.
 //
 // Real Postgres × 3 (the persist runs as `sync_applier`, a member of `app_user` holding the Slice-3
 // INSERT/UPDATE grant on node_membership — PGlite is a superuser and would not exercise that grant,
@@ -39,7 +42,7 @@ const TENANT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 // The signing identity of the held document. The FIXTURE trust set maps this signer to its public key,
 // so verifyMembershipDocument passes; the EMPTY set makes the same document `untrusted_signer` — the
-// inert-seam production behaviour.
+// behaviour boot produces for a bare node whose nodes.public_key trust set is empty.
 const SIGNER = "source-primary";
 const kp = generateNodeKeyPair();
 const TRUST: TrustSet = { [SIGNER]: kp.publicKey };
@@ -169,10 +172,11 @@ describe("membership gossip e2e — the pull-handshake consume path (design §5)
     expect((await readNodeMembership(subscriber.admin))!.body.term).toBe(SOURCE_TERM);
   }, 90_000);
 
-  it("with an EMPTY trust set the subscriber adopts nothing — the production Slice-4 seam is a no-op", async () => {
+  it("with an EMPTY trust set the subscriber adopts nothing — a bare node with no stamped key yields an empty trust set", async () => {
     // Same source, same advertised term-4 document, but the subscriber trusts no signer: the accept
-    // fence rejects it `untrusted_signer` and NOTHING is persisted. This is exactly boot's inert `{}`
-    // seam, proving the mechanism is gated on trust rather than always-on.
+    // fence rejects it `untrusted_signer` and NOTHING is persisted. This is what boot's real trust set
+    // produces on a bare node with no stamped nodes.public_key — proving the mechanism is gated on trust
+    // rather than always-on.
     expect(await readNodeMembership(untrusted.admin)).toBeNull();
     const outcome = await pullOneRound(untrustedPool, EMPTY);
     expect(outcome).toEqual({ accepted: false, reason: "invalid", failure: "untrusted_signer" });

@@ -4,9 +4,10 @@ import { PURPOSES, isPurpose, validatePayload } from "./purposes.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 describe("PURPOSES", () => {
-  it("declares the three purposes the host needs", () => {
+  it("declares the four purposes the host needs", () => {
     expect(Object.keys(PURPOSES).sort()).toEqual([
       "fiscal.aeat",
+      "membership.node_key",
       "payments.stripe",
       "sync.mirror_token",
     ]);
@@ -43,6 +44,15 @@ describe("sync.mirror_token purpose", () => {
   it("validatePayload accepts a token and rejects a payload missing it", () => {
     expect(() => validatePayload("sync.mirror_token", { token: "abc" })).not.toThrow();
     expect(() => validatePayload("sync.mirror_token", {})).toThrow();
+  });
+});
+
+describe("membership.node_key purpose", () => {
+  it("membership.node_key requires exactly privateKey", () => {
+    expect(isPurpose("membership.node_key")).toBe(true);
+    expect(() => validatePayload("membership.node_key", { privateKey: "PK_B64" })).not.toThrow();
+    expect(() => validatePayload("membership.node_key", {})).toThrow(); // missing
+    expect(() => validatePayload("membership.node_key", { privateKey: "x", extra: "y" })).toThrow(); // unexpected
   });
 });
 

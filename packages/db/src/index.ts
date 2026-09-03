@@ -90,6 +90,7 @@ export {
   readNodeMembership,
   writeNodeMembership,
 } from "./node-membership.js";
+export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./node-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";
