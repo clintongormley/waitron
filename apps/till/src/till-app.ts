@@ -565,11 +565,15 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
-  /** Recompute the memoised {@link #affordanceList} when — and only when — {@link profile} changes (it
-   * is the list's sole input), so the stable field stays current without allocating a fresh array on
-   * every render. Runs before `render()` in the same update cycle, so the field is fresh when read. */
+  /** Recompute the memoised {@link #affordanceList} when — and only when — one of its inputs changes:
+   * {@link profile} (its tab set), or {@link handheldMode} (a handheld suppresses affordances entirely —
+   * {@link #affordances}). A handheld's `handheldMode` is set in {@link #boot} AFTER `profile`, so the
+   * recompute must fire on it too or the list stays the stale pre-probe `{station,expo,schedule}`. So the
+   * stable field stays current without allocating a fresh array on every render. Runs before `render()`
+   * in the same update cycle, so the field is fresh when read. */
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("profile")) this.#affordanceList = this.#affordances();
+    if (changed.has("profile") || changed.has("handheldMode"))
+      this.#affordanceList = this.#affordances();
   }
 
   /**
@@ -1913,8 +1917,9 @@ export class TillApp extends LitElement {
    * Whether navigation should route through the drill-in STACK rather than the legacy `screen` enum —
    * true ONLY on the profile tab shell surface (SP-B2.1): a device profile is present AND the shell is
    * the active surface ({@link #shellActive}). Every rerouted nav handler branches on this; when it is
-   * false (an unprofiled boot, a handheld, a kds display, the lock/enrol overlays) the handler keeps its
-   * exact legacy `#setScreen`/`#goToScreen` behaviour, which handhelds and kds rely on.
+   * false (an unprofiled boot, or the lock/enrol overlays) the handler keeps its exact legacy
+   * `#setScreen`/`#goToScreen` behaviour. Since SP-B2.2 a profiled handheld + kds are shell devices too
+   * (the fence in {@link #shellActive} is gone), so only an UNPROFILED boot stays on the legacy path.
    */
   #inShell(): boolean {
     return this.profile !== undefined && this.#shellActive();
@@ -2073,26 +2078,18 @@ export class TillApp extends LitElement {
 
   /**
    * Whether the profile tab shell (SP-B2.1) should render in place of the legacy `#renderScreen`
-   * switch. True ONLY for the authenticated operator surface the shell replaces: the operator has
-   * passed the lock screen (`screen !== "lock"`), no enrol overlay is open, and this is neither a
-   * `kds_station` display (`deviceMode`) nor a `handheld` phone (`handheldMode`). Both of those STAY on
-   * the legacy screen-enum in B2.1: the kds display's `kds-board` card and the phone-portrait profile's
-   * `order` tab (a `table-order` card) both render nothing until B2.2 wraps them, so a shell would give
-   * those devices a dead tab — the till (counter + floor, both wrapped) is the ONLY shell device in
-   * B2.1. Keeping handheld + kds on the fully-working legacy path is a no-regression change. The
-   * enrolling overlays are already handled ahead of this branch in {@link render}; they are guarded
-   * here too so the predicate reads true only for the surface it names, independent of render order.
+   * switch. True ONLY for the authenticated surface the shell replaces: the operator (or a kds display)
+   * has passed the lock screen (`screen !== "lock"`) and no enrol overlay is open. Handheld + kds are
+   * now shell devices (SP-B2.2): the phone-portrait profile's `order` tab (a `table-order` card) and the
+   * kds profile's `kitchen` tab (a `kds-board` card) both render their embedded screens through the grid
+   * now, so the B2.1 fence (`!deviceMode && !handheldMode`) that kept them on the legacy screen-enum is
+   * removed — a shell would no longer hand either a dead tab. Only the STILL-unprofiled boot (no
+   * `profile`) keeps `#renderScreen`, via {@link #inShell}. The enrolling overlays are already handled
+   * ahead of this branch in {@link render}; they are guarded here too so the predicate reads true only
+   * for the surface it names, independent of render order.
    */
   #shellActive(): boolean {
-    // handheld + kds devices stay on the legacy screen-enum until B2.2 wraps table-order / kds-board;
-    // the till is the only shell device in B2.1.
-    return (
-      this.screen !== "lock" &&
-      !this.handheldEnrolling &&
-      !this.tillEnrolling &&
-      !this.deviceMode &&
-      !this.handheldMode
-    );
+    return this.screen !== "lock" && !this.handheldEnrolling && !this.tillEnrolling;
   }
 
   /** The active tab of the profile shell — the one keyed by {@link activeTabKey}, or the first tab as
@@ -2109,10 +2106,16 @@ export class TillApp extends LitElement {
    * shell is active (`#inShell()`) those handlers push an in-shell drill-in, and off-shell they keep
    * the legacy `#setScreen` behaviour.
    *
+   * A HANDHELD reaches NONE of Station/Expo/Schedule (its face-set is `lock`/`floor`/`table-order`
+   * only — §6a), so it gets an EMPTY affordance list regardless of its tab set — no dead buttons to a
+   * surface a phone cannot open. A kds display suppresses affordances at the shell anyway (kiosk mode),
+   * so `deviceMode` needs no branch here.
+   *
    * The COMPUTE helper for the memoised {@link #affordanceList} field — called only from
-   * {@link willUpdate} when {@link profile} changes, never per render.
+   * {@link willUpdate} when {@link profile} or {@link handheldMode} changes, never per render.
    */
   #affordances(): ShellAffordance[] {
+    if (this.handheldMode) return [];
     const tabKeys = new Set(this.profile?.tabs.map((tab) => tab.key) ?? []);
     return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
   }
@@ -2145,6 +2148,11 @@ export class TillApp extends LitElement {
         .cardOutcome=${this.cardOutcome}
       ></till-counter-screen>`;
     }
+    // The station (kds-board) + table-order props the card-grid now consumes (SP-B2.2 Tasks 3-4). Field
+    // names copied VERBATIM from `#drillBody`'s `station`/`table-order` arms — the source of truth for
+    // which app field feeds which prop (`bumpMode`/`deviceMode`/`initialDeviceStation` for the kds-board's
+    // embedded station screen; `menus`/`selectedCatalogueId`/`statuses`/`courses`/`tabLines`/`activeTabId`
+    // for the embedded table-order screen).
     return html`<till-card-grid
       .tab=${tab}
       .store=${this.#store}
@@ -2164,6 +2172,15 @@ export class TillApp extends LitElement {
       .fireControl=${this.fireControl}
       .zones=${this.zones}
       .tables=${this.tables}
+      .bumpMode=${this.bumpMode}
+      .deviceMode=${this.deviceMode}
+      .initialDeviceStation=${this.initialDeviceStation}
+      .menus=${this.menus}
+      .selectedMenuId=${this.selectedCatalogueId}
+      .statuses=${this.statuses}
+      .courses=${this.courses}
+      .tabLines=${this.tabLines}
+      .orderId=${this.activeTabId}
     ></till-card-grid>`;
   }
 
@@ -2334,6 +2351,7 @@ export class TillApp extends LitElement {
                       .activeTabKey=${this.activeTabKey}
                       .operatorName=${this.operatorName}
                       .affordances=${this.#affordanceList}
+                      .kiosk=${this.deviceMode}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         this.#onTabSelect(e.detail.key);

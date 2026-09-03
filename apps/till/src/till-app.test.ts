@@ -3866,11 +3866,12 @@ describe("till-app", () => {
       expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
     });
 
-    it("a HANDHELD with a profile stays on the legacy screen-enum, NOT the shell (B2.1 leaves table-order unwrapped)", async () => {
-      // A `handheld` phone STAYS on the legacy path in B2.1 even with a profile present: its
-      // phone-portrait profile's `order` tab is a `table-order` card that renders nothing until B2.2, so
-      // a shell would hand the waiter a dead Order tab. `#shellActive()` excludes `handheldMode` — proven
-      // by deletion: drop `&& !this.handheldMode` and this fails (the shell renders over the floor).
+    it("a HANDHELD with a profile renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
+      // A `handheld` phone with a profile is a SHELL device since SP-B2.2 (its `order` tab's `table-order`
+      // card renders through the grid now, so no dead Order tab): the shell renders in place of the legacy
+      // screen-enum, and the waiter lands on the FLOOR tab (the phone profile's first tab, mirroring the
+      // legacy face-set's post-login floor landing). Was the B2.1 fence test asserting the legacy floor
+      // screen; re-pointed to the shell + floor-tab intent when the fence was removed (Task 6).
       const phoneProfile: ProfileDef = {
         formFactor: "phone-portrait",
         capabilities: [],
@@ -3903,10 +3904,110 @@ describe("till-app", () => {
       expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      // Legacy handheld landing: the floor screen renders, the shell does not.
-      expect(shell(el)).toBeNull();
-      expect(floor(el)).not.toBeNull();
+      // SP-B2.2 handheld landing: the shell renders with the FLOOR tab active (the floor surface the
+      // waiter lands on), never the counter. The floor screen mounts as that tab's body through the grid
+      // (nested in the grid's OWN shadow root, so pierce it — `floor(el)` only reaches the app's root).
+      const s = shell(el)!;
+      expect(s).not.toBeNull();
+      expect(s.activeTabKey).toBe("floor");
+      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(grid).not.toBeNull();
+      expect(grid.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
       expect(counter(el)).toBeNull();
+    });
+  });
+
+  describe("profile shell for handheld + kds (SP-B2.2)", () => {
+    const shell = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { kiosk?: boolean; affordances?: unknown[] }>(
+        "till-tab-shell",
+      );
+
+    // A phone-portrait profile: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
+    // card, now WRAPPED by B2.2 so it renders through the grid). A handheld renders the FULL shell (its
+    // operator header) but NO Station/Expo/Schedule affordances — a phone reaches none of those.
+    const phoneProfile: ProfileDef = {
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+        {
+          key: "order",
+          title: "Order",
+          columns: 12,
+          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+
+    // A KDS profile: one `kitchen` tab carrying the `kds-board` card, whose embedded station screen the
+    // grid gates on the `act-as-kds` capability the profile grants. A kds display runs the shell in KIOSK
+    // mode (the operator header suppressed — a display has no logged-in operator).
+    const kdsProfile: ProfileDef = {
+      formFactor: "kds",
+      capabilities: ["act-as-kds"],
+      tabs: [
+        {
+          key: "kitchen",
+          title: "Kitchen",
+          columns: 24,
+          cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+        },
+      ],
+    };
+
+    it("renders the tab shell for a handheld with a full header and no affordances", async () => {
+      // A handheld stays on `lock` until the waiter PIN-logs-in (its face-set post-lock face is `floor`);
+      // the shell activates only on that authenticated surface, so boot THEN login before asserting.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      const s = shell(el)!;
+      expect(s).not.toBeNull();
+      // Handheld = the FULL header, never kiosk (kiosk is the kds display alone).
+      expect(s.kiosk).toBe(false);
+      // No Station/Expo/Schedule buttons — the handheld affordance list is empty even though none of the
+      // three is authored as a tab (the `handheldMode` branch in `#affordances`; the memo recompute on
+      // `handheldMode` change is what makes this `[]` rather than the stale pre-probe `{station,expo,schedule}`).
+      expect(s.affordances).toEqual([]);
+      // The full header renders its logout control — kiosk mode would suppress the whole header.
+      expect(s.shadowRoot!.querySelector(".logout")).not.toBeNull();
+    });
+
+    it("renders the tab shell in kiosk mode for a kds display, mounting the kds-board card", async () => {
+      // A kds_station boots STRAIGHT into device mode past the lock screen (no login); its `getTill`
+      // profile is the KDS profile the server resolves for the display, so `#shellActive()` sees it.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: kdsProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
+        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      });
+      await flush(el);
+      const s = shell(el)!;
+      expect(s).not.toBeNull();
+      // KDS = kiosk: the operator header is suppressed (a display never logs in).
+      expect(s.kiosk).toBe(true);
+      // The kitchen tab's kds-board card mounts the embedded station screen through the grid — nested in
+      // the grid's OWN shadow root (gated on the `act-as-kds` capability the profile grants), so pierce it.
+      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(grid).not.toBeNull();
+      expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
   });
 
