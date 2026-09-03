@@ -14,7 +14,8 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout, getProfile } from "@waitron/layouts";
+import { getLayout, getProfile, getProfileForFormFactor } from "@waitron/layouts";
+import type { FormFactor, ProfileDef } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -91,6 +92,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
+import type { DeviceKind } from "./device.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -99,6 +101,24 @@ import { requireUuidParam } from "./request-screens.js";
 // `error-boundary.ts` these routes wrap through is what answers with `server.internal` now, and it
 // emits that as a bare literal, so it needs no such import of its own. See errors.ts.
 import "./errors.js";
+
+/**
+ * Derive a layout FORM FACTOR from a device KIND for the profile fallback (SP-B1). A device row
+ * carries only `kind` (`packages/db/src/schema/devices.ts`), never a form factor, so the mapping is
+ * fixed here. `handheld` → `phone-portrait`: the codebase treats a handheld as a phone (the phone
+ * shell in `till-app`, and `device-session.ts`'s own doc pairs a handheld with the phone-portrait
+ * default). `tablet-landscape` is not reachable via device kind today.
+ */
+export function deviceFormFactor(kind: DeviceKind): FormFactor {
+  switch (kind) {
+    case "till":
+      return "till";
+    case "kds_station":
+      return "kds";
+    case "handheld":
+      return "phone-portrait";
+  }
+}
 
 /**
  * Everything the till's HTTP routes need, defined COMPLETE now even though the session routes below
@@ -613,8 +633,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
       // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. An ordinary
-      // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); a
-      // device with an assigned `layoutProfileId` gets its profile resolved and surfaced (SP-A.2 §16.3).
+      // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); an
+      // ENROLLED device always resolves a profile — its assigned `layoutProfileId` if set and resolvable,
+      // else the built-in default for its form factor (SP-B1, generalising SP-A.2 §16.3).
       // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
@@ -656,14 +677,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), resolved in the SAME tx only when
-        // a device cookie named a device carrying a non-null `layoutProfileId`. `getProfile` returns
-        // `undefined` for an absent/foreign id (RLS-scoped + tenant-filtered), which surfaces below as an
-        // ABSENT `profile` key rather than `null`.
-        const profile =
-          device?.layoutProfileId != null
-            ? await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId)
-            : undefined;
+        // SP-B1: an enrolled device always resolves a ProfileDef — its explicitly assigned profile if the
+        // id resolves, else the built-in/default profile for its form factor. A request with NO device
+        // (cookieless) stays `undefined` so the payload is byte-for-byte unchanged (see the no-cookie test).
+        let profile: ProfileDef | undefined;
+        if (device != null) {
+          if (device.layoutProfileId != null) {
+            profile = (await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId))?.definition;
+          }
+          profile ??= await getProfileForFormFactor(
+            tx,
+            deps.cfg.tenantId,
+            deviceFormFactor(device.kind),
+          );
+        }
         return {
           issuer: row,
           bumpMode: loc?.bumpMode,
@@ -726,11 +753,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
         layout: boot.layout,
         receipt: boot.receipt,
-        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), the resolved `ProfileDef`. Present
-        // ONLY when a device cookie named a device with a resolvable `layoutProfileId`; the key is ABSENT
-        // (never `null`) otherwise, so a request with no device cookie is byte-for-byte unchanged.
+        // The calling device's resolved layout PROFILE (SP-B1), a bare `ProfileDef`. Present for ANY
+        // enrolled device — its assigned profile if the `layoutProfileId` resolves, else the built-in
+        // default for its form factor — and ABSENT (never `null`) for a cookieless request, so a request
+        // with no device cookie is byte-for-byte unchanged.
         // ADDITIVE — the counter still renders from `layout`/`receipt` above until SP-B.
-        ...(boot.profile !== undefined ? { profile: boot.profile.definition } : {}),
+        ...(boot.profile !== undefined ? { profile: boot.profile } : {}),
       });
     }),
   );
