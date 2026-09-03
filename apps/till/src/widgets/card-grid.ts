@@ -9,9 +9,22 @@ import "./total.js";
 import "./tender-pay.js";
 import "./held-orders.js";
 import "./station-queue.js";
+// The big-card screens (SP-B2.1): each self-registers its tag, mounted embedded (chrome-suppressed) by
+// the switch below. Same side-effect-import-then-name-by-tag shape as the widgets above.
+import "../screens/till-floor-screen.js";
+import "../screens/till-expo-screen.js";
 import { CARD_REQUIRED_CAPABILITY } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
-import type { HeldOrderSummary, OrderFlow, StationQueueGroup, TillProduct } from "../api/client.js";
+import type {
+  FloorZone,
+  HeldOrderSummary,
+  OrderFlow,
+  StationQueueGroup,
+  TableState,
+  TillApi,
+  TillProduct,
+} from "../api/client.js";
+import type { FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
@@ -21,9 +34,10 @@ import type { CardOutcome, CardProvider } from "./tender-pay.js";
  * as the counter screen threads them today (`till-counter-screen.ts:267-307`); card events bubble past
  * this host to `till-app` unchanged — this host installs no listeners on them.
  *
- * Capability→absent and permission→locked are B2. Big cards (floor-plan, table-layout-editor,
- * kds-board, expo, table-order) and `notifications` are not rendered on the counter tab in B1 — they
- * arrive in B2. `visibleWhen` (data-condition show/hide) IS honoured here.
+ * Capability→absent is honoured (`#capable`); permission→locked is a later task. The `floor-plan`,
+ * `table-layout-editor` and `expo` big cards render here (SP-B2.1) by mounting their screens EMBEDDED
+ * (chrome-suppressed); `kds-board`, `table-order` and `notifications` arrive in B2.2/later.
+ * `visibleWhen` (data-condition show/hide) IS honoured here.
  */
 @customElement("till-card-grid")
 export class TillCardGrid extends LitElement {
@@ -66,6 +80,14 @@ export class TillCardGrid extends LitElement {
   @property() cardOutcome?: CardOutcome;
   /** The device's granted capability flags — a card whose required capability is absent is skipped. */
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
+  /** The HTTP face of the till, threaded to the big-card screens (floor placement writes, expo levers). */
+  @property({ attribute: false }) api?: TillApi;
+  /** The venue's `fire_control` mode, threaded to the embedded expo screen's own `fireControl`. */
+  @property() fireControl?: FireControlMode;
+  /** The venue's floor zones, threaded to the embedded floor screen (the app owns and refreshes them). */
+  @property({ attribute: false }) zones: FloorZone[] = [];
+  /** The live-floor occupancy read-model, threaded to the embedded floor screen. */
+  @property({ attribute: false }) tables: TableState[] = [];
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -135,12 +157,38 @@ export class TillCardGrid extends LitElement {
           .view=${"rail"}
           .stationId=${this.defaultStationId}
         ></till-station-queue>`;
-      // Big cards and `notifications` are not rendered on the counter tab in B1 — they arrive in B2.
-      case "notifications":
+      // Big-card screens (SP-B2.1), each mounted EMBEDDED so the card host owns the chrome (title/close)
+      // and the screen renders only its body. `.canExitToCounter=${false}` keeps a stray back-to-counter
+      // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
+      // manager's table-layout-editor card — the latter with `canEdit` (the permission LOCK is a later task).
       case "floor-plan":
+        return html`<till-floor-screen
+          embedded
+          .zones=${this.zones}
+          .tables=${this.tables}
+          .api=${this.api}
+          .canExitToCounter=${false}
+        ></till-floor-screen>`;
       case "table-layout-editor":
-      case "kds-board":
+        // `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
+        // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it.
+        return html`<till-floor-screen
+          embedded
+          .canEdit=${true}
+          .zones=${this.zones}
+          .tables=${this.tables}
+          .api=${this.api}
+          .canExitToCounter=${false}
+        ></till-floor-screen>`;
       case "expo":
+        return html`<till-expo-screen
+          embedded
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+        ></till-expo-screen>`;
+      // These arrive in B2.2/later — still not rendered on any tab yet.
+      case "notifications":
+      case "kds-board":
       case "table-order":
         return nothing;
     }

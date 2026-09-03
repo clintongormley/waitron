@@ -429,6 +429,13 @@ export class TillExpoScreen extends LitElement {
    * `till-station-queue`.
    */
   @property({ attribute: false }) reducedMotion?: boolean;
+  /**
+   * Whether this screen is mounted INSIDE a card host (SP-B2.1) rather than as a standalone screen.
+   * When embedded, it drops its own `<header class="head">` + Back button — the card host supplies the
+   * chrome (title, close) — and renders only the pass body. Default `false` keeps the standalone screen
+   * (its own header + Back) exactly as before, so every existing expo test stays green.
+   */
+  @property({ type: Boolean }) embedded = false;
 
   /** This node's open orders, grouped into courses across stations (reloaded after every lever). */
   @state() private orders: ExpoOrder[] = [];
@@ -503,12 +510,16 @@ export class TillExpoScreen extends LitElement {
   override render() {
     return html`
       <section class="screen" aria-label=${t("expo.title")}>
-        <header class="head">
-          <h1 class="title">${t("expo.title")}</h1>
-          <wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
-            ${t("expo.back")}
-          </wt-button>
-        </header>
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("expo.title")}</h1>
+                <wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
+                  ${t("expo.back")}
+                </wt-button>
+              </header>`
+        }
         ${this.#overdueBadge()}
         ${
           this.reprintErrorCode

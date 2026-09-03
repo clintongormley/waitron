@@ -76,6 +76,27 @@ const prepTab: TabDef = {
   cards: [{ type: "prep-queue", colSpan: 6, rowSpan: 3, config: {}, visibleWhen: ["has-items"] }],
 };
 
+const floorTab: TabDef = {
+  key: "floor",
+  title: "Floor",
+  columns: 12,
+  cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
+const editorTab: TabDef = {
+  key: "editor",
+  title: "Editor",
+  columns: 12,
+  cards: [{ type: "table-layout-editor", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
+const expoTab: TabDef = {
+  key: "expo",
+  title: "Expo",
+  columns: 12,
+  cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
 describe("till-card-grid", () => {
   it("renders each card element in a spanning cell on a fluid grid", async () => {
     const store = new WorkingOrderStore();
@@ -210,26 +231,67 @@ describe("till-card-grid", () => {
     expect(grid.columns).toBeUndefined();
   });
 
-  it("skips the big cards and notifications on the counter tab (B2), rendering no cell for them", async () => {
+  it("still skips notifications, kds-board and table-order (B2.2/later), rendering no cell for them", async () => {
     const store = new WorkingOrderStore();
+    // floor-plan / table-layout-editor / expo now RENDER (SP-B2.1, tested below); the three types
+    // that still return `nothing` arrive in B2.2/later, so a tab carrying them shows only the basket.
     const bigTab: TabDef = {
       key: "counter",
       title: "Counter",
       columns: 12,
       cards: [
         { type: "notifications", colSpan: 4, rowSpan: 1, config: {} },
-        { type: "floor-plan", colSpan: 6, rowSpan: 4, config: {} },
-        { type: "table-layout-editor", colSpan: 6, rowSpan: 4, config: {} },
         { type: "kds-board", colSpan: 6, rowSpan: 4, config: {} },
-        { type: "expo", colSpan: 6, rowSpan: 4, config: {} },
         { type: "table-order", colSpan: 6, rowSpan: 4, config: {} },
         { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
       ],
     };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: bigTab, store });
-    // Only the basket card renders; every skipped card yields no cell at all.
+    // Only the basket card renders; every still-skipped card yields no cell at all.
     expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
+  });
+
+  it("renders an embedded floor screen for a floor-plan card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: floorTab,
+      store,
+      zones: [],
+      tables: [],
+    });
+    const floor = el.shadowRoot!.querySelector<
+      HTMLElement & { embedded?: boolean; canEdit?: boolean }
+    >("till-floor-screen")!;
+    expect(floor).not.toBeNull();
+    expect(floor.embedded).toBe(true);
+    // A plain floor-plan card is the read-only floor — no edit affordance.
+    expect(floor.canEdit).toBe(false);
+  });
+
+  it("renders an embedded editable floor screen for a table-layout-editor card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      zones: [],
+      tables: [],
+    });
+    const floor = el.shadowRoot!.querySelector<
+      HTMLElement & { embedded?: boolean; canEdit?: boolean }
+    >("till-floor-screen")!;
+    expect(floor).not.toBeNull();
+    expect(floor.embedded).toBe(true);
+    expect(floor.canEdit).toBe(true);
+  });
+
+  it("renders an embedded expo screen for an expo card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: expoTab, store });
+    const expo = el.shadowRoot!.querySelector<HTMLElement & { embedded?: boolean }>(
+      "till-expo-screen",
+    )!;
+    expect(expo?.embedded).toBe(true);
   });
 
   it("ALWAYS renders tender-pay even without integrated-card-payment (cash path, sale-critical)", async () => {

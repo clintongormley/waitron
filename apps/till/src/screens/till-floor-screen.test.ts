@@ -526,6 +526,17 @@ describe("till-floor-screen", () => {
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
   });
+
+  // --- Embedded chrome seam (SP-B2.1): mounted inside a card host, the screen drops its own
+  // standalone header (title + Back) but KEEPS the view/edit toggles — those are floor BODY function,
+  // not shell chrome — so a manager can still edit the plan from inside a card.
+
+  it("suppresses its own header + back when embedded, keeping view/edit toggles", async () => {
+    const { el } = await mount({ embedded: true, canEdit: true });
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".back")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".edit-toggle")).not.toBeNull();
+  });
 });
 
 describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () => {

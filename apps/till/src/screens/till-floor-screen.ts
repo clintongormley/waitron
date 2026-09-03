@@ -101,7 +101,10 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The header's control cluster: view toggle, the manager-only edit toggle, and Back. */
+      /* The floor-body control cluster: the view toggle and the manager-only edit toggle. A sibling of
+         the header (never inside it), so it survives when the standalone header is dropped in an
+         embedded card host (SP-B2.1) — these toggles are floor function, not shell chrome. Back lives
+         in the header instead. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -344,6 +347,15 @@ export class TillFloorScreen extends LitElement {
    */
   @property({ attribute: false }) canExitToCounter = true;
   /**
+   * Whether this screen is mounted INSIDE a card host (SP-B2.1) rather than as a standalone screen.
+   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the Back
+   * button) — the card host supplies that chrome — but KEEPS the view/edit toggles, which are floor
+   * BODY function (a manager still edits the plan, an operator still flips map/list from inside a
+   * card), rendered in the always-present `.actions` bar. Default `false` keeps the standalone screen
+   * (its own header + Back) exactly as before, so every existing floor test stays green.
+   */
+  @property({ type: Boolean }) embedded = false;
+  /**
    * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
    * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
    * (the default) checks the live media query on every render; a test injects `true`/`false` for a
@@ -520,38 +532,42 @@ export class TillFloorScreen extends LitElement {
     const view: "map" | "list" = this.viewOverride ?? (placed.length > 0 ? "map" : "list");
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
-        <header class="head">
-          <h1 class="title">${t("floor.title")}</h1>
-          <div class="actions">
-            <wt-button
-              class="view-toggle"
-              data-view-toggle
-              variant="secondary"
-              @click=${() => this.#toggleView(view)}
-            >
-              ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
-            </wt-button>
-            ${
-              this.canEdit
-                ? html`<wt-button
-                    class="edit-toggle"
-                    data-edit-toggle
-                    variant=${this.editing ? "primary" : "secondary"}
-                    @click=${() => this.#toggleEdit()}
-                  >
-                    ${t("floor.edit_plan")}
-                  </wt-button>`
-                : nothing
-            }
-            ${
-              this.canExitToCounter
-                ? html`<wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-                    ${t("floor.back")}
-                  </wt-button>`
-                : nothing
-            }
-          </div>
-        </header>
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("floor.title")}</h1>
+                ${
+                  this.canExitToCounter
+                    ? html`<wt-button class="back" variant="secondary" @click=${() => this.#back()}>
+                        ${t("floor.back")}
+                      </wt-button>`
+                    : nothing
+                }
+              </header>`
+        }
+        <div class="actions">
+          <wt-button
+            class="view-toggle"
+            data-view-toggle
+            variant="secondary"
+            @click=${() => this.#toggleView(view)}
+          >
+            ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+          </wt-button>
+          ${
+            this.canEdit
+              ? html`<wt-button
+                  class="edit-toggle"
+                  data-edit-toggle
+                  variant=${this.editing ? "primary" : "secondary"}
+                  @click=${() => this.#toggleEdit()}
+                >
+                  ${t("floor.edit_plan")}
+                </wt-button>`
+              : nothing
+          }
+        </div>
         ${
           tabs.length > 0
             ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
