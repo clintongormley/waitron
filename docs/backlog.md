@@ -75,7 +75,8 @@ and a dev-only **per-tab device switcher**. Replaces the narrow per-tenant `till
 pre-production). The owner inserted this ahead of resuming Track-2 infra. Design:
 [layout-designer-and-device-profiles](superpowers/specs/2026-09-02-layout-designer-and-device-profiles-design.md).
 
-Decomposition + order **A → C → B** (each its own spec → plan):
+Decomposition + order **A → C → B** (each its own spec → plan). **A and C are landed; SP-B (grid
+editor + rendering) is the sole remaining sub-project of this track.**
 
 - **SP-A.1 — profile & card data model — LANDED #194.** Pure `@waitron/layouts` logic: form factors +
   12-card catalogue + capability flags, per-card contract registry (config/permission/capability/
@@ -104,8 +105,22 @@ Decomposition + order **A → C → B** (each its own spec → plan):
        + the sync/replication bundle, and changing what an immutable record's `till_id` holds needs a new H2
        receipt — a real initiative, not a cleanup. Needs its own brainstorm + full fiscal trace; capture the
        "a moved till is a new register" philosophy there.
-- **SP-C — dev per-tab device switcher** — per-tab `sessionStorage` identity + dev-only override header
-  + a device-reset route. Small; unblocks side-by-side testing.
+- **SP-C — dev per-tab device switcher — LANDED #201 (2026-09-03).** Shipped: a third `WAITRON_ENV=dev`
+  value that maps to `environment=preproduction` for all fiscal/AEAT/Stripe/DB-stamp code (no migration,
+  fiscal enum untouched) and additionally sets a new `config.devMode`; a dev-override header
+  `x-waitron-dev-device: <deviceId>` honoured ONLY under `devMode` at the single chokepoint `tryReadDevice`
+  (no token check, RLS/`active`-scoped, header-wins-over-cookie, no cookie fallback); dev-only
+  `GET`/`POST /api/dev/devices` (list + mint-and-adopt) and `POST /api/device/reset`; the `?dev` chooser
+  (`apps/till`) with per-tab `sessionStorage` identity + a fetch-wrapper header injector; `dev:setup` now
+  emits `WAITRON_ENV=dev` (venue still stamped/behaves preproduction). Fail-closed (inert outside dev) is
+  pinned by config-unit + real-PG override + HTTP e2e (preproduction→401), and the fiscal boundary by a
+  sale-under-override receipt test (`sales.till_id` follows the overridden device; `nodeId`/series/huella
+  unchanged). **Security note:** a review pass caught that `POST /api/device/reset` as first written was an
+  unauthenticated, always-mounted, CSRF-able cookie-clear that could 401 a live till's sales (§5); it is
+  now **devMode-gated (404 in production)**, and the spec (§4.4) + plan (Task 3) carry dated corrections
+  superseding their original "mounted always" text. Design:
+  [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
+  [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
 - **SP-B — grid editor + rendering** — the HA-Sections editor UI + making screens render from grid
   profiles (wrap the bespoke floor/KDS/table-order screens as cards; phased). The schedule risk. Removes
   the old widget model (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over.
