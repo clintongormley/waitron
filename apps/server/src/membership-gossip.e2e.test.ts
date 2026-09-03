@@ -1,13 +1,6 @@
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type AcceptResult,
-  type MembershipDocumentBody,
-  type SignedMembershipDocument,
-  type TrustSet,
-} from "@waitron/membership";
+import { generateNodeKeyPair, type AcceptResult, type TrustSet } from "@waitron/membership";
 import {
   readNodeMembership,
   stampDeployment,
@@ -20,6 +13,7 @@ import { adoptMembership } from "./membership-adopt.js";
 import { mountSyncApi } from "./sync-api.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // The HONEST end-to-end consume proof (design §5), the composition boot's empty-seam wiring is quiet
 // about: a document held on the SOURCE is advertised on its peer-authenticated /sync-api/hello, the
@@ -45,28 +39,12 @@ const TENANT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 // The signing identity of the held document. The FIXTURE trust set maps this signer to its public key,
 // so verifyMembershipDocument passes; the EMPTY set makes the same document `untrusted_signer` — the
-// inert-seam production behaviour. Built from the exported `signDocumentBody`, the way
-// `membership-adopt.test.ts` does, rather than widening the package's fixture surface.
+// inert-seam production behaviour.
 const SIGNER = "source-primary";
 const kp = generateNodeKeyPair();
 const TRUST: TrustSet = { [SIGNER]: kp.publicKey };
 const EMPTY: TrustSet = {};
-
-function body(term: number): MembershipDocumentBody {
-  return {
-    term,
-    nodes: [{ nodeId: SIGNER, contactUrl: "https://source", standing: "serving-primary" }],
-  };
-}
-function doc(term: number): SignedMembershipDocument {
-  const b = body(term);
-  return {
-    body: b,
-    signerNodeId: SIGNER,
-    signature: signDocumentBody(b, kp.privateKey),
-    endorsements: [],
-  };
-}
+const doc = (term: number) => signedMembershipDoc(term, { signerNodeId: SIGNER, keyPair: kp });
 
 // The document the source advertises throughout the suite. Term 4 so the idempotent second round has a
 // concrete "not newer than 4" to assert.

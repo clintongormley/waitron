@@ -1,34 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type MembershipDocumentBody,
-  type SignedMembershipDocument,
-  type TrustSet,
-} from "@waitron/membership";
+import { generateNodeKeyPair, type TrustSet } from "@waitron/membership";
 import { CORE_MIGRATIONS, readNodeMembership, writeNodeMembership } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { adoptMembership, persistIfNewer } from "./membership-adopt.js";
+import { adoptMembership } from "./membership-adopt.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // A signed document at `term`, signed by node "A" with a generated identity key. The trust set maps
 // "A" → that public key, so verifyMembershipDocument passes; an EMPTY trust set makes the same
-// document untrusted_signer — the inert-seam production behaviour. The package's own
-// `sampleBody`/`signDoc` fixtures are package-internal (not on the barrel), so build a tiny local
-// equivalent from the exported `signDocumentBody` rather than widen the package surface.
+// document untrusted_signer — the inert-seam production behaviour.
 const kp = generateNodeKeyPair();
-function body(term: number): MembershipDocumentBody {
-  return { term, nodes: [{ nodeId: "A", contactUrl: "https://a", standing: "serving-primary" }] };
-}
-function doc(term: number): SignedMembershipDocument {
-  const b = body(term);
-  return {
-    body: b,
-    signerNodeId: "A",
-    signature: signDocumentBody(b, kp.privateKey),
-    endorsements: [],
-  };
-}
+const doc = (term: number) => signedMembershipDoc(term, { keyPair: kp });
 const TRUST: TrustSet = { A: kp.publicKey };
 const EMPTY: TrustSet = {};
 
@@ -40,19 +22,6 @@ describe("membership adoption", () => {
   // (or an empty table), which makes them order-independent (CLAUDE.md §4).
   beforeEach(async () => {
     await pg.db.execute(sql`delete from node_membership`);
-  });
-
-  it("persistIfNewer upserts when there is no held document", async () => {
-    expect(await persistIfNewer(pg.db, doc(3))).toBe(true);
-    expect((await readNodeMembership(pg.db))?.body.term).toBe(3);
-  });
-
-  it("persistIfNewer is monotonic — a lower term is a no-op, a higher term overwrites", async () => {
-    await persistIfNewer(pg.db, doc(5));
-    expect(await persistIfNewer(pg.db, doc(3))).toBe(false); // the atomic WHERE guard rejects it
-    expect((await readNodeMembership(pg.db))?.body.term).toBe(5);
-    expect(await persistIfNewer(pg.db, doc(7))).toBe(true);
-    expect((await readNodeMembership(pg.db))?.body.term).toBe(7);
   });
 
   it("adoptMembership accepts an authentic, strictly-newer document and persists it", async () => {

@@ -66,7 +66,7 @@ export interface SyncPullResult extends ApplyBatchResult {
   /** The RAW `membership` field the peer advertised on /sync-api/hello (design §5), or `undefined`
    * from an older peer that does not serve it. Threaded out UNVERIFIED — the injected adopt callback
    * runs the @waitron/membership accept fence against it; this transport layer never inspects it. */
-  readonly membership: unknown;
+  readonly membership?: unknown;
 }
 
 const trimSlash = (url: string): string => url.replace(/\/$/, "");

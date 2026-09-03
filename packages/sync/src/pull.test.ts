@@ -50,7 +50,6 @@ const full = (applied: number): SyncPullResult => ({
   deferred: 0,
   fetched: BATCH,
   advanced: true,
-  membership: undefined,
 });
 // A FULL page of pure no-op redeliveries: applied 0, yet the cursor ADVANCED across the whole page
 // (rows committed above the cursor by a prior partial batch, re-applied as ON CONFLICT DO NOTHING).
@@ -60,7 +59,6 @@ const noopFull = (): SyncPullResult => ({
   deferred: 0,
   fetched: BATCH,
   advanced: true,
-  membership: undefined,
 });
 // A FULL page whose rows are ALL cross-origin-parked: applyBatch applied 0 and held the cursor below
 // every parked seq, so the cursor did NOT advance. The progress guard must break on this (no busy-loop).
@@ -69,14 +67,12 @@ const parkedFull = (): SyncPullResult => ({
   deferred: BATCH,
   fetched: BATCH,
   advanced: false,
-  membership: undefined,
 });
 const short = (applied: number, fetched = 0): SyncPullResult => ({
   applied,
   deferred: 0,
   fetched,
   advanced: true,
-  membership: undefined,
 });
 
 describe("runSyncPull loop control", () => {

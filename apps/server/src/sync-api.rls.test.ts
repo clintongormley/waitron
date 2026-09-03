@@ -5,35 +5,18 @@ import { withTenant, writeNodeMembership, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { decodeBatch, enrolPeer } from "@waitron/sync";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type MembershipDocumentBody,
-  type SignedMembershipDocument,
-} from "@waitron/membership";
+import { generateNodeKeyPair } from "@waitron/membership";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const log: Logger = () => {};
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-// A signed membership document at `term`, signed by node "A" with a generated identity key. The
-// package's own `sampleBody`/`signDoc` fixtures are package-internal (not on the barrel), so build a
-// tiny local equivalent from the exported `signDocumentBody` rather than widen the package surface —
-// the same shape membership-adopt.test.ts uses.
+// A signed membership document at `term`, signed by node "A" with a generated identity key — the
+// same shape membership-adopt.test.ts uses.
 const membershipKeyPair = generateNodeKeyPair();
-function membershipDoc(term: number): SignedMembershipDocument {
-  const body: MembershipDocumentBody = {
-    term,
-    nodes: [{ nodeId: "A", contactUrl: "https://a", standing: "serving-primary" }],
-  };
-  return {
-    body,
-    signerNodeId: "A",
-    signature: signDocumentBody(body, membershipKeyPair.privateKey),
-    endorsements: [],
-  };
-}
+const membershipDoc = (term: number) => signedMembershipDoc(term, { keyPair: membershipKeyPair });
 
 // A clone of the full-manifest template (`sync` last) for the peer lookups + /log read as a
 // non-superuser sync_tailer member; the pre-DB 401 cases are hermetic and never touch the DB.
@@ -132,29 +115,22 @@ describe("mountSyncApi peer auth + handshake", () => {
     }
   });
 
-  it("/sync-api/hello serves the held membership document (null when unset)", async () => {
+  it("/sync-api/hello serves the held membership document (seeded, not null)", async () => {
     // The handshake now rides the held membership document (design §5): a puller re-runs its accept
     // fence against `helloBody.membership`. Mount on `sync_applier` — a member of BOTH `app_user`
     // (the SELECT on node_membership readNodeMembership needs) and `sync_tailer` (the sync_peers
     // lookup requirePeer needs) — the production `syncDb` shape. `sync_reader` (sync_tailer only, as
     // the sibling /hello test uses) lacks the node_membership grant, so it is deliberately NOT reused
     // here (CLAUDE.md §3 — never widen a grant to make a test pass).
+    //
+    // The unset → null case is already asserted by the sibling "returns this node's id and
+    // environment" test above (its `toEqual` includes `membership: null`), so this test starts from a
+    // seeded document rather than re-proving that round-trip.
     const pool = await postgres.pg.connectAs("sync_applier", "ap");
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "memPeer", name: "mem" });
       const app = new Hono();
       mountSyncApi(app, { db: pool, tenantId: "t", nodeId: "n", environment: "production" }, log);
-
-      // Unset → membership is null, and { nodeId, environment } still present.
-      const before = await app.request("/sync-api/hello", {
-        headers: { Authorization: `Bearer ${peer.token}` },
-      });
-      expect(before.status).toBe(200);
-      expect(await before.json()).toEqual({
-        nodeId: "n",
-        environment: "production",
-        membership: null,
-      });
 
       // Seeded via the owner/admin pool (writeNodeMembership is owner-role capable) → /hello serves
       // the WHOLE document, and { nodeId, environment } is still carried alongside.
