@@ -297,6 +297,15 @@ function mountApp(cfg: TillConfig, enrolRateLimiter?: EnrolRateLimiter): Hono {
   return app;
 }
 
+/** A device API mounted with an explicit `devMode` flag — the SP-C dev per-tab device switcher surface
+ *  (`GET /api/dev/devices`) exists ONLY when `devMode === true`, and 404s otherwise. The plain `mountApp`
+ *  above omits the flag (undefined → dev routes not mounted), which is the fail-closed production shape. */
+function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
+  const app = new Hono();
+  mountDeviceApi(app, { db: suite.admin, cfg, secureCookies: false, devMode }, noopLog);
+  return app;
+}
+
 /** JSON request helper. `cookie: null` sends none; omitted sends none too (each caller is explicit). */
 async function send(
   app: Hono,
@@ -1008,6 +1017,81 @@ describe("Device API over real Postgres", () => {
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.unauthorized" },
+    });
+  });
+
+  // ── Dev-only per-tab device switcher: GET /api/dev/devices (SP-C, Task 4) ────────────────────────────
+  describe("GET /api/dev/devices (dev-only)", () => {
+    it("returns devices + option-sources (tills, stations, profiles), tenant-scoped, no token field", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      // A profile the venue can bind (`listProfiles`), plus an enrolled device so `devices[]` is non-empty.
+      await seedProfile(venue.cfg);
+      const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const res = await send(app, "GET", "/api/dev/devices");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        devices: Record<string, unknown>[];
+        tills: Record<string, unknown>[];
+        stations: Record<string, unknown>[];
+        profiles: Record<string, unknown>[];
+      };
+
+      // Devices: the active-only projection (id/kind/label/tillId/layoutProfileId/stationId/active). The
+      // just-enrolled device is present, and NO secret (token / tokenHash) rides the projection.
+      expect(body.devices.map((d) => d.id)).toContain(deviceId);
+      const device = body.devices.find((d) => d.id === deviceId)!;
+      expect(device).toMatchObject({
+        id: expect.any(String),
+        kind: "kds_station",
+        stationId: venue.defaultStationId,
+        active: true,
+      });
+      expect(device).not.toHaveProperty("token");
+      expect(device).not.toHaveProperty("tokenHash");
+
+      // Option-sources for minting a new device (Task 5): the venue's till, its stations and its profiles.
+      expect(body.tills.length).toBeGreaterThan(0);
+      expect(body.tills[0]).toMatchObject({
+        id: expect.any(String),
+        name: expect.any(String),
+        locationId: expect.any(String),
+      });
+      expect(body.stations.length).toBeGreaterThan(0);
+      expect(body.stations.map((s) => s.id)).toContain(venue.defaultStationId);
+      expect(body.profiles.length).toBeGreaterThan(0);
+      expect(body.profiles[0]).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+    });
+
+    it("lists only ACTIVE devices — a revoked device is omitted", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      const live = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+      const doomed = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+      const revoke = await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {
+        cookie: venue.managerCookie,
+      });
+      expect(revoke.status).toBe(204);
+
+      const body = (await (await send(app, "GET", "/api/dev/devices")).json()) as {
+        devices: { id: string }[];
+      };
+      const ids = body.devices.map((d) => d.id);
+      expect(ids).toContain(live.deviceId);
+      expect(ids).not.toContain(doomed.deviceId);
+    });
+
+    it("is absent (404) when devMode is false", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, false);
+      expect((await send(app, "GET", "/api/dev/devices")).status).toBe(404);
+    });
+
+    it("is absent (404) when devMode is omitted — fail-closed production shape", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      expect((await send(app, "GET", "/api/dev/devices")).status).toBe(404);
     });
   });
 });

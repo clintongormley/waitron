@@ -12,14 +12,16 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, deviceKind, devices, ticketItems, withTenant } from "@waitron/db";
+import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
+import { listProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
+import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireEnum, requireString } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
@@ -49,6 +51,15 @@ export interface DeviceApiDeps {
    * `enrol-rate-limit.ts` for why the limit is global-not-per-IP and in-memory-not-DB.
    */
   enrolRateLimiter?: EnrolRateLimiter;
+  /**
+   * When `true`, mounts the SP-C dev-only per-tab device switcher routes (`GET /api/dev/devices`, and
+   * Task 5's `POST /api/dev/devices`); outside dev they DO NOT EXIST (404) — the same fail-closed shape
+   * as the `DEV_DEVICE_HEADER` override. OPTIONAL so every existing `DeviceApiDeps`/`mountDeviceApi`
+   * construction (boot, tests) compiles unchanged: undefined means the dev group is not mounted, so the
+   * default is production, and the routes gate on `deps.devMode === true`. Boot wires the real value
+   * (`config.devMode`) in Task 6.
+   */
+  devMode?: boolean;
 }
 
 /**
@@ -417,4 +428,50 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       return c.body(null, 204);
     }),
   );
+
+  // ── Dev-only per-tab device switcher surface (SP-C) ──────────────────────────────────────────────────
+  // Mounted ONLY in devMode, so outside dev these routes DO NOT EXIST (404) — the same fail-closed
+  // shape as the override header. All reads are RLS-scoped (`withTenant` + `asAppUser`); nothing here
+  // returns a token or reader credential.
+  if (deps.devMode) {
+    app.get("/api/dev/devices", (c) =>
+      run(c, log, async () =>
+        c.json(
+          await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+            await asAppUser(tx);
+            // Active-only projection — the switcher chooses among devices a browser can BECOME, and a
+            // revoked device is not one. NO token/tokenHash column is selected: the credential never
+            // leaves the enrol Set-Cookie header (§device-session), so this list carries only bindings.
+            const deviceRows = await tx
+              .select({
+                id: devices.id,
+                kind: devices.deviceKind,
+                label: devices.label,
+                tillId: devices.tillId,
+                layoutProfileId: devices.layoutProfileId,
+                stationId: devices.stationId,
+                active: devices.active,
+              })
+              .from(devices)
+              .where(eq(devices.active, true))
+              .orderBy(desc(devices.enrolledAt));
+            // The option-sources for minting a new device (Task 5's `POST /api/dev/devices`): the tenant's
+            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its layout profiles.
+            const tillRows = await tx
+              .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
+              .from(tills);
+            const stations = await listStations(tx, deps.cfg);
+            const profiles = await listProfiles(tx, deps.cfg.tenantId);
+            return {
+              devices: deviceRows,
+              tills: tillRows,
+              stations,
+              profiles: profiles.map((p) => ({ id: p.id, name: p.name })),
+            };
+          }),
+        ),
+      ),
+    );
+    // (Task 5 adds POST /api/dev/devices inside this same `if (deps.devMode)` block.)
+  }
 }
