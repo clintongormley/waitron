@@ -97,6 +97,13 @@ const expoTab: TabDef = {
   cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {} }],
 };
 
+const orderTab: TabDef = {
+  key: "order",
+  title: "Order",
+  columns: 12,
+  cards: [{ type: "table-order", colSpan: 12, rowSpan: 12, config: {} }],
+};
+
 // A big card whose data-condition state the host CANNOT compute (`#currentState("expo")` is
 // undefined), but which carries a visibleWhen gate. Under B1 this was hidden (fail closed); SP-B2.1
 // follow-up d fails it OPEN so a self-fetching big card never silently vanishes.
@@ -241,22 +248,22 @@ describe("till-card-grid", () => {
     expect(grid.columns).toBeUndefined();
   });
 
-  it("still skips notifications and table-order (later), rendering no cell for them", async () => {
+  it("still skips notifications (later), rendering no cell for it", async () => {
     const store = new WorkingOrderStore();
-    // floor-plan / table-layout-editor / expo / kds-board now RENDER (kds-board tested below); the two
-    // types that still return `nothing` arrive later, so a tab carrying them shows only the basket.
+    // floor-plan / table-layout-editor / expo / kds-board / table-order now RENDER (tested below);
+    // `notifications` is the ONLY type that still returns `nothing`, so a tab carrying it shows only the
+    // basket.
     const bigTab: TabDef = {
       key: "counter",
       title: "Counter",
       columns: 12,
       cards: [
         { type: "notifications", colSpan: 4, rowSpan: 1, config: {} },
-        { type: "table-order", colSpan: 6, rowSpan: 4, config: {} },
         { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
       ],
     };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: bigTab, store });
-    // Only the basket card renders; every still-skipped card yields no cell at all.
+    // Only the basket card renders; the still-skipped notifications card yields no cell at all.
     expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
   });
@@ -326,6 +333,16 @@ describe("till-card-grid", () => {
       "till-expo-screen",
     )!;
     expect(expo?.embedded).toBe(true);
+  });
+
+  it("renders an embedded table-order screen for a table-order card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: orderTab, store });
+    const to = el.shadowRoot!.querySelector<HTMLElement & { embedded?: boolean }>(
+      "till-table-order-screen",
+    )!;
+    expect(to).not.toBeNull();
+    expect(to.embedded).toBe(true);
   });
 
   it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {

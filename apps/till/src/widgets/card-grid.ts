@@ -14,6 +14,7 @@ import "./station-queue.js";
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
+import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
@@ -22,8 +23,12 @@ import type {
   HeldOrderSummary,
   OrderFlow,
   StationQueueGroup,
+  TableServiceStatus,
   TableState,
+  TabLine,
   TillApi,
+  TillCourse,
+  TillMenu,
   TillProduct,
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
@@ -38,9 +43,9 @@ import type { CardOutcome, CardProvider } from "./tender-pay.js";
  *
  * All three visibility axes are honoured here (SP-B2.1): capability→absent (`#capable`),
  * permission→locked (`#locked`, a dimmed `?inert` cell), and `visibleWhen` (data-condition show/hide,
- * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor`, `expo` and
- * `kds-board` big cards render by mounting their screens EMBEDDED (chrome-suppressed); `table-order`
- * and `notifications` render nothing here and arrive later.
+ * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor`, `expo`,
+ * `kds-board` and `table-order` big cards render by mounting their screens EMBEDDED (chrome-suppressed);
+ * only `notifications` renders nothing here and arrives later.
  */
 @customElement("till-card-grid")
 export class TillCardGrid extends LitElement {
@@ -107,6 +112,19 @@ export class TillCardGrid extends LitElement {
   /** The device station the app already probed at cold boot, handed to the embedded station screen so it
    * does not re-fetch on mount (device-mode only; undefined on the operator path). */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
+  /** The open tab's lines, threaded to the embedded table-order screen (its own `lines` prop). The app
+   * owns and reloads them; renamed `tabLines` here so it never collides with a future basket-lines prop. */
+  @property({ attribute: false }) tabLines: TabLine[] = [];
+  /** The location's accessible menus, threaded to the embedded table-order screen's menu switcher. */
+  @property({ attribute: false }) menus: TillMenu[] = [];
+  /** The menu (catalogue) the table-order round grid currently shows, threaded straight through. */
+  @property() selectedMenuId = "";
+  /** The table service statuses the table-order Estado picker offers, threaded straight through. */
+  @property({ attribute: false }) statuses: TableServiceStatus[] = [];
+  /** The venue's active kitchen courses, threaded to the embedded table-order screen's course picker. */
+  @property({ attribute: false }) courses: TillCourse[] = [];
+  /** The tab's working-order id, threaded to the embedded table-order screen for reference/parity. */
+  @property() orderId?: string;
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -245,9 +263,26 @@ export class TillCardGrid extends LitElement {
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
         ></till-station-screen>`;
-      // These arrive later — still not rendered on any tab yet.
-      case "notifications":
       case "table-order":
+        // The tab (table-order) screen (SP-B2.2), mounted EMBEDDED like the floor/expo/station screens.
+        // The app owns every write and reload; the grid host only threads the props through. `canSettle`
+        // is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
+        // (cash + manual-card tenders), the server firewall being the real guarantee — so it is not passed.
+        return html`<till-table-order-screen
+          embedded
+          .lines=${this.tabLines}
+          .products=${this.products}
+          .menus=${this.menus}
+          .selectedMenuId=${this.selectedMenuId}
+          .statuses=${this.statuses}
+          .courses=${this.courses}
+          .fireControl=${this.fireControl}
+          .tables=${this.tables}
+          .orderId=${this.orderId}
+          .busy=${this.busy}
+        ></till-table-order-screen>`;
+      // This arrives later — still not rendered on any tab yet.
+      case "notifications":
         return nothing;
     }
   }
