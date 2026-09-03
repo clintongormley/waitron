@@ -232,6 +232,65 @@ describe("till-card-grid", () => {
     expect(el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
   });
 
+  it("ALWAYS renders tender-pay even without integrated-card-payment (cash path, sale-critical)", async () => {
+    const store = new WorkingOrderStore();
+    // tender-pay carries a required capability (integrated-card-payment) in CARD_REQUIRED_CAPABILITY,
+    // but it takes cash and is sale-critical, so the grid renders it regardless of capabilities.
+    const payTab: TabDef = {
+      key: "counter",
+      title: "Counter",
+      columns: 12,
+      cards: [{ type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} }],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: payTab,
+      store,
+      capabilities: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+  });
+
+  // capability-skip visible test lands in B2.2 when kds-board renders. Until then kds-board renders
+  // `nothing` in card-grid, so a capability-SKIP is not observable via till-station-screen here.
+  it.skip("skips a capability-gated card when the capability is absent", async () => {
+    const store = new WorkingOrderStore();
+    const kdsTab: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} },
+      ],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kdsTab,
+      store,
+      capabilities: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+  });
+
+  // capability-skip visible test lands in B2.2 when kds-board renders.
+  it.skip("renders a capability-gated card when the capability is present", async () => {
+    const store = new WorkingOrderStore();
+    const kdsTab: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} },
+      ],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kdsTab,
+      store,
+      capabilities: ["act-as-kds"],
+    });
+    expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+  });
+
   it("fails a visibleWhen gate closed for a card type with no data-condition mapping", async () => {
     const store = new WorkingOrderStore();
     // `basket` has no data-condition state, so a visibleWhen gate on it can never be satisfied — the

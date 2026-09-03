@@ -9,7 +9,8 @@ import "./total.js";
 import "./tender-pay.js";
 import "./held-orders.js";
 import "./station-queue.js";
-import type { CardInstance, CardType, TabDef } from "../layout.js";
+import { CARD_REQUIRED_CAPABILITY } from "../layout.js";
+import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type { HeldOrderSummary, OrderFlow, StationQueueGroup, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
@@ -63,13 +64,22 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) tipsEnabled = false;
   /** The outcome of the most recent non-captured `collect-card` attempt, threaded to the pay card. */
   @property() cardOutcome?: CardOutcome;
+  /** The device's granted capability flags — a card whose required capability is absent is skipped. */
+  @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
     if (tab === undefined) return nothing;
     return html`<div class="grid" style="grid-template-columns: repeat(${tab.columns}, 1fr)">
-      ${tab.cards.filter((card) => this.#visible(card)).map((card) => this.#cell(card))}
+      ${tab.cards.filter((card) => this.#capable(card) && this.#visible(card)).map((card) => this.#cell(card))}
     </div>`;
+  }
+
+  /** Capability→ABSENT (spec §5.1). tender-pay is sale-critical + takes cash → ALWAYS rendered. */
+  #capable(card: CardInstance): boolean {
+    if (card.type === "tender-pay") return true; // cash path — never gated absent
+    const required = CARD_REQUIRED_CAPABILITY[card.type];
+    return required === undefined || this.capabilities.includes(required);
   }
 
   #cell(card: CardInstance): TemplateResult | typeof nothing {
