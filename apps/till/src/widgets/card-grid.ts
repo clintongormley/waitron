@@ -192,8 +192,9 @@ export class TillCardGrid extends LitElement {
           .view=${"rail"}
           .stationId=${this.defaultStationId}
         ></till-station-queue>`;
-      // Big-card screens (SP-B2.1), each mounted EMBEDDED so the card host owns the chrome (title/close)
-      // and the screen renders only its body. `.canExitToCounter=${false}` keeps a stray back-to-counter
+      // Big-card screens (SP-B2.1), each mounted EMBEDDED so it renders only its BODY — its own header
+      // and Back are suppressed, and navigation chrome comes from the tab shell / drill-in host, not
+      // from this grid cell (the cell itself draws no title/close). `.canExitToCounter=${false}` keeps a stray back-to-counter
       // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
       // manager's table-layout-editor card — the latter with `canEdit`. The table-layout-editor card's
       // permission LOCK (till.configure) is enforced by `#locked`/`.cell.locked` at the CELL level above,
