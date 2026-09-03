@@ -41,6 +41,13 @@ export interface ServerConfig {
    */
   syncDatabaseUrl?: string;
   environment: DeploymentEnvironment;
+  /**
+   * Whether this host runs in DEV mode (`WAITRON_ENV=dev`) — the switch the dev per-tab device
+   * switcher (SP-C) gates the override header + dev routes on. Set from {@link isDevMode}; distinct
+   * from `environment`, which is fiscally two-valued and maps `dev` to `preproduction`. Never `true`
+   * on a production host.
+   */
+  devMode: boolean;
   httpPort: number;
   /** Defaults to loopback. `/health` (spec §9) is deliberately unauthenticated, which is fine on a
    * loopback listener and less fine on every interface — the body is operational metadata, not a
@@ -513,6 +520,10 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
   // numbering can never be reused, even for a test invoice, so this is the one default in the file
   // whose mistake is irreversible.
   if (isUnset(raw)) return "preproduction";
+  // `dev` is a DEV-ONLY input: it enables the dev device switcher (see `isDevMode`) but is
+  // fiscally identical to preproduction — the stamp, AEAT endpoints and Stripe mode never see it,
+  // so no migration and no widening of the fiscal `DeploymentEnvironment`/`Entorno` union.
+  if (raw === "dev") return "preproduction";
   if (raw !== "production" && raw !== "preproduction") {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_ENV",
@@ -520,6 +531,18 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
     });
   }
   return raw;
+}
+
+/**
+ * Whether this host runs in DEV mode — `WAITRON_ENV=dev`, the only input that enables the dev per-tab
+ * device switcher (SP-C). Distinct from {@link deploymentEnvironment}, which maps `dev` to
+ * `preproduction`: `devMode` is the switch the override header + dev routes gate on, so it is `true`
+ * for the literal `dev` alone and `false` for `production`, `preproduction`, and unset. Because it
+ * requires `WAITRON_ENV=dev` while `production` requires `WAITRON_ENV=production`, a host is never
+ * both production and devMode.
+ */
+export function isDevMode(env: Env): boolean {
+  return env.WAITRON_ENV === "dev";
 }
 
 export function loadConfig(
@@ -640,6 +663,7 @@ export function loadConfig(
       ? undefined
       : env.WAITRON_SYNC_DATABASE_URL,
     environment,
+    devMode: isDevMode(env),
     httpPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,

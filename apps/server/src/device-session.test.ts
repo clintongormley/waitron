@@ -19,6 +19,7 @@ import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import type { CapabilityFlag } from "@waitron/layouts";
 import {
+  DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
   assertDeviceCapability,
   assertNotHandheld,
@@ -536,5 +537,102 @@ describe("assertDeviceCapability (real Postgres)", () => {
     expect(
       (await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open")).ok,
     ).toBe(false);
+  });
+});
+
+/**
+ * Runs `tryReadDevice` inside a one-route Hono app, passing an optional dev-override header and/or
+ * cookie. Mirrors the file's existing `runProbe`/`probeTry` helper but exposes an arbitrary header set
+ * (the `probe` helpers only carry a cookie), so the SP-C override header can be driven directly.
+ */
+async function readWithHeaders(
+  deps: Parameters<typeof tryReadDevice>[0],
+  headers: Record<string, string>,
+): Promise<DeviceBinding | null> {
+  const app = new Hono();
+  app.get("/probe", async (c) => c.json({ binding: await tryReadDevice(deps, c) }));
+  const res = await app.request("/probe", { headers });
+  return ((await res.json()) as { binding: DeviceBinding | null }).binding;
+}
+
+/**
+ * Enrol a `till` device A (with its cookie kept) and a `kds_station` device B in the SAME tenant, plus a
+ * device in ANOTHER tenant — the SP-C dev-override fixture. Device A is a plausible "current cookie"
+ * identity; B is the override target; the foreign device proves the override read is RLS-scoped (a
+ * cross-tenant id is a miss). All three enrolled through the real pairing/enrol path, like the suite's
+ * other fixtures.
+ */
+async function enrolDevDevices(): Promise<{
+  cfg: TillConfig;
+  deviceAId: string;
+  deviceACookie: string;
+  deviceBId: string;
+  otherTenantDeviceId: string;
+}> {
+  const { cfg, stationId } = await setupStation();
+  // Device A — a `till` device (needs a till_id), whose cookie stands in for the current identity.
+  const { code: codeA } = await asApp(suite.admin, cfg, (tx) =>
+    generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Till A",
+    }),
+  );
+  const devA = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code: codeA }));
+  // Device B — a `kds_station` (needs a station), the override target.
+  const { code: codeB } = await asApp(suite.admin, cfg, (tx) =>
+    generatePairingCode(tx, cfg, { kind: "kds_station", stationId, label: "KDS B" }),
+  );
+  const devB = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code: codeB }));
+  // A device in a DIFFERENT tenant — its own fresh tenant via `enrolDeviceFixture`.
+  const { deviceId: otherTenantDeviceId } = await enrolDeviceFixture();
+  return {
+    cfg,
+    deviceAId: devA.deviceId,
+    deviceACookie: `${devA.deviceId}.${devA.token}`,
+    deviceBId: devB.deviceId,
+    otherTenantDeviceId,
+  };
+}
+
+describe("dev-override header (real Postgres)", () => {
+  it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
+    const { cfg, deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
+    const binding = await readWithHeaders(
+      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: false },
+      { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
+    );
+    expect(binding?.deviceId).toBe(deviceAId); // NOT deviceBId
+  });
+
+  it("is honoured when devMode is true — header wins over cookie, no token needed", async () => {
+    const { cfg, deviceACookie, deviceBId } = await enrolDevDevices();
+    const binding = await readWithHeaders(
+      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+      { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
+    );
+    expect(binding?.deviceId).toBe(deviceBId);
+    expect(binding?.kind).toBe("kds_station");
+  });
+
+  it("an unknown/foreign/malformed override id is a miss, with NO cookie fallback", async () => {
+    const { cfg, deviceACookie, otherTenantDeviceId } = await enrolDevDevices();
+    for (const bad of ["not-a-uuid", randomUUID(), otherTenantDeviceId]) {
+      const binding = await readWithHeaders(
+        { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+        { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: bad },
+      );
+      expect(binding).toBeNull();
+    }
+  });
+
+  it("with no override header, devMode reads the cookie unchanged", async () => {
+    const { cfg, deviceAId, deviceACookie } = await enrolDevDevices();
+    const binding = await readWithHeaders(
+      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+      { cookie: `${DEVICE_COOKIE}=${deviceACookie}` },
+    );
+    expect(binding?.deviceId).toBe(deviceAId);
   });
 });

@@ -12,14 +12,16 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, deviceKind, devices, ticketItems, withTenant } from "@waitron/db";
+import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
+import { listProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
-import { requireDevice, setDeviceCookie } from "./device-session.js";
+import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
+import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireEnum, requireString } from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
@@ -49,6 +51,15 @@ export interface DeviceApiDeps {
    * `enrol-rate-limit.ts` for why the limit is global-not-per-IP and in-memory-not-DB.
    */
   enrolRateLimiter?: EnrolRateLimiter;
+  /**
+   * When `true`, mounts the SP-C dev-only per-tab device switcher routes (`GET /api/dev/devices`, and
+   * Task 5's `POST /api/dev/devices`); outside dev they DO NOT EXIST (404) — the same fail-closed shape
+   * as the `DEV_DEVICE_HEADER` override. OPTIONAL so every existing `DeviceApiDeps`/`mountDeviceApi`
+   * construction (boot, tests) compiles unchanged: undefined means the dev group is not mounted, so the
+   * default is production, and the routes gate on `deps.devMode === true`. Boot wires the real value
+   * (`config.devMode`) in Task 6.
+   */
+  devMode?: boolean;
 }
 
 /**
@@ -117,20 +128,24 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "device.failed");
 
 /**
- * Mounts the three device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`
+ * Mounts the device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`
  * convention, attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps
  * errors identically:
  *
  *  1. UNAUTHENTICATED enrolment (`POST /api/device/enrol`) — mirrors the till's `POST /api/session`: no
  *     prior-session guard, redeems a pairing code as `app_user` under the tenant, and sets the trusted
  *     device cookie from the token the verb mints. The token leaves ONLY in the cookie (never the body).
- *  2. DEVICE-GUARDED routes (`GET /api/device/station`, `POST /api/device/ticket-items/:id/advance`) —
- *     each calls `requireDevice` FIRST (401 otherwise) and scopes every read/bump to the device's OWN
- *     bound station; a bump of another station's item is `device.forbidden_station` (403).
+ *  2. DEVICE-GUARDED routes (`GET /api/device/me`, `GET /api/device/station`, `POST
+ *     /api/device/ticket-items/:id/advance`) — each calls `requireDevice` FIRST (401 otherwise) and
+ *     resolves to the CALLER's own device: `me` returns that device's identity, while the station
+ *     routes scope every read/bump to the device's OWN bound station (a bump of another station's item
+ *     is `device.forbidden_station`, 403).
  *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`) — each calls
  *     `requireManagementSession` (401), then funnels its DB work through the local `gated` helper, which
  *     `authorizeManager`s `device.manage` (403) before the op runs, in exactly one place.
+ *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
+ *     and mint-and-adopt (`GET`/`POST /api/dev/devices`) and the cookie reset (`POST /api/device/reset`).
  */
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
@@ -197,7 +212,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // Echo the binding verbatim, incl. the SP-A.2 §16 profile/till/hardware fields so the client can
       // (SP-B) boot into its assigned profile + hardware. All non-secret config — the reader's
       // credentials stay in the vault and never ride this response.
@@ -218,7 +233,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // A `kds_station` device is ALWAYS station-bound: enrolDevice copies the code's station, itself a
       // live station `requireLiveStation` confirmed at mint. But `requireDevice` authenticates ANY active
       // device regardless of kind, and a `handheld` binds to NO station (`stationId` is null,
@@ -247,7 +262,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
@@ -403,4 +418,114 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       return c.body(null, 204);
     }),
   );
+
+  // ── Dev-only per-tab device switcher surface (SP-C) ──────────────────────────────────────────────────
+  // Mounted ONLY in devMode, so outside dev these routes DO NOT EXIST (404) — the same fail-closed
+  // shape as the override header. All reads are RLS-scoped (`withTenant` + `asAppUser`); nothing here
+  // returns a token or reader credential.
+  if (deps.devMode) {
+    app.get("/api/dev/devices", (c) =>
+      run(c, log, async () =>
+        c.json(
+          await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+            await asAppUser(tx);
+            // Active-only projection — the switcher chooses among devices a browser can BECOME, and a
+            // revoked device is not one. NO token/tokenHash column is selected: the credential never
+            // leaves the enrol Set-Cookie header (§device-session), so this list carries only bindings.
+            const deviceRows = await tx
+              .select({
+                id: devices.id,
+                kind: devices.deviceKind,
+                label: devices.label,
+                tillId: devices.tillId,
+                layoutProfileId: devices.layoutProfileId,
+                stationId: devices.stationId,
+                active: devices.active,
+              })
+              .from(devices)
+              .where(eq(devices.active, true))
+              .orderBy(desc(devices.enrolledAt));
+            // The option-sources for minting a new device (Task 5's `POST /api/dev/devices`): the tenant's
+            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its layout profiles.
+            const tillRows = await tx
+              .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
+              .from(tills);
+            const stations = await listStations(tx, deps.cfg);
+            const profiles = await listProfiles(tx, deps.cfg.tenantId);
+            return {
+              devices: deviceRows,
+              tills: tillRows,
+              stations,
+              profiles: profiles.map((p) => ({ id: p.id, name: p.name })),
+            };
+          }),
+        ),
+      ),
+    );
+    // Mint-and-adopt (SP-C, Task 5): mint a pairing code then immediately redeem it, returning the new
+    // device's id for the tab to adopt via the dev-override header. It sets NO device cookie — the dev
+    // override authenticates by id, so the enrol Set-Cookie is deliberately absent.
+    app.post("/api/dev/devices", (c) =>
+      run(c, log, async () => {
+        const body = await readJsonBody<{
+          kind?: unknown;
+          label?: unknown;
+          stationId?: unknown;
+          tillId?: unknown;
+          layoutProfileId?: unknown;
+        }>(c);
+        // The SAME field screens `POST /management-api/device-codes` uses, so validation cannot drift.
+        const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
+        const label = requireString(body.label, "label");
+        const optionalUuid = (v: unknown, field: string): string | null =>
+          v === undefined || v === null ? null : requireBodyUuid(v, field);
+        const stationId = kindRequiresStation(kind)
+          ? requireBodyUuid(body.stationId, "stationId")
+          : null;
+        const tillId = optionalUuid(body.tillId, "tillId");
+        const layoutProfileId = optionalUuid(body.layoutProfileId, "layoutProfileId");
+        // Mint a code then immediately redeem it, in ONE tenant tx, reusing every binding rule
+        // (`device.till_required` / `device.station_required` / `device.binding_invalid`). No cookie is
+        // set: the dev override authenticates by id, so the tab adopts the device via sessionStorage.
+        const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          const { code } = await generatePairingCode(tx, deps.cfg, {
+            kind,
+            stationId,
+            tillId,
+            layoutProfileId,
+            label,
+          });
+          return enrolDevice(tx, deps.cfg, { code });
+        });
+        // Echo only the non-secret bindings; the token `enrolDevice` mints stays in-process (no cookie,
+        // no body), unlike the enrol route which sets it as the trusted device cookie.
+        return c.json(
+          {
+            deviceId: enrolled.deviceId,
+            kind: enrolled.kind,
+            stationId: enrolled.stationId,
+            label: enrolled.label,
+          },
+          201,
+        );
+      }),
+    );
+    // ── Reset (drop THIS browser's device identity) ──────────────────────────────────────────────────
+    // DEV-ONLY: mounted only under devMode (404 otherwise), used by the `?dev` chooser to drop this
+    // browser's stored device cookie so the tab reverts to un-enrolled and can re-adopt. It is
+    // unauthenticated and reads no body — it just emits a cookie deletion — so it MUST NOT exist on a
+    // production/preproduction host: there a cross-site-triggered clear (a bare `<form method=post>`,
+    // no token, no preflight) would drop a LIVE till/KDS's device cookie, after which `requireSaleTillId`
+    // 401s its `POST /api/sales` — a till that cannot sell (CLAUDE.md §5). The devMode gate is what makes
+    // this safe, not any cookie attribute: `sameSite` governs whether the cookie is SENT, not whether a
+    // Set-Cookie can CLEAR one, and this handler never reads the incoming cookie. The device row is
+    // untouched (still active) — only the browser's copy of the cookie is cleared.
+    app.post("/api/device/reset", (c) =>
+      run(c, log, async () => {
+        clearDeviceCookie(c);
+        return c.body(null, 204);
+      }),
+    );
+  }
 }

@@ -23,6 +23,15 @@ import { isUuid } from "./till-session.js";
  */
 export const DEVICE_COOKIE = "waitron_device";
 
+/**
+ * The DEV-ONLY per-tab device override header (SP-C). When this host runs in `devMode` (config), a
+ * request carrying `x-waitron-dev-device: <deviceId>` is authenticated AS that device WITHOUT a token
+ * — a deliberate dev backdoor that lets one browser run several device identities in separate tabs.
+ * NEVER read unless `deps.devMode` is true, so it is byte-for-byte inert in preproduction/production.
+ * Lowercase kebab, matching `x-request-id`.
+ */
+export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
+
 /** How long the device cookie stays valid — one year in seconds (§3c). A kitchen display must remain
  * enrolled across reboots and power cuts, so — unlike the operator/management session cookies, which
  * carry NO `Max-Age` and die with the browser session — this one is deliberately long-lived. Instant
@@ -87,6 +96,27 @@ export interface DeviceBinding {
 }
 
 /**
+ * Maps a selected device row's non-secret binding columns onto a {@link DeviceBinding}. Shared by the
+ * cookie and the dev-override read paths in {@link tryReadDevice} so the two cannot drift on the field
+ * list — a select that omits a binding column fails to typecheck here. Carries NO authentication: the
+ * caller has already fetched an `active` row (and, on the cookie path, verified the token). The param
+ * is typed to the binding's own fields, so a `tokenHash` on the passed row is never copied through.
+ */
+function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">): DeviceBinding {
+  return {
+    deviceId,
+    kind: row.kind,
+    stationId: row.stationId,
+    tillId: row.tillId,
+    layoutProfileId: row.layoutProfileId,
+    receiptPrinterId: row.receiptPrinterId,
+    hasCashDrawer: row.hasCashDrawer,
+    cardProvider: row.cardProvider,
+    cardReaderId: row.cardReaderId,
+  };
+}
+
+/**
  * Reads and authenticates the request's device cookie against the database, returning the binding on
  * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
  * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
@@ -102,18 +132,51 @@ export interface DeviceBinding {
  * The lookup runs as `app_user` inside `withTenant`, so RLS hides another tenant's devices exactly as a
  * missing cookie would, and the `active = true` filter is what makes revocation INSTANT: a revoked row
  * is simply not found, with no token lifetime to expire. `verifySecret` (scrypt, `@waitron/identity`)
- * is constant-time — the token is NEVER compared with `===`. On success the sighting is recorded
- * (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the binding
- * returned; nothing is logged, and the token never leaves this function. The `last_seen_at` write
- * happens ONLY on the success path, so a firewall probe on a non-device request is a pure read.
+ * is constant-time — the token is NEVER compared with `===`. On a successful COOKIE read the sighting is
+ * recorded (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the
+ * binding returned; nothing is logged, and the token never leaves this function. That `last_seen_at` write
+ * happens ONLY on the cookie success path, so a firewall probe on a non-device request is a pure read — and
+ * so is the devMode override branch above, which resolves the binding by id and writes nothing.
  *
  * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
  * group carrying only `{ tenantId }` can gate on it without contriving a full config.
  */
 export async function tryReadDevice(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding | null> {
+  // SP-C dev override: in devMode ONLY, an `x-waitron-dev-device: <id>` header authenticates AS that
+  // device with NO token check. The header WINS over the cookie and does not fall back to it — an
+  // override that names a bad device is a clean miss (`null` → `device.unauthorized`), not a silent
+  // switch to the cookie's identity. Resolved by the SAME id-selected, RLS-scoped, `active = true`
+  // read the cookie path uses below, minus `verifySecret` AND minus the `last_seen_at = now()` sighting
+  // write that path performs — intentional: the dev backdoor is a pure read, mutating no real device's
+  // last-seen state.
+  if (deps.devMode === true) {
+    const override = c.req.header(DEV_DEVICE_HEADER);
+    if (override !== undefined) {
+      if (!isUuid(override)) return null;
+      return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const [row] = await tx
+          .select({
+            kind: devices.deviceKind,
+            stationId: devices.stationId,
+            tillId: devices.tillId,
+            layoutProfileId: devices.layoutProfileId,
+            receiptPrinterId: devices.receiptPrinterId,
+            hasCashDrawer: devices.hasCashDrawer,
+            cardProvider: devices.cardProvider,
+            cardReaderId: devices.cardReaderId,
+          })
+          .from(devices)
+          .where(and(eq(devices.id, override), eq(devices.active, true)));
+        if (row === undefined) return null;
+        return toDeviceBinding(override, row);
+      });
+    }
+  }
+
   const raw = readDeviceCookie(c);
   if (raw === null) return null;
   // Split on the FIRST `.` only: the id is a UUID (no dots) and a base64url token has none either, but
@@ -170,17 +233,7 @@ export async function tryReadDevice(
           sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
         ),
       );
-    return {
-      deviceId,
-      kind: row.kind,
-      stationId: row.stationId,
-      tillId: row.tillId,
-      layoutProfileId: row.layoutProfileId,
-      receiptPrinterId: row.receiptPrinterId,
-      hasCashDrawer: row.hasCashDrawer,
-      cardProvider: row.cardProvider,
-      cardReaderId: row.cardReaderId,
-    };
+    return toDeviceBinding(deviceId, row);
   });
 }
 
@@ -192,7 +245,7 @@ export async function tryReadDevice(
  * All the authentication and the `last_seen_at` book-keeping live in `tryReadDevice`.
  */
 export async function requireDevice(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding> {
   const device = await tryReadDevice(deps, c);
@@ -231,7 +284,7 @@ export async function requireDevice(
  * null, is the "read it yourself" signal, so the fail-closed null path is unchanged either way.
  */
 export async function requireSaleTillId(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
   c: Context,
   device?: DeviceBinding | null,
 ): Promise<TillId> {
@@ -262,7 +315,7 @@ export async function requireSaleTillId(
  * behaviour — this reads the binding itself.
  */
 export async function assertNotHandheld(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
   c: Context,
   action: string,
   device?: DeviceBinding | null,
@@ -304,7 +357,7 @@ export async function assertNotHandheld(
  * the binding itself, which is why the other capability call-site (`/api/drawer/open`) need not change.
  */
 export async function assertDeviceCapability(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
   c: Context,
   capability: CapabilityFlag,
   action: string,

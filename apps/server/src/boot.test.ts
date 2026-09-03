@@ -8,7 +8,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { captureError, readDeploymentEnvironment, stampDeployment, withTenant } from "@waitron/db";
+import {
+  asAppUser,
+  captureError,
+  readDeploymentEnvironment,
+  stampDeployment,
+  withTenant,
+} from "@waitron/db";
 import {
   cloneTemplate,
   nextCloneName,
@@ -37,6 +43,10 @@ import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { loadTillConfig } from "./till-config.js";
+import type { TillConfig } from "./till-config.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
  * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
@@ -2193,6 +2203,117 @@ describe("MAX_UPLOAD_BYTES", () => {
     // upload route cannot silently change the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(5 * 1024 * 1024);
   });
+});
+
+describe("SP-C dev override reaches the live device routes only under devMode", () => {
+  // The end-to-end proof that Task 6's boot wiring threads `config.devMode` all the way to the live
+  // routes: `mountDeviceApi` must receive `devMode: config.devMode`, and the `/api/device/me` route
+  // (which reconstructs a NARROW `{ db, cfg }` for `requireDevice`) must forward `devMode` so the
+  // `x-waitron-dev-device` override header is honoured. The security invariant is the fail-closed
+  // half: a NON-dev boot (`WAITRON_ENV=preproduction`) must IGNORE the header entirely — proven at
+  // the HTTP layer, not reasoned about. Both boots are TRADING mode (all five WAITRON_TILL_*_ID via
+  // KEY_ENV), so `mountDeviceApi` is mounted; only `WAITRON_ENV` differs between them.
+  //
+  // Two devices are enrolled (bound to two DIFFERENT tills) so the assertion proves the header
+  // SELECTS a specific device rather than defaulting to whatever one device happens to exist:
+  // `/api/device/me` returns device-2's id AND device-2's bound `tillId`, not device-1's. Enrolled
+  // via the genuine mint->redeem path (`generatePairingCode` + `enrolDevice`) on the app role under
+  // the tenant, exactly as `sale-till-source.receipt.test.ts` does — though the override path never
+  // checks the token, the real enrol path proves the wiring against a genuinely-provisioned device.
+  let deviceId1: string;
+  let deviceId2: string;
+  let till2: string;
+
+  beforeAll(async () => {
+    const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
+    // Two `tills` rows in this till's own tenant/location, inserted as the container superuser (RLS
+    // bypassed, exactly as the tenant/location seed above). The (tenant_id, till_id) composite FK on
+    // `devices` (MATCH SIMPLE, both columns non-null here) requires a real row per bound device.
+    const insertTill = async (name: string): Promise<string> => {
+      const res = await suite.admin.execute<{ id: string }>(sql`
+        insert into tills (tenant_id, location_id, name)
+        values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${name})
+        returning id`);
+      return res.rows[0]!.id;
+    };
+    const till1 = await insertTill("SP-C dev override till 1");
+    till2 = await insertTill("SP-C dev override till 2");
+    // Enrol a `till`-kind device bound to `boundTillId` and return its id — the mint->redeem runs on
+    // the app role under the tenant (the production enrol path), so `tryReadDevice`'s id-selected,
+    // RLS-scoped, `active = true` read resolves a genuine binding.
+    const enrolTillDevice = async (boundTillId: string): Promise<string> => {
+      const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return generatePairingCode(tx, cfg, {
+          kind: "till",
+          stationId: null,
+          tillId: boundTillId,
+          layoutProfileId: null,
+          label: "SP-C dev override device",
+        });
+      });
+      const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return enrolDevice(tx, cfg, { code });
+      });
+      return dev.deviceId;
+    };
+    deviceId1 = await enrolTillDevice(till1);
+    deviceId2 = await enrolTillDevice(till2);
+  }, 60_000);
+
+  it("under devMode, the x-waitron-dev-device header authenticates AS that device on /api/device/me (no cookie)", async () => {
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "dev",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    try {
+      // The header names device-2; the response is device-2's binding — proof the override reached
+      // `requireDevice` through the reconstructed `{ db, cfg }` (with `devMode` now forwarded), and
+      // that it SELECTED the named device (its own bound `tillId`), not device-1 or a default.
+      const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
+        headers: { [DEV_DEVICE_HEADER]: deviceId2 },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { deviceId: string; tillId: string | null };
+      expect(body.deviceId).toBe(deviceId2);
+      expect(body.tillId).toBe(till2);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("a boot NOT in devMode ignores the header (401 with no cookie)", async () => {
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    try {
+      // Same header, same enrolled device — but `config.devMode` is false, so the override is
+      // byte-for-byte inert: `tryReadDevice` never reads the header and, with no cookie, folds to
+      // `device.unauthorized` (401). This is the fail-closed security invariant at the HTTP layer.
+      const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
+        headers: { [DEV_DEVICE_HEADER]: deviceId1 },
+      });
+      expect(res.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
 });
 
 describe("DEFAULT_MIGRATIONS_ROOT", () => {

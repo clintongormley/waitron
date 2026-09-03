@@ -29,7 +29,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
-import { DEVICE_COOKIE } from "./device-session.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 
 /**
  * The H2 fiscal receipt for the SP-A.2 device-unification cutover — the REAL-Postgres arm (spec
@@ -203,6 +203,27 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
+/** Enrol a REAL `till`-kind device bound to `boundTillId` and return its raw `deviceId` (not a cookie)
+ *  — the id the SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same
+ *  genuine mint->redeem enrol path as {@link enrolTillCookie}. */
+async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
+  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: boundTillId,
+      layoutProfileId: null,
+      label: "Dev-override till",
+    });
+  });
+  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return enrolDevice(tx, cfg, { code });
+  });
+  return dev.deviceId;
+}
+
 function apiDeps(cfg: TillConfig): TillApiDeps {
   return { db: suite.admin, backend, clock, cfg, secureCookies: false, venueLocale: cfg.locale };
 }
@@ -349,5 +370,48 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
     expect(first!.numSerieFactura).toBe("A/1");
     expect(second!.numSerieFactura).toBe("A/2");
     expect(second!.entorno).toBe(first!.entorno);
+  });
+});
+
+describe("SP-C: a sale posted with the dev-override header files under THAT device's till (devMode)", () => {
+  it("resolves sale-time till_id from the x-waitron-dev-device header, not the env/cfg till", async () => {
+    // The §7 fiscal boundary for the dev switcher: under `devMode`, a `POST /api/sales` carrying the
+    // `x-waitron-dev-device: <id>` header (no `waitron_device` cookie) must resolve `sales.till_id` from
+    // THAT device's binding — the same `requireSaleTillId`/`tryReadDevice` path the cookie takes, reached
+    // through the dev override rather than the cookie. Device is bound to till Y (not the venue's own
+    // till X), so a pass proves the OVERRIDE drove the till, not a default to cfg.tillId.
+    //
+    // Failing case: were the override ignored (or `devMode` not forwarded to `requireSaleTillId`), the
+    // route would fall through to `device.unauthorized` (401, no cookie) — never file under till Y. This
+    // pins the composition SP-A.2's huella receipt already covers on the inertness side; till_id movement
+    // via the header is the new surface, so only that is asserted here.
+    const { cfg, locationId, product, operatorId } = await setupVenue();
+    const tillX = cfg.tillId;
+    const tillY = await insertTill(cfg, locationId, "Caja override");
+    expect(tillY).not.toBe(tillX);
+
+    // devMode ON: `mountTillApi`'s deps forward `devMode` to `requireSaleTillId`, which is what makes the
+    // override header live (byte-for-byte inert otherwise — the boot.test.ts fail-closed arm proves that).
+    const app = new Hono();
+    mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
+    const sessionCookie = await login(app, operatorId);
+
+    const deviceY = await enrolTillDeviceId(cfg, tillY);
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: sessionCookie,
+        [DEV_DEVICE_HEADER]: deviceY,
+      },
+      body: JSON.stringify({
+        lines: [{ productId: product.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    // The one sale filed under till Y (the overridden device's binding), NOT the venue's own till X.
+    expect(await saleTillIds(cfg)).toEqual([tillY]);
   });
 });

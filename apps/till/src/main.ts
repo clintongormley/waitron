@@ -2,6 +2,7 @@ import { html, render } from "lit";
 import { applyTokens } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
 import { TillApi } from "./api/client.js";
+import { withDevDeviceHeader } from "./api/dev-device.js";
 import { diag } from "./diagnostics.js";
 import "./till-app.js";
 
@@ -14,10 +15,20 @@ applyTokens(document.documentElement);
 
 // Crash capture + an instrumented fetch feed the one per-session diagnostics trail: window errors and
 // every API round trip land in `diag`, shared with <till-app>'s nav logging via ./diagnostics.js.
+// The raw `fetch` is wrapped with `withDevDeviceHeader` BEFORE it reaches `createInstrumentedFetch`, so
+// the dev per-tab device override (SP-C) rides every request AND shows up in the diagnostics trail;
+// it is inert unless this tab has stored a device id in sessionStorage.
 installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
-render(
-  html`<till-app .api=${new TillApi("", createInstrumentedFetch(fetch, diag))}></till-app>`,
-  app,
-);
+const fetchImpl = createInstrumentedFetch(withDevDeviceHeader(fetch), diag);
+
+// The `?dev` per-tab device switcher (SP-C): a developer running several device roles in one browser
+// opens `/?dev` to adopt or mint a device for THIS tab, then boots into `/` as it. Lazily imported so
+// the chooser (a dev-only tool) never rides the normal bundle path; the plain boot renders <till-app>.
+if (new URLSearchParams(location.search).has("dev")) {
+  await import("./screens/till-dev-chooser.js");
+  render(html`<till-dev-chooser .api=${new TillApi("", fetchImpl)}></till-dev-chooser>`, app);
+} else {
+  render(html`<till-app .api=${new TillApi("", fetchImpl)}></till-app>`, app);
+}

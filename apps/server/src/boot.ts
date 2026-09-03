@@ -887,6 +887,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       secureCookies,
       cardProvider,
       venueLocale,
+      devMode: config.devMode,
     },
     log,
   );
@@ -920,7 +921,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
     // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
     // device guard and the `device.manage` gate run per request.
-    mountDeviceApi(app, { db, cfg: till, secureCookies }, log);
+    mountDeviceApi(app, { db, cfg: till, secureCookies, devMode: config.devMode }, log);
     // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the
     // UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`, redeem a pairing code for a Bearer
     // token), the `requireAgent`-gated agent group (claim this agent's queued jobs, report each result —
