@@ -174,8 +174,10 @@ export async function setSingletonRole(db: Database, role: SingletonRole): Promi
 
 /** Sets the singleton-ownership role on a caller-provided transaction (see `setSingletonRole` for the
  * full contract — owner-role write, fail-loud on a 0-row update, `deployment_role_valid_ck` refuses
- * `'primary'` on a mirror). Exists so the promotion path (design §10) can commit this flip in the
- * SAME transaction as the membership-document write (`writeNodeMembershipTx`), so both land or neither
+ * `'primary'` on a mirror). Exists so a caller can commit this flip in the SAME transaction as a
+ * related write (CLAUDE.md §3: a caller that must write atomically with another write shares one
+ * transaction) — the promotion path (spec `2026-09-03-reserved-standby-identity-and-promotion-design.md`
+ * §6 R1) commits it with the membership-document write (`writeNodeMembershipTx`), so both land or neither
  * does. `setSingletonRole` is this on its own transaction. */
 export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): Promise<void> {
   const result = await tx.execute<{ id: number }>(

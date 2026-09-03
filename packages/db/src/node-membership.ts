@@ -55,9 +55,11 @@ export async function writeNodeMembership(
 /**
  * The plain-upsert of the singleton on a caller-provided transaction (see `writeNodeMembership` for
  * the full contract — dumb setter, no accept fence, `term` denormalised from `document.body.term`).
- * Exists so a caller can commit this write in the SAME transaction as a related change — the
- * promotion path (design §10) flips the singleton role and writes the new membership document
- * together, so both land or neither does. `writeNodeMembership` is this on its own transaction.
+ * Exists so a caller can commit this write in the SAME transaction as a related change (CLAUDE.md §3:
+ * a caller that must write atomically with another write shares one transaction) — the promotion path
+ * (spec `2026-09-03-reserved-standby-identity-and-promotion-design.md` §6 R1) flips the singleton role
+ * and writes the new membership document together, so both land or neither does. `writeNodeMembership`
+ * is this on its own transaction.
  */
 export async function writeNodeMembershipTx(
   tx: Transaction,

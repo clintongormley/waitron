@@ -34,4 +34,23 @@ describe("buildNextMembershipDocument", () => {
     });
     expect(doc.body.term).toBe(8);
   });
+
+  it("carries a provided endorsements array through verbatim", () => {
+    const endorsements = [
+      {
+        nodeId: "22222222-2222-2222-2222-222222222222",
+        publicKey: "endorsed-public-key",
+        endorsedBy: "33333333-3333-3333-3333-333333333333",
+        signature: "endorsement-sig",
+      },
+    ];
+    const doc = buildNextMembershipDocument({
+      heldDocument: null,
+      nodes: [self],
+      signerNodeId: nodeId,
+      signerPrivateKey: signer.privateKey,
+      endorsements,
+    });
+    expect(doc.endorsements).toEqual(endorsements);
+  });
 });

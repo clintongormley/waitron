@@ -34,9 +34,13 @@ export interface PromoteDeps {
    */
   readonly appDb: Database;
   /**
-   * The owner/provisioning pool — the `singleton_role` flip and the membership-document write are both
-   * owner-role (`app_user` has neither the UPDATE on `deployment` nor the plain-upsert path), and they
-   * share ONE transaction so the flip and the new document land together (CLAUDE.md §3).
+   * The owner/provisioning pool. The `singleton_role` flip is owner-role — `app_user` holds no UPDATE on
+   * `deployment` — so the membership-document write shares its ONE transaction (CLAUDE.md §3: the flip and
+   * the new document commit together, or neither does). That shared transaction is why the write runs here,
+   * NOT a privilege gap: `app_user` DOES hold INSERT/UPDATE on `node_membership` (migration 0097), but the
+   * plain-upsert accessor (`writeNodeMembership`/`writeNodeMembershipTx`) is reserved for the owner/promote
+   * paths by convention (the runtime adoption path uses the term-guarded `persistNodeMembershipIfNewer` —
+   * see `node-membership.ts`).
    */
   readonly ownerDb: Database;
   readonly holders: DeploymentHolders;

@@ -166,6 +166,28 @@ describe("promoteLocalSecondaryToPrimary", () => {
     await db.close();
   });
 
+  it("mints a term-0 document naming this node when NO membership document is held", async () => {
+    // A local secondary whose primary died before any membership document ever gossiped to it:
+    // `readNodeMembership` returns null, so `nextStandings` gets an empty list and must APPEND this
+    // node as serving-primary (rather than leaving the org chart with no serving-primary at all).
+    const { db, deps, tenantId, nodeId } = await localSecondary(); // NB: no writeNodeMembership seed
+
+    const result = await promoteLocalSecondaryToPrimary(deps(noopLog), {
+      oldNodeNeutralised: true,
+    });
+    expect(result.alreadyPrimary).toBe(false);
+
+    const held = await readNodeMembership(db);
+    expect(held?.body.term).toBe(0); // first document ever minted here starts at term 0
+    expect(held?.body.nodes).toEqual([
+      { nodeId, contactUrl: "", standing: "serving-primary" }, // appended: the sole node, serving-primary
+    ]);
+    // It verifies against this node's own directly-trusted key — a real signed mint, not a stub.
+    const trust = await readMembershipTrustSet(db, tenantId);
+    expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
+    await db.close();
+  });
+
   it("is idempotent: a second promote does not bump the term again", async () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
