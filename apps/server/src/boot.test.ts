@@ -1469,6 +1469,7 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(await hello.json()).toEqual({
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "production",
+        membership: null, // no document adopted → the handshake carries a null membership (design §5)
       });
       // A tokenless request is refused — the fail-closed guard, not just the route, is live.
       const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);

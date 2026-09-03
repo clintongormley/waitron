@@ -117,7 +117,7 @@ let adminPersonId: string; // the primary admin the operator authenticates for t
 
 let appDb: Database; // app_login → app_user: the bundle endpoint's auth + RLS venue reads
 let retentionDb: Database; // sync_pruner → sync_retention: mints the bundle's peer token
-let sourceReader: Database; // sync_reader: the HTTPS sync-api reads primary.sync_log through this
+let sourceReader: Database; // sync_applier (sync_tailer + app_user): the HTTPS sync-api reads primary.sync_log and node_membership through this
 let sourceWriter: Database; // app_login: captures the catalogues into primary.sync_log
 
 let boxCaPem: string;
@@ -315,7 +315,9 @@ beforeAll(async () => {
 
   appDb = await primary.pg.connectAs("app_login", "app_pw");
   retentionDb = await primary.pg.connectAs("sync_pruner", "pp");
-  sourceReader = await primary.pg.connectAs("sync_reader", "rp");
+  // Production source serve pool (boot.ts:1053): sync_tailer + app_user, since /hello now reads
+  // node_membership (app_user's SELECT) as well as sync_peers.
+  sourceReader = await primary.pg.connectAs("sync_applier", "ap");
   sourceWriter = await primary.pg.connectAs("app_login", "app_pw");
 
   adminPersonId = await withTenant(appDb, designated.tenantId, async (tx) => {
