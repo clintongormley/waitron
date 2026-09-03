@@ -131,6 +131,12 @@ export class TillTabShell extends LitElement {
 
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
+    // The EFFECTIVE active tab: `activeTabKey` when it names a real tab, else the first tab — mirroring
+    // `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body actually rendered
+    // (never "no tab selected" while a body shows).
+    const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
+      ? this.activeTabKey
+      : this.tabs[0]?.key;
     return html`
       <div class="shell">
         <header class="head">
@@ -139,9 +145,10 @@ export class TillTabShell extends LitElement {
             ${this.tabs.map(
               (tab) => html`
                 <button
+                  type="button"
                   class="tab"
                   role="tab"
-                  aria-selected=${tab.key === this.activeTabKey ? "true" : "false"}
+                  aria-selected=${tab.key === activeKey ? "true" : "false"}
                   @click=${() => this.#emit("tab-select", { key: tab.key })}
                 >
                   ${tab.title}

@@ -23,6 +23,16 @@ describe("till-tab-shell", () => {
     expect(active.textContent).toContain("Floor");
   });
 
+  it("marks the first tab active when activeTabKey is unset or unknown, and tabs are type=button", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs }); // no activeTabKey
+    const active = el.shadowRoot!.querySelectorAll<HTMLElement>('.tab[aria-selected="true"]');
+    // Exactly one tab is selected — the first — mirroring the app's #activeTab() fallback body.
+    expect(active.length).toBe(1);
+    expect(active[0]!.textContent).toContain("Counter");
+    // Native tab buttons are type=button so they never submit an enclosing form.
+    expect(el.shadowRoot!.querySelector<HTMLButtonElement>(".tab")!.type).toBe("button");
+  });
+
   it("emits tab-select when a tab is tapped", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
