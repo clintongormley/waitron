@@ -394,32 +394,44 @@ export class TillCounterScreen extends LitElement {
           this.embedded
             ? nothing
             : html`<div class="header">
-          <span class="brand">${BRAND}</span>
-          <div class="session">
-            <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
-              ${t("allergens.open")}
-            </wt-button>
-            <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
-              ${t("floor.open")}
-            </wt-button>
-            <wt-button class="station" variant="secondary" @click=${() => this.#showStation()}>
-              ${t("station.open")}
-            </wt-button>
-            <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
-              ${t("expo.open")}
-            </wt-button>
-            <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
-              ${t("schedule.open")}
-            </wt-button>
-            <span class="operator">${this.operatorName}</span>
-            <till-language-chooser
-              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-            ></till-language-chooser>
-            <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
-              ${t("action.logout")}
-            </wt-button>
-          </div>
-        </div>`
+                <span class="brand">${BRAND}</span>
+                <div class="session">
+                  <wt-button
+                    class="allergens"
+                    variant="secondary"
+                    @click=${() => this.#openAllergens()}
+                  >
+                    ${t("allergens.open")}
+                  </wt-button>
+                  <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
+                    ${t("floor.open")}
+                  </wt-button>
+                  <wt-button
+                    class="station"
+                    variant="secondary"
+                    @click=${() => this.#showStation()}
+                  >
+                    ${t("station.open")}
+                  </wt-button>
+                  <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
+                    ${t("expo.open")}
+                  </wt-button>
+                  <wt-button
+                    class="schedule"
+                    variant="secondary"
+                    @click=${() => this.#showSchedule()}
+                  >
+                    ${t("schedule.open")}
+                  </wt-button>
+                  <span class="operator">${this.operatorName}</span>
+                  <till-language-chooser
+                    .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+                  ></till-language-chooser>
+                  <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
+                    ${t("action.logout")}
+                  </wt-button>
+                </div>
+              </div>`
         }
         ${
           this.showAllergens
