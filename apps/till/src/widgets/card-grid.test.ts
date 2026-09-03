@@ -356,6 +356,42 @@ describe("till-card-grid", () => {
     expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 
+  it("never WIDENS access: no capabilities input surfaces a gated card (advisory client gate, SP-B2.1 follow-up c)", async () => {
+    // The client capability gate is advisory — the server's assertDeviceCapability is authoritative. It
+    // can only ever REMOVE a card, never add one: a truthy #capable is necessary-not-sufficient for a
+    // card to render. kds-board REQUIRES act-as-kds; absent, #capable filters it out; present, it passes
+    // the gate but still renders `nothing` until B2.2. So across BOTH capability states the gated card
+    // yields no cell the ungated set doesn't already have — the gate is monotonic (more caps ⇒ a superset
+    // of cards) and cannot manufacture access. The visible capability-SKIP proof (by deletion) lands in
+    // B2.2 when kds-board renders (the two skipped tests below); this pins the direction meanwhile.
+    const store = new WorkingOrderStore();
+    const mixed: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} }, // ungated — always renders
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} }, // gated on act-as-kds
+      ],
+    };
+    const absent = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: mixed,
+      store,
+      capabilities: [],
+    });
+    const absentCells = absent.el.shadowRoot!.querySelectorAll(".cell").length;
+    const present = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: mixed,
+      store,
+      capabilities: ["act-as-kds"],
+    });
+    const presentCells = present.el.shadowRoot!.querySelectorAll(".cell").length;
+    // Only the ungated basket renders in either state; granting the capability widened nothing observable.
+    expect(absentCells).toBe(1);
+    expect(presentCells).toBe(absentCells);
+    expect(present.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+  });
+
   // capability-skip visible test lands in B2.2 when kds-board renders. Until then kds-board renders
   // `nothing` in card-grid, so a capability-SKIP is not observable via till-station-screen here.
   it.skip("skips a capability-gated card when the capability is absent", async () => {

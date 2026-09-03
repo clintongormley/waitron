@@ -104,7 +104,15 @@ export class TillCardGrid extends LitElement {
     </div>`;
   }
 
-  /** Capability→ABSENT (spec §5.1). tender-pay is sale-critical + takes cash → ALWAYS rendered. */
+  /**
+   * Capability→ABSENT (spec §5.1). tender-pay is sale-critical + takes cash → ALWAYS rendered.
+   *
+   * This client gate is ADVISORY: the server's `assertDeviceCapability` is authoritative (SP-B2.1
+   * follow-up c). The gate only ever REMOVES a card the device is not equipped for — it can never WIDEN
+   * access, because a truthy result is a necessary-not-sufficient condition for a card to render and the
+   * server re-checks the capability on any privileged call the card would make. So a UI that (through a
+   * bug or a stale profile) showed a card the server would refuse fails CLOSED at the API, never open.
+   */
   #capable(card: CardInstance): boolean {
     if (card.type === "tender-pay") return true; // cash path — never gated absent
     const required = CARD_REQUIRED_CAPABILITY[card.type];

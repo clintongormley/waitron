@@ -22,6 +22,10 @@ import "./screens/till-station-screen.js";
 import "./screens/till-handheld-enrol-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-expo-screen.js";
+// The allergen lookup screen (menu & allergens). In the legacy path the counter screen owns it as a
+// LOCAL overlay (its own Allergens button); once the shell is active the shell owns the button and the
+// app mounts this as a `drill`-in (SP-B2.1 Task 8), so the app names the tag directly.
+import "./screens/till-allergen-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
 // The profile tab shell (SP-B2.1) — the chrome + tab strip the app renders in place of the legacy
@@ -71,6 +75,16 @@ import type {
  */
 type Screen =
   "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
+
+/**
+ * A transient DRILL-IN pushed OVER the profile tab shell (SP-B2.1 Task 8) — a screen that overlays the
+ * active tab's body (which the shell marks inert) and pops back to it, replacing the legacy `screen`-enum
+ * transitions WHILE THE SHELL IS ACTIVE. The `kind` selects which screen {@link TillApp.#drillBody}
+ * mounts into the shell's `drill` slot; the drill's CONTEXT (the active tab, the tab id, the sale result)
+ * already lives in app state, so `kind` is all this carries today. The legacy path (no profile / handheld
+ * / kds) is unchanged — it still drives `screen` through {@link TillApp.#setScreen}.
+ */
+type Drill = { kind: "table-order" | "ticket" | "schedule" | "station" | "expo" | "allergens" };
 
 /**
  * The phone face-set for a `handheld` device (handheld-tableside spec §6a) — the screens a waiter's
@@ -225,6 +239,14 @@ export class TillApp extends LitElement {
    * drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is Task 8.
    */
   @state() private activeTabKey?: string;
+  /**
+   * The transient drill-in stacked OVER the shell's active tab (SP-B2.1 Task 8), or undefined when the
+   * tab body itself is on top. Set by {@link #pushDrill} (open-table / a payment success / an affordance),
+   * cleared by {@link #popDrill} (a drill's Back/Close/New sale). ONLY consulted on the shell surface
+   * ({@link #inShell}); the legacy path never sets it. {@link #drillBody} maps `kind` to the screen it
+   * mounts into the shell's `drill` slot.
+   */
+  @state() private drill?: Drill;
   /**
    * Whether the station screen runs in DEVICE mode (device-identity-1 §5a) — an always-on enrolled KDS
    * display with no login. Set `true` by {@link #boot} when the device probe succeeds (an already-enrolled
@@ -791,7 +813,7 @@ export class TillApp extends LitElement {
       // and an already-settled order falls through to `recordSale`'s settled REPLAY below.
       await this.#syncIfDirty(id, lines, label);
       this.result = await this.api.recordSale(lines, tender, id);
-      this.#setScreen("ticket");
+      this.#showTicket();
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
       // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
       // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
@@ -851,7 +873,7 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#setScreen("ticket");
+        this.#showTicket();
         await this.#refreshHeldOrders();
       } else {
         this.cardOutcome = out.outcome;
@@ -994,7 +1016,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.#setScreen("ticket");
+      this.#showTicket();
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -1049,7 +1071,8 @@ export class TillApp extends LitElement {
    * owns its own fetching via `.api`, so this just switches. Operator path, so `deviceMode` stays false. */
   #onShowStation(): void {
     this.errorKey = undefined;
-    this.#setScreen("station");
+    if (this.#inShell()) this.#pushDrill({ kind: "station" });
+    else this.#setScreen("station");
   }
 
   /**
@@ -1127,7 +1150,8 @@ export class TillApp extends LitElement {
    * till-owned); the screen owns its own fetching + levers via `.api`, so this just switches. */
   #onShowExpo(): void {
     this.errorKey = undefined;
-    this.#setScreen("expo");
+    if (this.#inShell()) this.#pushDrill({ kind: "expo" });
+    else this.#setScreen("expo");
   }
 
   /**
@@ -1371,14 +1395,39 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     this.selectedCatalogueId = this.#defaultCatalogueId();
-    this.#setScreen("counter");
+    // On the shell surface the ticket was a drill-in over the counter tab: pop it back to the counter tab
+    // (the basket, just cleared, is ready for the next customer). The legacy path shows the `counter`
+    // screen exactly as before.
+    if (this.#inShell()) {
+      this.activeTabKey = "counter";
+      this.#popDrill();
+    } else {
+      this.#setScreen("counter");
+    }
   }
 
   /** Show the staff schedule screen (from the counter's "My schedule" control) WITHOUT clearing the
    * basket — the basket is till-owned and survives the round trip, exactly like logout. */
   #onShowSchedule(): void {
     this.errorKey = undefined;
-    this.#setScreen("schedule");
+    if (this.#inShell()) this.#pushDrill({ kind: "schedule" });
+    else this.#setScreen("schedule");
+  }
+
+  /** Reveal the allergen lookup as a drill-in over the shell (SP-B2.1) — the shell's Allergens button
+   * emits `open-allergens`. Shell-only: the legacy path keeps the counter screen's OWN local allergens
+   * overlay (the embedded counter suppresses its button, so `open-allergens` never fires there). Its
+   * `close-allergens` pops the drill ({@link #onCloseAllergens}). */
+  #onOpenAllergens(): void {
+    this.errorKey = undefined;
+    if (this.#inShell()) this.#pushDrill({ kind: "allergens" });
+  }
+
+  /** Pop the allergens drill-in when its screen asks to close (`close-allergens`). Shell-only: the
+   * legacy counter's LOCAL allergens overlay handles its own `close-allergens` inside the counter's
+   * shadow root, and this app-level handler no-ops off the shell surface so the two never collide. */
+  #onCloseAllergens(): void {
+    if (this.#inShell()) this.#popDrill();
   }
 
   /**
@@ -1453,7 +1502,10 @@ export class TillApp extends LitElement {
     // Load the tab's lines so the table-order screen renders populated. A failed read degrades to an
     // empty tab (see {@link #loadTabLines}) rather than blocking the transition.
     await this.#loadTabLines();
-    this.#setScreen("table-order");
+    // On the shell surface the table-order screen is a drill-in OVER the floor tab (which stays active
+    // underneath); the legacy path shows the `table-order` screen exactly as before.
+    if (this.#inShell()) this.#pushDrill({ kind: "table-order" });
+    else this.#setScreen("table-order");
   }
 
   /**
@@ -1709,7 +1761,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
-      this.#setScreen("ticket");
+      this.#showTicket();
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -1755,13 +1807,69 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
+  /**
+   * Whether navigation should route through the drill-in STACK rather than the legacy `screen` enum —
+   * true ONLY on the profile tab shell surface (SP-B2.1): a device profile is present AND the shell is
+   * the active surface ({@link #shellActive}). Every rerouted nav handler branches on this; when it is
+   * false (an unprofiled boot, a handheld, a kds display, the lock/enrol overlays) the handler keeps its
+   * exact legacy `#setScreen`/`#goToScreen` behaviour, which handhelds and kds rely on.
+   */
+  #inShell(): boolean {
+    return this.profile !== undefined && this.#shellActive();
+  }
+
+  /** Push a drill-in OVER the shell's active tab (SP-B2.1). Records the SAME `nav` diagnostics trail
+   * {@link #setScreen} records for a legacy face change — the drill `kind` is the nav target — then sets
+   * {@link drill}, which {@link render} slots into the shell's `drill` overlay (the tab body goes inert).
+   * Only ever called from the shell surface ({@link #inShell}). */
+  #pushDrill(drill: Drill): void {
+    diag.record("info", "nav", { screen: drill.kind });
+    this.drill = drill;
+  }
+
+  /** Pop the current drill-in, returning to the shell's active tab (SP-B2.1). Records the `nav` trail for
+   * the tab it returns to (the active tab key, the underlying face) so the trail is symmetric with
+   * {@link #pushDrill}, then clears {@link drill}. */
+  #popDrill(): void {
+    diag.record("info", "nav", { screen: this.activeTabKey });
+    this.drill = undefined;
+  }
+
+  /** Show the just-filed sale's ticket — a drill-in over the shell ({@link #inShell}) or the legacy
+   * `ticket` screen otherwise. The one place the four terminal fiscal-file paths
+   * ({@link #onConfirmPayment}/{@link #onCollectCard}/{@link #onCollectOrder}/{@link #onPayTab}) express
+   * that branch, so none re-implements it. */
+  #showTicket(): void {
+    if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
+    else this.#setScreen("ticket");
+  }
+
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
-   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip).
-   * Routed through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use
-   * it to escape the phone shell; a normal till reaches the counter exactly as before. */
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). On
+   * the shell surface ({@link #inShell}) this POPS the drill back to the counter tab; otherwise it routes
+   * through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use it to
+   * escape the phone shell, and a normal legacy till reaches the counter exactly as before. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
-    this.#goToScreen("counter");
+    if (this.#inShell()) {
+      this.activeTabKey = "counter";
+      this.#popDrill();
+    } else {
+      this.#goToScreen("counter");
+    }
+  }
+
+  /** Return to the FLOOR from a screen that emits `back-to-floor` — the table-order screen's Back (FP-1).
+   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, so this simply POPS the
+   * drill back to it (no reload — the floor tab's card grid renders from the app-owned `zones`/`tables`);
+   * otherwise it reloads and shows the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
+  #onBackToFloor(): void {
+    if (this.#inShell()) {
+      this.errorKey = undefined;
+      this.#popDrill();
+    } else {
+      void this.#onShowFloor();
+    }
   }
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
@@ -1938,10 +2046,72 @@ export class TillApp extends LitElement {
     ></till-card-grid>`;
   }
 
-  /** The shell's `drill` overlay body (SP-B2.1). Empty until Task 8 reroutes the drill-in nav
-   * (table order / station / expo / schedule / allergens) into the shell. */
+  /**
+   * The shell's `drill` overlay body (SP-B2.1) — the screen stacked over the active tab, or `nothing`
+   * when no drill is open (the tab body itself is on top). Each case mounts the SAME element its
+   * {@link #renderScreen} arm mounts, with the SAME props VERBATIM plus `slot="drill"` — NON-EMBEDDED, so
+   * every drill-in keeps its OWN header/Back/Close chrome (an `embedded` mount would suppress the Back and
+   * trap the user with no way out). The screens' own `back-to-counter`/`back-to-floor`/`close-allergens`/
+   * `new-sale` events drive the pop (wired on the app wrapper in {@link render}). The `allergens` case
+   * mirrors how {@link TillCounterScreen} feeds its LOCAL overlay — the FULL product set + the operator/
+   * invoice locales — the shell just owns the button now.
+   */
   #drillBody(): TemplateResult | typeof nothing {
-    return nothing;
+    switch (this.drill?.kind) {
+      case "table-order":
+        return html`<till-table-order-screen
+          slot="drill"
+          .lines=${this.tabLines}
+          .products=${this.products}
+          .menus=${this.menus}
+          .selectedMenuId=${this.selectedCatalogueId}
+          .statuses=${this.statuses}
+          .courses=${this.courses}
+          .fireControl=${this.fireControl}
+          .tables=${this.tables}
+          .orderId=${this.activeTabId}
+          .busy=${this.submitting}
+        ></till-table-order-screen>`;
+      case "ticket":
+        return html`<till-ticket-view
+          slot="drill"
+          .result=${this.result}
+          .issuer=${this.issuer}
+          .invoiceLocale=${this.invoiceLocale}
+          .receipt=${this.receipt}
+        ></till-ticket-view>`;
+      case "schedule":
+        return html`<till-schedule-screen
+          slot="drill"
+          .api=${this.api}
+          .staff=${this.staff}
+          .operatorPersonId=${this.operatorPersonId}
+        ></till-schedule-screen>`;
+      case "station":
+        return html`<till-station-screen
+          slot="drill"
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+        ></till-station-screen>`;
+      case "expo":
+        return html`<till-expo-screen
+          slot="drill"
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+        ></till-expo-screen>`;
+      case "allergens":
+        return html`<till-allergen-screen
+          slot="drill"
+          .products=${this.products}
+          .locale=${currentLocale()}
+          .invoiceLocale=${this.invoiceLocale}
+        ></till-allergen-screen>`;
+      case undefined:
+        return nothing;
+    }
   }
 
   override render() {
@@ -1987,8 +2157,10 @@ export class TillApp extends LitElement {
         @merge-tabs=${(event: Event) => void this.#onMergeTabs(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
-        @back-to-floor=${() => void this.#onShowFloor()}
+        @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
+        @open-allergens=${() => this.#onOpenAllergens()}
+        @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
