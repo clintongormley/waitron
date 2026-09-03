@@ -1094,4 +1094,75 @@ describe("Device API over real Postgres", () => {
       expect((await send(app, "GET", "/api/dev/devices")).status).toBe(404);
     });
   });
+
+  // ── Dev-only per-tab device switcher: POST /api/dev/devices (SP-C, Task 5) ────────────────────────────
+  // Mint-and-adopt: one call mints a pairing code and redeems it, returning the new device's id (which the
+  // tab adopts via the dev-override header). It sets NO device cookie — the dev override authenticates by
+  // id, so the enrol Set-Cookie shape is deliberately absent. Every binding rule is enforced by the reused
+  // `generatePairingCode`/`enrolDevice` verbs, NOT re-validated here.
+  describe("POST /api/dev/devices (dev-only mint-and-adopt)", () => {
+    it("mints a till device and returns its id with NO Set-Cookie", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+
+      const res = await send(app, "POST", "/api/dev/devices", {
+        body: { kind: "till", label: "Dev till", tillId: venue.cfg.tillId },
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        deviceId: string;
+        kind: string;
+        stationId: string | null;
+        label: string;
+      };
+      expect(body.deviceId).toEqual(expect.any(String));
+      expect(body.kind).toBe("till");
+      expect(body.stationId).toBeNull();
+      expect(body.label).toBe("Dev till");
+      // No token/tokenHash is echoed (enrolDevice returns a token; the route must NOT leak it), and no
+      // device cookie is set — the dev override authenticates by id, the tab adopts via sessionStorage.
+      expect(body).not.toHaveProperty("token");
+      expect(res.headers.get("set-cookie")).toBeNull();
+
+      // Adoptable: the minted id is a real, active device — it appears in the dev device list.
+      const list = (await (await send(app, "GET", "/api/dev/devices")).json()) as {
+        devices: { id: string }[];
+      };
+      expect(list.devices.map((d) => d.id)).toContain(body.deviceId);
+    });
+
+    it("mints a station-bound kds_station device, binding the station via the reused verb", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+
+      const res = await send(app, "POST", "/api/dev/devices", {
+        body: { kind: "kds_station", label: "Cocina", stationId: venue.defaultStationId },
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { deviceId: string; kind: string; stationId: string };
+      expect(body.kind).toBe("kds_station");
+      expect(body.stationId).toBe(venue.defaultStationId);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    });
+
+    it("reuses the existing binding refusals — a till with no tillId is device.till_required", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+
+      const res = await send(app, "POST", "/api/dev/devices", {
+        body: { kind: "till", label: "No till" },
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "device.till_required" },
+      });
+    });
+
+    it("is absent (404) when devMode is false", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, false);
+      const res = await send(app, "POST", "/api/dev/devices", { body: { kind: "till" } });
+      expect(res.status).toBe(404);
+    });
+  });
 });

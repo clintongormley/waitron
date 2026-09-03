@@ -472,6 +472,54 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         ),
       ),
     );
-    // (Task 5 adds POST /api/dev/devices inside this same `if (deps.devMode)` block.)
+    // Mint-and-adopt (SP-C, Task 5): mint a pairing code then immediately redeem it, returning the new
+    // device's id for the tab to adopt via the dev-override header. It sets NO device cookie — the dev
+    // override authenticates by id, so the enrol Set-Cookie is deliberately absent.
+    app.post("/api/dev/devices", (c) =>
+      run(c, log, async () => {
+        const body = await readJsonBody<{
+          kind?: unknown;
+          label?: unknown;
+          stationId?: unknown;
+          tillId?: unknown;
+          layoutProfileId?: unknown;
+        }>(c);
+        // The SAME field screens `POST /management-api/device-codes` uses, so validation cannot drift.
+        const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
+        const label = requireString(body.label, "label");
+        const optionalUuid = (v: unknown, field: string): string | null =>
+          v === undefined || v === null ? null : requireBodyUuid(v, field);
+        const stationId = kindRequiresStation(kind)
+          ? requireBodyUuid(body.stationId, "stationId")
+          : null;
+        const tillId = optionalUuid(body.tillId, "tillId");
+        const layoutProfileId = optionalUuid(body.layoutProfileId, "layoutProfileId");
+        // Mint a code then immediately redeem it, in ONE tenant tx, reusing every binding rule
+        // (`device.till_required` / `device.station_required` / `device.binding_invalid`). No cookie is
+        // set: the dev override authenticates by id, so the tab adopts the device via sessionStorage.
+        const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          const { code } = await generatePairingCode(tx, deps.cfg, {
+            kind,
+            stationId,
+            tillId,
+            layoutProfileId,
+            label,
+          });
+          return enrolDevice(tx, deps.cfg, { code });
+        });
+        // Echo only the non-secret bindings; the token `enrolDevice` mints stays in-process (no cookie,
+        // no body), unlike the enrol route which sets it as the trusted device cookie.
+        return c.json(
+          {
+            deviceId: enrolled.deviceId,
+            kind: enrolled.kind,
+            stationId: enrolled.stationId,
+            label: enrolled.label,
+          },
+          201,
+        );
+      }),
+    );
   }
 }
