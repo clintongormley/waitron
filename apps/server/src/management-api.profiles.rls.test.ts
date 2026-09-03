@@ -103,7 +103,10 @@ function mountApp(tenantId: string): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId },
+      // nodeId sentinel: the profile/theme management routes never read cfg.nodeId, but
+      // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
+      // sibling management tests (management-api.rls.test.ts, …-status/-passkey).
+      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
