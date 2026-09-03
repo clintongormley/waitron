@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
@@ -22,8 +22,17 @@ import "./screens/till-station-screen.js";
 import "./screens/till-handheld-enrol-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-expo-screen.js";
+// The allergen lookup screen (menu & allergens). In the legacy path the counter screen owns it as a
+// LOCAL overlay (its own Allergens button); once the shell is active the shell owns the button and the
+// app mounts this as a `drill`-in (SP-B2.1 Task 8), so the app names the tag directly.
+import "./screens/till-allergen-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
+// The profile tab shell (SP-B2.1) — the chrome + tab strip the app renders in place of the legacy
+// `screen`-enum switch once a device profile is present. Its per-tab body is the counter screen or the
+// card grid (below); named only as tags. The card grid is registered here too (a non-counter tab body).
+import "./widgets/tab-shell.js";
+import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -49,6 +58,7 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 import type { LayoutDef, ProfileDef, ReceiptConfig, TabDef } from "./layout.js";
+import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -65,6 +75,16 @@ import type {
  */
 type Screen =
   "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
+
+/**
+ * A transient DRILL-IN pushed OVER the profile tab shell (SP-B2.1 Task 8) — a screen that overlays the
+ * active tab's body (which the shell marks inert) and pops back to it, replacing the legacy `screen`-enum
+ * transitions WHILE THE SHELL IS ACTIVE. The `kind` selects which screen {@link TillApp.#drillBody}
+ * mounts into the shell's `drill` slot; the drill's CONTEXT (the active tab, the tab id, the sale result)
+ * already lives in app state, so `kind` is all this carries today. The legacy path (no profile / handheld
+ * / kds) is unchanged — it still drives `screen` through {@link TillApp.#setScreen}.
+ */
+type Drill = { kind: "table-order" | "ticket" | "schedule" | "station" | "expo" | "allergens" };
 
 /**
  * The phone face-set for a `handheld` device (handheld-tableside spec §6a) — the screens a waiter's
@@ -187,6 +207,23 @@ export class TillApp extends LitElement {
   readonly #store = new WorkingOrderStore();
 
   /**
+   * The shell's language chooser feed (SP-B2.1) — the same `TillApi.getLocales` adapter the counter
+   * screen's own chooser uses, hoisted to a stable field so the `<till-tab-shell>` property does not
+   * churn a fresh closure per render. Threaded to `till-tab-shell.loadLocales`; the chooser calls it
+   * lazily when opened, and its `locale-selected` bubbles to the app handler already wired below. */
+  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+
+  /**
+   * The shell's AFFORDANCE list (SP-B2.1), memoised into a stable field so `<till-tab-shell>`'s
+   * `.affordances` property does not see a fresh array on every unrelated `render()` (which would
+   * re-render the shell needlessly) — the same reason {@link #loadLocales} is a stable field. The list
+   * depends ONLY on {@link profile}, so it is recomputed exactly when that changes ({@link willUpdate})
+   * via {@link #affordances}. Defaults `[]` (the value read before a profile boots, never by the shell —
+   * the shell only renders once a profile is present).
+   */
+  #affordanceList: ShellAffordance[] = [];
+
+  /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from `GET /api/till`
    * on boot (Task 4 makes that field the derived default). It is the fallback the app switches back to
    * when nobody's preference applies: `resolveActiveLocale(personLocale, this.#venueLocale)` on login
@@ -194,6 +231,18 @@ export class TillApp extends LitElement {
    * deli's es-ES until boot resolves.
    */
   #venueLocale = "es-ES";
+
+  /**
+   * Whether the floor read-model has been FULLY loaded once this session (all three endpoints — tables,
+   * zones, statuses — via {@link #loadFloorData}). The "already loaded once" signal that lets a repeat
+   * visit to a floor tab ({@link #onTabSelect}) reload TABLES ONLY ({@link #refreshFloor}), since zones +
+   * statuses are static within a session. An explicit flag rather than `this.zones.length > 0`, which a
+   * venue that has tables but NO floor zones leaves permanently 0 → every visit would pay the full
+   * three-endpoint load (SP-B2.1 review). Set `true` at the end of a successful {@link #loadFloorData};
+   * RESET to `false` on {@link #onLogout} / {@link #onLoggedIn} (beside `drill`/`activeTabKey`) so a new
+   * session reloads the floor in full.
+   */
+  #floorLoaded = false;
 
   constructor() {
     super();
@@ -204,6 +253,22 @@ export class TillApp extends LitElement {
   }
 
   @state() private screen: Screen = "lock";
+  /**
+   * The key of the tab the profile shell (SP-B2.1) currently shows — the shell's active tab. Set on
+   * boot from the profile's first tab ({@link #boot}) and updated by the shell's `tab-select`. Stays
+   * undefined for an unprofiled boot, where {@link render} never reaches the shell branch and the legacy
+   * {@link #renderScreen} switch renders instead. This task RENDERS the shell + switches tabs; the
+   * drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is Task 8.
+   */
+  @state() private activeTabKey?: string;
+  /**
+   * The transient drill-in stacked OVER the shell's active tab (SP-B2.1 Task 8), or undefined when the
+   * tab body itself is on top. Set by {@link #pushDrill} (open-table / a payment success / an affordance),
+   * cleared by {@link #popDrill} (a drill's Back/Close/New sale). ONLY consulted on the shell surface
+   * ({@link #inShell}); the legacy path never sets it. {@link #drillBody} maps `kind` to the screen it
+   * mounts into the shell's `drill` slot.
+   */
+  @state() private drill?: Drill;
   /**
    * Whether the station screen runs in DEVICE mode (device-identity-1 §5a) — an always-on enrolled KDS
    * display with no login. Set `true` by {@link #boot} when the device probe succeeds (an already-enrolled
@@ -500,6 +565,13 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
+  /** Recompute the memoised {@link #affordanceList} when — and only when — {@link profile} changes (it
+   * is the list's sole input), so the stable field stays current without allocating a fresh array on
+   * every render. Runs before `render()` in the same update cycle, so the field is fresh when read. */
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("profile")) this.#affordanceList = this.#affordances();
+  }
+
   /**
    * Read the public till info once: set the OPERATOR-UI locale (`setLocale`) UNLESS an operator has
    * already logged in mid-flight (see the guard below), remember the receipt
@@ -560,6 +632,10 @@ export class TillApp extends LitElement {
       // The device's assigned layout profile (SP-B1). `#counterTab()` reads its `counter` tab and threads
       // it to the counter screen; absent/no-counter-tab leaves the screen on its region-model fallback.
       this.profile = till.profile;
+      // The initial active tab for the profile tab shell (SP-B2.1) — the first authored tab (the
+      // `counter` tab by convention). `#renderScreen` stays the fallback when there is no profile, so
+      // this is left undefined for an unprofiled boot and `render()` never reaches the shell branch.
+      this.activeTabKey = till.profile?.tabs[0]?.key;
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
@@ -629,6 +705,15 @@ export class TillApp extends LitElement {
     // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
     // venue default, so a new operator with no choice keeps the venue's language.
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
+    // Defense in depth (SP-B2.1 Finding 2): clear any leftover drill and reset to the first tab, BEFORE
+    // the first await below so no render in the login window can paint a prior operator's drill/tab.
+    // Logout already does this — the privacy-critical path — but a login that somehow followed a
+    // non-logout teardown resets here too. App state only meaningful on the shell; reset regardless.
+    this.drill = undefined;
+    this.activeTabKey = this.profile?.tabs[0]?.key;
+    // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
+    // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
+    this.#floorLoaded = false;
     const { menus, products } = await this.api.listProducts();
     this.products = products;
     this.menus = menus;
@@ -671,6 +756,15 @@ export class TillApp extends LitElement {
       } catch {
         // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
       }
+    }
+    // SP-B2.1 Finding 1: if the shell BOOTS showing a tab whose cards need the floor read-model (a
+    // profile whose first tab is the floor), load it now — the tab-select prefetch only fires on a tab
+    // CHANGE, so the INITIAL tab needs its own load. Guarded on the tab (a counter-first till never
+    // reaches this) and on `#inShell()` (a handheld stays legacy — its floor landing already loaded via
+    // `#onShowFloor` above — so this never double-loads).
+    if (this.#inShell()) {
+      const tab = this.#activeTab();
+      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
     }
   }
 
@@ -766,7 +860,7 @@ export class TillApp extends LitElement {
       // and an already-settled order falls through to `recordSale`'s settled REPLAY below.
       await this.#syncIfDirty(id, lines, label);
       this.result = await this.api.recordSale(lines, tender, id);
-      this.#setScreen("ticket");
+      this.#showTicket();
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
       // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
       // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
@@ -826,7 +920,7 @@ export class TillApp extends LitElement {
       });
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        this.#setScreen("ticket");
+        this.#showTicket();
         await this.#refreshHeldOrders();
       } else {
         this.cardOutcome = out.outcome;
@@ -969,7 +1063,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.#setScreen("ticket");
+      this.#showTicket();
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -1024,7 +1118,8 @@ export class TillApp extends LitElement {
    * owns its own fetching via `.api`, so this just switches. Operator path, so `deviceMode` stays false. */
   #onShowStation(): void {
     this.errorKey = undefined;
-    this.#setScreen("station");
+    if (this.#inShell()) this.#pushDrill({ kind: "station" });
+    else this.#setScreen("station");
   }
 
   /**
@@ -1102,7 +1197,8 @@ export class TillApp extends LitElement {
    * till-owned); the screen owns its own fetching + levers via `.api`, so this just switches. */
   #onShowExpo(): void {
     this.errorKey = undefined;
-    this.#setScreen("expo");
+    if (this.#inShell()) this.#pushDrill({ kind: "expo" });
+    else this.#setScreen("expo");
   }
 
   /**
@@ -1346,14 +1442,39 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     this.selectedCatalogueId = this.#defaultCatalogueId();
-    this.#setScreen("counter");
+    // On the shell surface the ticket was a drill-in over the counter tab: pop it back to the counter tab
+    // (the basket, just cleared, is ready for the next customer). The legacy path shows the `counter`
+    // screen exactly as before.
+    if (this.#inShell()) {
+      this.activeTabKey = "counter";
+      this.#popDrill();
+    } else {
+      this.#setScreen("counter");
+    }
   }
 
   /** Show the staff schedule screen (from the counter's "My schedule" control) WITHOUT clearing the
    * basket — the basket is till-owned and survives the round trip, exactly like logout. */
   #onShowSchedule(): void {
     this.errorKey = undefined;
-    this.#setScreen("schedule");
+    if (this.#inShell()) this.#pushDrill({ kind: "schedule" });
+    else this.#setScreen("schedule");
+  }
+
+  /** Reveal the allergen lookup as a drill-in over the shell (SP-B2.1) — the shell's Allergens button
+   * emits `open-allergens`. Shell-only: the legacy path keeps the counter screen's OWN local allergens
+   * overlay (the embedded counter suppresses its button, so `open-allergens` never fires there). Its
+   * `close-allergens` pops the drill ({@link #onCloseAllergens}). */
+  #onOpenAllergens(): void {
+    this.errorKey = undefined;
+    if (this.#inShell()) this.#pushDrill({ kind: "allergens" });
+  }
+
+  /** Pop the allergens drill-in when its screen asks to close (`close-allergens`). Shell-only: the
+   * legacy counter's LOCAL allergens overlay handles its own `close-allergens` inside the counter's
+   * shadow root, and this app-level handler no-ops off the shell surface so the two never collide. */
+  #onCloseAllergens(): void {
+    if (this.#inShell()) this.#popDrill();
   }
 
   /**
@@ -1367,6 +1488,21 @@ export class TillApp extends LitElement {
    */
   async #onShowFloor(): Promise<void> {
     this.errorKey = undefined;
+    await this.#loadFloorData();
+    this.#setScreen("floor");
+  }
+
+  /**
+   * Load the floor read-model into the app-owned `.tables`/`.zones`/`.statuses` props — the LOAD half of
+   * {@link #onShowFloor}, WITHOUT its `#setScreen("floor")` nav side effect. Shared by `#onShowFloor`
+   * (the legacy `show-floor` nav) and the shell surface ({@link #onTabSelect} / {@link #onLoggedIn}): a
+   * shell tab whose cards need the floor read-model (a `floor-plan` / `table-layout-editor` card) is
+   * reached via `tab-select`, not `show-floor`, so it must load the data itself or the floor-plan card
+   * renders an EMPTY floor with no table to tap — leaving table-service ordering unreachable from the
+   * shell (SP-B2.1 Finding 1). Swallows a failed load — degrade gracefully, the floor touches no fiscal
+   * path (design H2), so an empty floor is safe. Only writes reactive state (no `isConnected` guard).
+   */
+  async #loadFloorData(): Promise<void> {
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -1378,10 +1514,50 @@ export class TillApp extends LitElement {
       // The Estado picker's catalogue (FP-1) — loaded here so the table-order screen (reached from the
       // floor) has the full ACTIVE status set to offer, including statuses applied to no table yet.
       this.statuses = statuses;
+      // The full three-endpoint load has landed: repeat floor-tab visits now refresh tables only
+      // ({@link #onTabSelect}), regardless of whether the venue defined any floor zones (SP-B2.1 review).
+      this.#floorLoaded = true;
     } catch {
       // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
     }
-    this.#setScreen("floor");
+  }
+
+  /** Whether a tab's cards need the floor read-model (`.tables`/`.zones`/`.statuses`) — a `floor-plan`
+   * or `table-layout-editor` card, both rendered by `<till-floor-screen>` inside the card grid. Drives
+   * the shell's tab-select and boot floor prefetch (SP-B2.1 Finding 1).
+   *
+   * Only these two card types qualify because floor is the only card whose grid mount needs app-loaded
+   * props before it can render; station/expo self-fetch via `.api`, and table-order loads on the
+   * open-table drill push. */
+  #tabNeedsFloorData(tab: TabDef): boolean {
+    return tab.cards.some(
+      (card) => card.type === "floor-plan" || card.type === "table-layout-editor",
+    );
+  }
+
+  /**
+   * The shell's tab bar picked a tab (SP-B2.1). Three things happen, in order:
+   *  - the active tab switches;
+   *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
+   *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3); this runs AFTER the tab
+   *    switch so `#popDrill`'s nav-diagnostics trail records the tab landed ON, matching the sibling
+   *    handlers {@link #onBackToCounter}/{@link #onNewSale} (SP-B2.1 review);
+   *  - a tab whose cards need the floor read-model loads it — the FIRST visit does the full three-endpoint
+   *    load `#onShowFloor` does ({@link #loadFloorData}), since reaching the Floor tab via the tab bar (not
+   *    the legacy `show-floor` event) would otherwise leave it empty (Finding 1); a REPEAT visit reloads
+   *    only the live table occupancy ({@link #refreshFloor}), because zones + statuses are static within a
+   *    session (exactly the reasoning {@link #refreshFloor} applies after a placement edit), so re-fetching
+   *    them is pure waste. {@link #floorLoaded} is the "already loaded once" signal.
+   * Only ever called from the shell surface ({@link #inShell} is true whenever the shell renders).
+   */
+  #onTabSelect(key: string): void {
+    this.activeTabKey = key;
+    if (this.drill !== undefined) this.#popDrill();
+    const tab = this.profile?.tabs.find((candidate) => candidate.key === key);
+    if (tab !== undefined && this.#tabNeedsFloorData(tab)) {
+      if (this.#floorLoaded) void this.#refreshFloor();
+      else void this.#loadFloorData();
+    }
   }
 
   /**
@@ -1428,7 +1604,10 @@ export class TillApp extends LitElement {
     // Load the tab's lines so the table-order screen renders populated. A failed read degrades to an
     // empty tab (see {@link #loadTabLines}) rather than blocking the transition.
     await this.#loadTabLines();
-    this.#setScreen("table-order");
+    // On the shell surface the table-order screen is a drill-in OVER the floor tab (which stays active
+    // underneath); the legacy path shows the `table-order` screen exactly as before.
+    if (this.#inShell()) this.#pushDrill({ kind: "table-order" });
+    else this.#setScreen("table-order");
   }
 
   /**
@@ -1684,7 +1863,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
-      this.#setScreen("ticket");
+      this.#showTicket();
     } catch {
       this.errorKey = "sale.error";
     } finally {
@@ -1730,13 +1909,74 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
+  /**
+   * Whether navigation should route through the drill-in STACK rather than the legacy `screen` enum —
+   * true ONLY on the profile tab shell surface (SP-B2.1): a device profile is present AND the shell is
+   * the active surface ({@link #shellActive}). Every rerouted nav handler branches on this; when it is
+   * false (an unprofiled boot, a handheld, a kds display, the lock/enrol overlays) the handler keeps its
+   * exact legacy `#setScreen`/`#goToScreen` behaviour, which handhelds and kds rely on.
+   */
+  #inShell(): boolean {
+    return this.profile !== undefined && this.#shellActive();
+  }
+
+  /** Push a drill-in OVER the shell's active tab (SP-B2.1). Records the SAME `nav` diagnostics trail
+   * {@link #setScreen} records for a legacy face change — the drill `kind` is the nav target — then sets
+   * {@link drill}, which {@link render} slots into the shell's `drill` overlay (the tab body goes inert).
+   * Only ever called from the shell surface ({@link #inShell}). */
+  #pushDrill(drill: Drill): void {
+    diag.record("info", "nav", { screen: drill.kind });
+    this.drill = drill;
+  }
+
+  /** Pop the current drill-in, returning to the shell's active tab (SP-B2.1). Records the `nav` trail for
+   * the tab it returns to (the active tab key, the underlying face) so the trail is symmetric with
+   * {@link #pushDrill}, then clears {@link drill}. */
+  #popDrill(): void {
+    diag.record("info", "nav", { screen: this.activeTabKey });
+    this.drill = undefined;
+  }
+
+  /** Show the just-filed sale's ticket — a drill-in over the shell ({@link #inShell}) or the legacy
+   * `ticket` screen otherwise. The one place the four terminal fiscal-file paths
+   * ({@link #onConfirmPayment}/{@link #onCollectCard}/{@link #onCollectOrder}/{@link #onPayTab}) express
+   * that branch, so none re-implements it. */
+  #showTicket(): void {
+    if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
+    else this.#setScreen("ticket");
+  }
+
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
-   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip).
-   * Routed through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use
-   * it to escape the phone shell; a normal till reaches the counter exactly as before. */
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). On
+   * the shell surface ({@link #inShell}) this POPS the drill back to the counter tab; otherwise it routes
+   * through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use it to
+   * escape the phone shell, and a normal legacy till reaches the counter exactly as before. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
-    this.#goToScreen("counter");
+    if (this.#inShell()) {
+      this.activeTabKey = "counter";
+      this.#popDrill();
+    } else {
+      this.#goToScreen("counter");
+    }
+  }
+
+  /** Return to the FLOOR from a screen that emits `back-to-floor` — the table-order screen's Back (FP-1).
+   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, so this POPS the drill back
+   * to it AND re-reads the live occupancy ({@link #refreshFloor}, tables-only — zones + statuses are
+   * static within a session): the drill just opened a tab / rang a round, and NEITHER `openTab` nor the
+   * table-service actions update the app-owned `.tables`, so a bare pop would re-render the floor from a
+   * STALE read-model — the table the waiter just opened still showing FREE, so a re-tap fires `openTab`
+   * again and the server throws `tab.already_open` (SP-B2.1 review). Off the shell it reloads and shows
+   * the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
+  #onBackToFloor(): void {
+    if (this.#inShell()) {
+      this.errorKey = undefined;
+      this.#popDrill();
+      void this.#refreshFloor();
+    } else {
+      void this.#onShowFloor();
+    }
   }
 
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
@@ -1755,6 +1995,16 @@ export class TillApp extends LitElement {
     // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
     // recomputes it (FP-2).
     this.canEdit = false;
+    // Clear any open drill and reset the active tab (SP-B2.1 Finding 2). Logout sits in the non-inert
+    // shell header, and the `screen = "lock"` reset below does NOT touch `drill`/`activeTabKey` — so
+    // without this, operator A's ticket/receipt drill (and A's tab) would survive and re-mount over
+    // operator B's fresh counter on B's login. This is the PRIVACY-critical reset. App state only
+    // meaningful on the shell, reset regardless (the legacy path never reads either).
+    this.drill = undefined;
+    this.activeTabKey = this.profile?.tabs[0]?.key;
+    // A new shift reloads the floor in FULL — zones/statuses may have changed between operators (SP-B2.1
+    // review), so drop the "already loaded once" flag beside the other per-session resets.
+    this.#floorLoaded = false;
     this.errorKey = undefined;
     this.#setScreen("lock");
   }
@@ -1821,6 +2071,178 @@ export class TillApp extends LitElement {
     return this.profile?.tabs.find((tab) => tab.key === "counter");
   }
 
+  /**
+   * Whether the profile tab shell (SP-B2.1) should render in place of the legacy `#renderScreen`
+   * switch. True ONLY for the authenticated operator surface the shell replaces: the operator has
+   * passed the lock screen (`screen !== "lock"`), no enrol overlay is open, and this is neither a
+   * `kds_station` display (`deviceMode`) nor a `handheld` phone (`handheldMode`). Both of those STAY on
+   * the legacy screen-enum in B2.1: the kds display's `kds-board` card and the phone-portrait profile's
+   * `order` tab (a `table-order` card) both render nothing until B2.2 wraps them, so a shell would give
+   * those devices a dead tab — the till (counter + floor, both wrapped) is the ONLY shell device in
+   * B2.1. Keeping handheld + kds on the fully-working legacy path is a no-regression change. The
+   * enrolling overlays are already handled ahead of this branch in {@link render}; they are guarded
+   * here too so the predicate reads true only for the surface it names, independent of render order.
+   */
+  #shellActive(): boolean {
+    // handheld + kds devices stay on the legacy screen-enum until B2.2 wraps table-order / kds-board;
+    // the till is the only shell device in B2.1.
+    return (
+      this.screen !== "lock" &&
+      !this.handheldEnrolling &&
+      !this.tillEnrolling &&
+      !this.deviceMode &&
+      !this.handheldMode
+    );
+  }
+
+  /** The active tab of the profile shell — the one keyed by {@link activeTabKey}, or the first tab as
+   * a fallback (a stale/absent key never leaves the shell bodiless). */
+  #activeTab(): TabDef | undefined {
+    return this.profile?.tabs.find((tab) => tab.key === this.activeTabKey) ?? this.profile?.tabs[0];
+  }
+
+  /**
+   * The shell's AFFORDANCES (SP-B2.1) — surfaces reachable today (Station/Expo/Schedule) that are NOT
+   * authored as a tab in this profile, so the shell offers them as buttons rather than tabs. A surface
+   * authored AS a tab drops out of this list (it is reachable as a tab instead). The buttons emit
+   * `show-station`/`show-expo`/`show-schedule`, which bubble to the existing app handlers; when the
+   * shell is active (`#inShell()`) those handlers push an in-shell drill-in, and off-shell they keep
+   * the legacy `#setScreen` behaviour.
+   *
+   * The COMPUTE helper for the memoised {@link #affordanceList} field — called only from
+   * {@link willUpdate} when {@link profile} changes, never per render.
+   */
+  #affordances(): ShellAffordance[] {
+    const tabKeys = new Set(this.profile?.tabs.map((tab) => tab.key) ?? []);
+    return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
+  }
+
+  /** The active tab's body element (SP-B2.1): the counter POS for the `counter` tab (its header
+   * suppressed — the shell owns the chrome), the SP-B1 card grid for every other tab. */
+  #tabBody(tab: TabDef): TemplateResult {
+    if (tab.key === "counter") {
+      // Same prop list as `#renderScreen`'s `counter` arm, plus `embedded` (the shell owns the header)
+      // and `counterTab=${tab}` (the shell's active tab IS the counter tab). Only the header relocates.
+      return html`<till-counter-screen
+        embedded
+        .api=${this.api}
+        .store=${this.#store}
+        .products=${this.products}
+        .menus=${this.menus}
+        .selectedMenuId=${this.selectedCatalogueId}
+        .heldOrders=${this.heldOrders}
+        .stationQueue=${this.stationQueue}
+        .defaultStationId=${this.#defaultStationId()}
+        .operatorName=${this.operatorName}
+        .invoiceLocale=${this.invoiceLocale}
+        .orderFlow=${this.orderFlow}
+        .stage=${this.stage}
+        .busy=${this.submitting || this.placing}
+        .layout=${this.#layoutFor()}
+        .counterTab=${tab}
+        .cardProvider=${this.cardProvider}
+        .tipsEnabled=${this.tipsEnabled}
+        .cardOutcome=${this.cardOutcome}
+      ></till-counter-screen>`;
+    }
+    return html`<till-card-grid
+      .tab=${tab}
+      .store=${this.#store}
+      .capabilities=${this.profile?.capabilities ?? []}
+      .canConfigureTill=${this.canEdit}
+      .products=${this.products}
+      .heldOrders=${this.heldOrders}
+      .stationQueue=${this.stationQueue}
+      .defaultStationId=${this.#defaultStationId()}
+      .busy=${this.submitting}
+      .orderFlow=${this.orderFlow}
+      .stage=${this.stage}
+      .cardProvider=${this.cardProvider}
+      .tipsEnabled=${this.tipsEnabled}
+      .cardOutcome=${this.cardOutcome}
+      .api=${this.api}
+      .fireControl=${this.fireControl}
+      .zones=${this.zones}
+      .tables=${this.tables}
+    ></till-card-grid>`;
+  }
+
+  /**
+   * The shell's `drill` overlay body (SP-B2.1) — the screen stacked over the active tab, or `nothing`
+   * when no drill is open (the tab body itself is on top). Each case mounts the SAME element its
+   * {@link #renderScreen} arm mounts, with the SAME props VERBATIM plus `slot="drill"` — NON-EMBEDDED, so
+   * every drill-in keeps its OWN header/Back/Close chrome (an `embedded` mount would suppress the Back and
+   * trap the user with no way out). The screens' own `back-to-counter`/`back-to-floor`/`close-allergens`/
+   * `new-sale` events drive the pop (wired on the app wrapper in {@link render}). The `allergens` case
+   * mirrors how {@link TillCounterScreen} feeds its LOCAL overlay — the FULL product set + the operator/
+   * invoice locales — the shell just owns the button now.
+   */
+  /** The shell's active-tab body (SP-B2.1) — {@link #tabBody} of the {@link #activeTab}, or `nothing`
+   * when no tab resolves (a profile with no tabs). Extracted from `render` so the shell subtree reads
+   * as one call rather than an inline IIFE. */
+  #activeTabBody(): TemplateResult | typeof nothing {
+    const tab = this.#activeTab();
+    return tab !== undefined ? this.#tabBody(tab) : nothing;
+  }
+
+  #drillBody(): TemplateResult | typeof nothing {
+    switch (this.drill?.kind) {
+      case "table-order":
+        return html`<till-table-order-screen
+          slot="drill"
+          .lines=${this.tabLines}
+          .products=${this.products}
+          .menus=${this.menus}
+          .selectedMenuId=${this.selectedCatalogueId}
+          .statuses=${this.statuses}
+          .courses=${this.courses}
+          .fireControl=${this.fireControl}
+          .tables=${this.tables}
+          .orderId=${this.activeTabId}
+          .busy=${this.submitting}
+        ></till-table-order-screen>`;
+      case "ticket":
+        return html`<till-ticket-view
+          slot="drill"
+          .result=${this.result}
+          .issuer=${this.issuer}
+          .invoiceLocale=${this.invoiceLocale}
+          .receipt=${this.receipt}
+        ></till-ticket-view>`;
+      case "schedule":
+        return html`<till-schedule-screen
+          slot="drill"
+          .api=${this.api}
+          .staff=${this.staff}
+          .operatorPersonId=${this.operatorPersonId}
+        ></till-schedule-screen>`;
+      case "station":
+        return html`<till-station-screen
+          slot="drill"
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+        ></till-station-screen>`;
+      case "expo":
+        return html`<till-expo-screen
+          slot="drill"
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+        ></till-expo-screen>`;
+      case "allergens":
+        return html`<till-allergen-screen
+          slot="drill"
+          .products=${this.products}
+          .locale=${currentLocale()}
+          .invoiceLocale=${this.invoiceLocale}
+        ></till-allergen-screen>`;
+      case undefined:
+        return nothing;
+    }
+  }
+
   override render() {
     return html`
       <div
@@ -1864,8 +2286,10 @@ export class TillApp extends LitElement {
         @merge-tabs=${(event: Event) => void this.#onMergeTabs(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
-        @back-to-floor=${() => void this.#onShowFloor()}
+        @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
+        @open-allergens=${() => this.#onOpenAllergens()}
+        @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
@@ -1896,10 +2320,30 @@ export class TillApp extends LitElement {
               // whatever screen the boot left set.
               this.tillEnrolling
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
-                // the whole screen subtree, repainting every child in the new language (the screens hold no
-                // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
-                keyed(currentLocale(), this.#renderScreen())
+              : // The profile tab shell (SP-B2.1) replaces the legacy `screen`-enum switch once a device
+                // profile is present AND the operator is on the authenticated surface it covers
+                // (`#shellActive`). An unprofiled boot — every legacy-path test stub — keeps `#renderScreen`.
+                // Both arms are keyed on the active locale: a locale switch changes the key, so Lit DISCARDS
+                // and rebuilds the subtree, repainting every child in the new language (the screens/shell hold
+                // no LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+                this.#inShell()
+                ? keyed(
+                    currentLocale(),
+                    html`<till-tab-shell
+                      .tabs=${this.profile?.tabs ?? []}
+                      .activeTabKey=${this.activeTabKey}
+                      .operatorName=${this.operatorName}
+                      .affordances=${this.#affordanceList}
+                      .loadLocales=${this.#loadLocales}
+                      @tab-select=${(e: CustomEvent<{ key: string }>) => {
+                        this.#onTabSelect(e.detail.key);
+                      }}
+                    >
+                      ${this.#activeTabBody()}
+                      ${this.#drillBody() /* Task 8 fills the drill overlay */}
+                    </till-tab-shell>`,
+                  )
+                : keyed(currentLocale(), this.#renderScreen())
         }
       </div>
     `;

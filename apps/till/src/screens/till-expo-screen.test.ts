@@ -204,12 +204,16 @@ async function flush(el: TillExpoScreen): Promise<void> {
 }
 
 async function mount(props: {
-  api: TillApi;
+  api?: TillApi;
   fireControl?: "waiter" | "kitchen" | "expo";
   now?: number;
   reducedMotion?: boolean;
+  embedded?: boolean;
 }): Promise<TillExpoScreen> {
-  const { el } = await mountWidget<TillExpoScreen>("till-expo-screen", props);
+  const { el } = await mountWidget<TillExpoScreen>("till-expo-screen", {
+    api: stubApi([]),
+    ...props,
+  });
   await flush(el);
   return el;
 }
@@ -883,5 +887,19 @@ describe("till-expo-screen", () => {
     el.addEventListener("back-to-counter", spy);
     el.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
     expect(spy).toHaveBeenCalledOnce();
+  });
+
+  // --- Embedded chrome seam (SP-B2.1): mounted inside a card host, the screen drops its own
+  // standalone header + Back so the card supplies the chrome; standalone (default) keeps them.
+
+  it("suppresses its own header + back button when embedded", async () => {
+    const el = await mount({ embedded: true });
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".back")).toBeNull();
+  });
+
+  it("renders its header + back button when standalone (default)", async () => {
+    const el = await mount({});
+    expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
   });
 });

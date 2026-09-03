@@ -103,3 +103,18 @@ export interface ProfileDef {
   capabilities: CapabilityFlag[];
   theme?: ThemeOverride;
 }
+
+// Minimal mirror of the per-card contract axes the till needs to GATE the view (SP-B2). The server
+// validates every profile on write via `validateProfile` (`packages/layouts/src/validate-profile.ts`),
+// which enforces the per-card `CARD_CONTRACTS` in `packages/layouts/src/card-contract.ts`; the client
+// only needs the required-capability / required-permission per card to hide/lock a cell. Keep in sync with
+// CARD_CONTRACTS if a card's contract changes. `tender-pay`'s capability is deliberately NOT enforced
+// as an absence (it takes cash) — see the always-render carve-out in card-grid.ts.
+export const CARD_REQUIRED_CAPABILITY: Partial<Record<CardType, CapabilityFlag>> = {
+  "tender-pay": "integrated-card-payment",
+  "kds-board": "act-as-kds",
+};
+
+export const CARD_REQUIRED_PERMISSION: Partial<Record<CardType, string>> = {
+  "table-layout-editor": "till.configure",
+};

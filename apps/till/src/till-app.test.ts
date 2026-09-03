@@ -3808,6 +3808,414 @@ describe("till-app", () => {
     });
   });
 
+  describe("profile tab shell (SP-B2.1)", () => {
+    // A `till` profile with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
+    // capability, so it renders the card grid under the empty `capabilities` list). The shell renders
+    // in place of the legacy `screen`-enum switch once this profile is present.
+    const shellProfile: ProfileDef = {
+      formFactor: "till",
+      capabilities: [],
+      tabs: [
+        { key: "counter", title: "Counter", columns: 12, cards: [] },
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const shell = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+
+    it("renders the tab shell with the counter tab active when a profile is present", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+      });
+      await toCounter(el);
+      const s = shell(el)!;
+      expect(s).not.toBeNull();
+      expect(s.activeTabKey).toBe("counter");
+      // The counter tab's body is the counter screen, mounted EMBEDDED — the shell owns the header, so
+      // the screen suppresses its own (no duplicate chrome).
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector(".header")).toBeNull();
+    });
+
+    it("switches the active tab body on tab-select", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await el.updateComplete;
+      // Floor tab → the card grid (its floor-plan card); the counter body is gone.
+      expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+    });
+
+    it("keeps the legacy screen-enum (no shell) when the boot carries no profile", async () => {
+      // The default `till` fixture omits `profile`, so `#shellActive()` is never reached and
+      // `#renderScreen` renders the counter screen with its OWN header — the false direction of the
+      // shell branch, checked so a shell that renders unconditionally would fail here.
+      const { el } = await mountApp();
+      await toCounter(el);
+      expect(shell(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
+    });
+
+    it("a HANDHELD with a profile stays on the legacy screen-enum, NOT the shell (B2.1 leaves table-order unwrapped)", async () => {
+      // A `handheld` phone STAYS on the legacy path in B2.1 even with a profile present: its
+      // phone-portrait profile's `order` tab is a `table-order` card that renders nothing until B2.2, so
+      // a shell would hand the waiter a dead Order tab. `#shellActive()` excludes `handheldMode` — proven
+      // by deletion: drop `&& !this.handheldMode` and this fails (the shell renders over the floor).
+      const phoneProfile: ProfileDef = {
+        formFactor: "phone-portrait",
+        capabilities: [],
+        tabs: [
+          {
+            key: "floor",
+            title: "Floor",
+            columns: 12,
+            cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+          },
+          {
+            key: "order",
+            title: "Order",
+            columns: 12,
+            cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+          },
+        ],
+      };
+      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await flush(el);
+      expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      // Legacy handheld landing: the floor screen renders, the shell does not.
+      expect(shell(el)).toBeNull();
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
+  });
+
+  describe("drill-in stack (SP-B2.1)", () => {
+    // A `till` profile: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
+    // grid, not an empty tab) + a `floor` tab (a `floor-plan` card). Station/Expo/Schedule are NOT tabs,
+    // so the shell offers them as affordance buttons; the shell's Allergens button is always present.
+    const shellProfile: ProfileDef = {
+      formFactor: "till",
+      capabilities: [],
+      tabs: [
+        {
+          key: "counter",
+          title: "Counter",
+          columns: 12,
+          cards: [
+            { type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } },
+            { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+            { type: "total", colSpan: 4, rowSpan: 1, config: {} },
+            { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+          ],
+        },
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const shell = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+    const drill = (el: TillApp) => el.shadowRoot!.querySelector('[slot="drill"]');
+    const grid = (el: TillApp) => el.shadowRoot!.querySelector("till-card-grid");
+
+    /** Boots the shell, logs in (lands on the counter tab), and switches to the floor tab — the surface
+     * a table is opened from. `getTablesState` returns `freeTable` so the floor has a table to open. */
+    async function toShellFloor(): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await el.updateComplete;
+      return el;
+    }
+
+    /** Boots the shell and logs in — leaving the app on the counter tab (no drill open). */
+    async function toShellCounter(): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+      });
+      await toCounter(el);
+      return el;
+    }
+
+    it("pushes the table-order drill-in over the shell when a table is opened from the floor tab", async () => {
+      const el = await toShellFloor();
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      await flush(el);
+      // The table-order screen mounts into the shell's `drill` slot, OVER the (now inert) floor tab.
+      expect(drill(el)).not.toBeNull();
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el)!.getAttribute("slot")).toBe("drill");
+    });
+
+    it("pops the table-order drill-in back to the floor tab on back-to-floor", async () => {
+      const el = await toShellFloor();
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      await flush(el);
+      emit(tableOrder(el)!, "back-to-floor");
+      await el.updateComplete;
+      // Drill gone; the underlying floor tab's card grid is back on top.
+      expect(drill(el)).toBeNull();
+      expect(tableOrder(el)).toBeNull();
+      expect(grid(el)).not.toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+    });
+
+    it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
+      // REVIEW FIX 1: opening a table (`openTab`) and table-service actions do NOT update `this.tables`,
+      // so after a waiter opens table N from the floor tab, adds a round, and taps Back, the floor tab
+      // must RE-READ occupancy or it re-renders from the STALE read-model — table N still shows FREE.
+      // Tapping it again calls `openTab(N)` → server throws `tab.already_open` → the waiter cannot resume
+      // the tab they just opened. Asserting the floor screen merely EXISTS (as the pop test above does)
+      // is what masked this; here we assert FRESHNESS — the floor reflects a SECOND fetch. Proven by
+      // deletion: drop the `#refreshFloor()` from `#onBackToFloor`'s shell branch and this goes red.
+      const occupiedT1: TableState = {
+        ...freeTable,
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-new",
+        tabLineCount: 1,
+        tabTotal: "3.00",
+      };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        // FIRST floor load (tab-select): table free. SECOND load (the back-to-floor refresh): now occupied.
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockResolvedValueOnce([occupiedT1]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" }); // first floor load → freeTable
+      await flush(el);
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // drill in
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      emit(tableOrder(el)!, "back-to-floor"); // pop the drill + tables-only refresh → occupiedT1
+      await flush(el);
+      const g = grid(el)!;
+      const floorScreen = g.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+      expect(floorScreen).not.toBeNull();
+      // The floor RE-READ occupancy: table t1 now renders the SECOND fetch (occupied), not the stale free
+      // one — so tapping it resumes the open tab instead of re-firing `openTab` → `tab.already_open`.
+      expect(floorScreen!.tables).toEqual([occupiedT1]);
+    });
+
+    it("pushes the schedule drill-in from the shell's Schedule affordance", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-schedule");
+      await el.updateComplete;
+      expect(drill(el)).not.toBeNull();
+      expect(schedule(el)).not.toBeNull();
+      expect(schedule(el)!.getAttribute("slot")).toBe("drill");
+    });
+
+    it("pushes the station drill-in from the shell's Station affordance", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-station");
+      await el.updateComplete;
+      expect(drill(el)).not.toBeNull();
+      expect(station(el)).not.toBeNull();
+      expect(station(el)!.getAttribute("slot")).toBe("drill");
+    });
+
+    it("pushes the expo drill-in from the shell's Pass affordance", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-expo");
+      await el.updateComplete;
+      expect(drill(el)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-expo-screen")!.getAttribute("slot")).toBe("drill");
+    });
+
+    it("pushes the allergens drill-in from the shell's Allergens affordance (full product set)", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "open-allergens");
+      await el.updateComplete;
+      const allergen = el.shadowRoot!.querySelector<HTMLElement & { products: unknown[] }>(
+        "till-allergen-screen",
+      );
+      expect(drill(el)).not.toBeNull();
+      expect(allergen).not.toBeNull();
+      expect(allergen!.getAttribute("slot")).toBe("drill");
+      // The drill gets the FULL product set (allergen lookup spans every menu), exactly as the counter's
+      // own local overlay feeds it — the shell just owns the button now.
+      expect(allergen!.products).toEqual([cafe]);
+    });
+
+    it("pops the allergens drill-in on its own close-allergens", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "open-allergens");
+      await el.updateComplete;
+      emit(el.shadowRoot!.querySelector("till-allergen-screen")!, "close-allergens");
+      await el.updateComplete;
+      expect(drill(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
+    });
+
+    it("pops a drill-in back to the counter tab on back-to-counter", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-schedule");
+      await el.updateComplete;
+      expect(schedule(el)).not.toBeNull();
+      emit(schedule(el)!, "back-to-counter");
+      await el.updateComplete;
+      // Drill gone; the counter tab is active and its body renders again.
+      expect(drill(el)).toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("counter");
+    });
+
+    it("completes a sale through the shell + grid counter and lands on the ticket drill-in (sale-path guard)", async () => {
+      // Follows the legacy counter-sale test body — the ONLY change is the counter now lives in the shell
+      // and the ticket appears as a drill-in rather than the `ticket` screen. Proves the nav rewrite did
+      // not break the sale path: the sale must complete through the shell and reach the ticket.
+      const el = await toShellCounter();
+      const c = counter(el)!;
+      // The counter tab renders through the SP-B1 card grid (its cards include tender-pay); the store is
+      // the app's own working order. The card grid lives in the counter screen's shadow root.
+      const cardGrid = c.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+      expect(cardGrid).not.toBeNull();
+      expect(cardGrid!.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      // The ticket is a drill-in over the (inert) counter tab — not a legacy screen swap.
+      expect(ticket(el)).not.toBeNull();
+      expect(ticket(el)!.getAttribute("slot")).toBe("drill");
+      expect(drill(el)).not.toBeNull();
+      expect(ticket(el)!.result).toBe(saleResult);
+    });
+
+    it("returns to the counter tab and clears the basket on New sale from the ticket drill-in", async () => {
+      const el = await toShellCounter();
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+      emit(ticket(el)!, "new-sale");
+      await el.updateComplete;
+      // Ticket drill gone; back on the counter tab with an empty basket ready for the next customer.
+      expect(drill(el)).toBeNull();
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(counter(el)!.store.lines.length).toBe(0);
+    });
+
+    it("loads the floor read-model when the floor tab is selected in the shell (data reaches the card)", async () => {
+      // FINDING 1: the Floor tab is reached via `tab-select` on the shell, NOT the legacy `show-floor`
+      // event — so the tab-select handler must load `.tables`/`.zones` (as `#onShowFloor` does) or the
+      // floor-plan card renders a BLANK floor with no table to tap, and table-service ordering is
+      // unreachable from the shell. Asserting the floor screen EXISTS is what masked this before; here we
+      // assert the data actually loaded and reached the card. Proven by deletion: drop the
+      // `#loadFloorData()` call from `#onTabSelect` and the tables/zones assertions go red.
+      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await flush(el); // await the ASYNC floor load, not just the synchronous tab switch
+      const g = grid(el)!;
+      expect(g).not.toBeNull();
+      const floorScreen = g.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+      expect(floorScreen).not.toBeNull();
+      // The read-model actually loaded and threaded through to the card — a NON-EMPTY floor.
+      expect(floorScreen!.tables).toEqual([freeTable]);
+      expect(floorScreen!.zones).toEqual([floorZone]);
+    });
+
+    it("clears the open drill and resets the active tab on logout (Finding 2 — no stale receipt into the next shift)", async () => {
+      // FINDING 2: operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout
+      // (NOT New sale) from the non-inert shell header. The screen reset does NOT clear `drill`/
+      // `activeTabKey`, so operator B's fresh login would re-mount A's ticket over B's counter. Assert the
+      // STATE is cleared (not merely that the shell unmounted at `lock`, which would mask it).
+      const el = await toShellCounter();
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull(); // operator A's ticket drill is open
+      const app = el as unknown as { drill?: unknown; activeTabKey?: string };
+      emit(shell(el)!, "logout");
+      await flush(el);
+      expect(app.drill).toBeUndefined();
+      expect(app.activeTabKey).toBe("counter"); // back to the first tab
+    });
+
+    it("resets any leftover drill/active tab on login (Finding 2 — defense in depth)", async () => {
+      // Defense in depth: even a login that somehow followed a NON-logout teardown must not inherit a
+      // prior operator's drill or tab. Simulate that stale state directly, then log a fresh operator in.
+      const el = await toShellCounter();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      const app = el as unknown as { drill?: unknown; activeTabKey?: string };
+      // A `schedule` drill (renders cleanly from the empty roster) standing in for any stale drill.
+      app.drill = { kind: "schedule" };
+      app.activeTabKey = "floor";
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", canConfigureTill: false });
+      await flush(el);
+      expect(app.drill).toBeUndefined();
+      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("dismisses an open drill when a tab is selected (Finding 3)", async () => {
+      // FINDING 3: the tab bar is in the non-inert header, so a tab tap while a drill is open must
+      // DISMISS the drill, not switch the surface underneath it. Proven by deletion: drop the
+      // `#popDrill()` from `#onTabSelect` and the schedule drill survives the switch.
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-schedule"); // open a drill
+      await el.updateComplete;
+      expect(schedule(el)).not.toBeNull();
+      expect(drill(el)).not.toBeNull();
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await flush(el);
+      expect(drill(el)).toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(grid(el)).not.toBeNull();
+    });
+  });
+
   describe("per-user locale (Task 9)", () => {
     /** Boots, then logs a person in carrying `locale` in the `logged-in` detail — leaving the app on
      * the counter with the UI switched per `resolveActiveLocale(locale, venueDefault)`. */

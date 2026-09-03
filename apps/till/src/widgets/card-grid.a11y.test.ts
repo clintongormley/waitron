@@ -17,6 +17,14 @@ const counterTab: TabDef = {
   ],
 };
 
+// A permission-gated card the operator lacks — renders inside a locked (?inert, aria-disabled) cell.
+const editorTab: TabDef = {
+  key: "editor",
+  title: "Editor",
+  columns: 12,
+  cards: [{ type: "table-layout-editor", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-card-grid a11y (%s theme)", (theme) => {
@@ -25,6 +33,16 @@ describe.each(["light", "dark"] as const)("till-card-grid a11y (%s theme)", (the
     const { host } = await mountWidget<TillCardGrid>(
       "till-card-grid",
       { tab: counterTab, store },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("a permission-locked (inert) card cell has no violations", async () => {
+    const store = new WorkingOrderStore();
+    const { host } = await mountWidget<TillCardGrid>(
+      "till-card-grid",
+      { tab: editorTab, store, canConfigureTill: false, zones: [], tables: [] },
       theme,
     );
     await expectNoA11yViolations(host);

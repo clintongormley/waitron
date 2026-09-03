@@ -220,6 +220,14 @@ export class TillCounterScreen extends LitElement {
    * straight through to the pay widget's own `cardOutcome` — see its doc for how a fresh value drives
    * the retry / switch-tender / wait screen. */
   @property() cardOutcome?: CardOutcome;
+  /**
+   * Whether this screen is rendered INSIDE the profile tab shell (SP-B2.1). When set, the screen
+   * suppresses its own `.header` — the brand/operator/log-out/affordance chrome lives in the shell
+   * (`till-tab-shell`), so a duplicate header would double it. The sale body (menu controls + the
+   * grid/region + the local allergen overlay) is unchanged; only the header relocates. Defaults false,
+   * so the legacy standalone counter screen (unprofiled boot) renders its own header exactly as before.
+   */
+  @property({ type: Boolean }) embedded = false;
 
   /** Announce that the operator wants to end their shift. The app (Task 19) tears the session down. */
   #logout(): void {
@@ -382,33 +390,49 @@ export class TillCounterScreen extends LitElement {
       this.layout.filter((widget) => widget.region === region);
     return html`
       <div class="screen">
-        <div class="header">
-          <span class="brand">${BRAND}</span>
-          <div class="session">
-            <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
-              ${t("allergens.open")}
-            </wt-button>
-            <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
-              ${t("floor.open")}
-            </wt-button>
-            <wt-button class="station" variant="secondary" @click=${() => this.#showStation()}>
-              ${t("station.open")}
-            </wt-button>
-            <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
-              ${t("expo.open")}
-            </wt-button>
-            <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
-              ${t("schedule.open")}
-            </wt-button>
-            <span class="operator">${this.operatorName}</span>
-            <till-language-chooser
-              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-            ></till-language-chooser>
-            <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
-              ${t("action.logout")}
-            </wt-button>
-          </div>
-        </div>
+        ${
+          this.embedded
+            ? nothing
+            : html`<div class="header">
+                <span class="brand">${BRAND}</span>
+                <div class="session">
+                  <wt-button
+                    class="allergens"
+                    variant="secondary"
+                    @click=${() => this.#openAllergens()}
+                  >
+                    ${t("allergens.open")}
+                  </wt-button>
+                  <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
+                    ${t("floor.open")}
+                  </wt-button>
+                  <wt-button
+                    class="station"
+                    variant="secondary"
+                    @click=${() => this.#showStation()}
+                  >
+                    ${t("station.open")}
+                  </wt-button>
+                  <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
+                    ${t("expo.open")}
+                  </wt-button>
+                  <wt-button
+                    class="schedule"
+                    variant="secondary"
+                    @click=${() => this.#showSchedule()}
+                  >
+                    ${t("schedule.open")}
+                  </wt-button>
+                  <span class="operator">${this.operatorName}</span>
+                  <till-language-chooser
+                    .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+                  ></till-language-chooser>
+                  <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
+                    ${t("action.logout")}
+                  </wt-button>
+                </div>
+              </div>`
+        }
         ${
           this.showAllergens
             ? html`<till-allergen-screen

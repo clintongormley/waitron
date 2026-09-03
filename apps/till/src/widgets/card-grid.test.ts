@@ -76,6 +76,37 @@ const prepTab: TabDef = {
   cards: [{ type: "prep-queue", colSpan: 6, rowSpan: 3, config: {}, visibleWhen: ["has-items"] }],
 };
 
+const floorTab: TabDef = {
+  key: "floor",
+  title: "Floor",
+  columns: 12,
+  cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
+const editorTab: TabDef = {
+  key: "editor",
+  title: "Editor",
+  columns: 12,
+  cards: [{ type: "table-layout-editor", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
+const expoTab: TabDef = {
+  key: "expo",
+  title: "Expo",
+  columns: 12,
+  cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {} }],
+};
+
+// A big card whose data-condition state the host CANNOT compute (`#currentState("expo")` is
+// undefined), but which carries a visibleWhen gate. Under B1 this was hidden (fail closed); SP-B2.1
+// follow-up d fails it OPEN so a self-fetching big card never silently vanishes.
+const gatedBigCard: TabDef = {
+  key: "expo",
+  title: "Expo",
+  columns: 12,
+  cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {}, visibleWhen: ["has-tickets"] }],
+};
+
 describe("till-card-grid", () => {
   it("renders each card element in a spanning cell on a fluid grid", async () => {
     const store = new WorkingOrderStore();
@@ -210,32 +241,203 @@ describe("till-card-grid", () => {
     expect(grid.columns).toBeUndefined();
   });
 
-  it("skips the big cards and notifications on the counter tab (B2), rendering no cell for them", async () => {
+  it("still skips notifications, kds-board and table-order (B2.2/later), rendering no cell for them", async () => {
     const store = new WorkingOrderStore();
+    // floor-plan / table-layout-editor / expo now RENDER (SP-B2.1, tested below); the three types
+    // that still return `nothing` arrive in B2.2/later, so a tab carrying them shows only the basket.
     const bigTab: TabDef = {
       key: "counter",
       title: "Counter",
       columns: 12,
       cards: [
         { type: "notifications", colSpan: 4, rowSpan: 1, config: {} },
-        { type: "floor-plan", colSpan: 6, rowSpan: 4, config: {} },
-        { type: "table-layout-editor", colSpan: 6, rowSpan: 4, config: {} },
         { type: "kds-board", colSpan: 6, rowSpan: 4, config: {} },
-        { type: "expo", colSpan: 6, rowSpan: 4, config: {} },
         { type: "table-order", colSpan: 6, rowSpan: 4, config: {} },
         { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
       ],
     };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: bigTab, store });
-    // Only the basket card renders; every skipped card yields no cell at all.
+    // Only the basket card renders; every still-skipped card yields no cell at all.
     expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
   });
 
-  it("fails a visibleWhen gate closed for a card type with no data-condition mapping", async () => {
+  it("renders an embedded floor screen for a floor-plan card", async () => {
     const store = new WorkingOrderStore();
-    // `basket` has no data-condition state, so a visibleWhen gate on it can never be satisfied — the
-    // host hides it rather than showing a card whose condition it cannot evaluate.
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: floorTab,
+      store,
+      zones: [],
+      tables: [],
+    });
+    const floor = el.shadowRoot!.querySelector<
+      HTMLElement & { embedded?: boolean; canEdit?: boolean }
+    >("till-floor-screen")!;
+    expect(floor).not.toBeNull();
+    expect(floor.embedded).toBe(true);
+    // A plain floor-plan card is the read-only floor — no edit affordance.
+    expect(floor.canEdit).toBe(false);
+  });
+
+  it("renders an embedded editable floor screen for a table-layout-editor card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      zones: [],
+      tables: [],
+    });
+    const floor = el.shadowRoot!.querySelector<
+      HTMLElement & { embedded?: boolean; canEdit?: boolean }
+    >("till-floor-screen")!;
+    expect(floor).not.toBeNull();
+    expect(floor.embedded).toBe(true);
+    expect(floor.canEdit).toBe(true);
+  });
+
+  it("locks a permission-gated card when the operator lacks the permission", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      canConfigureTill: false,
+    });
+    const cell = el.shadowRoot!.querySelector<HTMLElement>(".cell.locked")!;
+    expect(cell).not.toBeNull();
+    expect(cell.hasAttribute("inert")).toBe(true);
+    expect(cell.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("unlocks a permission-gated card when the operator has the permission", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      canConfigureTill: true,
+    });
+    expect(el.shadowRoot!.querySelector(".cell.locked")).toBeNull();
+    // The cell still renders — visible, just unlocked.
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
+  it("renders an embedded expo screen for an expo card", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: expoTab, store });
+    const expo = el.shadowRoot!.querySelector<HTMLElement & { embedded?: boolean }>(
+      "till-expo-screen",
+    )!;
+    expect(expo?.embedded).toBe(true);
+  });
+
+  it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: gatedBigCard, store });
+    // expo renders `till-expo-screen` (Task 5); `#currentState("expo")` is undefined, so the gate
+    // cannot be evaluated — fail open means the CELL is present (not filtered out).
+    expect(el.shadowRoot!.querySelectorAll(".cell").length).toBe(1);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+  });
+
+  it("ALWAYS renders tender-pay even without integrated-card-payment (cash path, sale-critical)", async () => {
+    const store = new WorkingOrderStore();
+    // tender-pay carries a required capability (integrated-card-payment) in CARD_REQUIRED_CAPABILITY,
+    // but it takes cash and is sale-critical, so the grid renders it regardless of capabilities.
+    const payTab: TabDef = {
+      key: "counter",
+      title: "Counter",
+      columns: 12,
+      cards: [{ type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} }],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: payTab,
+      store,
+      capabilities: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+  });
+
+  it("never WIDENS access: no capabilities input surfaces a gated card (advisory client gate, SP-B2.1 follow-up c)", async () => {
+    // The client capability gate is advisory — the server's assertDeviceCapability is authoritative. It
+    // can only ever REMOVE a card, never add one: a truthy #capable is necessary-not-sufficient for a
+    // card to render. kds-board REQUIRES act-as-kds; absent, #capable filters it out; present, it passes
+    // the gate but still renders `nothing` until B2.2. So across BOTH capability states the gated card
+    // yields no cell the ungated set doesn't already have — the gate is monotonic (more caps ⇒ a superset
+    // of cards) and cannot manufacture access. The visible capability-SKIP proof (by deletion) lands in
+    // B2.2 when kds-board renders (the two skipped tests below); this pins the direction meanwhile.
+    const store = new WorkingOrderStore();
+    const mixed: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} }, // ungated — always renders
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} }, // gated on act-as-kds
+      ],
+    };
+    const absent = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: mixed,
+      store,
+      capabilities: [],
+    });
+    const absentCells = absent.el.shadowRoot!.querySelectorAll(".cell").length;
+    const present = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: mixed,
+      store,
+      capabilities: ["act-as-kds"],
+    });
+    const presentCells = present.el.shadowRoot!.querySelectorAll(".cell").length;
+    // Only the ungated basket renders in either state; granting the capability widened nothing observable.
+    expect(absentCells).toBe(1);
+    expect(presentCells).toBe(absentCells);
+    expect(present.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+  });
+
+  // capability-skip visible test lands in B2.2 when kds-board renders. Until then kds-board renders
+  // `nothing` in card-grid, so a capability-SKIP is not observable via till-station-screen here.
+  it.skip("skips a capability-gated card when the capability is absent", async () => {
+    const store = new WorkingOrderStore();
+    const kdsTab: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} },
+      ],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kdsTab,
+      store,
+      capabilities: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+  });
+
+  // capability-skip visible test lands in B2.2 when kds-board renders.
+  it.skip("renders a capability-gated card when the capability is present", async () => {
+    const store = new WorkingOrderStore();
+    const kdsTab: TabDef = {
+      key: "x",
+      title: "X",
+      columns: 12,
+      cards: [
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} },
+      ],
+    };
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kdsTab,
+      store,
+      capabilities: ["act-as-kds"],
+    });
+    expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+  });
+
+  it("passes a visibleWhen gate OPEN for a card type with no data-condition mapping (follow-up d)", async () => {
+    const store = new WorkingOrderStore();
+    // `basket` has no data-condition state (`#currentState → undefined`), so the host cannot evaluate
+    // a visibleWhen gate on it. SP-B2.1 follow-up d fails such a card OPEN — it renders rather than
+    // silently vanishing (B1 hid it, fail closed).
     const gatedBasketTab: TabDef = {
       key: "counter",
       title: "Counter",
@@ -246,6 +448,19 @@ describe("till-card-grid", () => {
       tab: gatedBasketTab,
       store,
     });
-    expect(el.shadowRoot!.querySelector("till-basket")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+  });
+
+  it("STILL hides a card whose host-COMPUTED state is out of the visibleWhen list (fail-open is undefined-only)", async () => {
+    const store = new WorkingOrderStore();
+    // Regression that fail-open only opens the `#currentState → undefined` branch, never the
+    // computed-but-mismatched one: held-orders' state IS computable — `heldOrders: []` yields "empty",
+    // which is NOT in the gate, so the card stays HIDDEN exactly as under B1.
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: heldTab,
+      store,
+      heldOrders: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-held-orders")).toBeNull();
   });
 });
