@@ -40,7 +40,9 @@ routes not even mounted — in `preproduction` and `production`.
 2. A **dev-override request header** (`x-waitron-dev-device: <deviceId>`) honoured only when
    `devMode`, resolved at the single device-resolution chokepoint (`tryReadDevice`) with **no token
    check**, RLS- and `active`-scoped (§4.1).
-3. A **dev-only device-list endpoint** the chooser reads (§4.2), mounted **only** when `devMode`.
+3. A **dev-only device surface**, mounted **only** when `devMode`: a **list** the chooser reads
+   (devices + the binding option-sources — §4.2) and a **mint-and-adopt** endpoint that creates a new
+   device from the chooser and hands back its id (§4.3).
 4. A **device-reset route** wiring the currently-orphaned `clearDeviceCookie`
    (`device-session.ts:56`) — the parent spec's §11 third bullet (§4.4).
 5. A **client per-tab identity** in `sessionStorage` + header injection (§5.1) and the **chooser
@@ -132,36 +134,51 @@ Header name follows the lowercase-kebab precedent in the tree (`x-request-id`,
 
 ### 4.2 The dev-only device-list endpoint
 
-The chooser needs the venue's enrolled devices, **before operator login** (device identity is a
-boot-time thing). The existing list is `GET /management-api/devices` (`device-api.ts:361`) but it is
-management-session gated (dashboard) — unreachable from the pre-login till. So SP-C adds a dev-only
-read:
+The chooser needs the venue's enrolled devices **and** the option-sources it will bind a *new* device
+to (§4.3) — all **before operator login** (device identity is a boot-time thing). The existing list
+`GET /management-api/devices` (`device-api.ts:361`) is management-session gated (dashboard),
+unreachable from the pre-login till. So SP-C adds one dev-only read that carries everything the
+chooser renders:
 
-- **`GET /api/dev/devices`** — returns each device's `{ id, kind, label, tillId, layoutProfileId,
-  stationId, active }` (all non-secret; **never** a token or reader credential), tenant-scoped by
-  `withTenant` + `asAppUser` RLS, newest-enrolled first, active only (a revoked device cannot be
-  chosen).
-- It is **mounted only when `devMode`** (a `if (deps.devMode) app.get(...)` inside `mountDeviceApi`,
-  or a small dev-only mount group). Outside dev the route **does not exist** → a plain 404. This is
-  the same fail-closed shape as the override: nothing to gate per-request because the surface is
-  absent.
+- **`GET /api/dev/devices`** returns `{ devices, tills, stations, profiles }`:
+  - `devices` — each enrolled device's `{ id, kind, label, tillId, layoutProfileId, stationId,
+    active }` (all non-secret; **never** a token or reader credential), active only (a revoked device
+    cannot be chosen).
+  - `tills` — `{ id, name, locationId }` (a trivial tenant-scoped `tills` projection; no `listTills`
+    verb exists today — a few lines).
+  - `stations` — reusing `listStations(tx, cfg)` (`kitchen.ts:128`).
+  - `profiles` — reusing `listProfiles(tx, tenantId)` → `{ id, name, definition }[]`
+    (`packages/layouts/src/profile-store.ts:62`); the chooser shows `name` and can read
+    `definition.formFactor`.
+- All four reads run inside one `withTenant(tenantId)` + `asAppUser` scope, so RLS confines every list
+  to this box's tenant.
+- It is **mounted only when `devMode`** (a `if (deps.devMode) { ... }` dev-only mount group inside
+  `mountDeviceApi`). Outside dev the route **does not exist** → a plain 404. Same fail-closed shape as
+  the override: nothing to gate per-request because the surface is absent.
 
-### 4.3 Enrolling a new device from the chooser
+### 4.3 Mint-and-adopt: enrolling a new device from the chooser
 
-**Baseline (this spec):** the chooser offers a code field that reuses the **existing**
-`POST /api/device/enrol` (`device-api.ts:158`; client `enrolDevice(code)`,
-`apps/till/src/api/client.ts:1350`). You mint a pairing code in the dashboard (owner login) as today,
-paste it, and on success the returned `deviceId` is written to this tab's `sessionStorage` and the
-tab boots as it. This reuses all binding/FK validation and adds no new server surface. The enrol also
-sets the shared cookie as a side effect, which is harmless: every *working* tab uses its own
-`sessionStorage` override (§5), which wins in `devMode`, so the cookie only matters for a tab that
-never visited the chooser.
+A dev-only endpoint creates a fully-bound device in one call and hands back its id, so a developer can
+spin up (say) a handheld bound to the counter till with a chosen profile **without bouncing to the
+dashboard**:
 
-**Decision to confirm on review (§11):** whether to also add a **dev-only mint-and-adopt** endpoint
-so "enrol new device" is fully self-service (pick a kind + the bindings that kind requires, no
-dashboard bounce), reusing `generatePairingCode` + `enrolDevice` under the hood. It is more
-convenient for spinning up a handheld quickly but duplicates a slice of the dashboard's binding UI;
-the baseline keeps SP-C small. Left as baseline unless the owner asks for the mint.
+- **`POST /api/dev/devices`** — body `{ kind, label, stationId?, tillId?, layoutProfileId? }` (the
+  mint form's fields — §5.2; hardware bindings default: no printer, no drawer, `cardProvider: "none"`,
+  a device needing those is still minted from the dashboard). Body-screened **exactly** as
+  `POST /management-api/device-codes` already screens the same fields (`device-api.ts:281`–`:342`:
+  `requireEnum` on `kind`, `requireString` on `label`, the `optionalBindingUuid` shape screens),
+  reusing those screens so validation cannot drift.
+- Under the hood it runs the **existing** verbs in one tenant transaction:
+  `generatePairingCode(tx, cfg, { kind, stationId, tillId, layoutProfileId, … })` then
+  `enrolDevice(tx, cfg, { code })`. So every binding rule is enforced unchanged — the per-kind till
+  gate (`device.till_required`), the station requirement (`device.station_required`), and the
+  binding FKs (`device.binding_invalid`) — with **no new validation surface**.
+- It returns `{ deviceId, kind, stationId, label }` (the enrol shape, minus the token). It **does not
+  set the device cookie**: the dev override is deviceId-only (§4.1), so the tab adopts the new device
+  purely by writing `deviceId` to its own `sessionStorage` (§5.2) and reloading — the shared cookie is
+  never touched, keeping other tabs undisturbed. (This is cleaner than routing through
+  `POST /api/device/enrol`, whose whole purpose is to set that cookie.)
+- **Mounted only when `devMode`**, in the same dev-only group as the list — absent (404) outside dev.
 
 ### 4.4 The device-reset route
 
@@ -206,17 +223,20 @@ even in a production bundle.
   present, it renders a new `<till-dev-chooser>` element **instead of** `<till-app>`; otherwise the
   app boots exactly as today. Using a query param, not a path, avoids depending on any SPA
   path-fallback in the dev server.
-- **What it shows:** the device list from `GET /api/dev/devices` (§4.2) — each row naming its kind,
-  label, till and profile — plus an "enrol a new device" affordance (§4.3) and the reset action
-  (§4.4).
-- **Picking a device:** write `sessionStorage["waitron.devDeviceId"]`, then `location.assign("/")`
-  (drop the `?dev`). The tab reloads into `<till-app>`, whose boot probe (`/api/till` then
-  `/api/device/me`, `till-app.ts:511`/`:585`) now carries the header and resolves to the chosen
-  device — so the existing kind-branching shell selection (`till-app.ts:586`) "just works" (a
-  `handheld` boots the handheld shell, a `kds_station` the station shell, a `till` the till shell).
-- **Enrolling then adopting:** on `POST /api/device/enrol` success, write the returned `deviceId` to
-  `sessionStorage` and `location.assign("/")` — the new device becomes this tab's identity without
-  relying on the shared cookie.
+- **What it shows** (all from the one `GET /api/dev/devices` payload — §4.2): the enrolled `devices`,
+  each row naming its kind, label, till and profile; a **mint form** (§4.3) — a `kind` picker, a
+  `label` field, and the binding the kind needs (a `till` picker from `tills` for a `till`/`handheld`,
+  a `station` picker from `stations` for a `kds_station`) plus an optional `profile` picker from
+  `profiles`; and the reset action (§4.4).
+- **Picking an existing device:** write `sessionStorage["waitron.devDeviceId"]`, then
+  `location.assign("/")` (drop the `?dev`). The tab reloads into `<till-app>`, whose boot probe
+  (`/api/till` then `/api/device/me`, `till-app.ts:511`/`:585`) now carries the header and resolves to
+  the chosen device — so the existing kind-branching shell selection (`till-app.ts:586`) "just works"
+  (a `handheld` boots the handheld shell, a `kds_station` the station shell, a `till` the till shell).
+- **Minting then adopting:** submit the mint form → `POST /api/dev/devices` (§4.3) → write the
+  returned `deviceId` to `sessionStorage` → `location.assign("/")`. The new device becomes this tab's
+  identity, cookie untouched. A validation refusal (`device.till_required` etc.) renders inline on the
+  form, not a nav.
 
 If `GET /api/dev/devices` 404s (the app is not running in dev), the chooser renders a plain "dev mode
 is off — set `WAITRON_ENV=dev`" message rather than an error, so hitting `?dev` against a
@@ -269,8 +289,9 @@ SP-C introduces **no new fiscal behaviour** and needs **no new H2 receipt**:
 
 **No new codes.** The dev routes simply do not exist outside `devMode` (404). An override miss folds
 to the existing `device.unauthorized` (`device-session.ts:199`). The reset route returns `204`. The
-enrol-by-code reuse answers the existing `device.*` enrol codes. If the dev-mint enhancement (§4.3)
-is chosen on review, it reuses `generatePairingCode`/`enrolDevice`'s existing codes.
+mint endpoint (§4.3) reuses `generatePairingCode`/`enrolDevice` and their existing codes
+(`device.till_required`, `device.station_required`, `device.binding_invalid`, `station.not_found`)
+plus the shared `management.request_invalid` body screens.
 
 ---
 
@@ -297,18 +318,26 @@ role, so PGlite's superuser cannot show the tenant scoping; CLAUDE.md §4):**
   revoked/malformed → `device.unauthorized`, **no** cookie fallback; header absent → cookie.
 - **RLS:** an id belonging to another tenant → miss (`device.unauthorized`), the same as unknown.
 
-**Dev-list + reset (`apps/server`):**
-- `GET /api/dev/devices` returns this tenant's active devices with the non-secret projection and
-  **no token field**; it is **absent (404) when not `devMode`** (prove by toggling the flag).
+**Dev surface + reset (`apps/server`):**
+- `GET /api/dev/devices` returns this tenant's active `devices` (non-secret projection, **no token
+  field**) plus `tills`/`stations`/`profiles`; RLS confines each list to the tenant; it is **absent
+  (404) when not `devMode`** (prove by toggling the flag).
+- `POST /api/dev/devices` mints-and-adopts: a valid body creates a device via
+  `generatePairingCode`+`enrolDevice` and returns `{ deviceId, … }` with **no cookie set** (assert the
+  response carries no `Set-Cookie`); an invalid body reuses the existing refusals
+  (`device.till_required` for a till/handheld with no till, `device.station_required` for a
+  kds_station with none, `device.binding_invalid` for a foreign id, `management.request_invalid` for a
+  bad field). Absent (404) when not `devMode`.
 - `POST /api/device/reset` clears the cookie (`Max-Age=0`, matching `Path` — mirror the existing
   `clearDeviceCookie` test at `device-session.test.ts:335`) and returns `204`.
 
 **Client (`apps/till`, browser-mode vitest):**
 - The `main.ts` fetch wrapper adds `x-waitron-dev-device` **iff** `sessionStorage` holds the key, and
   omits it otherwise; a throwing/blocked `sessionStorage` degrades to no header (no throw).
-- `<till-dev-chooser>` renders on `?dev`; lists devices from `GET /api/dev/devices`; picking writes
-  the storage key and navigates to `/`; enrol-by-code writes the returned id; a 404 list renders the
-  "dev mode is off" message.
+- `<till-dev-chooser>` renders on `?dev`; lists devices from `GET /api/dev/devices`; picking an
+  existing device writes the storage key and navigates to `/`; submitting the mint form calls
+  `POST /api/dev/devices` and writes the returned id; a validation refusal renders inline; a 404 list
+  renders the "dev mode is off" message.
 
 Per-tab isolation itself is a property of `sessionStorage` (per-tab by definition) — documented, and
 covered indirectly by the header-injection unit test rather than a two-tab integration harness.
@@ -321,19 +350,19 @@ covered indirectly by the header-injection unit test rather than a two-tab integ
   `config.devMode`.
 - `apps/server/src/device-session.ts` — override branch in `tryReadDevice` (+ `devMode` dep threaded
   to the four wrappers).
-- `apps/server/src/device-api.ts` — `DeviceApiDeps.devMode`; dev-only `GET /api/dev/devices`;
-  `POST /api/device/reset`.
+- `apps/server/src/device-api.ts` — `DeviceApiDeps.devMode`; the dev-only mount group
+  (`GET /api/dev/devices`, `POST /api/dev/devices`); `POST /api/device/reset`. Reuses the existing
+  body screens and `generatePairingCode`/`enrolDevice` verbs; a trivial `tills` projection; and
+  `listStations`/`listProfiles`.
 - `apps/server/src/boot.ts` — thread `config.devMode` into the device/till/sale mounts.
 - `apps/server/scripts/dev-setup.ts` — emit `WAITRON_ENV=dev`.
 - `apps/till/src/main.ts` — `?dev` check → render chooser; per-tab header wrapper around `fetchImpl`.
-- `apps/till/src/screens/till-dev-chooser.ts` (new) — the chooser view.
-- `apps/till/src/api/client.ts` — a `getDevDevices()` method + `resetDevice()`; enrol reuse exists.
+- `apps/till/src/screens/till-dev-chooser.ts` (new) — the chooser view (list + mint form + reset).
+- `apps/till/src/api/client.ts` — `getDevDevices()`, `mintDevDevice(req)`, `resetDevice()`.
 
 ---
 
-## 11. Decision to confirm on spec review
+## 11. Status
 
-- **Enrol-new scope (§4.3):** baseline is **code-paste reuse** (smallest). Alternative: a dev-only
-  **mint-and-adopt** endpoint for fully self-service enrol. Confirm which before planning.
-
-Everything else is settled. This is a single implementation plan; the slice is small.
+All decisions settled (enrol-new is **mint-and-adopt** — §4.3, owner call 2026-09-03). This is a
+single implementation plan; the slice is small.
