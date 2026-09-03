@@ -12,6 +12,7 @@ import {
   asAppUser,
   captureError,
   readDeploymentEnvironment,
+  readMembershipTrustSet,
   stampDeployment,
   withTenant,
 } from "@waitron/db";
@@ -1039,6 +1040,15 @@ describe("startServer, against a real container as the deployment role", () => {
             sql`select count(*)::int as n from nodes`,
           );
           expect(nodes.rows[0]!.n).toBe(1);
+
+          // Slice 4: the provision path established the primary node's membership identity — a keypair
+          // was generated, the private half sealed, and the public half stamped on `nodes.public_key`
+          // — so the freshly-minted node is the venue's SOLE trust anchor. `readMembershipTrustSet`
+          // scopes by `tenant_id`, so it returns exactly this venue's one keyed node. RED before boot
+          // wires `establishIdentity`: `public_key` is null and the trust set is empty.
+          const trust = await readMembershipTrustSet(check, json.tenantId);
+          expect(Object.keys(trust)).toHaveLength(1);
+          expect(Object.values(trust)[0]).toMatch(/.+/);
 
           // The restart was requested exactly once, AFTER the 200 flushed (setTimeout(0) in
           // setup-api.ts), as a SIGTERM to this process — the graceful-shutdown latch bin.ts installs.
