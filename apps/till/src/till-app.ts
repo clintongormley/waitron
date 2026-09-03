@@ -1849,15 +1849,24 @@ export class TillApp extends LitElement {
   /**
    * Whether the profile tab shell (SP-B2.1) should render in place of the legacy `#renderScreen`
    * switch. True ONLY for the authenticated operator surface the shell replaces: the operator has
-   * passed the lock screen (`screen !== "lock"`), no enrol overlay is open, and this is not a
-   * `kds_station` display (`deviceMode`), which STAYS on its legacy station screen in B2.1 (its
-   * kds-board card renders nothing until B2.2, so a shell would show an empty tab). The enrolling
-   * overlays are already handled ahead of this branch in {@link render}; they are guarded here too so
-   * the predicate reads true only for the surface it names, independent of render order.
+   * passed the lock screen (`screen !== "lock"`), no enrol overlay is open, and this is neither a
+   * `kds_station` display (`deviceMode`) nor a `handheld` phone (`handheldMode`). Both of those STAY on
+   * the legacy screen-enum in B2.1: the kds display's `kds-board` card and the phone-portrait profile's
+   * `order` tab (a `table-order` card) both render nothing until B2.2 wraps them, so a shell would give
+   * those devices a dead tab — the till (counter + floor, both wrapped) is the ONLY shell device in
+   * B2.1. Keeping handheld + kds on the fully-working legacy path is a no-regression change. The
+   * enrolling overlays are already handled ahead of this branch in {@link render}; they are guarded
+   * here too so the predicate reads true only for the surface it names, independent of render order.
    */
   #shellActive(): boolean {
+    // handheld + kds devices stay on the legacy screen-enum until B2.2 wraps table-order / kds-board;
+    // the till is the only shell device in B2.1.
     return (
-      this.screen !== "lock" && !this.handheldEnrolling && !this.tillEnrolling && !this.deviceMode
+      this.screen !== "lock" &&
+      !this.handheldEnrolling &&
+      !this.tillEnrolling &&
+      !this.deviceMode &&
+      !this.handheldMode
     );
   }
 

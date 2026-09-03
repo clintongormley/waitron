@@ -3865,6 +3865,49 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
       expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
     });
+
+    it("a HANDHELD with a profile stays on the legacy screen-enum, NOT the shell (B2.1 leaves table-order unwrapped)", async () => {
+      // A `handheld` phone STAYS on the legacy path in B2.1 even with a profile present: its
+      // phone-portrait profile's `order` tab is a `table-order` card that renders nothing until B2.2, so
+      // a shell would hand the waiter a dead Order tab. `#shellActive()` excludes `handheldMode` — proven
+      // by deletion: drop `&& !this.handheldMode` and this fails (the shell renders over the floor).
+      const phoneProfile: ProfileDef = {
+        formFactor: "handheld",
+        capabilities: [],
+        tabs: [
+          {
+            key: "floor",
+            title: "Floor",
+            columns: 12,
+            cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+          },
+          {
+            key: "order",
+            title: "Order",
+            columns: 12,
+            cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+          },
+        ],
+      };
+      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await flush(el);
+      expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      // Legacy handheld landing: the floor screen renders, the shell does not.
+      expect(shell(el)).toBeNull();
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+    });
   });
 
   describe("per-user locale (Task 9)", () => {
