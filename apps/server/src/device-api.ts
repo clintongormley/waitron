@@ -18,7 +18,7 @@ import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
-import { requireDevice, setDeviceCookie } from "./device-session.js";
+import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireEnum, requireString } from "./request-screens.js";
@@ -117,17 +117,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "device.failed");
 
 /**
- * Mounts the three device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`
+ * Mounts the device route groups on an existing Hono app — the `mountTillApi`/`mountManagementApi`
  * convention, attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps
  * errors identically:
  *
  *  1. UNAUTHENTICATED enrolment (`POST /api/device/enrol`) — mirrors the till's `POST /api/session`: no
  *     prior-session guard, redeems a pairing code as `app_user` under the tenant, and sets the trusted
  *     device cookie from the token the verb mints. The token leaves ONLY in the cookie (never the body).
- *  2. DEVICE-GUARDED routes (`GET /api/device/station`, `POST /api/device/ticket-items/:id/advance`) —
+ *  2. UNAUTHENTICATED, UNGATED reset (`POST /api/device/reset`) — wires `clearDeviceCookie` (no DB touch
+ *     at all): dropping the cookie the CALLER's own browser is carrying is always harmless (the device
+ *     row is untouched, still active), so — unlike every other route here — this one runs no guard and
+ *     is mounted identically in dev and production (SP-C).
+ *  3. DEVICE-GUARDED routes (`GET /api/device/station`, `POST /api/device/ticket-items/:id/advance`) —
  *     each calls `requireDevice` FIRST (401 otherwise) and scopes every read/bump to the device's OWN
  *     bound station; a bump of another station's item is `device.forbidden_station` (403).
- *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
+ *  4. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`) — each calls
  *     `requireManagementSession` (401), then funnels its DB work through the local `gated` helper, which
  *     `authorizeManager`s `device.manage` (403) before the op runs, in exactly one place.
@@ -188,6 +192,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         },
         200,
       );
+    }),
+  );
+
+  // ── Reset (drop THIS browser's device identity) ──────────────────────────────────────────────────────
+  // Wires `clearDeviceCookie`: the device row is untouched (still active) — the browser simply reverts
+  // to un-enrolled and can re-enrol. `sameSite: Strict` means a cross-site POST cannot reach the cookie.
+  app.post("/api/device/reset", (c) =>
+    run(c, log, async () => {
+      clearDeviceCookie(c);
+      return c.body(null, 204);
     }),
   );
 
