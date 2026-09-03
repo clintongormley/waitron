@@ -811,9 +811,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // device's assigned profile to declare `integrated-card-payment`. This generalises the old
       // hardcoded handheld check — a handheld carries a capability-less profile (or none), so it is
       // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
-      // write, so the fence holds even if the client were bypassed. An ordinary till carries no device
-      // cookie and passes. (A handheld may still settle a cash or manual-card sale on `/api/sales`,
-      // node-keyed, which runs NO capability guard — only the INTEGRATED leg here is fenced.)
+      // write, so the fence holds even if the client were bypassed. A cookie-less caller passes THIS
+      // capability guard (there is no device to check) — but the route still nets to a rejection, because
+      // `requireSaleTillId` below fails closed with `device.unauthorized` on a missing cookie (§16.4): an
+      // ordinary env-only till is no longer a sellable box on `/api/pay`. (A handheld may still settle a
+      // cash or manual-card sale on `/api/sales`, node-keyed, which runs NO capability guard — only the
+      // INTEGRATED leg here is fenced.)
       await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
@@ -974,14 +977,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       // SP-A.2 §16.4 cutover: a Mode-I place files a deferred chained invoice under the AUTHENTICATED
-      // device's `till_id`, not env (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). The
-      // place-amendment `capturedByTillId` moves to the same device till, consistent with that invoice.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
+      // device's `till_id`, which `placeOrder` takes as `saleTillId`. That device till reaches the FISCAL
+      // record ONLY; the `order_placed` amendment's `capturedByTillId` stays the box's CONFIGURED register
+      // (`deps.cfg.tillId`), matching `cancelPlacedOrder` so a re-homed box's place/cancel history agrees.
+      const saleTillId = await requireSaleTillId(deps, c, device);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        saleCfg,
+        deps.cfg,
         id,
         personId,
+        saleTillId,
       );
       return c.json(result);
     }),

@@ -506,7 +506,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       id,
       lines: [{ productId: base.each.id, quantity: "1" }],
     });
-    await placeOrder(deps(), cfg, id, OPERATOR);
+    await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
     // Placing filed the deferred invoice; no receipt is printed at place (only collect settles + prints).
     expect(await printJobsFor(cfg)).toEqual([]);
 

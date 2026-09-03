@@ -238,7 +238,13 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
     ],
     label: "Mesa 7",
   });
-  await placeOrder({ db: suite.admin, backend, clock }, venue.cfg, orderId, OPERATOR);
+  await placeOrder(
+    { db: suite.admin, backend, clock },
+    venue.cfg,
+    orderId,
+    OPERATOR,
+    venue.cfg.tillId,
+  );
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
     join working_order_lines wol on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id

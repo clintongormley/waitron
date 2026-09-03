@@ -1181,7 +1181,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
     const id = randomUUID();
     await parkOrder({ db }, cfg, { id, lines: [line(cafe)] });
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
 
     const items = await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
