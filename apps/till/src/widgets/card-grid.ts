@@ -13,9 +13,11 @@ import "./station-queue.js";
 // the switch below. Same side-effect-import-then-name-by-tag shape as the widgets above.
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
+import "../screens/till-station-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
+  DeviceStation,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -24,7 +26,7 @@ import type {
   TillApi,
   TillProduct,
 } from "../api/client.js";
-import type { FireControlMode } from "./station-queue.js";
+import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
@@ -36,9 +38,9 @@ import type { CardOutcome, CardProvider } from "./tender-pay.js";
  *
  * All three visibility axes are honoured here (SP-B2.1): capability→absent (`#capable`),
  * permission→locked (`#locked`, a dimmed `?inert` cell), and `visibleWhen` (data-condition show/hide,
- * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor` and `expo` big
- * cards render by mounting their screens EMBEDDED (chrome-suppressed); `kds-board`, `table-order` and
- * `notifications` render nothing here and arrive in B2.2/later.
+ * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor`, `expo` and
+ * `kds-board` big cards render by mounting their screens EMBEDDED (chrome-suppressed); `table-order`
+ * and `notifications` render nothing here and arrive later.
  */
 @customElement("till-card-grid")
 export class TillCardGrid extends LitElement {
@@ -96,6 +98,15 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** Whether this operator may configure the till — the sole permission gating a card (table-layout-editor). */
   @property({ type: Boolean }) canConfigureTill = false;
+  /** Per-line (default) vs whole-ticket bump — the `bump_mode` venue setting, threaded to the embedded
+   * station screen (kds-board card), which passes it straight to its queue widget. */
+  @property() bumpMode: BumpMode = "line";
+  /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
+   * login, one bound station) rather than the session-gated operator path — threaded straight through. */
+  @property() deviceMode = false;
+  /** The device station the app already probed at cold boot, handed to the embedded station screen so it
+   * does not re-fetch on mount (device-mode only; undefined on the operator path). */
+  @property({ attribute: false }) initialDeviceStation?: DeviceStation;
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -118,8 +129,10 @@ export class TillCardGrid extends LitElement {
    * through a bug or a stale profile, still cannot perform it — those two endpoints fail CLOSED
    * regardless of what the grid rendered. The third capability, `act-as-kds` (the only one this gate
    * actually consults, since tender-pay short-circuits above), has no live server enforcement in B2.1
-   * (comment-only at `apps/server/src/device-api.ts:256`); its one card, `kds-board`, renders `nothing`
-   * here and is wrapped in B2.2, so no reachable card relies on the advisory gate alone today.
+   * (comment-only at `apps/server/src/device-api.ts:256`); its one card, `kds-board`, now renders here
+   * (SP-B2.2), so it is the one card gated by the advisory client check alone. The station display it
+   * mounts performs only kitchen-queue reads/advances, not either of the two server-fenced operations
+   * above, so the absence of a live `act-as-kds` server gate widens no fiscal or cash path.
    */
   #capable(card: CardInstance): boolean {
     if (card.type === "tender-pay") return true; // cash path — never gated absent
@@ -217,9 +230,23 @@ export class TillCardGrid extends LitElement {
           .api=${this.api}
           .fireControl=${this.fireControl}
         ></till-expo-screen>`;
-      // These arrive in B2.2/later — still not rendered on any tab yet.
-      case "notifications":
       case "kds-board":
+        // The KDS station display (SP-B2.2), mounted EMBEDDED like the floor/expo screens. It is
+        // SELF-FETCHING — it owns `.api` and reads its own station list + queue (device-mode: its one
+        // bound station) — so the grid host threads only the venue settings it configures with, never a
+        // queue. The default-station queue the host DOES hold (`stationQueue`) is the counter's own
+        // prep-queue widget's data, not this display's picked/bound station, so it is deliberately not
+        // passed here.
+        return html`<till-station-screen
+          embedded
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+        ></till-station-screen>`;
+      // These arrive later — still not rendered on any tab yet.
+      case "notifications":
       case "table-order":
         return nothing;
     }
@@ -237,7 +264,18 @@ export class TillCardGrid extends LitElement {
     return states.includes(current);
   }
 
-  /** Each card's data-condition state, computed from data the host already holds (spec §7). */
+  /**
+   * Each card's data-condition state, computed from data the host already holds (spec §7).
+   *
+   * `kds-board` (like `expo`) is deliberately NOT a case here — it returns `undefined` from the
+   * `default` arm and so fails OPEN via `#visible` (SP-B2.1 follow-up d). It is a SELF-FETCHING screen:
+   * the host holds no authoritative queue for the operator's PICKED (or the device's BOUND) station —
+   * `stationQueue` is only the DEFAULT station's queue (KDS-1, the counter's own prep-queue widget) — so
+   * the host cannot compute this card's `has-tickets`/`idle` state, and a `visibleWhen` gate on a
+   * kds-board card must not silently vanish it. This matches the landed B2.1 treatment of `expo`, whose
+   * identical host-uncomputable states are handled the same way: the two big self-fetching screens are
+   * both left host-uncomputed, not one computed and one not.
+   */
   #currentState(type: CardType): string | undefined {
     switch (type) {
       case "held-orders":

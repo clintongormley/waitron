@@ -241,17 +241,16 @@ describe("till-card-grid", () => {
     expect(grid.columns).toBeUndefined();
   });
 
-  it("still skips notifications, kds-board and table-order (B2.2/later), rendering no cell for them", async () => {
+  it("still skips notifications and table-order (later), rendering no cell for them", async () => {
     const store = new WorkingOrderStore();
-    // floor-plan / table-layout-editor / expo now RENDER (SP-B2.1, tested below); the three types
-    // that still return `nothing` arrive in B2.2/later, so a tab carrying them shows only the basket.
+    // floor-plan / table-layout-editor / expo / kds-board now RENDER (kds-board tested below); the two
+    // types that still return `nothing` arrive later, so a tab carrying them shows only the basket.
     const bigTab: TabDef = {
       key: "counter",
       title: "Counter",
       columns: 12,
       cards: [
         { type: "notifications", colSpan: 4, rowSpan: 1, config: {} },
-        { type: "kds-board", colSpan: 6, rowSpan: 4, config: {} },
         { type: "table-order", colSpan: 6, rowSpan: 4, config: {} },
         { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
       ],
@@ -356,14 +355,16 @@ describe("till-card-grid", () => {
     expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 
-  it("never WIDENS access: no capabilities input surfaces a gated card (advisory client gate, SP-B2.1 follow-up c)", async () => {
+  it("never WIDENS access: the advisory gate is MONOTONIC — more caps ⇒ a superset of cards (SP-B2.1 follow-up c)", async () => {
     // The client capability gate is advisory — the server's assertDeviceCapability is authoritative. It
-    // can only ever REMOVE a card, never add one: a truthy #capable is necessary-not-sufficient for a
-    // card to render. kds-board REQUIRES act-as-kds; absent, #capable filters it out; present, it passes
-    // the gate but still renders `nothing` until B2.2. So across BOTH capability states the gated card
-    // yields no cell the ungated set doesn't already have — the gate is monotonic (more caps ⇒ a superset
-    // of cards) and cannot manufacture access. The visible capability-SKIP proof (by deletion) lands in
-    // B2.2 when kds-board renders (the two skipped tests below); this pins the direction meanwhile.
+    // can only ever REMOVE a card, never one that manufactures access to a server-fenced operation: a
+    // truthy #capable is necessary-not-sufficient for a card to render. kds-board REQUIRES act-as-kds;
+    // absent, #capable filters it out; present (SP-B2.2), it renders the station display — a
+    // kitchen-queue read/advance surface that touches NEITHER server-fenced operation (the pay endpoint
+    // or the cash-drawer open). So granting the capability yields a strict SUPERSET of the ungated set
+    // (the ungated basket stays; kds-board is ADDED), never a different-or-smaller set — the gate is
+    // monotonic and cannot remove a card the device was already entitled to. The direction of the
+    // per-card skip itself is pinned by the two capability tests + the prove-by-deletion control above.
     const store = new WorkingOrderStore();
     const mixed: TabDef = {
       key: "x",
@@ -379,22 +380,22 @@ describe("till-card-grid", () => {
       store,
       capabilities: [],
     });
-    const absentCells = absent.el.shadowRoot!.querySelectorAll(".cell").length;
+    // Absent: only the ungated basket; the gated kds-board is filtered out.
+    expect(absent.el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
+    expect(absent.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+    expect(absent.el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
     const present = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: mixed,
       store,
       capabilities: ["act-as-kds"],
     });
-    const presentCells = present.el.shadowRoot!.querySelectorAll(".cell").length;
-    // Only the ungated basket renders in either state; granting the capability widened nothing observable.
-    expect(absentCells).toBe(1);
-    expect(presentCells).toBe(absentCells);
+    // Present: the SUPERSET — the ungated basket still renders (nothing was removed) AND kds-board is added.
+    expect(present.el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(2);
     expect(present.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+    expect(present.el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
   });
 
-  // capability-skip visible test lands in B2.2 when kds-board renders. Until then kds-board renders
-  // `nothing` in card-grid, so a capability-SKIP is not observable via till-station-screen here.
-  it.skip("skips a capability-gated card when the capability is absent", async () => {
+  it("skips a capability-gated card when the capability is absent", async () => {
     const store = new WorkingOrderStore();
     const kdsTab: TabDef = {
       key: "x",
@@ -413,8 +414,7 @@ describe("till-card-grid", () => {
     expect(el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
   });
 
-  // capability-skip visible test lands in B2.2 when kds-board renders.
-  it.skip("renders a capability-gated card when the capability is present", async () => {
+  it("renders a capability-gated card when the capability is present", async () => {
     const store = new WorkingOrderStore();
     const kdsTab: TabDef = {
       key: "x",
@@ -431,6 +431,28 @@ describe("till-card-grid", () => {
       capabilities: ["act-as-kds"],
     });
     expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+  });
+
+  it("proves the capability skip by deletion: kds-board absent without act-as-kds, present with it", async () => {
+    const store = new WorkingOrderStore();
+    const tab: TabDef = {
+      key: "k",
+      title: "K",
+      columns: 12,
+      cards: [{ type: "kds-board", colSpan: 12, rowSpan: 6, config: {} }],
+    };
+    const absent = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab,
+      store,
+      capabilities: [],
+    });
+    expect(absent.el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+    const present = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab,
+      store,
+      capabilities: ["act-as-kds"],
+    });
+    expect(present.el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
   });
 
   it("passes a visibleWhen gate OPEN for a card type with no data-condition mapping (follow-up d)", async () => {
