@@ -1,20 +1,36 @@
 import { eq } from "drizzle-orm";
 import type { TrustSet } from "@waitron/membership";
 import { tenantId as brandTenantId } from "@waitron/shared";
-import type { Database } from "./client.js";
+import type { Database, Transaction } from "./client.js";
 import { nodes } from "./schema/nodes.js";
 import { withTenant } from "./tenancy.js";
 
 /**
- * Stamp a node's membership identity PUBLIC key (design §4) on the owner connection. `nodes` is
- * FORCE-RLS, so this runs under `withTenant` with the tenant GUC set — the owner is subject to the
- * policy too. app_user holds no UPDATE on `nodes` (setNodePublicKey is owner-role, like the provision
- * writes it sits beside). The PRIVATE half is sealed in the vault (apps/server/node-identity.ts).
+ * Stamp a node's membership identity PUBLIC key (design §4) on a caller-provided transaction whose
+ * tenant GUC is already set. Factored from `setNodePublicKey` so a caller that must stamp atomically
+ * WITH another write shares one transaction rather than opening a second: `establishNodeIdentity`
+ * seals the matching private key and calls this in the SAME `withTenant`, so the private/public pair
+ * lands together or not at all (CLAUDE.md §3 — `withTenant` IS that transaction; a write-path helper
+ * takes a `tx`). `nodes` is FORCE-RLS, so the tx must carry the tenant GUC (its `withTenant` sets it),
+ * and the connection's role must hold UPDATE on `nodes` — owner-role, since app_user holds none.
  *
- * No-op-safe on a non-matching id (0 rows updated): the provision path is the only caller and it
- * passes a just-minted id, so a 0-row update would be a bug — but this accessor does not assert it,
- * because the id is fresh by construction and a guard here would only add a read the caller does not
- * need.
+ * No-op-safe on a non-matching id (0 rows updated): callers pass a just-minted id, so a 0-row update
+ * would be a bug — but this accessor does not assert it, because the id is fresh by construction and a
+ * guard here would only add a read the caller does not need.
+ */
+export async function setNodePublicKeyTx(
+  tx: Transaction,
+  nodeId: string,
+  publicKey: string,
+): Promise<void> {
+  await tx.update(nodes).set({ publicKey }).where(eq(nodes.id, nodeId));
+}
+
+/**
+ * Stamp a node's membership identity PUBLIC key on the owner connection, opening its own tenant
+ * transaction (design §4). The standalone form, for a lone stamp (a test seeding a source node; the
+ * adopt proof); a caller that must stamp atomically alongside another write uses `setNodePublicKeyTx`
+ * inside one shared `withTenant` instead. Owner-role, per `setNodePublicKeyTx`.
  */
 export function setNodePublicKey(
   db: Database,
@@ -22,10 +38,7 @@ export function setNodePublicKey(
   nodeId: string,
   publicKey: string,
 ): Promise<void> {
-  const tenant = brandTenantId(tenantId);
-  return withTenant(db, tenant, async (tx) => {
-    await tx.update(nodes).set({ publicKey }).where(eq(nodes.id, nodeId));
-  });
+  return withTenant(db, brandTenantId(tenantId), (tx) => setNodePublicKeyTx(tx, nodeId, publicKey));
 }
 
 /**
