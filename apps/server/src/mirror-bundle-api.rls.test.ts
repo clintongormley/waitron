@@ -4,11 +4,20 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, stampDeployment, withTenant, type Database } from "@waitron/db";
+import {
+  asAppUser,
+  readMembershipTrustSet,
+  stampDeployment,
+  withTenant,
+  type Database,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
+import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 
@@ -19,6 +28,18 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
+
+// The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
+// as node-identity.test.ts uses. The primary seals its identity key under this ring, and the endpoint
+// unseals it (as app_user) to endorse the standby's key.
+const RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+// The standby's identity key the primary vouches for — a real Ed25519 SPKI public key so the
+// endorsement's signature verifies against the primary's key over canonicalize({nodeId, publicKey}).
+const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -34,9 +55,15 @@ let stateDir: string;
 let appDb: Database; // app_login → app_user: auth + the RLS venue reads
 let retentionDb: Database; // sync_pruner → sync_retention: mints the peer token
 
-/** Provision a fresh venue (as the owner), returning the five designated ids in AdoptResult shape plus
- * the seeded admin's person id. `applyVenue` seeds ONE `role='admin'` person carrying ADMIN_PASSWORD. */
-async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: string }> {
+/** Provision a fresh venue (as the owner) with standard FA + rectificative RF series and an ESTABLISHED
+ * node identity, returning the five designated ids in AdoptResult shape, the seeded admin's person id,
+ * and the primary node's public key (the trust anchor its endorsement must verify against).
+ * `applyVenue` seeds ONE `role='admin'` person carrying ADMIN_PASSWORD. */
+async function setupVenue(): Promise<{
+  designated: AdoptResult;
+  adminPersonId: string;
+  primaryPublicKey: string;
+}> {
   const venue = await applyVenue(
     planVenue({
       country: "ES",
@@ -56,8 +83,8 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
         dayCutover: "05:00",
       },
       tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
+      seriesCode: "FA",
+      rectificativeSeriesCode: "RF",
       admin: {
         displayName: "Administradora",
         pinHash: hashPin("1234"),
@@ -73,13 +100,23 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
+  // Establish the primary's membership identity (owner-side seal + nodes.public_key stamp), so the
+  // endpoint can unseal the private key and endorse the standby. Mirrors node-identity.test.ts.
+  await establishNodeIdentity(
+    { ownerDb: suite.admin, ring: RING },
+    designated.tenantId,
+    designated.nodeId,
+  );
+  const primaryPublicKey = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
+    designated.nodeId
+  ]!;
   // The admin person id — read back under RLS as app_user, the only role the endpoint ever uses.
   const adminPersonId = await withTenant(appDb, designated.tenantId, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
   });
-  return { designated, adminPersonId };
+  return { designated, adminPersonId, primaryPublicKey };
 }
 
 /** Insert a second, NON-admin (staff) person carrying a dashboard password, returning its id. Staff
@@ -100,10 +137,24 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
   const app = new Hono();
   mountMirrorBundleApi(
     app,
-    { appDb, retentionDb, stateDir, relayUrl, boxHostname: "waitron.local", designated },
+    {
+      appDb,
+      retentionDb,
+      ring: RING,
+      stateDir,
+      relayUrl,
+      boxHostname: "waitron.local",
+      designated,
+    },
     log,
   );
   return app;
+}
+
+/** A well-formed standby identity — a fresh nodeId + the real STANDBY_PUB — required in every request
+ * now (the primary reserves this standby's identity and endorses this key). */
+function validStandby(): { standbyNodeId: string; standbyPublicKey: string } {
+  return { standbyNodeId: crypto.randomUUID(), standbyPublicKey: STANDBY_PUB };
 }
 
 async function post(app: Hono, body: unknown): Promise<Response> {
@@ -147,7 +198,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       lines.push(JSON.stringify({ level, event, fields }));
     const app = mountApp(designated, "https://relay.example:9000/", log);
 
-    const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       rows: { tenant: { id: string } };
@@ -178,7 +233,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     // No logger passed here — exercises the no-op default (mountMirrorBundleApi's `log?`).
     const app = mountApp(designated, "relay.example:9000");
 
-    const res = await post(app, { personId: staffPersonId, password: STAFF_PASSWORD });
+    const res = await post(app, {
+      personId: staffPersonId,
+      password: STAFF_PASSWORD,
+      ...validStandby(),
+    });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("authorization.not_permitted");
   });
@@ -187,7 +246,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, "relay.example:9000");
 
-    const res = await post(app, { personId: adminPersonId, password: "wrong" });
+    const res = await post(app, { personId: adminPersonId, password: "wrong", ...validStandby() });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
   });
@@ -216,8 +275,92 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, undefined);
 
-    const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.no_relay");
+  });
+
+  it("returns a reserved identity: a fresh number, disjoint series, and a valid endorsement", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: standby.nodeId,
+      standbyPublicKey: standby.publicKey,
+    });
+    expect(res.status).toBe(200);
+    const bundle = (await res.json()) as {
+      reservedIdentity: {
+        nif: string;
+        idSistemaInformatico: string;
+        numeroInstalacion: number;
+        series: { code: string; purpose: string }[];
+        endorsement: { nodeId: string; publicKey: string; endorsedBy: string; signature: string };
+      };
+    };
+    const r = bundle.reservedIdentity;
+    // A fresh installation number the primary reserved (past its own — applyVenue's registerSif took 1).
+    expect(r.numeroInstalacion).toBeGreaterThan(0);
+    expect(typeof r.nif).toBe("string");
+    // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
+    expect(r.idSistemaInformatico).toBe("W1");
+    // Disjoint series: one per primary series (FA + RF), each suffixed with the reserved number.
+    expect(r.series.map((s) => s.code).sort()).toEqual(
+      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+    );
+    // Purpose is preserved alongside the derived code.
+    const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
+    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    // The endorsement vouches for THIS standby, by the primary node.
+    expect(r.endorsement.nodeId).toBe(standby.nodeId);
+    expect(r.endorsement.publicKey).toBe(standby.publicKey);
+    expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
+    // The signature verifies against the primary's public key over canonicalize({nodeId, publicKey}) —
+    // i.e. a trust set {primaryNodeId: primaryPublicKey} would admit this standby key.
+    expect(
+      verifyBytes(
+        canonicalize({ nodeId: standby.nodeId, publicKey: standby.publicKey }),
+        r.endorsement.signature,
+        primaryPublicKey,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a missing/malformed standby identity with 400 mirror.standby_invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    // No standby fields at all — a valid admin credential, but the standby identity is required.
+    const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("mirror.standby_invalid");
+
+    // A non-UUID standby nodeId is refused the same way.
+    const res2 = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: "not-a-uuid",
+      standbyPublicKey: STANDBY_PUB,
+    });
+    expect(res2.status).toBe(400);
+    expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
+
+    // An empty standby publicKey is refused the same way.
+    const res3 = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: "",
+    });
+    expect(res3.status).toBe(400);
+    expect((await res3.json()).error.code).toBe("mirror.standby_invalid");
   });
 });

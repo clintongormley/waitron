@@ -11,7 +11,7 @@
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
 import {
   invoiceSeries,
   locations,
@@ -23,13 +23,37 @@ import {
   type Database,
 } from "@waitron/db";
 import { enrolPeer } from "@waitron/sync";
+import { currentSif, reserveInstallationNumber } from "@waitron/fiscal-verifactu";
+import { endorseKey, type Endorsement } from "@waitron/membership";
+import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
 import { caCertPath } from "./box-secrets.js";
+import { readNodeIdentityKey } from "./node-identity.js";
+
+/**
+ * The dormant fiscal + membership identity the PRIMARY reserves for a standby at adopt (design §4/§6
+ * R2). The primary is the sole allocator per NIF: it bumps ITS OWN `contadores_instalacion` to mint a
+ * fresh `numeroInstalacion` the standby will persist inert (via `writeReservedSif`, Task 3) and
+ * activate on promotion — a standby's DB is a copy and must never mint. `series` are DISJOINT codes
+ * (`${primaryCode}-${numeroInstalacion}`), one per primary series, purpose preserved: the installation
+ * number is globally unique + never-reused per NIF, so the suffix makes the standby's series provably
+ * disjoint from the primary's. `endorsement` vouches for the standby's identity key, signed by the
+ * primary's identity key — the chain-back-to-setup that lets other members trust a document the standby
+ * later signs (Task 5 consumes this shape verbatim).
+ */
+export interface ReservedIdentity {
+  nif: string;
+  idSistemaInformatico: string;
+  numeroInstalacion: number;
+  series: { code: string; purpose: string }[];
+  endorsement: Endorsement;
+}
 
 /**
  * Everything the mirror needs to adopt this venue and pull from the box. `rows` + `designated` are the
  * `adoptVenue` inputs (camelCase Drizzle rows, matching its `$inferInsert`); the remaining fields are
  * the connection handshake. `syncToken` is the plaintext bearer, returned exactly once.
+ * `reservedIdentity` is the standby's dormant identity the primary reserves + endorses (design §6 R2).
  */
 export interface MirrorBundle {
   rows: AdoptVenueRows;
@@ -39,21 +63,29 @@ export interface MirrorBundle {
   boxCaPem: string;
   relayUrl: string;
   syncToken: string;
+  reservedIdentity: ReservedIdentity;
 }
 
 /**
  * `appDb` reads the venue rows under RLS as `app_user`; `retentionDb` (a `sync_retention` member) mints
- * the peer token via `enrolPeer` — the two roles that hold exactly the privileges each step needs. No
- * `ring`: the token is not sealed on the primary. `designated` are the five ids the till was provisioned
- * with (`config.till.*`); `stateDir` locates the box CA; `relayUrl`/`boxHostname` are the box's dial-in.
+ * the peer token via `enrolPeer` — the two roles that hold exactly the privileges each step needs.
+ * `appDb` ALSO computes the reservation: `app_user` holds SELECT/INSERT/UPDATE on
+ * `contadores_instalacion`/`registro_sif`/`cadenas` (`0001_registros_inmutables.sql`) and SELECT on
+ * `invoice_series`, so the counter bump + fiscal/series reads all run as `app_user` (CLAUDE.md §3:
+ * never widen a grant). `ring` unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as
+ * `app_user`) to sign the standby's endorsement; `standby` is the node the primary vouches for.
+ * `designated` are the five ids the till was provisioned with (`config.till.*`); `stateDir` locates the
+ * box CA; `relayUrl`/`boxHostname` are the box's dial-in.
  */
 export interface AssembleDeps {
   appDb: Database;
   retentionDb: Database;
+  ring: KeyRing;
   stateDir: string;
   relayUrl: string;
   boxHostname: string;
   designated: AdoptResult;
+  standby: { nodeId: string; publicKey: string };
 }
 
 /**
@@ -81,6 +113,54 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
+  // Reserve the standby's dormant fiscal identity (design §6 R2). The counter bump + the SIF/series
+  // reads share ONE `withTenant` transaction so the reservation is consistent: `currentSif` reads the
+  // primary's live SIF, `reserveInstallationNumber` bumps the primary's OWN `contadores_instalacion`
+  // (the primary is the sole allocator per NIF), and the series read derives disjoint codes from the
+  // number just reserved. `currentSif` throwing `sif.not_registered` correctly surfaces an
+  // unprovisioned primary — an impossible state for a trading primary — and is left to propagate.
+  const reserved = await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
+    const primarySif = await currentSif(
+      tx,
+      brandTenantId(deps.designated.tenantId),
+      brandNodeId(deps.designated.nodeId),
+    );
+    const numeroInstalacion = await reserveInstallationNumber(tx, {
+      nif: primarySif.nif,
+      idSistemaInformatico: primarySif.idSistemaInformatico,
+    });
+    const primarySeries = await tx
+      .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, brandNodeId(deps.designated.nodeId)));
+    const series = primarySeries.map((s) => ({
+      code: `${s.code}-${numeroInstalacion}`,
+      purpose: s.purpose,
+    }));
+    return {
+      nif: primarySif.nif,
+      idSistemaInformatico: primarySif.idSistemaInformatico,
+      numeroInstalacion,
+      series,
+    };
+  });
+
+  // Endorse the standby's identity key with the primary's identity PRIVATE key (design §4). The key is
+  // unsealed as `app_user` inside `readNodeIdentityKey`'s own transaction; `endorseKey` signs
+  // canonicalize({nodeId, publicKey}) so the endorsement chains the standby's key back to the primary's
+  // setup-established trust anchor.
+  const primaryPrivateKey = await readNodeIdentityKey(
+    deps.appDb,
+    deps.ring,
+    deps.designated.tenantId,
+  );
+  const endorsement = endorseKey(
+    deps.standby.nodeId,
+    deps.standby.publicKey,
+    deps.designated.nodeId,
+    primaryPrivateKey,
+  );
+
   const boxCaPem = await readFile(caCertPath(deps.stateDir), "utf8");
 
   const { token } = await enrolPeer(deps.retentionDb, {
@@ -96,5 +176,12 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     boxCaPem,
     relayUrl: deps.relayUrl,
     syncToken: token,
+    reservedIdentity: {
+      nif: reserved.nif,
+      idSistemaInformatico: reserved.idSistemaInformatico,
+      numeroInstalacion: reserved.numeroInstalacion,
+      series: reserved.series,
+      endorsement,
+    },
   };
 }

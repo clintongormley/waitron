@@ -2,11 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { stampDeployment, type Database } from "@waitron/db";
+import { readMembershipTrustSet, stampDeployment, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { authenticatePeer } from "@waitron/sync";
+import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 
@@ -15,6 +18,17 @@ import { assembleMirrorBundle } from "./mirror-bundle.js";
 // holds SELECT on all five parent tables — the whole point here) and mints the token as a
 // `sync_retention` member (`sync_pruner`), a non-superuser INSERT on sync_peers. CLAUDE.md §4.
 const LOCALE = "es-ES";
+
+// The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
+// as node-identity.test.ts uses. `assembleMirrorBundle` now unseals the primary's identity key to
+// endorse the standby.
+const RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+// The standby's identity key the primary vouches for — a real Ed25519 SPKI public key.
+const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
 const suite = useTemplateDb({ template: "manifest" });
 // A second, never-stamped clone for the null-environment branch: `suite` is stamped in beforeAll, so
@@ -56,8 +70,8 @@ async function setupVenue(): Promise<AdoptResult> {
         dayCutover: "05:00",
       },
       tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
+      seriesCode: "FA",
+      rectificativeSeriesCode: "RF",
       admin: {
         displayName: "Administradora",
         pinHash: hashPin("1234"),
@@ -66,13 +80,21 @@ async function setupVenue(): Promise<AdoptResult> {
     }),
     { db: suite.admin },
   );
-  return {
+  const designated: AdoptResult = {
     tenantId: venue.tenantId,
     locationId: venue.locationId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
+  // Establish the primary's membership identity so assembleMirrorBundle can unseal it and endorse the
+  // standby (mirrors node-identity.test.ts).
+  await establishNodeIdentity(
+    { ownerDb: suite.admin, ring: RING },
+    designated.tenantId,
+    designated.nodeId,
+  );
+  return designated;
 }
 
 beforeAll(async () => {
@@ -103,14 +125,17 @@ afterAll(async () => {
 describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   it("assembles a bundle carrying the venue rows, connection details, and a fresh token", async () => {
     const designated = await setupVenue();
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
     const bundle = await assembleMirrorBundle({
       appDb,
       retentionDb,
+      ring: RING,
       stateDir,
       relayUrl: "https://relay.test:9000/",
       boxHostname: "waitron.local",
       designated,
+      standby,
     });
 
     // The venue's parent rows are present and tenant-scoped.
@@ -126,6 +151,32 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     expect(bundle.boxHostname).toBe("waitron.local");
     expect(bundle.boxCaPem).toContain("BEGIN CERTIFICATE");
     expect(bundle.relayUrl).toBe("https://relay.test:9000/");
+
+    // The reserved identity: a fresh installation number, disjoint series (FA/RF suffixed with it,
+    // purpose preserved), and an endorsement of the standby's key by the primary node.
+    const r = bundle.reservedIdentity;
+    expect(r.numeroInstalacion).toBeGreaterThan(0);
+    // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
+    expect(r.idSistemaInformatico).toBe("W1");
+    expect(r.series.map((s) => s.code).sort()).toEqual(
+      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+    );
+    const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
+    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    expect(r.endorsement.nodeId).toBe(standby.nodeId);
+    expect(r.endorsement.publicKey).toBe(standby.publicKey);
+    expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
+    const primaryPub = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
+      designated.nodeId
+    ]!;
+    expect(
+      verifyBytes(
+        canonicalize({ nodeId: standby.nodeId, publicKey: standby.publicKey }),
+        r.endorsement.signature,
+        primaryPub,
+      ),
+    ).toBe(true);
 
     // The minted token authenticates as a real peer, resolving to the designated node id — the identity
     // the mirror pulls as. Round-trips through authenticatePeer on the same retention pool.
@@ -143,10 +194,12 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     const bundleA = await assembleMirrorBundle({
       appDb,
       retentionDb,
+      ring: RING,
       stateDir,
       relayUrl: "https://relay.test:9000/",
       boxHostname: "waitron.local",
       designated: a,
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
 
     expect(bundleA.rows.tenant.id).toBe(a.tenantId);
@@ -169,10 +222,12 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
         assembleMirrorBundle({
           appDb: unstampedApp,
           retentionDb,
+          ring: RING,
           stateDir,
           relayUrl: "https://relay.test:9000/",
           boxHostname: "waitron.local",
           designated,
+          standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
         }),
       ).rejects.toMatchObject({ code: "mirror.not_provisioned" });
     } finally {
