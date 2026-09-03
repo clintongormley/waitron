@@ -21,9 +21,14 @@ applyTokens(document.documentElement);
 installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
-render(
-  html`<till-app
-    .api=${new TillApi("", createInstrumentedFetch(withDevDeviceHeader(fetch), diag))}
-  ></till-app>`,
-  app,
-);
+const fetchImpl = createInstrumentedFetch(withDevDeviceHeader(fetch), diag);
+
+// The `?dev` per-tab device switcher (SP-C): a developer running several device roles in one browser
+// opens `/?dev` to adopt or mint a device for THIS tab, then boots into `/` as it. Lazily imported so
+// the chooser (a dev-only tool) never rides the normal bundle path; the plain boot renders <till-app>.
+if (new URLSearchParams(location.search).has("dev")) {
+  await import("./screens/till-dev-chooser.js");
+  render(html`<till-dev-chooser .api=${new TillApi("", fetchImpl)}></till-dev-chooser>`, app);
+} else {
+  render(html`<till-app .api=${new TillApi("", fetchImpl)}></till-app>`, app);
+}
