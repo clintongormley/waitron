@@ -220,6 +220,14 @@ export class TillCounterScreen extends LitElement {
    * straight through to the pay widget's own `cardOutcome` — see its doc for how a fresh value drives
    * the retry / switch-tender / wait screen. */
   @property() cardOutcome?: CardOutcome;
+  /**
+   * Whether this screen is rendered INSIDE the profile tab shell (SP-B2.1). When set, the screen
+   * suppresses its own `.header` — the brand/operator/log-out/affordance chrome lives in the shell
+   * (`till-tab-shell`), so a duplicate header would double it. The sale body (menu controls + the
+   * grid/region + the local allergen overlay) is unchanged; only the header relocates. Defaults false,
+   * so the legacy standalone counter screen (unprofiled boot) renders its own header exactly as before.
+   */
+  @property({ type: Boolean }) embedded = false;
 
   /** Announce that the operator wants to end their shift. The app (Task 19) tears the session down. */
   #logout(): void {
@@ -382,7 +390,10 @@ export class TillCounterScreen extends LitElement {
       this.layout.filter((widget) => widget.region === region);
     return html`
       <div class="screen">
-        <div class="header">
+        ${
+          this.embedded
+            ? nothing
+            : html`<div class="header">
           <span class="brand">${BRAND}</span>
           <div class="session">
             <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
@@ -408,7 +419,8 @@ export class TillCounterScreen extends LitElement {
               ${t("action.logout")}
             </wt-button>
           </div>
-        </div>
+        </div>`
+        }
         ${
           this.showAllergens
             ? html`<till-allergen-screen

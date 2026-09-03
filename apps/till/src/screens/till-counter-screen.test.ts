@@ -359,4 +359,11 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
+
+  it("suppresses its own header when embedded (chrome lives in the shell)", async () => {
+    const { el } = await mount({ embedded: true });
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    // The sale body still renders — only the header relocates to the shell.
+    expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
+  });
 });
