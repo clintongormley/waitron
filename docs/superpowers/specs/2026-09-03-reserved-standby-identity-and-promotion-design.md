@@ -225,7 +225,12 @@ subscriber-side immutability handling); and `establishNodeIdentity`'s missing re
 idempotency guard today, only the provision route's post-provision unreachability protects it
 ([`apps/server/src/node-identity.ts:29`](../../../apps/server/src/node-identity.ts)), so R2 must guard the
 standby's establish so a re-run cannot mint a fresh keypair and orphan a previously-signed document
-(parent Slice-4 follow-up (b)).
+(parent Slice-4 follow-up (b)). **R3 sharp edge (from R1 review):** R1's promote writes the minted
+document with the *unguarded* `writeNodeMembershipTx` (plain upsert), not the term-guarded
+`persistNodeMembershipIfNewer`. Safe in R1 because the local-secondary promote is fenced (the old
+primary is neutralised, so nothing else mints), but in R3 (cloud, multi-node) a promote that read held
+term N could race a gossip-adopt landing a newer term N+k and regress it — R3's promote write should
+term-guard (or advisory-lock) the mint.
 
 ## 9. Interactions
 
