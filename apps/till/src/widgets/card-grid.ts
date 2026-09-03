@@ -34,10 +34,11 @@ import type { CardOutcome, CardProvider } from "./tender-pay.js";
  * as the counter screen threads them today (`till-counter-screen.ts:267-307`); card events bubble past
  * this host to `till-app` unchanged — this host installs no listeners on them.
  *
- * Capability→absent is honoured (`#capable`); permission→locked is a later task. The `floor-plan`,
- * `table-layout-editor` and `expo` big cards render here (SP-B2.1) by mounting their screens EMBEDDED
- * (chrome-suppressed); `kds-board`, `table-order` and `notifications` arrive in B2.2/later.
- * `visibleWhen` (data-condition show/hide) IS honoured here.
+ * All three visibility axes are honoured here (SP-B2.1): capability→absent (`#capable`),
+ * permission→locked (`#locked`, a dimmed `?inert` cell), and `visibleWhen` (data-condition show/hide,
+ * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor` and `expo` big
+ * cards render by mounting their screens EMBEDDED (chrome-suppressed); `kds-board`, `table-order` and
+ * `notifications` render nothing here and arrive in B2.2/later.
  */
 @customElement("till-card-grid")
 export class TillCardGrid extends LitElement {
@@ -55,7 +56,7 @@ export class TillCardGrid extends LitElement {
     /* Permission→LOCKED: the card stays visible but dimmed and non-interactive (?inert). The dim uses
        the shared disabled-opacity token, not a hardcoded number. */
     .cell.locked {
-      opacity: var(--wt-opacity-disabled, 0.5);
+      opacity: var(--wt-opacity-disabled);
     }
   `;
 
