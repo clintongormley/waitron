@@ -195,11 +195,11 @@ export class TillCardGrid extends LitElement {
       // Big-card screens (SP-B2.1), each mounted EMBEDDED so the card host owns the chrome (title/close)
       // and the screen renders only its body. `.canExitToCounter=${false}` keeps a stray back-to-counter
       // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
-      // manager's table-layout-editor card — the latter with `canEdit` (the permission LOCK is a later task).
-      // `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
+      // manager's table-layout-editor card — the latter with `canEdit`. The table-layout-editor card's
+      // permission LOCK (till.configure) is enforced by `#locked`/`.cell.locked` at the CELL level above,
+      // not here. `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
       // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it. The
-      // read-only floor-plan card mounts the SAME screen without edit; the two arms differ only by
-      // `canEdit` (the permission LOCK is a later task).
+      // read-only floor-plan card mounts the SAME screen without edit; the two arms differ only by `canEdit`.
       case "floor-plan":
       case "table-layout-editor":
         return html`<till-floor-screen

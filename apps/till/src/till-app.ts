@@ -2105,8 +2105,9 @@ export class TillApp extends LitElement {
    * The shell's AFFORDANCES (SP-B2.1) — surfaces reachable today (Station/Expo/Schedule) that are NOT
    * authored as a tab in this profile, so the shell offers them as buttons rather than tabs. A surface
    * authored AS a tab drops out of this list (it is reachable as a tab instead). The buttons emit
-   * `show-station`/`show-expo`/`show-schedule`, which bubble to the existing app handlers; rerouting
-   * them to in-shell drill-ins is Task 8, so today they set legacy screen state the shell ignores.
+   * `show-station`/`show-expo`/`show-schedule`, which bubble to the existing app handlers; when the
+   * shell is active (`#inShell()`) those handlers push an in-shell drill-in, and off-shell they keep
+   * the legacy `#setScreen` behaviour.
    *
    * The COMPUTE helper for the memoised {@link #affordanceList} field — called only from
    * {@link willUpdate} when {@link profile} changes, never per render.

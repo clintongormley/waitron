@@ -187,13 +187,17 @@ export class TillTabShell extends LitElement {
               >${t("allergens.open")}</wt-button
             >
             <span class="operator">${this.operatorName}</span>
-            <till-language-chooser
-              .loadLocales=${this.loadLocales}
-              @locale-selected=${(e: Event) => {
-                e.stopPropagation();
-                this.#emit("locale-selected", (e as CustomEvent).detail);
-              }}
-            ></till-language-chooser>
+            ${
+              this.loadLocales !== undefined
+                ? html`<till-language-chooser
+                    .loadLocales=${this.loadLocales}
+                    @locale-selected=${(e: Event) => {
+                      e.stopPropagation();
+                      this.#emit("locale-selected", (e as CustomEvent).detail);
+                    }}
+                  ></till-language-chooser>`
+                : nothing
+            }
             <wt-button class="logout" variant="secondary" @click=${() => this.#emit("logout")}
               >${t("action.logout")}</wt-button
             >

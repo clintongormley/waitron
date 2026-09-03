@@ -90,6 +90,11 @@ describe("till-tab-shell", () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
       activeTabKey: "counter",
+      // The chooser only renders when loadLocales is supplied (guards a throw on open without it).
+      loadLocales: async () => [
+        { code: "en-GB", label: "English" },
+        { code: "es-ES", label: "Español" },
+      ],
     });
     let detail: { code: string } | undefined;
     el.addEventListener(
@@ -105,6 +110,14 @@ describe("till-tab-shell", () => {
       }),
     );
     expect(detail).toEqual({ code: "en-GB" });
+  });
+
+  it("omits the language chooser when loadLocales is not supplied (no throw-on-open surface)", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs,
+      activeTabKey: "counter",
+    });
+    expect(el.shadowRoot!.querySelector("till-language-chooser")).toBeNull();
   });
 
   it("makes the body inert while a drill-in is slotted", async () => {
