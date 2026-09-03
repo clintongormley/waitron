@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { selectStyles } from "../select-styles.js";
 import { setDevDeviceId } from "../api/dev-device.js";
-import type { DevDeviceList, TillApi } from "../api/client.js";
+import type { DevDeviceList, DevMintRequest, TillApi } from "../api/client.js";
 
 /**
  * The SP-C DEV per-tab device switcher, mounted by `main.ts` on the `?dev` query branch (never in the
@@ -164,13 +164,7 @@ export class TillDevChooser extends LitElement {
     if (this.label === "" || this.minting) return;
     this.minting = true;
     this.mintError = undefined;
-    const req: {
-      kind: string;
-      label: string;
-      tillId?: string;
-      stationId?: string;
-      layoutProfileId?: string;
-    } = { kind: this.kind, label: this.label };
+    const req: DevMintRequest = { kind: this.kind, label: this.label };
     if (this.kind === "kds_station") {
       if (this.stationId !== "") req.stationId = this.stationId;
     } else if (this.tillId !== "") {

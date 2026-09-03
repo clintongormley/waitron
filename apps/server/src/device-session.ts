@@ -96,6 +96,27 @@ export interface DeviceBinding {
 }
 
 /**
+ * Maps a selected device row's non-secret binding columns onto a {@link DeviceBinding}. Shared by the
+ * cookie and the dev-override read paths in {@link tryReadDevice} so the two cannot drift on the field
+ * list — a select that omits a binding column fails to typecheck here. Carries NO authentication: the
+ * caller has already fetched an `active` row (and, on the cookie path, verified the token). The param
+ * is typed to the binding's own fields, so a `tokenHash` on the passed row is never copied through.
+ */
+function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">): DeviceBinding {
+  return {
+    deviceId,
+    kind: row.kind,
+    stationId: row.stationId,
+    tillId: row.tillId,
+    layoutProfileId: row.layoutProfileId,
+    receiptPrinterId: row.receiptPrinterId,
+    hasCashDrawer: row.hasCashDrawer,
+    cardProvider: row.cardProvider,
+    cardReaderId: row.cardReaderId,
+  };
+}
+
+/**
  * Reads and authenticates the request's device cookie against the database, returning the binding on
  * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
  * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
@@ -148,17 +169,7 @@ export async function tryReadDevice(
           .from(devices)
           .where(and(eq(devices.id, override), eq(devices.active, true)));
         if (row === undefined) return null;
-        return {
-          deviceId: override,
-          kind: row.kind,
-          stationId: row.stationId,
-          tillId: row.tillId,
-          layoutProfileId: row.layoutProfileId,
-          receiptPrinterId: row.receiptPrinterId,
-          hasCashDrawer: row.hasCashDrawer,
-          cardProvider: row.cardProvider,
-          cardReaderId: row.cardReaderId,
-        };
+        return toDeviceBinding(override, row);
       });
     }
   }
@@ -219,17 +230,7 @@ export async function tryReadDevice(
           sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
         ),
       );
-    return {
-      deviceId,
-      kind: row.kind,
-      stationId: row.stationId,
-      tillId: row.tillId,
-      layoutProfileId: row.layoutProfileId,
-      receiptPrinterId: row.receiptPrinterId,
-      hasCashDrawer: row.hasCashDrawer,
-      cardProvider: row.cardProvider,
-      cardReaderId: row.cardReaderId,
-    };
+    return toDeviceBinding(deviceId, row);
   });
 }
 
