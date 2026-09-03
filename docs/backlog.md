@@ -143,6 +143,22 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
+**Pricing adjustments (NEW — owner-added 2026-09-03):** two related, unbuilt capabilities on the
+ordering/sale flow, both gated on the already-anticipated **discount permission** (the "discount gate"
+noted under *What's built → Identity* remaining — decide the authorised-role rule and whether a
+reason/reason-code is captured):
+
+- **Reduce or zero the price of an order line** — an authorised operator override of a single line's
+  price (a comped or reduced dish), down to €0. A line price comes locked from the catalogue today; this
+  adds a manual per-line override. (A €0-comp *sale* path exists — *Debt → Product decisions* — but not a
+  per-line reduction.)
+- **Apply a discount to a whole order** — an order-level discount (percentage or amount) spread across
+  all lines, distinct from a per-line override. Needs the distribution rule across lines/VAT rates.
+
+  *Fiscal:* a *descuento* agreed at/before issuance is outside the VAT base (Q15, closed on primary
+  source — *The advisor gap*), so a reduction/discount must reach the line **before** `computeHuella`,
+  not as an after-the-fact adjustment. H2-adjacent — specced with the owner, not landed unattended.
+
 **Bookings (SP14):** Bookings-1 landed (#180, #182); future, each greenfield — public/online/QR
 booking, availability / double-booking prevention, reminders (SMS/email), a customer/CRM entity,
 recurring bookings, a calendar grid, deposits.
