@@ -121,9 +121,18 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering** — the HA-Sections editor UI + making screens render from grid
-  profiles (wrap the bespoke floor/KDS/table-order screens as cards; phased). The schedule risk. Removes
-  the old widget model (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over.
+- **SP-B — grid editor + rendering — SPECCED 2026-09-03; B1 planning next.** The HA-Sections editor UI
+  plus making screens render from grid profiles (wrap the bespoke floor/KDS/table-order screens as
+  cards; phased). The schedule risk. Removes the old widget model
+  (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
+  [sp-b-grid-editor-and-rendering](superpowers/specs/2026-09-03-sp-b-grid-editor-and-rendering-design.md).
+  Decisions (brainstorm 2026-09-03): **rendering-first slicing** — **B1** grid renderer + counter
+  renders from profile · **B2** wrap the four bespoke screens as full-span cards + tabs/drill-in nav ·
+  **B3** dashboard grid editor (placeholder tiles *for v1*; live renders a committed follow-on) + API
+  client + reassign-profile route · **B4** drop old widget model + rehome receipt into a new
+  `tenant_receipts` table. **Fluid width only** (no column reflow; orientation = form-factor).
+  Not H2, but must preserve the sale path. Correction to parent §12: the counter is **not** already
+  grid-driven (still the old region model) — it is B1 work.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
