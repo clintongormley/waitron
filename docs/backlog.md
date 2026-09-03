@@ -331,11 +331,13 @@ vs gated on an unbuilt foundation or an external dependency:
 - **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
   pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
-  the two follow-ups under *Onboarding*). With Slices 1 (#197), 2 (storage, #198) and **3 (distribution,
-  #202) shipped**, the next ready-to-build code slice is **membership Slice 4 (setup/adopt — key
-  endorsement into the trust set)**, which turns the Slice-3 adoption mechanism LIVE (Slice 3 ships it
-  inert behind an empty trust-set seam) — see the membership row below; reserved-SIF remains
-  foundation-gated.
+  the two follow-ups under *Onboarding*). With Slices 1 (#197), 2 (storage, #198), 3 (distribution,
+  #202) and **4 (setup/adopt, #203) shipped**, membership adoption is now **LIVE** (boot reads a real
+  trust set from `nodes.public_key`; the Slice-3 empty-seam no-op is gone). The next membership slice is
+  **Slice 5 (promotion integration — `promote` mints the next signed document)**, which composes with
+  **reserved-SIF staging** (foundation-gated — see below) since a promoted node needs both a signed
+  membership doc and its own SIF/installation number; Slice 5 is therefore **not cleanly ready-to-build
+  until reserved-SIF lands**. Slice 6 (rejoin) is owner-gated; Slice 7 (conflict surface) follows.
 - **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
   2026-09-02, owner-review still pending). Spec:
   [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
@@ -355,10 +357,10 @@ vs gated on an unbuilt foundation or an external dependency:
   deriving the column from `document.body.term` on write. **Slices remaining, each its own plan:**
   (3) **distribution** over `/sync-api/hello` + local adoption **LANDED #202** (plan:
   [membership-slice-3-distribution](superpowers/plans/2026-09-03-membership-slice-3-distribution.md));
-  (4) **setup/adopt** key endorsement into the trust set **[ready-to-build NEXT]**; (5) **promotion
-  integration** (`promote` mints the next document); (6) **rejoin — drain-then-restore** [fiscal-adjacent
-  → owner sign-off before land]; (7) **conflict surface** (config down-only + ops conflict log). Unblocks
-  promote Slice 5 + the conflict watcher.
+  (4) **setup/adopt** trust establishment **LANDED #203**; (5) **promotion
+  integration** (`promote` mints the next document) **[NEXT — composes with reserved-SIF staging]**;
+  (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
   membership }` (the held signed document or `null`); the pull worker threads that field out of the
   handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
@@ -381,6 +383,31 @@ vs gated on an unbuilt foundation or an external dependency:
   `adoptMembership` wrapper closure is **not directly unit-tested** (boot tests use unreachable peers so the
   drain throws before the callback fires; the module it calls is 100% covered + e2e-proven) — a candidate
   boot-wiring assertion for a later slice.
+  **Slice 4 (setup/adopt) LANDED #203** (2026-09-03): each node gets an Ed25519 identity at setup, so boot
+  reads the trust set LIVE (`readMembershipTrustSet(localSyncDb, till.tenantId)`) — the Slice-3 empty seam
+  is gone and adoption is no longer inert. Shipped: `nodes.public_key` nullable trust-anchor column
+  (generated migration `0098`; `app_user` gains nothing — the read rides the pre-existing table-level
+  SELECT, writes stay owner-role); `@waitron/db` accessors `setNodePublicKey` / `setNodePublicKeyTx`
+  (tx-taking core) / `readMembershipTrustSet` (→ `TrustSet`, skips keyless nodes); the `membership.node_key`
+  credentials vault purpose (private key sealed under the box key, `sync.mirror_token` pattern);
+  `apps/server/src/node-identity.ts` — `establishNodeIdentity` generates a keypair and seals the private
+  key + stamps the public key in **ONE transaction** (they are one logical change), `readNodeIdentityKey`
+  the Slice-5 signer's entry point (exercised now by a sign/verify pairing proof); wired into
+  `/setup-api/provision` (deps-gated) + boot. **Adopt needed no code change** — the cloud mirror inherits
+  the primary's key through the node row `adoptVenue` already replicates (value-asserting `adopt.rls`
+  proof). **Owner decisions:** trust anchors ONLY — the **endorsement chain is DEFERRED** (no consumer
+  until promotion; the cloud mirror runs as the primary's nodeId, never signs, seals no key); public keys
+  on `nodes.public_key`; private key in the credentials vault. **Follow-ups from #203 (carry into Slice 5+):**
+  (a) a provision failure AFTER `provision()` mints the tenant/chain is **unrecoverable** → re-image (the
+  existing `sealAeat`-window class, widened by one step; recovery is the cold-recovery/re-image posture).
+  (b) **Slice 5 must guard `establishNodeIdentity` to run once per node** before any document is signed —
+  a re-establish mints a fresh keypair and would orphan a previously-signed document. (c) the membership
+  private key is **decryptable by the `app_user` pool** (same as `sync.mirror_token`/`fiscal.aeat`) —
+  Slice 5's threat model should state it. (d) finish-phase review made the seal+stamp atomic (was an
+  incidental two-transaction split) and caught a §1 false claim in that fix's own comment ("app_user holds
+  neither" is false for `tenant_credentials` — it holds full DML there per `0001`); both corrected. Not
+  applied: a shared `seedLocation` test helper (the inline location-insert is the repo's convention across
+  ~90 test files — a separate repo-wide cleanup, not this slice).
   **Follow-ups recorded from #197:** two efficiency micro-opts were consciously skipped in
   `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
   `MAX_ENDORSEMENTS`, revisit only if the cap grows; the break-glass-rooted (option B)
