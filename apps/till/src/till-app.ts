@@ -676,6 +676,12 @@ export class TillApp extends LitElement {
     // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
     // venue default, so a new operator with no choice keeps the venue's language.
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
+    // Defense in depth (SP-B2.1 Finding 2): clear any leftover drill and reset to the first tab, BEFORE
+    // the first await below so no render in the login window can paint a prior operator's drill/tab.
+    // Logout already does this — the privacy-critical path — but a login that somehow followed a
+    // non-logout teardown resets here too. App state only meaningful on the shell; reset regardless.
+    this.drill = undefined;
+    this.activeTabKey = this.profile?.tabs[0]?.key;
     const { menus, products } = await this.api.listProducts();
     this.products = products;
     this.menus = menus;
@@ -718,6 +724,15 @@ export class TillApp extends LitElement {
       } catch {
         // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
       }
+    }
+    // SP-B2.1 Finding 1: if the shell BOOTS showing a tab whose cards need the floor read-model (a
+    // profile whose first tab is the floor), load it now — the tab-select prefetch only fires on a tab
+    // CHANGE, so the INITIAL tab needs its own load. Guarded on the tab (a counter-first till never
+    // reaches this) and on `#inShell()` (a handheld stays legacy — its floor landing already loaded via
+    // `#onShowFloor` above — so this never double-loads).
+    if (this.#inShell()) {
+      const tab = this.#activeTab();
+      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
     }
   }
 
@@ -1441,6 +1456,21 @@ export class TillApp extends LitElement {
    */
   async #onShowFloor(): Promise<void> {
     this.errorKey = undefined;
+    await this.#loadFloorData();
+    this.#setScreen("floor");
+  }
+
+  /**
+   * Load the floor read-model into the app-owned `.tables`/`.zones`/`.statuses` props — the LOAD half of
+   * {@link #onShowFloor}, WITHOUT its `#setScreen("floor")` nav side effect. Shared by `#onShowFloor`
+   * (the legacy `show-floor` nav) and the shell surface ({@link #onTabSelect} / {@link #onLoggedIn}): a
+   * shell tab whose cards need the floor read-model (a `floor-plan` / `table-layout-editor` card) is
+   * reached via `tab-select`, not `show-floor`, so it must load the data itself or the floor-plan card
+   * renders an EMPTY floor with no table to tap — leaving table-service ordering unreachable from the
+   * shell (SP-B2.1 Finding 1). Swallows a failed load — degrade gracefully, the floor touches no fiscal
+   * path (design H2), so an empty floor is safe. Only writes reactive state (no `isConnected` guard).
+   */
+  async #loadFloorData(): Promise<void> {
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -1455,7 +1485,32 @@ export class TillApp extends LitElement {
     } catch {
       // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
     }
-    this.#setScreen("floor");
+  }
+
+  /** Whether a tab's cards need the floor read-model (`.tables`/`.zones`/`.statuses`) — a `floor-plan`
+   * or `table-layout-editor` card, both rendered by `<till-floor-screen>` inside the card grid. Drives
+   * the shell's tab-select and boot floor prefetch (SP-B2.1 Finding 1). */
+  #tabNeedsFloorData(tab: TabDef): boolean {
+    return tab.cards.some(
+      (card) => card.type === "floor-plan" || card.type === "table-layout-editor",
+    );
+  }
+
+  /**
+   * The shell's tab bar picked a tab (SP-B2.1). Three things happen, in order:
+   *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
+   *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3);
+   *  - the active tab switches;
+   *  - a tab whose cards need the floor read-model triggers the same load `#onShowFloor` does
+   *    ({@link #loadFloorData}) — reaching the Floor tab via the tab bar (not the legacy `show-floor`
+   *    event) would otherwise leave it empty (Finding 1).
+   * Only ever called from the shell surface ({@link #inShell} is true whenever the shell renders).
+   */
+  #onTabSelect(key: string): void {
+    if (this.drill !== undefined) this.#popDrill();
+    this.activeTabKey = key;
+    const tab = this.profile?.tabs.find((candidate) => candidate.key === key);
+    if (tab !== undefined && this.#tabNeedsFloorData(tab)) void this.#loadFloorData();
   }
 
   /**
@@ -1888,6 +1943,13 @@ export class TillApp extends LitElement {
     // Drop the floor-editor privilege — the next operator starts un-privileged until their own login
     // recomputes it (FP-2).
     this.canEdit = false;
+    // Clear any open drill and reset the active tab (SP-B2.1 Finding 2). Logout sits in the non-inert
+    // shell header, and the `screen = "lock"` reset below does NOT touch `drill`/`activeTabKey` — so
+    // without this, operator A's ticket/receipt drill (and A's tab) would survive and re-mount over
+    // operator B's fresh counter on B's login. This is the PRIVACY-critical reset. App state only
+    // meaningful on the shell, reset regardless (the legacy path never reads either).
+    this.drill = undefined;
+    this.activeTabKey = this.profile?.tabs[0]?.key;
     this.errorKey = undefined;
     this.#setScreen("lock");
   }
@@ -2207,7 +2269,7 @@ export class TillApp extends LitElement {
                       .affordances=${this.#affordances()}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                        this.activeTabKey = e.detail.key;
+                        this.#onTabSelect(e.detail.key);
                       }}
                     >
                       ${(() => {

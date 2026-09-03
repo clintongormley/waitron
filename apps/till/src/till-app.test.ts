@@ -4093,6 +4093,86 @@ describe("till-app", () => {
       expect(shell(el)!.activeTabKey).toBe("counter");
       expect(counter(el)!.store.lines.length).toBe(0);
     });
+
+    it("loads the floor read-model when the floor tab is selected in the shell (data reaches the card)", async () => {
+      // FINDING 1: the Floor tab is reached via `tab-select` on the shell, NOT the legacy `show-floor`
+      // event — so the tab-select handler must load `.tables`/`.zones` (as `#onShowFloor` does) or the
+      // floor-plan card renders a BLANK floor with no table to tap, and table-service ordering is
+      // unreachable from the shell. Asserting the floor screen EXISTS is what masked this before; here we
+      // assert the data actually loaded and reached the card. Proven by deletion: drop the
+      // `#loadFloorData()` call from `#onTabSelect` and the tables/zones assertions go red.
+      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await flush(el); // await the ASYNC floor load, not just the synchronous tab switch
+      const g = grid(el)!;
+      expect(g).not.toBeNull();
+      const floorScreen = g.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+      expect(floorScreen).not.toBeNull();
+      // The read-model actually loaded and threaded through to the card — a NON-EMPTY floor.
+      expect(floorScreen!.tables).toEqual([freeTable]);
+      expect(floorScreen!.zones).toEqual([floorZone]);
+    });
+
+    it("clears the open drill and resets the active tab on logout (Finding 2 — no stale receipt into the next shift)", async () => {
+      // FINDING 2: operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout
+      // (NOT New sale) from the non-inert shell header. The screen reset does NOT clear `drill`/
+      // `activeTabKey`, so operator B's fresh login would re-mount A's ticket over B's counter. Assert the
+      // STATE is cleared (not merely that the shell unmounted at `lock`, which would mask it).
+      const el = await toShellCounter();
+      const c = counter(el)!;
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull(); // operator A's ticket drill is open
+      const app = el as unknown as { drill?: unknown; activeTabKey?: string };
+      emit(shell(el)!, "logout");
+      await flush(el);
+      expect(app.drill).toBeUndefined();
+      expect(app.activeTabKey).toBe("counter"); // back to the first tab
+    });
+
+    it("resets any leftover drill/active tab on login (Finding 2 — defense in depth)", async () => {
+      // Defense in depth: even a login that somehow followed a NON-logout teardown must not inherit a
+      // prior operator's drill or tab. Simulate that stale state directly, then log a fresh operator in.
+      const el = await toShellCounter();
+      emit(shell(el)!, "logout");
+      await flush(el);
+      const app = el as unknown as { drill?: unknown; activeTabKey?: string };
+      // A `schedule` drill (renders cleanly from the empty roster) standing in for any stale drill.
+      app.drill = { kind: "schedule" };
+      app.activeTabKey = "floor";
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", canConfigureTill: false });
+      await flush(el);
+      expect(app.drill).toBeUndefined();
+      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(schedule(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+    });
+
+    it("dismisses an open drill when a tab is selected (Finding 3)", async () => {
+      // FINDING 3: the tab bar is in the non-inert header, so a tab tap while a drill is open must
+      // DISMISS the drill, not switch the surface underneath it. Proven by deletion: drop the
+      // `#popDrill()` from `#onTabSelect` and the schedule drill survives the switch.
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-schedule"); // open a drill
+      await el.updateComplete;
+      expect(schedule(el)).not.toBeNull();
+      expect(drill(el)).not.toBeNull();
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await flush(el);
+      expect(drill(el)).toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(grid(el)).not.toBeNull();
+    });
   });
 
   describe("per-user locale (Task 9)", () => {
