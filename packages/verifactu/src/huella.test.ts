@@ -148,7 +148,7 @@ describe("till_id is not part of the huella (SP-A.2 §16.4(a))", () => {
   // of SALE METADATA only — `till_id` is stored on `sales.till_id` and snapshotted on
   // `registros_facturacion.till_id`, and is NEVER a huella input. This block is the structural half of
   // the receipt: the canonical string the huella hashes is built from exactly the eight alta fields
-  // (`CadenaAltaInput`, types.ts:197) and five anulación fields (`CadenaAnulacionInput`, types.ts:209),
+  // (`CadenaAltaInput` in types.ts) and five anulación fields (`CadenaAnulacionInput` in types.ts),
   // and `till_id` is none of them. The §5 invariant "never put our own metadata into a hash" — the
   // same one the `entorno`-identity and `parent_line_id` tests pin — applied to `till_id`.
   //

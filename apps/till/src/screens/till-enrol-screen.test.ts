@@ -71,7 +71,16 @@ describe("till-enrol-screen", () => {
     const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
       api: stubApi({ enrolDevice }),
     });
-    el.shadowRoot!.querySelector<HTMLElement>("[data-enrol]")!.click();
+    const button = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-enrol]",
+    )!;
+    expect(button.disabled).toBe(true); // Set up starts disabled — no code has been typed yet
+    // `wt-button` has no host-level click guard of its own (only its INNER shadow `<button>` goes
+    // `disabled`; see packages/ui/src/components/wt-button.ts), so `button.click()` on the host
+    // bypasses that native semantics — same as till-lock-screen's Log in (see
+    // till-lock-screen.test.ts's "force-clicked with an empty PIN" case). What actually stops the
+    // call below is `#enrol`'s own `code === ""` guard, which this asserts directly is disabled too.
+    button.click();
     await flush(el);
     expect(enrolDevice).not.toHaveBeenCalled();
   });

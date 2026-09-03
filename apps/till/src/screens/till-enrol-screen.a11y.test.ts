@@ -46,6 +46,10 @@ describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (
     // Drive an enrol failure so the role="alert" banner renders for the sweep. `#enrol` reads the code
     // LIVE off the field, so the field's own `.value` must be set (not just a synthetic wt-change, which
     // only updates tracked state) — otherwise the submit early-returns and the banner never appears.
+    // Clicking the `wt-button` HOST bypasses its inner shadow `<button>`'s disabled paint (the host has
+    // no click guard of its own — see till-enrol-screen.test.ts's direct disabled-property assertion),
+    // but that's harmless here: a real code is set below, so `#enrol`'s `code === ""` guard is a no-op
+    // and the call goes through on its own merits regardless of the button's disabled attribute.
     el.shadowRoot!.querySelector<HTMLInputElement>("[data-code]")!.value = "STALE";
     el.shadowRoot!.querySelector<HTMLElement>("[data-enrol]")!.click();
     await flush(el);
