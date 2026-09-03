@@ -222,7 +222,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // Echo the binding verbatim, incl. the SP-A.2 §16 profile/till/hardware fields so the client can
       // (SP-B) boot into its assigned profile + hardware. All non-secret config — the reader's
       // credentials stay in the vault and never ride this response.
@@ -243,7 +243,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // A `kds_station` device is ALWAYS station-bound: enrolDevice copies the code's station, itself a
       // live station `requireLiveStation` confirmed at mint. But `requireDevice` authenticates ANY active
       // device regardless of kind, and a `handheld` binds to NO station (`stationId` is null,
@@ -272,7 +272,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.

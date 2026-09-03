@@ -122,6 +122,17 @@ export interface TillApiDeps {
    */
   cardProvider?: PaymentProvider;
   /**
+   * Whether this host runs in DEV mode (SP-C, `config.devMode`) — the switch the per-tab device
+   * override header (`x-waitron-dev-device`) gates on. Boot wires `config.devMode`; forwarded to the
+   * device guards (`tryReadDevice`/`requireSaleTillId`/`assertNotHandheld`/`assertDeviceCapability`)
+   * so the override reaches the sale/pay routes. OPTIONAL and defaulting to fail-closed (unset ⇒ the
+   * header is inert), so every existing `TillApiDeps` construction — tests included — compiles
+   * unchanged, exactly as `DeviceApiDeps.devMode` does (Controller Ruling 1). The routes that pass
+   * `deps` wholesale inherit it; the ONE that reconstructs a narrow `{ db, cfg }` (`GET /api/till`'s
+   * `tryReadDevice`) forwards `deps.devMode` explicitly.
+   */
+  devMode?: boolean;
+  /**
    * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts) from geography +
    * the optional `WAITRON_TILL_LOCALE` override. `GET /api/till` echoes it as `locale` (the language
    * the till app defaults to before a per-user preference is known), and `GET /api/locales` returns it
@@ -605,7 +616,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); a
       // device with an assigned `layoutProfileId` gets its profile resolved and surfaced (SP-A.2 §16.3).
       // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
-      const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg }, c);
+      const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
       // runs inside the same `withTenant` + `asAppUser` block (RLS scopes both to this till's tenant),
       // never a second connection. `getLayout` does not authorize — this boot read is deliberately
