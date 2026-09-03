@@ -85,6 +85,7 @@ export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./dep
 export * from "./schema/deployment.js";
 export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 export type { MirrorConnection } from "./mirror-config.js";
+export { readNodeMembership, writeNodeMembership } from "./node-membership.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";

@@ -673,6 +673,13 @@
       "when": 1788370298916,
       "tag": "0095_parched_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1788432177947,
+      "tag": "0096_node_membership",
+      "breakpoints": true
     }
   ]
 }
