@@ -28,9 +28,12 @@ import { persistNodeMembershipIfNewer, type Database } from "@waitron/db";
  * case (untrusted, or already-superseded). This NEVER throws for an expected rejection — those are
  * results, not errors — so the pull loop's best-effort wrapper only ever logs on a genuine DB fault.
  *
- * The `trustSet` is the inert Slice-4 seam: boot passes `{}` today, so every real gossiped document is
- * `untrusted_signer` and this is a production no-op until setup/adopt populates the trust set; the
- * mechanism is exercised only with an injected fixture trust set in tests.
+ * The `trustSet` is LIVE as of Slice 4: boot reads it from `nodes.public_key` via
+ * `readMembershipTrustSet` (not `{}`). A provisioned primary carries a populated set (its own key,
+ * stamped at setup by `establishNodeIdentity`); an adopted cloud mirror carries the primary's key
+ * (inherited through the node row `adoptVenue` replicates). So a genuinely-trusted, strictly-newer
+ * gossiped document is now accepted. An EMPTY set corresponds to a bare, un-provisioned node with no
+ * stamped key — the untrusted control, still exercised with an injected fixture trust set in tests.
  */
 export interface AdoptMembershipDeps {
   db: Database; // the pull worker's app-role pool (member of app_user → INSERT/UPDATE on node_membership)

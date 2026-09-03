@@ -15,6 +15,12 @@ import "./errors.js";
  * The order mirrors sealMirrorToken: the vault row is FK-restricted to the tenant, so this runs AFTER
  * provisionVenue mints it. `nodes` is FORCE-RLS, so both the seal (tenant_credentials WITH CHECK) and
  * the stamp (nodes policy) run under `withTenant` on the owner connection.
+ *
+ * Two transactions (the seal, then the stamp via setNodePublicKey's own `withTenant`), non-atomic —
+ * safe by idempotent re-run on the already-non-atomic provision path (provision.ts): a retry
+ * regenerates the keypair, upserts the sealed private key (putCredential onConflictDoUpdate), and
+ * overwrites `nodes.public_key`, and nothing has signed yet (the private key is the Slice-5 signer's,
+ * unused at setup), so no chain depends on the half-written state a mid-run failure leaves.
  */
 export interface EstablishIdentityDeps {
   ownerDb: Database;
