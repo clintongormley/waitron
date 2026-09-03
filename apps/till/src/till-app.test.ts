@@ -3988,6 +3988,47 @@ describe("till-app", () => {
       expect(shell(el)!.activeTabKey).toBe("floor");
     });
 
+    it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
+      // REVIEW FIX 1: opening a table (`openTab`) and table-service actions do NOT update `this.tables`,
+      // so after a waiter opens table N from the floor tab, adds a round, and taps Back, the floor tab
+      // must RE-READ occupancy or it re-renders from the STALE read-model — table N still shows FREE.
+      // Tapping it again calls `openTab(N)` → server throws `tab.already_open` → the waiter cannot resume
+      // the tab they just opened. Asserting the floor screen merely EXISTS (as the pop test above does)
+      // is what masked this; here we assert FRESHNESS — the floor reflects a SECOND fetch. Proven by
+      // deletion: drop the `#refreshFloor()` from `#onBackToFloor`'s shell branch and this goes red.
+      const occupiedT1: TableState = {
+        ...freeTable,
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-new",
+        tabLineCount: 1,
+        tabTotal: "3.00",
+      };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        // FIRST floor load (tab-select): table free. SECOND load (the back-to-floor refresh): now occupied.
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockResolvedValueOnce([occupiedT1]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" }); // first floor load → freeTable
+      await flush(el);
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // drill in
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+      emit(tableOrder(el)!, "back-to-floor"); // pop the drill + tables-only refresh → occupiedT1
+      await flush(el);
+      const g = grid(el)!;
+      const floorScreen = g.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+      expect(floorScreen).not.toBeNull();
+      // The floor RE-READ occupancy: table t1 now renders the SECOND fetch (occupied), not the stale free
+      // one — so tapping it resumes the open tab instead of re-firing `openTab` → `tab.already_open`.
+      expect(floorScreen!.tables).toEqual([occupiedT1]);
+    });
+
     it("pushes the schedule drill-in from the shell's Schedule affordance", async () => {
       const el = await toShellCounter();
       emit(shell(el)!, "show-schedule");

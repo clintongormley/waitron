@@ -232,6 +232,18 @@ export class TillApp extends LitElement {
    */
   #venueLocale = "es-ES";
 
+  /**
+   * Whether the floor read-model has been FULLY loaded once this session (all three endpoints — tables,
+   * zones, statuses — via {@link #loadFloorData}). The "already loaded once" signal that lets a repeat
+   * visit to a floor tab ({@link #onTabSelect}) reload TABLES ONLY ({@link #refreshFloor}), since zones +
+   * statuses are static within a session. An explicit flag rather than `this.zones.length > 0`, which a
+   * venue that has tables but NO floor zones leaves permanently 0 → every visit would pay the full
+   * three-endpoint load (SP-B2.1 review). Set `true` at the end of a successful {@link #loadFloorData};
+   * RESET to `false` on {@link #onLogout} / {@link #onLoggedIn} (beside `drill`/`activeTabKey`) so a new
+   * session reloads the floor in full.
+   */
+  #floorLoaded = false;
+
   constructor() {
     super();
     // Follow a locale switch made anywhere (login/logout/the chooser's setLocale): on a locale change
@@ -699,6 +711,9 @@ export class TillApp extends LitElement {
     // non-logout teardown resets here too. App state only meaningful on the shell; reset regardless.
     this.drill = undefined;
     this.activeTabKey = this.profile?.tabs[0]?.key;
+    // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
+    // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
+    this.#floorLoaded = false;
     const { menus, products } = await this.api.listProducts();
     this.products = products;
     this.menus = menus;
@@ -1499,6 +1514,9 @@ export class TillApp extends LitElement {
       // The Estado picker's catalogue (FP-1) — loaded here so the table-order screen (reached from the
       // floor) has the full ACTIVE status set to offer, including statuses applied to no table yet.
       this.statuses = statuses;
+      // The full three-endpoint load has landed: repeat floor-tab visits now refresh tables only
+      // ({@link #onTabSelect}), regardless of whether the venue defined any floor zones (SP-B2.1 review).
+      this.#floorLoaded = true;
     } catch {
       // Non-fatal: leave zones/tables/statuses at their last values (or empty), degrade gracefully.
     }
@@ -1519,23 +1537,25 @@ export class TillApp extends LitElement {
 
   /**
    * The shell's tab bar picked a tab (SP-B2.1). Three things happen, in order:
-   *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
-   *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3);
    *  - the active tab switches;
+   *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
+   *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3); this runs AFTER the tab
+   *    switch so `#popDrill`'s nav-diagnostics trail records the tab landed ON, matching the sibling
+   *    handlers {@link #onBackToCounter}/{@link #onNewSale} (SP-B2.1 review);
    *  - a tab whose cards need the floor read-model loads it — the FIRST visit does the full three-endpoint
    *    load `#onShowFloor` does ({@link #loadFloorData}), since reaching the Floor tab via the tab bar (not
    *    the legacy `show-floor` event) would otherwise leave it empty (Finding 1); a REPEAT visit reloads
    *    only the live table occupancy ({@link #refreshFloor}), because zones + statuses are static within a
    *    session (exactly the reasoning {@link #refreshFloor} applies after a placement edit), so re-fetching
-   *    them is pure waste. `this.zones.length > 0` is the "already loaded once" signal.
+   *    them is pure waste. {@link #floorLoaded} is the "already loaded once" signal.
    * Only ever called from the shell surface ({@link #inShell} is true whenever the shell renders).
    */
   #onTabSelect(key: string): void {
-    if (this.drill !== undefined) this.#popDrill();
     this.activeTabKey = key;
+    if (this.drill !== undefined) this.#popDrill();
     const tab = this.profile?.tabs.find((candidate) => candidate.key === key);
     if (tab !== undefined && this.#tabNeedsFloorData(tab)) {
-      if (this.zones.length > 0) void this.#refreshFloor();
+      if (this.#floorLoaded) void this.#refreshFloor();
       else void this.#loadFloorData();
     }
   }
@@ -1942,13 +1962,18 @@ export class TillApp extends LitElement {
   }
 
   /** Return to the FLOOR from a screen that emits `back-to-floor` — the table-order screen's Back (FP-1).
-   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, so this simply POPS the
-   * drill back to it (no reload — the floor tab's card grid renders from the app-owned `zones`/`tables`);
-   * otherwise it reloads and shows the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
+   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, so this POPS the drill back
+   * to it AND re-reads the live occupancy ({@link #refreshFloor}, tables-only — zones + statuses are
+   * static within a session): the drill just opened a tab / rang a round, and NEITHER `openTab` nor the
+   * table-service actions update the app-owned `.tables`, so a bare pop would re-render the floor from a
+   * STALE read-model — the table the waiter just opened still showing FREE, so a re-tap fires `openTab`
+   * again and the server throws `tab.already_open` (SP-B2.1 review). Off the shell it reloads and shows
+   * the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
   #onBackToFloor(): void {
     if (this.#inShell()) {
       this.errorKey = undefined;
       this.#popDrill();
+      void this.#refreshFloor();
     } else {
       void this.#onShowFloor();
     }
@@ -1977,6 +2002,9 @@ export class TillApp extends LitElement {
     // meaningful on the shell, reset regardless (the legacy path never reads either).
     this.drill = undefined;
     this.activeTabKey = this.profile?.tabs[0]?.key;
+    // A new shift reloads the floor in FULL — zones/statuses may have changed between operators (SP-B2.1
+    // review), so drop the "already loaded once" flag beside the other per-session resets.
+    this.#floorLoaded = false;
     this.errorKey = undefined;
     this.#setScreen("lock");
   }
