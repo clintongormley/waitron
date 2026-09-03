@@ -48,7 +48,7 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
-import type { LayoutDef, ReceiptConfig } from "./layout.js";
+import type { LayoutDef, ProfileDef, ReceiptConfig, TabDef } from "./layout.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -419,6 +419,14 @@ export class TillApp extends LitElement {
    */
   @state() private receivedLayout?: LayoutDef;
   /**
+   * The device's assigned layout PROFILE as received from `GET /api/till` (SP-B1), or `undefined` when
+   * the server omits it (an older server, or a form-factor with no default profile). {@link counterTab}
+   * selects this profile's `counter` tab and threads it to `till-counter-screen`; a screen handed no tab
+   * falls back to the region-model layout (Task 4), so an unprofiled boot is unaffected. The profile is a
+   * LOCAL mirror shape ({@link ProfileDef}), bundle-decoupled from `@waitron/layouts` like {@link LayoutDef}.
+   */
+  @state() private profile?: ProfileDef;
+  /**
    * The authored NON-FISCAL receipt trim (header subtitle + footer message), read from `GET /api/till`
    * on boot and threaded to `till-ticket-view`. Defaults to `{}` (no trim) — the value an older server
    * that omits the field, or a tenant that never opened the receipt editor, resolves to. It renders
@@ -547,6 +555,9 @@ export class TillApp extends LitElement {
       // to the ticket. `?? {}` handles an older server that omits `receipt` (the field is typed present).
       this.receivedLayout = till.layout;
       this.receipt = till.receipt ?? {};
+      // The device's assigned layout profile (SP-B1). `#counterTab()` reads its `counter` tab and threads
+      // it to the counter screen; absent/no-counter-tab leaves the screen on its region-model fallback.
+      this.profile = till.profile;
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
@@ -1799,6 +1810,15 @@ export class TillApp extends LitElement {
       : LAYOUT_A;
   }
 
+  /**
+   * The `counter` tab of the device's assigned profile (SP-B1), or `undefined` when there is no profile
+   * or it declares no `counter` tab. Threaded to `till-counter-screen.counterTab`; when undefined the
+   * counter screen falls back to the region-model layout (Task 4), so an unprofiled boot is unchanged.
+   */
+  #counterTab(): TabDef | undefined {
+    return this.profile?.tabs.find((tab) => tab.key === "counter");
+  }
+
   override render() {
     return html`
       <div
@@ -1909,6 +1929,7 @@ export class TillApp extends LitElement {
           .stage=${this.stage}
           .busy=${this.submitting || this.placing}
           .layout=${this.#layoutFor()}
+          .counterTab=${this.#counterTab()}
           .cardProvider=${this.cardProvider}
           .tipsEnabled=${this.tipsEnabled}
           .cardOutcome=${this.cardOutcome}
