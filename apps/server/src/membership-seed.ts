@@ -1,7 +1,7 @@
-import { buildNextMembershipDocument } from "@waitron/membership";
+import { nextStandings } from "@waitron/membership";
 import { writeNodeMembership, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import { readNodeIdentityKey } from "./node-identity.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
 import "./errors.js";
 
 /**
@@ -17,12 +17,11 @@ export async function seedTermZeroMembership(
   tenantId: string,
   nodeId: string,
 ): Promise<void> {
-  const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring, tenantId);
-  const document = buildNextMembershipDocument({
+  const document = await mintNextMembershipDocument(deps, {
+    tenantId,
     heldDocument: null,
-    nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
+    nodes: nextStandings([], nodeId), // the single-node term-0 chart IS nextStandings of an empty set
     signerNodeId: nodeId,
-    signerPrivateKey,
   });
   await writeNodeMembership(deps.db, document);
 }

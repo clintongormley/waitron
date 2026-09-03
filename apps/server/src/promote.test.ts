@@ -17,7 +17,11 @@ import {
 } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { verifyMembershipDocument } from "@waitron/membership";
+import {
+  verifyMembershipDocument,
+  type MembershipNode,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { singletonPass } from "./singleton-pass.js";
@@ -65,6 +69,29 @@ async function localSecondary(): Promise<{
 }
 
 const noopLog: PromoteDeps["log"] = () => {};
+
+// A held term-3 chart: an OLD serving-primary and this node as serving-secondary, plus any `extra`
+// bystander nodes. promote reads only term + node list to bump, never the held signature, so a
+// placeholder signature is fine here (the node-membership.test.ts doc() fixture uses the same shape).
+function heldTermThreeDoc(
+  nodeId: string,
+  oldNodeId: string,
+  extra: MembershipNode[] = [],
+): SignedMembershipDocument {
+  return {
+    body: {
+      term: 3,
+      nodes: [
+        { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
+        { nodeId, contactUrl: "", standing: "serving-secondary" },
+        ...extra,
+      ],
+    },
+    signerNodeId: oldNodeId,
+    signature: "held-placeholder-sig",
+    endorsements: [],
+  };
+}
 
 describe("promoteLocalSecondaryToPrimary", () => {
   it("refuses without a fence attestation and leaves state unchanged", async () => {
@@ -115,23 +142,14 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const { db, deps, tenantId, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
     const bystanderId = "bystander-1";
-    // A held term-3 chart: an OLD serving-primary, this node as serving-secondary, and a third
-    // uninvolved node — so we assert the flip touches ONLY the two it should and leaves the bystander
-    // exactly as it was. promote reads only term + node list to bump, never the held signature, so a
-    // placeholder signature is fine here (the node-membership.test.ts doc() fixture uses the same shape).
-    await writeNodeMembership(db, {
-      body: {
-        term: 3,
-        nodes: [
-          { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
-          { nodeId, contactUrl: "", standing: "serving-secondary" },
-          { nodeId: bystanderId, contactUrl: "https://bystander", standing: "sell-only" },
-        ],
-      },
-      signerNodeId: oldNodeId,
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+    // A held term-3 chart with a third uninvolved node appended — so we assert the flip touches ONLY
+    // the two it should and leaves the bystander exactly as it was.
+    await writeNodeMembership(
+      db,
+      heldTermThreeDoc(nodeId, oldNodeId, [
+        { nodeId: bystanderId, contactUrl: "https://bystander", standing: "sell-only" },
+      ]),
+    );
 
     const result = await promoteLocalSecondaryToPrimary(deps(noopLog), {
       oldNodeNeutralised: true,
@@ -191,18 +209,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   it("is idempotent: a second promote does not bump the term again", async () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
-    await writeNodeMembership(db, {
-      body: {
-        term: 3,
-        nodes: [
-          { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
-          { nodeId, contactUrl: "", standing: "serving-secondary" },
-        ],
-      },
-      signerNodeId: oldNodeId,
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, oldNodeId));
 
     const first = await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
     expect(first.alreadyPrimary).toBe(false);

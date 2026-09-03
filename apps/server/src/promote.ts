@@ -6,10 +6,10 @@ import {
   writeNodeMembershipTx,
   type Database,
 } from "@waitron/db";
-import { buildNextMembershipDocument, type MembershipNode } from "@waitron/membership";
+import { nextStandings } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
-import { readNodeIdentityKey } from "./node-identity.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -54,28 +54,6 @@ export interface PromoteDeps {
 }
 
 /**
- * The new org chart after a local-secondary promotion (design §6 R1): this node becomes serving-primary,
- * whichever node was serving-primary becomes sell-only (still a replication source until drained, so it
- * is demoted rather than evicted), and every other node is left exactly as it was (contactUrl preserved).
- * If this node is not yet listed, it is appended as serving-primary with an empty contactUrl — so a
- * promote against a held chart that omits the promoting node still names it correctly.
- */
-export function nextStandings(
-  current: readonly MembershipNode[],
-  selfNodeId: string,
-): MembershipNode[] {
-  const next = current.map((n): MembershipNode => {
-    if (n.nodeId === selfNodeId) return { ...n, standing: "serving-primary" };
-    if (n.standing === "serving-primary") return { ...n, standing: "sell-only" };
-    return n;
-  });
-  if (!next.some((n) => n.nodeId === selfNodeId)) {
-    next.push({ nodeId: selfNodeId, contactUrl: "", standing: "serving-primary" });
-  }
-  return next;
-}
-
-/**
  * Refuses to proceed without a fence attestation (promotion runbook design §6). A plain throw BEFORE any
  * state change, so a refused promote leaves the node exactly as it was (abort before the point-of-no-return,
  * §7). Extracted so the guard can be proven by deletion (CLAUDE.md §4).
@@ -116,19 +94,24 @@ export async function promoteLocalSecondaryToPrimary(
     return { alreadyPrimary: true }; // already the singleton holder — idempotent no-op
   }
 
-  // Build the next membership document BEFORE the point-of-no-return: read this node's signing key and
-  // the held org chart, flip standings (this node -> serving-primary, the outgoing primary -> sell-only),
-  // and sign — all reads plus the in-memory sign, no write yet, so a failure here aborts with no effect.
-  // R1 signs with this node's OWN directly-trusted identity key (`endorsements: []`); the endorsement
-  // chain is an R2/R3 concern.
-  const signerPrivateKey = await readNodeIdentityKey(deps.appDb, deps.ring, deps.tenantId);
+  // Build the next membership document BEFORE the point-of-no-return: read the held org chart, flip
+  // standings (this node -> serving-primary, the outgoing primary -> sell-only), then read this node's
+  // signing key and sign — all reads plus the in-memory sign, no write yet, so a failure here aborts
+  // with no effect. R1 signs with this node's OWN directly-trusted identity key (`endorsements: []`); the
+  // endorsement chain is an R2/R3 concern. The held read and the key read run sequentially rather than in
+  // parallel: `mintNextMembershipDocument` (the design-named shared helper, §6 R1 item 2) owns the key
+  // read, and the node list it needs is derived from the held document, so the shared helper wins over
+  // saving one round trip on this rare failover path.
   const held = await readNodeMembership(deps.appDb);
-  const document = buildNextMembershipDocument({
-    heldDocument: held,
-    nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
-    signerNodeId: deps.nodeId,
-    signerPrivateKey,
-  });
+  const document = await mintNextMembershipDocument(
+    { db: deps.appDb, ring: deps.ring },
+    {
+      tenantId: deps.tenantId,
+      heldDocument: held,
+      nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
+      signerNodeId: deps.nodeId,
+    },
+  );
 
   // PONR: the role flip and the new document commit together in ONE owner transaction (CLAUDE.md §3), so
   // a crash between the two writes cannot leave a primary with no document. Both writes are owner-role.

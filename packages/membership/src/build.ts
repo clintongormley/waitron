@@ -21,7 +21,7 @@ export function buildNextMembershipDocument(args: {
   endorsements?: readonly Endorsement[];
 }): SignedMembershipDocument {
   const body: MembershipDocumentBody = {
-    term: (args.heldDocument?.body.term ?? -1) + 1,
+    term: args.heldDocument === null ? 0 : args.heldDocument.body.term + 1,
     nodes: args.nodes,
   };
   return {
