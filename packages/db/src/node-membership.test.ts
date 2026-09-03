@@ -6,6 +6,7 @@ import {
   persistNodeMembershipIfNewer,
   readNodeMembership,
   writeNodeMembership,
+  writeNodeMembershipTx,
 } from "./node-membership.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
@@ -80,6 +81,16 @@ describe("node_membership accessors", () => {
       pg.db.execute(sql`insert into node_membership (id, term, document) values (2, 1, '{}')`),
     );
     expect(error).toBeDefined();
+  });
+
+  it("writeNodeMembershipTx writes inside a caller transaction", async () => {
+    // The tx-taking form (Task 4 commits a singleton-role flip and this write in ONE transaction):
+    // run it on a caller-provided tx and confirm the write persists after that transaction commits.
+    const d = doc(3);
+    await pg.db.transaction(async (tx) => {
+      await writeNodeMembershipTx(tx, d);
+    });
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(3);
   });
 });
 

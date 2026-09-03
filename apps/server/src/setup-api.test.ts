@@ -178,6 +178,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   provisionRequests: ProvisionRequest[];
   provision: ReturnType<typeof vi.fn>;
   establishIdentity: ReturnType<typeof vi.fn>;
+  seedMembership: ReturnType<typeof vi.fn>;
   sealAeat: ReturnType<typeof vi.fn>;
   persistTrading: ReturnType<typeof vi.fn>;
   requestRestart: ReturnType<typeof vi.fn>;
@@ -192,6 +193,9 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const establishIdentity = vi.fn(async () => {
     calls.push("establishIdentity");
   });
+  const seedMembership = vi.fn(async () => {
+    calls.push("seedMembership");
+  });
   const sealAeat = vi.fn(async () => {
     calls.push("sealAeat");
   });
@@ -205,6 +209,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     environment: "preproduction",
     provision,
     establishIdentity,
+    seedMembership,
     sealAeat,
     persistTrading,
     requestRestart,
@@ -218,6 +223,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     provisionRequests,
     provision,
     establishIdentity,
+    seedMembership,
     sealAeat,
     persistTrading,
     requestRestart,
@@ -246,6 +252,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       calls,
       provisionRequests,
       establishIdentity,
+      seedMembership,
       sealAeat,
       requestRestart,
       persistTrading,
@@ -259,13 +266,22 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
-    expect(calls).toEqual(["provision", "establishIdentity", "persistTrading"]);
+    expect(calls).toEqual(["provision", "establishIdentity", "seedMembership", "persistTrading"]);
     await tick();
-    expect(calls).toEqual(["provision", "establishIdentity", "persistTrading", "requestRestart"]);
+    expect(calls).toEqual([
+      "provision",
+      "establishIdentity",
+      "seedMembership",
+      "persistTrading",
+      "requestRestart",
+    ]);
 
     // Membership identity is established for the freshly-minted node (design §4), after provision
     // returns and before the trading config is persisted — with the VenueResult's tenant + node ids.
+    // The term-0 membership document is then seeded for that same node (design §6 R1), before the
+    // trading config is persisted.
     expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
+    expect(seedMembership).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
 
     // Demo → no AEAT cert seal, and the demo/live fork stamped preproduction.
     expect(sealAeat).not.toHaveBeenCalled();
@@ -358,10 +374,12 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(sealAeat).toHaveBeenCalledTimes(1);
     expect(sealAeat.mock.calls[0]).toEqual([TENANT_ID, CERT]);
     // The seal runs AFTER provision mints the tenant and BEFORE the trading config is persisted;
-    // identity establishment sits between provision and the seal (design §4).
+    // identity establishment and the term-0 membership seed sit between provision and the seal
+    // (design §4 + §6 R1).
     expect(calls).toEqual([
       "provision",
       "establishIdentity",
+      "seedMembership",
       "sealAeat",
       "persistTrading",
       "requestRestart",
@@ -654,6 +672,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   it.each([
     ["provision"],
     ["establishIdentity"],
+    ["seedMembership"],
     ["sealAeat"],
     ["persistTrading"],
     ["requestRestart"],

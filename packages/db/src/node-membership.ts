@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SignedMembershipDocument } from "@waitron/membership";
-import type { Database } from "./client.js";
+import type { Database, Transaction } from "./client.js";
 import { nodeMembership } from "./schema/node-membership.js";
 
 /**
@@ -49,8 +49,24 @@ export async function writeNodeMembership(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<void> {
+  await db.transaction((tx) => writeNodeMembershipTx(tx, document));
+}
+
+/**
+ * The plain-upsert of the singleton on a caller-provided transaction (see `writeNodeMembership` for
+ * the full contract — dumb setter, no accept fence, `term` denormalised from `document.body.term`).
+ * Exists so a caller can commit this write in the SAME transaction as a related change (CLAUDE.md §3:
+ * a caller that must write atomically with another write shares one transaction) — the promotion path
+ * (spec `2026-09-03-reserved-standby-identity-and-promotion-design.md` §6 R1) flips the singleton role
+ * and writes the new membership document together, so both land or neither does. `writeNodeMembership`
+ * is this on its own transaction.
+ */
+export async function writeNodeMembershipTx(
+  tx: Transaction,
+  document: SignedMembershipDocument,
+): Promise<void> {
   const term = document.body.term;
-  await db
+  await tx
     .insert(nodeMembership)
     .values({ id: 1, term, document })
     .onConflictDoUpdate({

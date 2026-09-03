@@ -25,6 +25,10 @@ export { endorseKey } from "./endorsement.js";
 
 export { signDocumentBody, verifyMembershipDocument } from "./verify.js";
 
+export { buildNextMembershipDocument } from "./build.js";
+
+export { nextStandings } from "./standings.js";
+
 export { acceptMembershipDocument } from "./accept.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from

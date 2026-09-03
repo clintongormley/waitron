@@ -9,6 +9,7 @@ import {
   readSingletonRole,
   setDeploymentMode,
   setSingletonRole,
+  setSingletonRoleTx,
   stampDeployment,
 } from "./deployment.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
@@ -178,6 +179,16 @@ describeEachTarget("the deployment stamp", (target) => {
   it("setSingletonRole fails loudly on an unstamped database", async () => {
     const error = await captureError(() => setSingletonRole(db, "secondary"));
     expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+  });
+
+  it("setSingletonRoleTx flips the role inside a caller transaction", async () => {
+    // The tx-taking form (Task 4 commits this flip and a membership-document write in ONE
+    // transaction): stamp first, run it on a caller-provided tx, confirm the flip persists.
+    await stampDeployment(db, "preproduction");
+    await db.transaction(async (tx) => {
+      await setSingletonRoleTx(tx, "secondary");
+    });
+    expect(await readSingletonRole(db)).toBe("secondary");
   });
 
   it("readDeploymentAxes returns both axes in one read", async () => {
