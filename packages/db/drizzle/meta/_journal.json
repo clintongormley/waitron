@@ -694,6 +694,13 @@
       "when": 1788453928602,
       "tag": "0098_node_public_key",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1788474833632,
+      "tag": "0099_lazy_master_mold",
+      "breakpoints": true
     }
   ]
 }

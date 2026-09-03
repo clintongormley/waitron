@@ -1,4 +1,5 @@
-import { index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import type { Endorsement } from "@waitron/membership";
 import { locations, tenants } from "./tenants.js";
 
 /**
@@ -43,6 +44,14 @@ export const nodes = pgTable(
     // adoptVenue's verbatim node-row copy, so a mirror inherits the primary's anchor with no bundle
     // change. Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
     publicKey: text("public_key"),
+    // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
+    // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document
+    // this node later signs, chaining back to setup. Public data — the exact sibling of `public_key`
+    // above — so it lives here, not in the secret vault (whose exact-match string-only payload cannot
+    // hold it). Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
+    // NULL. Set owner-role at adopt (insertReservedNodeTx); app_user holds SELECT only. Read at R3
+    // promotion to attach to the minted membership document.
+    endorsement: jsonb("endorsement").$type<Endorsement>(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
