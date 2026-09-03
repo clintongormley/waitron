@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import {
   createPostgresDb,
   readDeploymentAxes,
+  readMembershipTrustSet,
   readMirrorConfig,
   withTenant,
   type Database,
@@ -1141,10 +1142,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // A mirror's ONE peer is the relay it dials, built from the DB config + the vault token above; a
     // primary's peers come from WAITRON_SYNC_PEERS (loadSyncConfig).
     const peers = isMirror && mirrorPeer !== undefined ? [mirrorPeer] : syncConfig.peers;
-    // The membership trust set (design §4). SLICE-4 SEAM: empty today, so every gossiped document is
-    // untrusted_signer and adoption is a production no-op until setup/adopt populates it. Kept as a
-    // named local so Slice 4 replaces this one line with a real read.
-    const membershipTrustSet: TrustSet = {};
+    // The membership trust set (design §4): the node's own key at setup, plus the primary's key on a
+    // mirror (inherited through adoptVenue's replicated node row). Read from nodes.public_key on the
+    // app pool under the venue tenant (readMembershipTrustSet). A fresh primary trusts itself; a mirror
+    // trusts the primary — so the Slice-3 adoptMembership callback now accepts a genuinely-trusted,
+    // strictly-newer gossiped document instead of the empty-seam no-op.
+    const membershipTrustSet: TrustSet = await readMembershipTrustSet(localSyncDb, till.tenantId);
     // Best-effort membership gossip on the pull handshake (design §5): the pull worker hands each peer's
     // advertised /hello document here; the accept fence + term-guarded persist run on the app-role pool
     // (localSyncDb is a member of app_user, holding the Slice-3 INSERT/UPDATE grant on node_membership).
@@ -1156,11 +1159,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         { db: localSyncDb, trustSet: membershipTrustSet },
         raw,
       );
-      // Unreachable in production: the trust set is empty (above), so `accepted` is never true until
-      // Slice 4 populates it — the mechanism is exercised end-to-end with a fixture trust set in
-      // membership-gossip.e2e.test.ts instead. The false branch (a rejected document) is the covered
-      // production path.
-      /* v8 ignore next */
+      // Now reachable: with a real trust set the node accepts a trusted, strictly-newer document. Covered
+      // by boot.test.ts's "boot reads a REAL trust set …" case (it drives this very callback), and the
+      // accept fence + persist it delegates to are proven end-to-end in membership-gossip.e2e.test.ts.
       if (outcome.accepted) log("info", "membership.adopted", { term: outcome.document.body.term });
     };
     const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>

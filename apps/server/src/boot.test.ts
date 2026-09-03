@@ -13,9 +13,11 @@ import {
   captureError,
   readDeploymentEnvironment,
   readMembershipTrustSet,
+  readNodeMembership,
   stampDeployment,
   withTenant,
 } from "@waitron/db";
+import { generateNodeKeyPair } from "@waitron/membership";
 import {
   cloneTemplate,
   nextCloneName,
@@ -48,6 +50,7 @@ import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 /**
  * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
@@ -1513,6 +1516,66 @@ describe("startServer, against a real container as the deployment role", () => {
       await server.close();
     }
     await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow(); // listener gone
+  }, 60_000);
+
+  it("boot reads a REAL trust set, so its adoptMembership callback accepts a trusted, strictly-newer document (Slice 4)", async () => {
+    // The now-live seam: boot reads `membershipTrustSet` from `nodes.public_key` (Slice 4), not the old
+    // empty `{}`. Stamp a node the venue trusts, boot, then drive boot's OWN `adoptMembership` callback
+    // with a document that node signed — the accept fence passes, the term-guarded persist writes
+    // node_membership, and the `if (outcome.accepted)` log fires. This is the branch that carried the
+    // now-false `/* v8 ignore */` while the seam was empty; here it is covered through boot.ts itself.
+    // The peer is unreachable (so the live worker never adopts), so we invoke the captured callback boot
+    // handed runSyncPull directly rather than standing up a live source — that end-to-end pull → adopt is
+    // proven separately in membership-gossip.e2e.test.ts.
+    const SIGNER = "77777777-7777-4777-8777-777777777777";
+    const kp = generateNodeKeyPair();
+    // Stamp the trusted node BEFORE boot: `membershipTrustSet` is read once at startup, so the row must
+    // exist first. Inserted as the container superuser (RLS bypassed), tenant-scoped to this venue.
+    await suite.admin.execute(sql`
+      insert into nodes (id, tenant_id, location_id, name, public_key)
+      values (${SIGNER}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
+              'Trusted primary', ${kp.publicKey})`);
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_SYNC_PEERS: JSON.stringify([
+        {
+          nodeId: "66666666-6666-4666-8666-666666666666",
+          url: "http://127.0.0.1:1/",
+          token: "peer-token",
+        },
+      ]),
+      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
+    });
+    try {
+      // Boot handed the same `adoptMembership` callback to both lane workers; grab the ordered lane's.
+      const ordered = vi
+        .mocked(runSyncPull)
+        .mock.calls.map((c) => c[0])
+        .find((d) => d.lane === "ordered");
+      expect(ordered?.adoptMembership).toBeDefined();
+      // Nothing adopted yet — the singleton is empty.
+      expect(await readNodeMembership(suite.admin)).toBeNull();
+      // Drive boot's real callback with a term-5 document the stamped node signed. Because boot's trust
+      // set now maps SIGNER → kp.publicKey, the accept fence passes and the persist lands.
+      await ordered!.adoptMembership!(
+        signedMembershipDoc(5, { signerNodeId: SIGNER, keyPair: kp }),
+      );
+      const held = await readNodeMembership(suite.admin);
+      expect(held).not.toBeNull();
+      expect(held!.body.term).toBe(5);
+      expect(held!.signerNodeId).toBe(SIGNER);
+    } finally {
+      await server.close();
+      // node_membership is a whole-DB singleton and this suite's DB is shared, so clear both writes to
+      // keep the sync tests that assert `membership: null` order-independent (this file's own rule).
+      await suite.admin.execute(sql`delete from node_membership`);
+      await suite.admin.execute(sql`delete from nodes where id = ${SIGNER}`);
+    }
   }, 60_000);
 
   it("close() swallows a REJECTING pull worker and still tears down the listener and pools", async () => {

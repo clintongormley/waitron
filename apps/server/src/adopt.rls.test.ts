@@ -7,7 +7,9 @@ import {
   nodes,
   readDeploymentEnvironment,
   readDeploymentMode,
+  readMembershipTrustSet,
   readMirrorConfig,
+  setNodePublicKey,
   tenants,
   tills,
   withTenant,
@@ -187,5 +189,53 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       sql`select id from tenants where id = ${designated.tenantId}`,
     );
     expect(t.rows).toHaveLength(1);
+  });
+
+  it("a mirror inherits the primary's trust anchor through the replicated node row (no adopt change)", async () => {
+    // Owner Decision 2, proven end-to-end: the adopt path itself needs NO membership code. The primary
+    // stamps its node's public key (as establishNodeIdentity does on provision); adoptVenue replicates
+    // the `nodes` row column-for-column; `readMembershipTrustSet` on the mirror's OWN app pool reads it
+    // back. So a mirror trusts the primary with nothing but the row it already copies.
+    const PRIMARY_PUB = "PRIMARY_PUB";
+    const { rows, designated } = await buildBundleParts();
+    // Stamp the primary's node on the SOURCE as the owner (setNodePublicKey is owner-role), then re-read
+    // the `nodes` rows as app_user under RLS — the same read `assembleMirrorBundle` performs — so the
+    // key rides the bundle through a real app-pool read on BOTH sides, not a hand-set field.
+    await setNodePublicKey(source.admin, designated.tenantId, designated.nodeId, PRIMARY_PUB);
+    rows.nodes = await withTenant(sourceApp, designated.tenantId, (tx) => tx.select().from(nodes));
+    const bundle: MirrorBundle = {
+      rows,
+      designated,
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+      relayUrl: "https://relay.test:9000/",
+      syncToken: "peer-token-adopt-002",
+    };
+
+    await adoptFromPrimary(
+      {
+        ownerDb: mirror.admin,
+        ring: RING,
+        fetchBundle: async () => bundle,
+        persistTrading: async () => {},
+        databaseUrl: "postgres://app@mirror/db",
+        migrationsDatabaseUrl: "postgres://owner@mirror/db",
+        syncDatabaseUrl: "postgres://sync@mirror/db",
+      },
+      {
+        primaryUrl: "https://primary.test/",
+        credential: {
+          personId: "99999999-9999-9999-9999-999999999999",
+          password: "dashPass123",
+        },
+      },
+    );
+
+    // The mirror's app pool now reads the primary's key back as the venue's sole trust anchor — proof the
+    // trust anchor inherited through replication alone. Assert the VALUE (not mere presence) so a dropped
+    // or mis-replicated `public_key` fails here.
+    const trust = await readMembershipTrustSet(mirrorApp, designated.tenantId);
+    expect(trust).toEqual({ [designated.nodeId]: PRIMARY_PUB });
   });
 });
