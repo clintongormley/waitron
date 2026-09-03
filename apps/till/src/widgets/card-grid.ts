@@ -13,7 +13,7 @@ import "./station-queue.js";
 // the switch below. Same side-effect-import-then-name-by-tag shape as the widgets above.
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
-import { CARD_REQUIRED_CAPABILITY } from "../layout.js";
+import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
   FloorZone,
@@ -52,6 +52,11 @@ export class TillCardGrid extends LitElement {
       min-width: 0;
       min-height: 0;
     }
+    /* Permission→LOCKED: the card stays visible but dimmed and non-interactive (?inert). The dim uses
+       the shared disabled-opacity token, not a hardcoded number. */
+    .cell.locked {
+      opacity: var(--wt-opacity-disabled, 0.5);
+    }
   `;
 
   /** The tab to render. Undefined until the app resolves a profile — renders nothing meanwhile. */
@@ -88,6 +93,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) zones: FloorZone[] = [];
   /** The live-floor occupancy read-model, threaded to the embedded floor screen. */
   @property({ attribute: false }) tables: TableState[] = [];
+  /** Whether this operator may configure the till — the sole permission gating a card (table-layout-editor). */
+  @property({ type: Boolean }) canConfigureTill = false;
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -104,11 +111,23 @@ export class TillCardGrid extends LitElement {
     return required === undefined || this.capabilities.includes(required);
   }
 
+  /**
+   * Permission→LOCKED (spec §5.2). Only `till.configure` (on `table-layout-editor`) exists in the
+   * catalogue, so this can only ever be true for that card — never for a sale-critical card
+   * (product-grid/basket/total/tender-pay carry no required permission).
+   */
+  #locked(card: CardInstance): boolean {
+    return CARD_REQUIRED_PERMISSION[card.type] === "till.configure" && !this.canConfigureTill;
+  }
+
   #cell(card: CardInstance): TemplateResult | typeof nothing {
     const element = this.#element(card);
     if (element === nothing) return nothing;
+    const locked = this.#locked(card);
     return html`<div
-      class="cell"
+      class="cell ${locked ? "locked" : ""}"
+      ?inert=${locked}
+      aria-disabled=${locked ? "true" : nothing}
       style="grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}"
     >
       ${element}

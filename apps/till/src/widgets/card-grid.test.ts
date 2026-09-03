@@ -285,6 +285,31 @@ describe("till-card-grid", () => {
     expect(floor.canEdit).toBe(true);
   });
 
+  it("locks a permission-gated card when the operator lacks the permission", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      canConfigureTill: false,
+    });
+    const cell = el.shadowRoot!.querySelector<HTMLElement>(".cell.locked")!;
+    expect(cell).not.toBeNull();
+    expect(cell.hasAttribute("inert")).toBe(true);
+    expect(cell.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("unlocks a permission-gated card when the operator has the permission", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: editorTab,
+      store,
+      canConfigureTill: true,
+    });
+    expect(el.shadowRoot!.querySelector(".cell.locked")).toBeNull();
+    // The cell still renders — visible, just unlocked.
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
   it("renders an embedded expo screen for an expo card", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: expoTab, store });
