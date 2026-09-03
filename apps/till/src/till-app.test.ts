@@ -3808,6 +3808,65 @@ describe("till-app", () => {
     });
   });
 
+  describe("profile tab shell (SP-B2.1)", () => {
+    // A `till` profile with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
+    // capability, so it renders the card grid under the empty `capabilities` list). The shell renders
+    // in place of the legacy `screen`-enum switch once this profile is present.
+    const shellProfile: ProfileDef = {
+      formFactor: "till",
+      capabilities: [],
+      tabs: [
+        { key: "counter", title: "Counter", columns: 12, cards: [] },
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const shell = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+
+    it("renders the tab shell with the counter tab active when a profile is present", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+      });
+      await toCounter(el);
+      const s = shell(el)!;
+      expect(s).not.toBeNull();
+      expect(s.activeTabKey).toBe("counter");
+      // The counter tab's body is the counter screen, mounted EMBEDDED — the shell owns the header, so
+      // the screen suppresses its own (no duplicate chrome).
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector(".header")).toBeNull();
+    });
+
+    it("switches the active tab body on tab-select", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await el.updateComplete;
+      // Floor tab → the card grid (its floor-plan card); the counter body is gone.
+      expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+    });
+
+    it("keeps the legacy screen-enum (no shell) when the boot carries no profile", async () => {
+      // The default `till` fixture omits `profile`, so `#shellActive()` is never reached and
+      // `#renderScreen` renders the counter screen with its OWN header — the false direction of the
+      // shell branch, checked so a shell that renders unconditionally would fail here.
+      const { el } = await mountApp();
+      await toCounter(el);
+      expect(shell(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
+    });
+  });
+
   describe("per-user locale (Task 9)", () => {
     /** Boots, then logs a person in carrying `locale` in the `logged-in` detail — leaving the app on
      * the counter with the UI switched per `resolveActiveLocale(locale, venueDefault)`. */

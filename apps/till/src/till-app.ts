@@ -24,6 +24,11 @@ import "./screens/till-enrol-screen.js";
 import "./screens/till-expo-screen.js";
 // The reusable supervisor-override dialog (cash-drawer-authorization §5); named as a tag below.
 import "./widgets/supervisor-override-dialog.js";
+// The profile tab shell (SP-B2.1) — the chrome + tab strip the app renders in place of the legacy
+// `screen`-enum switch once a device profile is present. Its per-tab body is the counter screen or the
+// card grid (below); named only as tags. The card grid is registered here too (a non-counter tab body).
+import "./widgets/tab-shell.js";
+import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -49,6 +54,7 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 import type { LayoutDef, ProfileDef, ReceiptConfig, TabDef } from "./layout.js";
+import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -187,6 +193,13 @@ export class TillApp extends LitElement {
   readonly #store = new WorkingOrderStore();
 
   /**
+   * The shell's language chooser feed (SP-B2.1) — the same `TillApi.getLocales` adapter the counter
+   * screen's own chooser uses, hoisted to a stable field so the `<till-tab-shell>` property does not
+   * churn a fresh closure per render. Threaded to `till-tab-shell.loadLocales`; the chooser calls it
+   * lazily when opened, and its `locale-selected` bubbles to the app handler already wired below. */
+  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+
+  /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from `GET /api/till`
    * on boot (Task 4 makes that field the derived default). It is the fallback the app switches back to
    * when nobody's preference applies: `resolveActiveLocale(personLocale, this.#venueLocale)` on login
@@ -204,6 +217,14 @@ export class TillApp extends LitElement {
   }
 
   @state() private screen: Screen = "lock";
+  /**
+   * The key of the tab the profile shell (SP-B2.1) currently shows — the shell's active tab. Set on
+   * boot from the profile's first tab ({@link #boot}) and updated by the shell's `tab-select`. Stays
+   * undefined for an unprofiled boot, where {@link render} never reaches the shell branch and the legacy
+   * {@link #renderScreen} switch renders instead. This task RENDERS the shell + switches tabs; the
+   * drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is Task 8.
+   */
+  @state() private activeTabKey?: string;
   /**
    * Whether the station screen runs in DEVICE mode (device-identity-1 §5a) — an always-on enrolled KDS
    * display with no login. Set `true` by {@link #boot} when the device probe succeeds (an already-enrolled
@@ -560,6 +581,10 @@ export class TillApp extends LitElement {
       // The device's assigned layout profile (SP-B1). `#counterTab()` reads its `counter` tab and threads
       // it to the counter screen; absent/no-counter-tab leaves the screen on its region-model fallback.
       this.profile = till.profile;
+      // The initial active tab for the profile tab shell (SP-B2.1) — the first authored tab (the
+      // `counter` tab by convention). `#renderScreen` stays the fallback when there is no profile, so
+      // this is left undefined for an unprofiled boot and `render()` never reaches the shell branch.
+      this.activeTabKey = till.profile?.tabs[0]?.key;
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
@@ -1821,6 +1846,95 @@ export class TillApp extends LitElement {
     return this.profile?.tabs.find((tab) => tab.key === "counter");
   }
 
+  /**
+   * Whether the profile tab shell (SP-B2.1) should render in place of the legacy `#renderScreen`
+   * switch. True ONLY for the authenticated operator surface the shell replaces: the operator has
+   * passed the lock screen (`screen !== "lock"`), no enrol overlay is open, and this is not a
+   * `kds_station` display (`deviceMode`), which STAYS on its legacy station screen in B2.1 (its
+   * kds-board card renders nothing until B2.2, so a shell would show an empty tab). The enrolling
+   * overlays are already handled ahead of this branch in {@link render}; they are guarded here too so
+   * the predicate reads true only for the surface it names, independent of render order.
+   */
+  #shellActive(): boolean {
+    return (
+      this.screen !== "lock" && !this.handheldEnrolling && !this.tillEnrolling && !this.deviceMode
+    );
+  }
+
+  /** The active tab of the profile shell — the one keyed by {@link activeTabKey}, or the first tab as
+   * a fallback (a stale/absent key never leaves the shell bodiless). */
+  #activeTab(): TabDef | undefined {
+    return this.profile?.tabs.find((tab) => tab.key === this.activeTabKey) ?? this.profile?.tabs[0];
+  }
+
+  /**
+   * The shell's AFFORDANCES (SP-B2.1) — surfaces reachable today (Station/Expo/Schedule) that are NOT
+   * authored as a tab in this profile, so the shell offers them as buttons rather than tabs. A surface
+   * authored AS a tab drops out of this list (it is reachable as a tab instead). The buttons emit
+   * `show-station`/`show-expo`/`show-schedule`, which bubble to the existing app handlers; rerouting
+   * them to in-shell drill-ins is Task 8, so today they set legacy screen state the shell ignores.
+   */
+  #affordances(): ShellAffordance[] {
+    const tabKeys = new Set(this.profile?.tabs.map((tab) => tab.key) ?? []);
+    return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
+  }
+
+  /** The active tab's body element (SP-B2.1): the counter POS for the `counter` tab (its header
+   * suppressed — the shell owns the chrome), the SP-B1 card grid for every other tab. */
+  #tabBody(tab: TabDef): TemplateResult {
+    if (tab.key === "counter") {
+      // Same prop list as `#renderScreen`'s `counter` arm, plus `embedded` (the shell owns the header)
+      // and `counterTab=${tab}` (the shell's active tab IS the counter tab). Only the header relocates.
+      return html`<till-counter-screen
+        embedded
+        .api=${this.api}
+        .store=${this.#store}
+        .products=${this.products}
+        .menus=${this.menus}
+        .selectedMenuId=${this.selectedCatalogueId}
+        .heldOrders=${this.heldOrders}
+        .stationQueue=${this.stationQueue}
+        .defaultStationId=${this.#defaultStationId()}
+        .operatorName=${this.operatorName}
+        .invoiceLocale=${this.invoiceLocale}
+        .orderFlow=${this.orderFlow}
+        .stage=${this.stage}
+        .busy=${this.submitting || this.placing}
+        .layout=${this.#layoutFor()}
+        .counterTab=${tab}
+        .cardProvider=${this.cardProvider}
+        .tipsEnabled=${this.tipsEnabled}
+        .cardOutcome=${this.cardOutcome}
+      ></till-counter-screen>`;
+    }
+    return html`<till-card-grid
+      .tab=${tab}
+      .store=${this.#store}
+      .capabilities=${this.profile?.capabilities ?? []}
+      .canConfigureTill=${this.canEdit}
+      .products=${this.products}
+      .heldOrders=${this.heldOrders}
+      .stationQueue=${this.stationQueue}
+      .defaultStationId=${this.#defaultStationId()}
+      .busy=${this.submitting}
+      .orderFlow=${this.orderFlow}
+      .stage=${this.stage}
+      .cardProvider=${this.cardProvider}
+      .tipsEnabled=${this.tipsEnabled}
+      .cardOutcome=${this.cardOutcome}
+      .api=${this.api}
+      .fireControl=${this.fireControl}
+      .zones=${this.zones}
+      .tables=${this.tables}
+    ></till-card-grid>`;
+  }
+
+  /** The shell's `drill` overlay body (SP-B2.1). Empty until Task 8 reroutes the drill-in nav
+   * (table order / station / expo / schedule / allergens) into the shell. */
+  #drillBody(): TemplateResult | typeof nothing {
+    return nothing;
+  }
+
   override render() {
     return html`
       <div
@@ -1896,10 +2010,33 @@ export class TillApp extends LitElement {
               // whatever screen the boot left set.
               this.tillEnrolling
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : // keyed on the active locale: a locale switch changes the key, so Lit DISCARDS and rebuilds
-                // the whole screen subtree, repainting every child in the new language (the screens hold no
-                // LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
-                keyed(currentLocale(), this.#renderScreen())
+              : // The profile tab shell (SP-B2.1) replaces the legacy `screen`-enum switch once a device
+                // profile is present AND the operator is on the authenticated surface it covers
+                // (`#shellActive`). An unprofiled boot — every legacy-path test stub — keeps `#renderScreen`.
+                // Both arms are keyed on the active locale: a locale switch changes the key, so Lit DISCARDS
+                // and rebuilds the subtree, repainting every child in the new language (the screens/shell hold
+                // no LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+                this.profile !== undefined && this.#shellActive()
+                ? keyed(
+                    currentLocale(),
+                    html`<till-tab-shell
+                      .tabs=${this.profile.tabs}
+                      .activeTabKey=${this.activeTabKey}
+                      .operatorName=${this.operatorName}
+                      .affordances=${this.#affordances()}
+                      .loadLocales=${this.#loadLocales}
+                      @tab-select=${(e: CustomEvent<{ key: string }>) => {
+                        this.activeTabKey = e.detail.key;
+                      }}
+                    >
+                      ${(() => {
+                        const tab = this.#activeTab();
+                        return tab ? this.#tabBody(tab) : nothing;
+                      })()}
+                      ${this.#drillBody() /* Task 8 fills the drill overlay */}
+                    </till-tab-shell>`,
+                  )
+                : keyed(currentLocale(), this.#renderScreen())
         }
       </div>
     `;
