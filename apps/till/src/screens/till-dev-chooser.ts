@@ -16,9 +16,10 @@ import type { DevDeviceList, DevMintRequest, TillApi } from "../api/client.js";
  * It is a DEVELOPER TOOL, not a shipped surface: reachable only when the server exposes the dev routes
  * (devMode) AND the operator adds `?dev`. So its copy is DELIBERATELY plain English literals, not `t()`
  * catalogue keys — there is nothing to localise for a tool no venue ever sees, and `apps/*` is exempt
- * from the english-only guard either way. The one dev route that is ABSENT outside devMode
- * (`GET /api/dev/devices` → 404) rejects `getDevDevices`, which flips {@link devOff} so the tool renders
- * a plain "dev mode is off" hint instead of an empty, broken-looking list.
+ * from the english-only guard either way. Any rejection of `getDevDevices` — chiefly the 404 when the
+ * dev route is absent outside devMode, but also a transient/network/server error — flips {@link devOff}
+ * so the tool renders a load-failure hint instead of an empty, broken-looking list. The hint does not
+ * assert the cause: it only KNOWS the list failed to load, not why.
  *
  * Modelled on `till-enrol-screen.ts` / `till-schedule-screen.ts`: `.api` threaded from the app, `wt-*`
  * primitives (`wt-card`/`wt-button`/`wt-input`) + token-styled native `<select>`s (there is no
@@ -118,7 +119,10 @@ export class TillDevChooser extends LitElement {
 
   /** The enrolled devices + mint option-sources, or `undefined` while the first read is in flight. */
   @state() private list?: DevDeviceList;
-  /** Set when the dev route is absent (rejected `getDevDevices`) — renders the "dev mode is off" hint. */
+  /** Set on ANY rejected `getDevDevices` (404 when the dev route is absent, a transient/network/server
+   * error, or a JSON-parse failure) — renders the load-failure hint. The flag name is a historical
+   * shorthand; the rendered copy does not claim dev mode is definitely off, since a rejection can have
+   * other causes. */
   @state() private devOff = false;
   /** The error CODE of a rejected mint, rendered inline (never a user-facing surface — see class note). */
   @state() private mintError?: string;
@@ -207,8 +211,8 @@ export class TillDevChooser extends LitElement {
   #body(): TemplateResult {
     if (this.devOff) {
       return html`<p class="hint" data-dev-off>
-        Dev mode is off — set <code>WAITRON_ENV=dev</code> and restart the server to use the device
-        switcher.
+        Couldn't load devices. If this host isn't running in dev mode, start it with
+        <code>WAITRON_ENV=dev</code> and reload.
       </p>`;
     }
     if (this.list === undefined) {

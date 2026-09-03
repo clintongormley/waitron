@@ -189,6 +189,15 @@ Wire the orphaned `clearDeviceCookie` (`device-session.ts:56`), the parent spec'
   is untouched and still active; the browser simply reverts to un-enrolled and can re-enrol. The
   cookie is `sameSite: "Strict"`, so a cross-site POST cannot reach it. It is generally useful (clear
   a stuck cookie identity) and the parent spec frames it as such.
+
+  > **Correction (2026-09-03, security review):** superseded. `sameSite: "Strict"` governs whether the
+  > cookie is SENT on a cross-site request, not whether a cross-site request can trigger a `Set-Cookie`
+  > that CLEARS one — a bare cross-site `<form method=post>` reaches the route with no token and no
+  > preflight regardless. So an always-mounted, unauthenticated reset is CSRF-able and would drop a
+  > LIVE till's or KDS's device cookie, after which `requireSaleTillId` 401s its `POST /api/sales` — a
+  > till that cannot sell (CLAUDE.md §5). `POST /api/device/reset` is therefore mounted ONLY under
+  > `devMode` (404 otherwise), in the same dev-only group as the rest of §4. Do not reintroduce the
+  > always-mounted route.
 - The chooser exposes it as a "reset this browser's cookie identity" action; it is orthogonal to the
   per-tab `sessionStorage` switch (which the override drives).
 

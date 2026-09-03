@@ -324,6 +324,10 @@ Expected: FAIL (404 — route not mounted).
 
 Add `clearDeviceCookie` to the `./device-session.js` import at the top of `device-api.ts`, and mount the route inside `mountDeviceApi` (alongside the enrol route; NOT dev-gated — dropping your own cookie is harmless and `sameSite: Strict`):
 
+> **Correction (2026-09-03, security review):** `POST /api/device/reset` is now mounted ONLY under
+> `devMode` (404 otherwise), NOT always — an unauthenticated always-mounted cookie-clear is CSRF-able
+> and would 401 a live till's sales (§5). Do not reintroduce the always-mounted route.
+
 ```ts
   // ── Reset (drop THIS browser's device identity) ──────────────────────────────────────────────────────
   // Wires `clearDeviceCookie`: the device row is untouched (still active) — the browser simply reverts

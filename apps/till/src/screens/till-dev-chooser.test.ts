@@ -283,15 +283,16 @@ describe("till-dev-chooser", () => {
     expect(el.shadowRoot!.querySelector(".reset .error")!.textContent).toContain("server.internal");
   });
 
-  it("renders the dev-mode-off message when getDevDevices rejects", async () => {
+  it("renders a load-failure message (with WAITRON_ENV=dev guidance) when getDevDevices rejects", async () => {
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({
         getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
       }),
     });
     await flush(el);
+    expect(el.shadowRoot!.textContent).toContain("Couldn't load devices");
     expect(el.shadowRoot!.textContent).toContain("WAITRON_ENV=dev");
-    // The device list + mint form are absent when dev mode is off.
+    // The device list + mint form are absent when the load failed.
     expect(el.shadowRoot!.querySelector("[data-mint-submit]")).toBeNull();
   });
 });
