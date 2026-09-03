@@ -82,6 +82,7 @@ import { provisionVenue } from "./provision.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
 import { sealAeatCredential } from "./aeat-credential.js";
 import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { mountDiscovery } from "./discovery-api.js";
@@ -651,6 +652,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             },
             establishIdentity: (tenantId, nodeId) =>
               establishNodeIdentity({ ownerDb, ring }, tenantId, nodeId),
+            seedMembership: (tenantId, nodeId) =>
+              seedTermZeroMembership({ db: ownerDb, ring }, tenantId, nodeId),
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
             persistTrading,
             databaseUrl: config.databaseUrl,

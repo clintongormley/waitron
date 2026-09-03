@@ -50,6 +50,12 @@ export interface SetupDeps {
    * `establishNodeIdentity({ ownerDb, ring }, …)`. Optional like the other provision deps so an unwired
    * box refuses via the deps gate rather than half-provisioning. Provision path only — a mirror seals none. */
   establishIdentity?: (tenantId: string, nodeId: string) => Promise<void>;
+  /** `seedTermZeroMembership({ db, ring }, …)` bound in boot: mints the venue's term-0 membership
+   * document right after `establishIdentity` seals the identity key. A fresh primary signs its own
+   * single-node org chart (design §6 R1), so a document exists before any promotion needs to bump one.
+   * Optional like the other provision deps so an unwired box refuses via the deps gate. Provision path
+   * only — a mirror inherits the primary's document through replication and mints none. */
+  seedMembership?: (tenantId: string, nodeId: string) => Promise<void>;
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
@@ -313,6 +319,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
     const establishIdentity = deps.establishIdentity;
+    const seedMembership = deps.seedMembership;
     const sealAeat = deps.sealAeat;
     const persistTrading = deps.persistTrading;
     const requestRestart = deps.requestRestart;
@@ -321,6 +328,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (
       provision === undefined ||
       establishIdentity === undefined ||
+      seedMembership === undefined ||
       sealAeat === undefined ||
       persistTrading === undefined ||
       requestRestart === undefined ||
@@ -391,6 +399,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // vault row is FK-restricted to the tenant) and before the trading config is persisted. A fresh
         // primary becomes its own sole trust anchor; boot reads it into membershipTrustSet.
         await establishIdentity(result.tenantId, result.nodeId);
+
+        // Seed the venue's term-0 membership document (design §6 R1): after the identity key exists,
+        // before the trading config is persisted. The primary signs its own org chart; boot has
+        // nothing to bump yet.
+        await seedMembership(result.tenantId, result.nodeId);
 
         // Seal the AEAT cert AFTER provision mints the tenant (the vault row is FK-restricted to it)
         // and BEFORE the trading config is persisted.
