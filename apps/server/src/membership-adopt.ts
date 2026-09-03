@@ -8,7 +8,7 @@ import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from 
 
 /**
  * Local adoption of a gossiped membership document (design §5). Wired to the pull worker's
- * `adoptMembership` callback (boot.ts, a later task): every /sync-api/hello handshake hands the
+ * `adoptMembership` callback in boot.ts: every /sync-api/hello handshake hands the
  * peer's advertised document here. Runs the Slice-1 two-part accept fence (authentic via the trust
  * set + strictly newer than the held term) and, only on accept, persists it. Returns the
  * `AcceptResult` so the caller can log an adoption; a rejection is the normal, quiet case (an
