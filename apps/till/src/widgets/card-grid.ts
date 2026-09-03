@@ -113,8 +113,12 @@ export class TillCardGrid extends LitElement {
    * the two capability-bearing OPERATIONS via `assertDeviceCapability`
    * (`apps/server/src/device-session.ts:359`): the integrated-card payment for the "pay" action
    * (`apps/server/src/till-api.ts:849`) and the cash-drawer open for "drawer_open"
-   * (`apps/server/src/till-api.ts:1294`). So a card shown through a bug or a stale profile still cannot
-   * perform a fenced operation — those two endpoints fail CLOSED regardless of what the grid rendered.
+   * (`apps/server/src/till-api.ts:1294`). So a card that leads to ONE OF THOSE TWO operations, if shown
+   * through a bug or a stale profile, still cannot perform it — those two endpoints fail CLOSED
+   * regardless of what the grid rendered. The third capability, `act-as-kds` (the only one this gate
+   * actually consults, since tender-pay short-circuits above), has no live server enforcement in B2.1
+   * (comment-only at `apps/server/src/device-api.ts:256`); its one card, `kds-board`, renders `nothing`
+   * here and is wrapped in B2.2, so no reachable card relies on the advisory gate alone today.
    */
   #capable(card: CardInstance): boolean {
     if (card.type === "tender-pay") return true; // cash path — never gated absent
