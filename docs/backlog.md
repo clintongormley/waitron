@@ -121,18 +121,31 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — SPECCED 2026-09-03; B1 planning next.** The HA-Sections editor UI
+- **SP-B — grid editor + rendering — B1 LANDED #204 (2026-09-03); B2 next.** The HA-Sections editor UI
   plus making screens render from grid profiles (wrap the bespoke floor/KDS/table-order screens as
   cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
-  [sp-b-grid-editor-and-rendering](superpowers/specs/2026-09-03-sp-b-grid-editor-and-rendering-design.md).
+  [sp-b-grid-editor-and-rendering](superpowers/specs/2026-09-03-sp-b-grid-editor-and-rendering-design.md);
+  B1 plan: [sp-b1-grid-renderer-and-counter](superpowers/plans/2026-09-03-sp-b1-grid-renderer-and-counter.md).
   Decisions (brainstorm 2026-09-03): **rendering-first slicing** — **B1** grid renderer + counter
   renders from profile · **B2** wrap the four bespoke screens as full-span cards + tabs/drill-in nav ·
   **B3** dashboard grid editor (placeholder tiles *for v1*; live renders a committed follow-on) + API
   client + reassign-profile route · **B4** drop old widget model + rehome receipt into a new
   `tenant_receipts` table. **Fluid width only** (no column reflow; orientation = form-factor).
-  Not H2, but must preserve the sale path. Correction to parent §12: the counter is **not** already
-  grid-driven (still the old region model) — it is B1 work.
+  Not H2, but must preserve the sale path.
+  - **B1 LANDED #204:** `GET /api/till` resolves a `ProfileDef` for every enrolled device (explicit →
+    else form-factor default via `deviceFormFactor`; cookieless unchanged); till-local `ProfileDef`
+    mirror + `till-card-grid` fluid renderer; the counter renders from its profile `counter` tab with
+    the region model kept as a fallback (removed in B4); `till-app` boots the counter into its profile.
+    Owner call: the default counter drops the prep-queue rail (SP-A's `DEFAULT_PROFILES.till` has no
+    prep-queue card) — **shipped as-is**; revisit default-profile content separately if wanted.
+  - **B2 follow-ups carried from B1 review (fold into the SP-B2 spec):** (a) capability→absent +
+    permission→locked card gating (first real cases are big cards); (b) an app-level sale test driven
+    through the grid path (B1 covers it via the region-model sale test + the card-grid composed-event
+    bubble test); (c) reconcile the boot `profile.capabilities` list with server-enforced capabilities
+    for a default-fallback device (server fencing is already the safe direction); (d) `visibleWhen`
+    fails **closed** for a card type with no state mapping — fine now, an awareness note when B2 adds
+    gated card types.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
