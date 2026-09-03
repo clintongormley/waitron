@@ -188,20 +188,15 @@ export class TillCardGrid extends LitElement {
       // and the screen renders only its body. `.canExitToCounter=${false}` keeps a stray back-to-counter
       // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
       // manager's table-layout-editor card — the latter with `canEdit` (the permission LOCK is a later task).
+      // `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
+      // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it. The
+      // read-only floor-plan card mounts the SAME screen without edit; the two arms differ only by
+      // `canEdit` (the permission LOCK is a later task).
       case "floor-plan":
-        return html`<till-floor-screen
-          embedded
-          .zones=${this.zones}
-          .tables=${this.tables}
-          .api=${this.api}
-          .canExitToCounter=${false}
-        ></till-floor-screen>`;
       case "table-layout-editor":
-        // `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
-        // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it.
         return html`<till-floor-screen
           embedded
-          .canEdit=${true}
+          .canEdit=${card.type === "table-layout-editor"}
           .zones=${this.zones}
           .tables=${this.tables}
           .api=${this.api}

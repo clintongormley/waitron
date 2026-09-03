@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
@@ -212,6 +212,16 @@ export class TillApp extends LitElement {
    * churn a fresh closure per render. Threaded to `till-tab-shell.loadLocales`; the chooser calls it
    * lazily when opened, and its `locale-selected` bubbles to the app handler already wired below. */
   readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+
+  /**
+   * The shell's AFFORDANCE list (SP-B2.1), memoised into a stable field so `<till-tab-shell>`'s
+   * `.affordances` property does not see a fresh array on every unrelated `render()` (which would
+   * re-render the shell needlessly) — the same reason {@link #loadLocales} is a stable field. The list
+   * depends ONLY on {@link profile}, so it is recomputed exactly when that changes ({@link willUpdate})
+   * via {@link #affordances}. Defaults `[]` (the value read before a profile boots, never by the shell —
+   * the shell only renders once a profile is present).
+   */
+  #affordanceList: ShellAffordance[] = [];
 
   /**
    * The venue's DERIVED default UI locale (per-user-language-preference), read from `GET /api/till`
@@ -541,6 +551,13 @@ export class TillApp extends LitElement {
 
   override firstUpdated(): void {
     void this.#boot();
+  }
+
+  /** Recompute the memoised {@link #affordanceList} when — and only when — {@link profile} changes (it
+   * is the list's sole input), so the stable field stays current without allocating a fresh array on
+   * every render. Runs before `render()` in the same update cycle, so the field is fresh when read. */
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("profile")) this.#affordanceList = this.#affordances();
   }
 
   /**
@@ -1489,7 +1506,11 @@ export class TillApp extends LitElement {
 
   /** Whether a tab's cards need the floor read-model (`.tables`/`.zones`/`.statuses`) — a `floor-plan`
    * or `table-layout-editor` card, both rendered by `<till-floor-screen>` inside the card grid. Drives
-   * the shell's tab-select and boot floor prefetch (SP-B2.1 Finding 1). */
+   * the shell's tab-select and boot floor prefetch (SP-B2.1 Finding 1).
+   *
+   * Only these two card types qualify because floor is the only card whose grid mount needs app-loaded
+   * props before it can render; station/expo self-fetch via `.api`, and table-order loads on the
+   * open-table drill push. */
   #tabNeedsFloorData(tab: TabDef): boolean {
     return tab.cards.some(
       (card) => card.type === "floor-plan" || card.type === "table-layout-editor",
@@ -1501,16 +1522,22 @@ export class TillApp extends LitElement {
    *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
    *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3);
    *  - the active tab switches;
-   *  - a tab whose cards need the floor read-model triggers the same load `#onShowFloor` does
-   *    ({@link #loadFloorData}) — reaching the Floor tab via the tab bar (not the legacy `show-floor`
-   *    event) would otherwise leave it empty (Finding 1).
+   *  - a tab whose cards need the floor read-model loads it — the FIRST visit does the full three-endpoint
+   *    load `#onShowFloor` does ({@link #loadFloorData}), since reaching the Floor tab via the tab bar (not
+   *    the legacy `show-floor` event) would otherwise leave it empty (Finding 1); a REPEAT visit reloads
+   *    only the live table occupancy ({@link #refreshFloor}), because zones + statuses are static within a
+   *    session (exactly the reasoning {@link #refreshFloor} applies after a placement edit), so re-fetching
+   *    them is pure waste. `this.zones.length > 0` is the "already loaded once" signal.
    * Only ever called from the shell surface ({@link #inShell} is true whenever the shell renders).
    */
   #onTabSelect(key: string): void {
     if (this.drill !== undefined) this.#popDrill();
     this.activeTabKey = key;
     const tab = this.profile?.tabs.find((candidate) => candidate.key === key);
-    if (tab !== undefined && this.#tabNeedsFloorData(tab)) void this.#loadFloorData();
+    if (tab !== undefined && this.#tabNeedsFloorData(tab)) {
+      if (this.zones.length > 0) void this.#refreshFloor();
+      else void this.#loadFloorData();
+    }
   }
 
   /**
@@ -2052,6 +2079,9 @@ export class TillApp extends LitElement {
    * authored AS a tab drops out of this list (it is reachable as a tab instead). The buttons emit
    * `show-station`/`show-expo`/`show-schedule`, which bubble to the existing app handlers; rerouting
    * them to in-shell drill-ins is Task 8, so today they set legacy screen state the shell ignores.
+   *
+   * The COMPUTE helper for the memoised {@link #affordanceList} field — called only from
+   * {@link willUpdate} when {@link profile} changes, never per render.
    */
   #affordances(): ShellAffordance[] {
     const tabKeys = new Set(this.profile?.tabs.map((tab) => tab.key) ?? []);
@@ -2118,6 +2148,14 @@ export class TillApp extends LitElement {
    * mirrors how {@link TillCounterScreen} feeds its LOCAL overlay — the FULL product set + the operator/
    * invoice locales — the shell just owns the button now.
    */
+  /** The shell's active-tab body (SP-B2.1) — {@link #tabBody} of the {@link #activeTab}, or `nothing`
+   * when no tab resolves (a profile with no tabs). Extracted from `render` so the shell subtree reads
+   * as one call rather than an inline IIFE. */
+  #activeTabBody(): TemplateResult | typeof nothing {
+    const tab = this.#activeTab();
+    return tab !== undefined ? this.#tabBody(tab) : nothing;
+  }
+
   #drillBody(): TemplateResult | typeof nothing {
     switch (this.drill?.kind) {
       case "table-order":
@@ -2259,23 +2297,20 @@ export class TillApp extends LitElement {
                 // Both arms are keyed on the active locale: a locale switch changes the key, so Lit DISCARDS
                 // and rebuilds the subtree, repainting every child in the new language (the screens/shell hold
                 // no LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
-                this.profile !== undefined && this.#shellActive()
+                this.#inShell()
                 ? keyed(
                     currentLocale(),
                     html`<till-tab-shell
-                      .tabs=${this.profile.tabs}
+                      .tabs=${this.profile?.tabs ?? []}
                       .activeTabKey=${this.activeTabKey}
                       .operatorName=${this.operatorName}
-                      .affordances=${this.#affordances()}
+                      .affordances=${this.#affordanceList}
                       .loadLocales=${this.#loadLocales}
                       @tab-select=${(e: CustomEvent<{ key: string }>) => {
                         this.#onTabSelect(e.detail.key);
                       }}
                     >
-                      ${(() => {
-                        const tab = this.#activeTab();
-                        return tab ? this.#tabBody(tab) : nothing;
-                      })()}
+                      ${this.#activeTabBody()}
                       ${this.#drillBody() /* Task 8 fills the drill overlay */}
                     </till-tab-shell>`,
                   )
