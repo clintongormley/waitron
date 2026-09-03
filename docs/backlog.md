@@ -307,9 +307,9 @@ vs gated on an unbuilt foundation or an external dependency:
 - **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
   pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
-  the two follow-ups under *Onboarding*). With those landed and **membership Slice 1 shipped (#197)**, the
-  next ready-to-build code slice is **membership Slice 2 (the `node_membership` storage singleton)** — see
-  the membership row below; reserved-SIF remains foundation-gated.
+  the two follow-ups under *Onboarding*). With Slice 1 (#197) and **Slice 2 (storage) shipped (#198)**,
+  the next ready-to-build code slice is **membership Slice 3 (distribution over `/sync-api/hello` + local
+  adoption)** — see the membership row below; reserved-SIF remains foundation-gated.
 - **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
   2026-09-02, owner-review still pending). Spec:
   [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
@@ -319,15 +319,27 @@ vs gated on an unbuilt foundation or an external dependency:
   serialization, Ed25519 sign/verify, endorsement-chain trust rooted at setup, `verifyMembershipDocument`
   (strict-shape — a verified document IS exactly its signed content, spec §3), `acceptMembershipDocument`
   (the authentic + strictly-newer fence; demote-never-promote). `MAX_ENDORSEMENTS`/`MAX_NODES` = 8.
-  **Slices remaining, each its own plan:** (2) **storage** — the `node_membership` singleton + accessors
-  [ready-to-build NEXT]; (3) **distribution** over `/sync-api/hello` + local adoption; (4) **setup/adopt**
+  **Slice 2 (storage) LANDED #198** (plan:
+  [membership-slice-2-storage](superpowers/plans/2026-09-03-membership-slice-2-storage.md)): the
+  `node_membership` whole-DB singleton (`id=1`, `term bigint`, `document jsonb`, `updated_at` — no
+  `tenant_id`/RLS, mirrors `mirror_config`; migration `0096_node_membership.sql`, renumbered from 0088 on
+  rebase over #199's 0088–0095) + `readNodeMembership`/`writeNodeMembership` accessors on `@waitron/db`
+  (type-only dep on `@waitron/membership`). Owner decisions: `GRANT SELECT` to `app_user` only, owner-role
+  writes; plain-upsert dumb setter (accept fence stays in `@waitron/membership`); `term` reconciled by
+  deriving the column from `document.body.term` on write. **Slices remaining, each its own plan:**
+  (3) **distribution** over `/sync-api/hello` + local adoption **[ready-to-build NEXT]**; (4) **setup/adopt**
   key endorsement into the trust set; (5) **promotion integration** (`promote` mints the next document);
   (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
+  **Follow-ups recorded from #198 (carry into Slice 3):** the **`app_user` INSERT/UPDATE write grant on
+  `node_membership` was deliberately deferred** — Slice 2 grants SELECT only (owner-role writes), so the
+  Slice-3 runtime-adoption writer (a node persisting a gossiped newer document on the app pool) must add
+  that grant in its own migration when its role is known. The `document` column is `jsonb` (driver parses
+  on read, Drizzle serialises on write; the simplify pass switched it from `text`). The `term` `number`↔`bigint`
+  reconciliation (#197 follow-up) is resolved in `writeNodeMembership`.
   **Follow-ups recorded from #197:** two efficiency micro-opts were consciously skipped in
   `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
-  `MAX_ENDORSEMENTS`, revisit only if the cap grows; `term` is a JS `number` in Slice 1 but the Slice-2
-  `node_membership` storage boundary is `bigint` — reconcile there; the break-glass-rooted (option B)
+  `MAX_ENDORSEMENTS`, revisit only if the cap grows; the break-glass-rooted (option B)
   signing hardening stays deferred with break-glass.
 - **Foundation-first, then its dependents (fiscal-adjacent, owner-gated):** **reserved-SIF staging**
   mints the installation number + disjoint series → unblocks promote **Slice 3**, the C2a promote
