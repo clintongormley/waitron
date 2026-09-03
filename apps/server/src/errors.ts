@@ -1125,6 +1125,43 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
+     * A pairing code for a SALE-CAPABLE kind (`till` or `handheld`, {@link kindRequiresTill}) was minted
+     * with NO `till_id`, OR a `kds_station` code was minted WITH one. The `tills` row a sale-capable
+     * device rings against is the fiscal register-snapshot a later task stamps at sale time (SP-A.2
+     * §16.4), so a `till`/`handheld` MUST name one and a `kds_station` (which rings no sale) must name
+     * NONE. A VALIDATION failure on the mint, checked BEFORE any write, the exact twin of the per-kind
+     * station gate `device.station_required` (a required binding missing, or a forbidden one present).
+     *
+     * NO params: the fault names the PROBLEM, not a value — the missing/forbidden till id carries
+     * nothing non-secret worth echoing, the same no-param shape `device.station_required` uses. Grep
+     * `"device.` in this file for the family: `station_required` / `pairing_invalid` /
+     * `pairing_expired` / `pairing_rate_limited` / `pairing_code_unavailable` / `unauthorized` are the
+     * param-less device siblings, while `forbidden_station` / `not_found` echo an id — this one takes
+     * after the former. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
+     * map (a request that named the wrong bindings for the kind), not here — the route owns the status.
+     * Never renamed once shipped.
+     */
+    "device.till_required": Record<string, never>;
+    /**
+     * A pairing code named a binding id — a `till_id`, `receipt_printer_id` or `layout_profile_id` —
+     * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
+     * composite FK rejects too). Surfaced by translating the `23503` the composite FK raises at the
+     * `device_pairing_codes` INSERT, keyed on the CONSTRAINT NAME (`device_pairing_codes_till_fk` /
+     * `device_pairing_codes_receipt_printer_fk` / `device_pairing_codes_layout_profile_fk`, migration
+     * 0095) — the `isZoneFkViolation` idiom (`tables.ts`). A NULL binding (MATCH SIMPLE skips its FK)
+     * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
+     *
+     * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
+     * `"receiptPrinterId"`, `"layoutProfileId"` — and NEVER the offending id value: a request-shape
+     * fault names the field, not the value, the same no-leak, echo-the-name discipline
+     * `management.request_invalid` and `setup.request_invalid` follow (grep `{ field: string }` in this
+     * file for that family). `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing
+     * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local
+     * STATUS map (a request naming a binding that does not exist), not here. Never renamed once shipped.
+     */
+    "device.binding_invalid": { field: "tillId" | "receiptPrinterId" | "layoutProfileId" };
+    /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
      * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no

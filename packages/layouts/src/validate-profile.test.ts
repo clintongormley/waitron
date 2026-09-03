@@ -59,10 +59,26 @@ describe("validateProfile — structure", () => {
     expect(validateProfile(noCaps).capabilities).toEqual([]);
   });
   it("rejects capabilities that are not an array", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: "act-as-kds" }))).toBe("not_object");
+    expect(reason(() => validateProfile({ ...ok, capabilities: "act-as-kds" }))).toBe(
+      "bad_capabilities",
+    );
   });
   it("rejects an unknown capability flag", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: ["fly"] }))).toBe("not_object");
+    expect(reason(() => validateProfile({ ...ok, capabilities: ["fly"] }))).toBe(
+      "bad_capabilities",
+    );
+  });
+  it("rejects a non-array capabilities with bad_capabilities", () => {
+    expect(() => validateProfile({ formFactor: "till", capabilities: "x", tabs: [] })).toThrowError(
+      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+    );
+  });
+  it("rejects an unknown capability flag with bad_capabilities", () => {
+    expect(() =>
+      validateProfile({ formFactor: "till", capabilities: ["nope"], tabs: [] }),
+    ).toThrowError(
+      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+    );
   });
   it("rejects empty tabs", () => {
     expect(reason(() => validateProfile({ ...ok, tabs: [] }))).toBe("no_tabs");
@@ -307,6 +323,26 @@ describe("validateProfile — cards", () => {
     expect(p.tabs[0].cards[0].visibleWhen).toEqual(["unread"]);
     expect(p.tabs[0].cards[0].visibleWhen).not.toBe(input);
   });
+  it("does not alias the input card config", () => {
+    // kds (non-selling) so a single product-grid card is enough — a till would throw missing_required
+    // before returning, never reaching the aliasing assertion (assertSaleCritical fires only for till).
+    const input = {
+      formFactor: "kds",
+      capabilities: [],
+      tabs: [
+        {
+          key: "t",
+          title: "T",
+          columns: 12,
+          cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } }],
+        },
+      ],
+    };
+    const out = validateProfile(input);
+    expect(out.tabs[0].cards[0].config).not.toBe(input.tabs[0].cards[0].config);
+    (input.tabs[0].cards[0].config as Record<string, unknown>).columns = 999;
+    expect(out.tabs[0].cards[0].config.columns).toBe(4);
+  });
 });
 
 describe("validateProfile — sale-critical", () => {
@@ -369,5 +405,39 @@ describe("validateProfile — sale-critical", () => {
       ],
     });
     expect(p.formFactor).toBe("kds");
+  });
+});
+
+describe("validateProfile — theme", () => {
+  it("round-trips a valid theme override", () => {
+    const theme = { tokens: { "--wt-color-primary": "#123456" } };
+    const out = validateProfile({
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+      theme,
+    });
+    expect(out.theme).toEqual(theme);
+    expect(out.theme).not.toBe(theme); // validated copy, not the input alias
+  });
+  it("omits theme when absent", () => {
+    const out = validateProfile({
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+    });
+    expect("theme" in out).toBe(false);
+  });
+  it("surfaces an invalid theme as theme.invalid", () => {
+    expect(() =>
+      validateProfile({
+        formFactor: "phone-portrait",
+        capabilities: [],
+        tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
+        theme: { tokens: { "--evil": "x" } },
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "theme.invalid", params: { reason: "unknown_token" } }),
+    );
   });
 });

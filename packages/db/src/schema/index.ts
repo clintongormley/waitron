@@ -24,6 +24,8 @@ export * from "./location-catalogues.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";
 export * from "./layouts.js";
+export * from "./layout-profiles.js";
+export * from "./tenant-themes.js";
 export * from "./table-service-statuses.js";
 export * from "./working-order-counters.js";
 export * from "./sales.js";

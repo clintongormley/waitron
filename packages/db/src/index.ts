@@ -51,6 +51,8 @@ export {
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
 export { tillLayouts } from "./schema/layouts.js";
+export { layoutProfiles } from "./schema/layout-profiles.js";
+export { tenantThemes } from "./schema/tenant-themes.js";
 export { tableServiceStatuses } from "./schema/table-service-statuses.js";
 export { bookingStatus, bookings } from "./schema/bookings.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
@@ -86,7 +88,12 @@ export type { MirrorConnection } from "./mirror-config.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";
-export { isPgError, isUniqueViolation, uniqueViolationConstraint } from "./unique-violation.js";
+export {
+  isPgError,
+  isUniqueViolation,
+  pgErrorConstraint,
+  uniqueViolationConstraint,
+} from "./unique-violation.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**

@@ -7,13 +7,14 @@ import type { ThemeOverride } from "./profile.js";
  * touch chrome tokens, never an arbitrary CSS custom property, so it can never smuggle a property the
  * design system does not expose.
  *
- * PROVISIONAL SET. Every name here is a REAL token verified against the design-system registry
- * (`packages/ui/src/tokens/{colors,structure}.css`) on 2026-09-02 — nothing renders these in SP-A.1,
- * so the DEFINITIVE themeable subset (and a cross-package consistency test sourcing it from that
- * registry) is finalised in the theme-editor slice, where the owner decides which tokens are exposed.
- * Do NOT hand-add a name without confirming it exists in that registry — an earlier draft allowlisted
- * four tokens that never existed (`--wt-color-primary-text`, `--wt-color-surface-text`,
- * `--wt-color-accent`, bare `--wt-radius`), gating against phantoms.
+ * PROVISIONAL SET. Every name here is a REAL token from the design-system registry
+ * (`packages/ui/src/tokens/{colors,structure}.css`) — `theme-registry.test.ts` proves it every run,
+ * failing on any name that is not declared there, so this allowlist can never drift onto a phantom
+ * (an earlier draft allowlisted four tokens that never existed — `--wt-color-primary-text`,
+ * `--wt-color-surface-text`, `--wt-color-accent`, bare `--wt-radius`). Nothing renders these in
+ * SP-A.1, so the DEFINITIVE themeable subset is finalised in the theme-editor slice, where the owner
+ * decides which tokens are exposed. Do NOT hand-add a name without confirming it exists in that
+ * registry — the guard will reject it.
  */
 export const THEMEABLE_TOKENS: readonly string[] = [
   "--wt-color-primary",

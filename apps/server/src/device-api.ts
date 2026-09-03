@@ -72,7 +72,11 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `device.pairing_code_unavailable` (a mint whose digest collided with an outstanding code's, 409 —
  *    `generatePairingCode` maps the `device_pairing_codes_lookup_idx` 23505 rather than surfacing a raw
  *    500), `device.station_required` (minting a station-binding code with NO station, a validation
- *    failure, 400), `device.not_found` (the manager-facing revoke of an absent device id, 404) and
+ *    failure, 400), `device.till_required` (a sale-capable `till`/`handheld` code minted with no
+ *    `till_id`, or a `kds_station` code minted WITH one — the per-kind till gate, 400),
+ *    `device.binding_invalid` (a code naming a till/printer/profile id that is not this tenant's — the
+ *    composite-FK 23503 translated by constraint name, 400), `device.not_found` (the manager-facing
+ *    revoke of an absent device id, 404) and
  *    `station.not_found` (minting a code against an unknown/foreign/retired station that WAS supplied,
  *    404, via `requireLiveStation`).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
@@ -90,6 +94,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.pairing_rate_limited": 429,
   "device.pairing_code_unavailable": 409,
   "device.station_required": 400,
+  // The sale-capable-kind till gate and the binding-FK translation, both request-shape faults naming
+  // the problem/field (never a value) — 400, the `device.station_required`/`management.request_invalid`
+  // shape. `device.binding_invalid` is a 400 (a request that named a nonexistent binding), NOT the 404
+  // `station.not_found` takes for a supplied-but-unknown station: it names the FIELD, not the id, so it
+  // reads as a malformed request rather than a lookup miss.
+  "device.till_required": 400,
+  "device.binding_invalid": 400,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -187,7 +198,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
-      return c.json({ deviceId: device.deviceId, kind: device.kind, stationId: device.stationId });
+      // Echo the binding verbatim, incl. the SP-A.2 §16 profile/till/hardware fields so the client can
+      // (SP-B) boot into its assigned profile + hardware. All non-secret config — the reader's
+      // credentials stay in the vault and never ride this response.
+      return c.json({
+        deviceId: device.deviceId,
+        kind: device.kind,
+        stationId: device.stationId,
+        tillId: device.tillId,
+        layoutProfileId: device.layoutProfileId,
+        receiptPrinterId: device.receiptPrinterId,
+        hasCashDrawer: device.hasCashDrawer,
+        cardProvider: device.cardProvider,
+        cardReaderId: device.cardReaderId,
+      });
     }),
   );
 
@@ -214,6 +238,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
+  // Capability note (SP-A.2 §16, Task 14): the `act-as-kds` capability flag is DECLARED on the kds
+  // default profile, but route-level enforcement here is deliberately DEFERRED. Existing `kds_station`
+  // devices carry `layoutProfileId = null`, so an `assertDeviceCapability(deps, c, "act-as-kds", …)`
+  // would refuse them (a device with no profile declares no capabilities) — a regression on the bump
+  // path. This route is already `requireDevice` + station-ownership gated (only a `kds_station` device
+  // bound to the station reaches it), so the flag adds no protection here today; wiring it awaits KDS
+  // devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg }, c);
@@ -252,7 +283,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
       // 500) and flows to the field screens below → a clean `management.request_invalid` 400.
-      const body = await readJsonBody<{ kind?: unknown; stationId?: unknown; label?: unknown }>(c);
+      const body = await readJsonBody<{
+        kind?: unknown;
+        stationId?: unknown;
+        tillId?: unknown;
+        layoutProfileId?: unknown;
+        receiptPrinterId?: unknown;
+        hasCashDrawer?: unknown;
+        cardProvider?: unknown;
+        cardReaderId?: unknown;
+        label?: unknown;
+      }>(c);
       // `requireEnum` narrows `kind` to the `device_kind` pgEnum union (= `DeviceKind`) off
       // `deviceKind.enumValues`, so a future additive kind is accepted the moment the enum widens;
       // `requireBodyUuid` screens `stationId` to a UUID SHAPE (a non-uuid would `22P02` in
@@ -265,9 +306,52 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const stationId = kindRequiresStation(kind)
         ? requireBodyUuid(body.stationId, "stationId")
         : null;
+      // The profile/till/hardware BINDINGS (SP-A.2 §16). Screened for SHAPE only when present, then
+      // passed through — the per-kind `till_id` gate (till/handheld require one, kds_station forbids it)
+      // lives in `generatePairingCode` and throws `device.till_required`, so the route must NOT enforce
+      // `tillId` presence here: an omitted binding is `null`, not a request error, and a `kds_station`
+      // (no till) and a `till` (a till) both reach the verb. A non-uuid binding would `22P02` at the
+      // bare-uuid column, so `optionalBindingUuid` screens the SHAPE of a present value to
+      // `management.request_invalid` naming the field, while an absent/`null` one yields `null` (NOT
+      // `requireNullableBodyUuid`, which rejects an omitted field). An id that is well-formed but names
+      // no row of the tenant is caught by the composite FK → `device.binding_invalid`, in the verb.
+      const optionalBindingUuid = (v: unknown, field: string): string | null =>
+        v === undefined || v === null ? null : requireBodyUuid(v, field);
+      // The string sibling of `optionalBindingUuid`: an absent/`null` value yields `fallback`, a
+      // present one is screened to a string (`management.request_invalid` naming the field otherwise).
+      const optionalBindingString = <F extends string | null>(
+        v: unknown,
+        field: string,
+        fallback: F,
+      ): string | F => (v === undefined || v === null ? fallback : requireString(v, field));
+      const tillId = optionalBindingUuid(body.tillId, "tillId");
+      const layoutProfileId = optionalBindingUuid(body.layoutProfileId, "layoutProfileId");
+      const receiptPrinterId = optionalBindingUuid(body.receiptPrinterId, "receiptPrinterId");
+      const cardReaderId = optionalBindingString(body.cardReaderId, "cardReaderId", null);
+      // `card_provider` defaults to `'none'` (no integrated card) and `has_cash_drawer` to false; a
+      // present value is screened to its type, else `management.request_invalid` naming the field.
+      const cardProvider = optionalBindingString(body.cardProvider, "cardProvider", "none");
+      if (
+        body.hasCashDrawer !== undefined &&
+        body.hasCashDrawer !== null &&
+        typeof body.hasCashDrawer !== "boolean"
+      ) {
+        throw new AppError("management.request_invalid", { field: "hasCashDrawer" });
+      }
+      const hasCashDrawer = body.hasCashDrawer === true;
       const label = requireString(body.label, "label");
       const result = await gated(sessionId, (tx) =>
-        generatePairingCode(tx, deps.cfg, { kind, stationId, label }),
+        generatePairingCode(tx, deps.cfg, {
+          kind,
+          stationId,
+          tillId,
+          layoutProfileId,
+          receiptPrinterId,
+          hasCashDrawer,
+          cardProvider,
+          cardReaderId,
+          label,
+        }),
       );
       return c.json(result, 201);
     }),

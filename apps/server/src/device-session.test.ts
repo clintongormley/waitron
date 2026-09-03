@@ -7,6 +7,7 @@ import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { DEFAULT_PROFILES } from "@waitron/layouts";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -16,8 +17,10 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
+import type { CapabilityFlag } from "@waitron/layouts";
 import {
   DEVICE_COOKIE,
+  assertDeviceCapability,
   assertNotHandheld,
   clearDeviceCookie,
   readDeviceCookie,
@@ -91,6 +94,54 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId };
 }
 
+/** The profile/till/hardware bindings a device enrolled with NONE assigned surfaces — every binding is
+ * the column default. A `kds_station` (like `enrolDeviceFixture`'s) binds no till, no profile and no
+ * hardware, so `tryReadDevice` carries these back verbatim. Spread into the expected binding so the new
+ * SP-A.2 fields are pinned alongside the pre-existing `deviceId`/`kind`/`stationId`. */
+const NO_BINDINGS = {
+  tillId: null,
+  layoutProfileId: null,
+  receiptPrinterId: null,
+  hasCashDrawer: false,
+  cardProvider: "none",
+  cardReaderId: null,
+} as const;
+
+/** Enrol a REAL `till` device carrying a NON-NULL profile + hardware binding (SP-A.2 §16) — a layout
+ * profile the manager authored, the seeded till, a cash drawer, and an integrated card reader. Proves
+ * `tryReadDevice` carries every new binding column back off the row, not just the null defaults. The
+ * profile row is inserted on the admin connection (RLS bypassed) — pure setup, the `setupStation` shape;
+ * `receiptPrinterId` is left null so the fixture needs no `printers` row (the composite FK skips a NULL). */
+async function enrolTillDeviceFixture(): Promise<{
+  cfg: TillConfig;
+  deviceId: string;
+  token: string;
+  layoutProfileId: string;
+}> {
+  const { cfg } = await setupStation();
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+    returning id`);
+  const layoutProfileId = prof.rows[0]!.id;
+  const { code } = await asApp(suite.admin, cfg, (tx) =>
+    // A `till` is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It also
+    // carries the assigned profile + the hardware trio (cash drawer + integrated card reader).
+    generatePairingCode(tx, cfg, {
+      kind: "till",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      hasCashDrawer: true,
+      cardProvider: "stripe_terminal",
+      cardReaderId: "reader_ABC",
+      label: "Counter till",
+    }),
+  );
+  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  return { cfg, deviceId: dev.deviceId, token: dev.token, layoutProfileId };
+}
+
 /** Flip `active = false` on the superuser connection — the revocation a `device.manage` route performs.
  * Run as the admin (RLS bypassed) for pure test setup, the `device.test.ts` `expirePairingCodes` shape. */
 async function revoke(deviceId: string): Promise<void> {
@@ -106,9 +157,7 @@ async function lastSeenAt(deviceId: string): Promise<string | null> {
   return rows[0]!.last_seen_at;
 }
 
-type ProbeResult =
-  | { ok: true; binding: { deviceId: string; kind: string; stationId: string | null } }
-  | { ok: false; code: string };
+type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: string };
 
 /**
  * The shared one-route scaffold every guard probe runs behind (the `management-session.test.ts`
@@ -144,10 +193,7 @@ async function probe(cfg: TillConfig, cookieValue: string | null): Promise<Probe
     c.json(await requireDevice(deps, c)),
   );
   if (res.status === 200) {
-    return {
-      ok: true,
-      binding: (await res.json()) as { deviceId: string; kind: string; stationId: string | null },
-    };
+    return { ok: true, binding: (await res.json()) as DeviceBinding };
   }
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
@@ -162,7 +208,13 @@ async function enrolHandheldFixture(): Promise<{
 }> {
   const { cfg } = await setupStation();
   const { code } = await asApp(suite.admin, cfg, (tx) =>
-    generatePairingCode(tx, cfg, { kind: "handheld", stationId: null, label: "Waiter phone" }),
+    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till.
+    generatePairingCode(tx, cfg, {
+      kind: "handheld",
+      stationId: null,
+      tillId: cfg.tillId,
+      label: "Waiter phone",
+    }),
   );
   const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
   return { cfg, deviceId: dev.deviceId, token: dev.token };
@@ -194,6 +246,57 @@ async function probeAssert(
   });
   if (res.status === 204) return { ok: true };
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
+}
+
+/** Enrol a REAL handheld carrying an ASSIGNED profile whose capabilities are `[]` (the phone-portrait
+ * default) — the generalised stand-in for the old hardcoded handheld: a device that reaches a fenced
+ * route but whose profile declares NEITHER `integrated-card-payment` NOR `open-cash-drawer`, so the
+ * capability firewall refuses it exactly as `assertNotHandheld` refused it by kind. The profile row is
+ * inserted on the admin connection (RLS bypassed) — pure setup, the `enrolTillDeviceFixture` shape. */
+async function enrolHandheldWithProfileFixture(): Promise<{
+  cfg: TillConfig;
+  deviceId: string;
+  token: string;
+}> {
+  const { cfg } = await setupStation();
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into layout_profiles (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_PROFILES["phone-portrait"])}::jsonb)
+    returning id`);
+  const layoutProfileId = prof.rows[0]!.id;
+  const { code } = await asApp(suite.admin, cfg, (tx) =>
+    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It carries
+    // the phone-portrait profile, whose `capabilities: []` grant neither fenced flag.
+    generatePairingCode(tx, cfg, {
+      kind: "handheld",
+      stationId: null,
+      tillId: cfg.tillId,
+      layoutProfileId,
+      label: "Waiter phone",
+    }),
+  );
+  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  return { cfg, deviceId: dev.deviceId, token: dev.token };
+}
+
+/** Run `assertDeviceCapability` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no
+ * throw), or the thrown code + params when it refuses. */
+async function probeCapability(
+  cfg: TillConfig,
+  cookieValue: string | null,
+  capability: CapabilityFlag,
+  action: string,
+): Promise<{ ok: true } | { ok: false; code: string; params: unknown }> {
+  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
+    await assertDeviceCapability(deps, c, capability, action);
+    return c.body(null, 204);
+  });
+  if (res.status === 204) return { ok: true };
+  return {
+    ok: false,
+    code: isAppError(thrown) ? thrown.code : String(thrown),
+    params: isAppError(thrown) ? thrown.params : undefined,
+  };
 }
 
 const COOKIE_VALUE = "11111111-1111-4111-8111-111111111111.token_ABC-123";
@@ -260,9 +363,32 @@ describe("requireDevice (real Postgres)", () => {
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(cfg, `${deviceId}.${token}`);
-    expect(result).toEqual({ ok: true, binding: { deviceId, kind: "kds_station", stationId } });
+    expect(result).toEqual({
+      ok: true,
+      binding: { deviceId, kind: "kds_station", stationId, ...NO_BINDINGS },
+    });
 
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
+  });
+
+  it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16)", async () => {
+    const { cfg, deviceId, token, layoutProfileId } = await enrolTillDeviceFixture();
+    // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
+    // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo.
+    expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
+      ok: true,
+      binding: {
+        deviceId,
+        kind: "till",
+        stationId: null,
+        tillId: cfg.tillId,
+        layoutProfileId,
+        receiptPrinterId: null,
+        hasCashDrawer: true,
+        cardProvider: "stripe_terminal",
+        cardReaderId: "reader_ABC",
+      },
+    });
   });
 
   it("rejects a WRONG token with device.unauthorized and does not touch last_seen_at", async () => {
@@ -313,6 +439,7 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
       deviceId,
       kind: "kds_station",
       stationId,
+      ...NO_BINDINGS,
     });
     // Every point where `requireDevice` throws `device.unauthorized`, the core returns `null`: no dot,
     // empty, empty selector, empty token, non-uuid selector, unknown id, wrong token.
@@ -348,5 +475,66 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
     // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
     // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
     expect(await probeAssert(cfg, "not-a-uuid.sometoken")).toEqual({ ok: true });
+  });
+});
+
+describe("assertDeviceCapability (real Postgres)", () => {
+  it("refuses a device whose assigned profile LACKS the capability, naming the action", async () => {
+    // The phone-portrait profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
+    // deletion: drop the `!capabilities.includes(...)` check in `assertDeviceCapability` and these pass.
+    const { cfg, deviceId, token } = await enrolHandheldWithProfileFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "drawer_open" } });
+  });
+
+  it("passes a device whose assigned profile HAS the capability", async () => {
+    // The `till` fixture's profile is `DEFAULT_PROFILES.till`, which declares BOTH flags.
+    const { cfg, deviceId, token } = await enrolTillDeviceFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: true });
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+    ).toEqual({ ok: true });
+  });
+
+  it("refuses a device with NO assigned profile (layoutProfileId null)", async () => {
+    // A kds_station enrolled with no profile assigned declares no capabilities at all → refused before
+    // any profile read. Prove-by-deletion: drop the `layoutProfileId === null` guard and this throws
+    // elsewhere instead of the clean 403.
+    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    expect(
+      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
+    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
+  });
+
+  it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
+    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
+    // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5). Prove-by-deletion: drop the
+    // `device === null` early return and this throws instead of passing.
+    const { cfg } = await enrolDeviceFixture();
+    expect(await probeCapability(cfg, null, "integrated-card-payment", "pay")).toEqual({
+      ok: true,
+    });
+    expect(await probeCapability(cfg, null, "open-cash-drawer", "drawer_open")).toEqual({
+      ok: true,
+    });
+  });
+
+  it("preserves the handheld firewall: a handheld (profile caps []) is still blocked from pay + drawer", async () => {
+    // The behaviour `assertNotHandheld` enforced by KIND is now enforced by CAPABILITY: a handheld's
+    // capability-less profile carries neither flag, so pay and drawer are refused exactly as before —
+    // but via the capability, not the device kind.
+    const { cfg, deviceId, token } = await enrolHandheldWithProfileFixture();
+    expect(
+      (await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
+    ).toBe(false);
+    expect(
+      (await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open")).ok,
+    ).toBe(false);
   });
 });

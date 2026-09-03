@@ -1,9 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError } from "@waitron/shared";
+import { AppError, tillId } from "@waitron/shared";
+import type { TillId } from "@waitron/shared";
 import { asAppUser, devices, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { getProfile } from "@waitron/layouts";
+import type { CapabilityFlag } from "@waitron/layouts";
 import { verifySecret } from "@waitron/identity";
 // Side-effect only: keeps this host's `device.unauthorized` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-session.ts` follows for its host `session.required`
@@ -62,11 +65,25 @@ export function readDeviceCookie(c: Context): string | null {
 
 /** The identity a `requireDevice` call resolves the cookie to: which device it is, what KIND it is, and
  * the single station it is bound to (NULL only for a future non-station kind). The device-authenticated
- * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's. */
+ * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
+ *
+ * SP-A.2 §16 widened this with the device's assigned PROFILE + TILL + static HARDWARE bindings, all read
+ * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them and the client
+ * can (SP-B) boot into its profile. `tillId` — the `tills` row a sale-capable device rings against
+ * (§16.4; NULL for a `kds_station`). `layoutProfileId` — the assigned layout profile (§16.3; NULL when
+ * unassigned). The hardware trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`,
+ * `cardProvider` (config token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a
+ * credential; the reader's secrets stay in the vault, never on this row. */
 export interface DeviceBinding {
   deviceId: string;
   kind: DeviceKind;
   stationId: string | null;
+  tillId: string | null;
+  layoutProfileId: string | null;
+  receiptPrinterId: string | null;
+  hasCashDrawer: boolean;
+  cardProvider: string;
+  cardReaderId: string | null;
 }
 
 /**
@@ -119,6 +136,14 @@ export async function tryReadDevice(
         tokenHash: devices.tokenHash,
         kind: devices.deviceKind,
         stationId: devices.stationId,
+        // The profile/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
+        // boot reads echo them without a second query. All non-secret config, never credentials.
+        tillId: devices.tillId,
+        layoutProfileId: devices.layoutProfileId,
+        receiptPrinterId: devices.receiptPrinterId,
+        hasCashDrawer: devices.hasCashDrawer,
+        cardProvider: devices.cardProvider,
+        cardReaderId: devices.cardReaderId,
       })
       .from(devices)
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
@@ -145,7 +170,17 @@ export async function tryReadDevice(
           sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
         ),
       );
-    return { deviceId, kind: row.kind, stationId: row.stationId };
+    return {
+      deviceId,
+      kind: row.kind,
+      stationId: row.stationId,
+      tillId: row.tillId,
+      layoutProfileId: row.layoutProfileId,
+      receiptPrinterId: row.receiptPrinterId,
+      hasCashDrawer: row.hasCashDrawer,
+      cardProvider: row.cardProvider,
+      cardReaderId: row.cardReaderId,
+    };
   });
 }
 
@@ -166,6 +201,47 @@ export async function requireDevice(
 }
 
 /**
+ * Resolve the `till_id` a SALE files under from the AUTHENTICATED enrolled device (SP-A.2 §16.4/§16.5 —
+ * the H2 fiscal cutover). Before this, a sale's till came from `cfg.tillId` (env `WAITRON_TILL_TILL_ID`);
+ * now it comes from the device the request carries, so a re-homed or re-profiled box files under the till
+ * its OWN enrolment names, never a stale env value. The four sale routes (`/api/sales`, `/api/pay`,
+ * `/api/working-orders/:id/place`, `/api/working-orders/:id/collect`) call this once and thread the
+ * result into a per-request `saleCfg = { ...cfg, tillId }`. Only `tillId` changes: `nodeId`/`seriesId`
+ * STAY `cfg` (a {@link DeviceBinding} carries no node/series — the SIF/chain key is the node, not the
+ * device).
+ *
+ * Modelled on {@link requireDevice}/{@link assertDeviceCapability}: it reads the binding via
+ * {@link tryReadDevice} (RLS as `app_user`) and fails CLOSED. Both refusals are documented SETUP
+ * preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous to the
+ * boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a setup fault
+ * surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):
+ *  - No `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
+ *    device-auth code (an ordinary env-only till is no longer a sellable box on its own).
+ *  - A device with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
+ *    `device.till_required` — the mint-time twin (Task 12) reused: a till-less device cannot ring a sale.
+ *
+ * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard (UUID-validated,
+ * `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the env value it replaces
+ * (`till-config.ts`).
+ *
+ * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard reads
+ * the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTenant` read run once
+ * per request instead of twice. Passing `null` means "resolved, no device" (fail-closed → `unauthorized`);
+ * OMITTING it preserves the original behaviour — this reads the binding itself. Undefined (omitted), not
+ * null, is the "read it yourself" signal, so the fail-closed null path is unchanged either way.
+ */
+export async function requireSaleTillId(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+  device?: DeviceBinding | null,
+): Promise<TillId> {
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  if (resolved === null) throw new AppError("device.unauthorized", {});
+  if (resolved.tillId === null) throw new AppError("device.till_required", {});
+  return tillId(resolved.tillId);
+}
+
+/**
  * The handheld firewall (spec §5, decision 0.1; owner reversal 2026-08-30, widened same day): a handheld
  * device may not reach THIS fiscal/cash route at all. A handheld takes and fires orders, and settles a
  * sale on `POST /api/sales` for cash OR a manual card tender — both file under the node's SIF (`nodeId`),
@@ -179,12 +255,84 @@ export async function requireDevice(
  * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which
  * never posts to a sale route anyway) also passes. ONLY an active `handheld` binding is refused, with
  * `device.forbidden_action` naming the attempted `action`.
+ *
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): a settlement route reads
+ * the binding ONCE and threads it here and to `requireSaleTillId`, so scrypt runs once per request. `null`
+ * means "resolved, no device" (passes, like an absent cookie); OMITTING it preserves the original
+ * behaviour — this reads the binding itself.
  */
 export async function assertNotHandheld(
   deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
   action: string,
+  device?: DeviceBinding | null,
 ): Promise<void> {
-  const device = await tryReadDevice(deps, c);
-  if (device?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  if (resolved?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+}
+
+/**
+ * The profile-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of
+ * {@link assertNotHandheld} from a hardcoded KIND check to a DECLARED capability. A route that requires
+ * a server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`; opening
+ * the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard, on the SAME
+ * request, so the fence holds even if the client were bypassed — the identical placement and reasoning
+ * as `assertNotHandheld`, which it replaces on those two routes. It guards UNRECOVERABLE fiscal records
+ * (CLAUDE.md §5), so it fails CLOSED: any device that cannot be shown to hold the capability is refused
+ * with `device.forbidden_action` naming the attempted `action`.
+ *
+ * The branches, in order:
+ *  1. No device cookie (`tryReadDevice` → `null`) — an ordinary env-configured/legacy till, which
+ *     authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
+ *     `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less till.
+ *  2. A device with NO assigned profile (`layoutProfileId === null`) declares no capabilities at all —
+ *     refused. (This is the path the old handheld, which carried no profile, now falls down.)
+ *  3. Resolve the assigned profile via `getProfile` under the SAME `withTenant` + `asAppUser` scope
+ *     `tryReadDevice` uses, so RLS scopes the read to this tenant. A bound-but-missing profile is
+ *     unreachable (the `(tenant_id, layout_profile_id)` FK is RESTRICT — see `devices.ts`); treated
+ *     defensively as no-capability.
+ *  4. Whether the profile's declared `capabilities` include the required flag decides pass vs refuse.
+ *
+ * A handheld carrying a capability-less profile (e.g. the phone-portrait default, `capabilities: []`)
+ * is therefore still refused pay + drawer — the handheld-firewall behaviour is PRESERVED, now enforced
+ * by the capability rather than by the kind.
+ *
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
+ * binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt run once per
+ * request (the profile `getProfile` read below is a separate query and always runs). `null` means
+ * "resolved, no device" (passes, branch 1); OMITTING it preserves the original behaviour — this reads
+ * the binding itself, which is why the other capability call-site (`/api/drawer/open`) need not change.
+ */
+export async function assertDeviceCapability(
+  deps: { db: Database; cfg: { tenantId: string } },
+  c: Context,
+  capability: CapabilityFlag,
+  action: string,
+  device?: DeviceBinding | null,
+): Promise<void> {
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
+  if (resolved === null) return;
+  // (2) No assigned profile ⇒ no declared capabilities ⇒ refuse.
+  if (resolved.layoutProfileId === null) {
+    throw new AppError("device.forbidden_action", { action });
+  }
+  const layoutProfileId = resolved.layoutProfileId;
+  // (3) Resolve the profile in the SAME tx shape `tryReadDevice` uses (RLS as `app_user`).
+  const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return getProfile(tx, deps.cfg.tenantId, layoutProfileId);
+  });
+  // Defensive only: the `(tenant_id, layout_profile_id)` composite FK on `devices` is RESTRICT
+  // (schema/devices.ts), so a bound profile always resolves — this branch is unreachable in practice,
+  // hence the v8-ignore rather than a contrived test that would have to defeat the FK.
+  /* v8 ignore start */
+  if (profile === undefined) {
+    throw new AppError("device.forbidden_action", { action });
+  }
+  /* v8 ignore stop */
+  // (4) The declared capability set is the source of truth.
+  if (!profile.definition.capabilities.includes(capability)) {
+    throw new AppError("device.forbidden_action", { action });
+  }
 }

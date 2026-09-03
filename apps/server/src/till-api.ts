@@ -14,7 +14,7 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout } from "@waitron/layouts";
+import { getLayout, getProfile } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -85,7 +85,12 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-import { assertNotHandheld } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  assertNotHandheld,
+  requireSaleTillId,
+  tryReadDevice,
+} from "./device-session.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -158,6 +163,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // both node-keyed, record-sale.ts:79-82.) `assertNotHandheld` refuses it server-side even if the client
   // is bypassed. 403: authenticated but forbidden.
   "device.forbidden_action": 403,
+  // The SP-A.2 sale-time device gate (§16.4/§16.5): a sale route resolves its `till_id` from the
+  // authenticated enrolled device (`requireSaleTillId`) — a SETUP precondition, not a per-sale block. A
+  // request carrying no `waitron_device` cookie is refused `device.unauthorized` (401, the device-auth
+  // status), and an authenticated device with no till (a `kds_station`, which rings no sale)
+  // `device.till_required` (400, the validation status). Same codes AND same statuses `device-api.ts`'s
+  // own map assigns them — this fiscal surface does not diverge from that sibling.
+  "device.unauthorized": 401,
+  "device.till_required": 400,
   "session.not_open": 401,
   "session.required": 401,
   // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
@@ -587,6 +600,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(id)` filter selects exactly that row.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
+      // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
+      // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. An ordinary
+      // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); a
+      // device with an assigned `layoutProfileId` gets its profile resolved and surfaced (SP-A.2 §16.3).
+      // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
+      const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg }, c);
       // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
       // runs inside the same `withTenant` + `asAppUser` block (RLS scopes both to this till's tenant),
       // never a second connection. `getLayout` does not authorize — this boot read is deliberately
@@ -626,6 +645,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
+        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), resolved in the SAME tx only when
+        // a device cookie named a device carrying a non-null `layoutProfileId`. `getProfile` returns
+        // `undefined` for an absent/foreign id (RLS-scoped + tenant-filtered), which surfaces below as an
+        // ABSENT `profile` key rather than `null`.
+        const profile =
+          device?.layoutProfileId != null
+            ? await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId)
+            : undefined;
         return {
           issuer: row,
           bumpMode: loc?.bumpMode,
@@ -633,6 +660,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           courses,
           layout: definition,
           receipt,
+          profile,
         };
       });
       /* v8 ignore start */
@@ -687,6 +715,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
         layout: boot.layout,
         receipt: boot.receipt,
+        // The calling device's assigned layout PROFILE (SP-A.2 §16.3), the resolved `ProfileDef`. Present
+        // ONLY when a device cookie named a device with a resolvable `layoutProfileId`; the key is ABSENT
+        // (never `null`) otherwise, so a request with no device cookie is byte-for-byte unchanged.
+        // ADDITIVE — the counter still renders from `layout`/`receipt` above until SP-B.
+        ...(boot.profile !== undefined ? { profile: boot.profile.definition } : {}),
       });
     }),
   );
@@ -743,9 +776,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
+      // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
+      // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
+      // carries no node/series. `recordTillSale` reads `cfg.tillId` unchanged, now the device's via `saleCfg`.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        deps.cfg,
+        saleCfg,
         body,
         personId,
       );
@@ -765,13 +802,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): integrated card pay settles at the fixed till — a handheld never
-      // settles THROUGH pay (it may settle a cash or manual-card sale on `/api/sales`, node-keyed, but not
-      // the INTEGRATED card leg here — that drives a real reader). A handheld cookie throws
-      // `device.forbidden_action` (403) here, before the provider
-      // guard and any fiscal write, so the fence holds even if the client were bypassed. An ordinary
-      // till carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "pay");
+      // Resolve the calling device ONCE and thread it to both device guards below (the capability
+      // firewall and `requireSaleTillId`): `tryReadDevice` opens a `withTenant` tx and runs the CPU-heavy
+      // scrypt `verifySecret`, so a single read keeps both — and the one gated `last_seen_at` sighting —
+      // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
+      const device = await tryReadDevice(deps, c);
+      // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
+      // device's assigned profile to declare `integrated-card-payment`. This generalises the old
+      // hardcoded handheld check — a handheld carries a capability-less profile (or none), so it is
+      // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
+      // write, so the fence holds even if the client were bypassed. A cookie-less caller passes THIS
+      // capability guard (there is no device to check) — but the route still nets to a rejection, because
+      // `requireSaleTillId` below fails closed with `device.unauthorized` on a missing cookie (§16.4): an
+      // ordinary env-only till is no longer a sellable box on `/api/pay`. (A handheld may still settle a
+      // cash or manual-card sale on `/api/sales`, node-keyed, which runs NO capability guard — only the
+      // INTEGRATED leg here is fenced.)
+      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
       // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
@@ -789,9 +835,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (deps.cardProvider === undefined) {
         throw new Error("/api/pay: no integrated card provider configured");
       }
+      // SP-A.2 §16.4 cutover: the integrated pay's `till_id` comes from the AUTHENTICATED device, not env
+      // (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). Resolved AFTER the capability
+      // firewall + provider guard so those refusals keep their existing status; the reader-identity till
+      // (`provider.collect`) moves to the same device till, consistent with the fiscal record it files.
+      // Threads the once-resolved `device` so the fail-closed `unauthorized`/`till_required` checks reuse
+      // the binding read above rather than a second scrypt pass.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const outcome = await payWorkingOrderIntegrated(
         { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
-        deps.cfg,
+        saleCfg,
         body,
         personId,
       );
@@ -918,13 +971,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // settlement is a cash or manual-card sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
       // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
       // device cookie and passes.
-      await assertNotHandheld(deps, c, "place");
+      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
+      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      const device = await tryReadDevice(deps, c);
+      await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      // SP-A.2 §16.4 cutover: a Mode-I place files a deferred chained invoice under the AUTHENTICATED
+      // device's `till_id`, which `placeOrder` takes as `saleTillId`. That device till reaches the FISCAL
+      // record ONLY; the `order_placed` amendment's `capturedByTillId` stays the box's CONFIGURED register
+      // (`deps.cfg.tillId`), matching `cancelPlacedOrder` so a re-homed box's place/cancel history agrees.
+      const saleTillId = await requireSaleTillId(deps, c, device);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         deps.cfg,
         id,
         personId,
+        saleTillId,
       );
       return c.json(result);
     }),
@@ -1195,10 +1257,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): a handheld has no cash drawer to open — refused
-      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries no
-      // device cookie and passes.
-      await assertNotHandheld(deps, c, "drawer_open");
+      // Capability firewall (SP-A.2 §16): opening the cash drawer requires the device's assigned
+      // profile to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
+      // handheld carries a capability-less profile (or none) and so has no drawer to open, refused
+      // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries
+      // no device cookie and passes.
+      await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open");
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -1259,12 +1323,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // a handheld's settlement path is a cash or manual-card sale on `/api/sales`), so it is refused
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "collect");
+      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
+      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      const device = await tryReadDevice(deps, c);
+      await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await c.req.json<{ tender: TillTender }>();
+      // SP-A.2 §16.4 cutover: collect settles under the AUTHENTICATED device's `till_id`, not env — Mode T
+      // files `recordSale` immediate, Mode I settles the deferred invoice. Only `tillId` changes;
+      // `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
-        deps.cfg,
+        saleCfg,
         { id, lines: [], tender: body.tender },
         personId,
       );

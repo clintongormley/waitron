@@ -88,6 +88,14 @@ export interface TillInfo {
   tipsEnabled: boolean;
   layout: LayoutDef;
   receipt: ReceiptConfig;
+  /**
+   * The CALLING device's assigned layout PROFILE (SP-A.2 §16.3) — present ONLY when the boot request
+   * carried a device cookie for a device with a resolvable profile, ABSENT otherwise. ADDITIVE: the app
+   * still renders from {@link layout}/{@link receipt} above; booting into the profile model is SP-B, which
+   * lands the typed local `ProfileDef` mirror (never imported from `@waitron/layouts` — the bundle rule)
+   * and the consumer that reads this. Left `unknown` here so no consumer can use it un-narrowed before then.
+   */
+  profile?: unknown;
 }
 
 /**
@@ -671,11 +679,28 @@ export interface DeviceEnrolment {
  * boots into. A LOCAL mirror of the server's response, NOT imported — the bundle-decoupling rule. `kind`
  * is a plain `string` (not a union): the client only branches on the values it knows and treats any other
  * as "not a special device", so a server that adds a new kind never breaks an older client.
+ *
+ * SP-A.2 §16 added the device's assigned PROFILE + TILL + static HARDWARE bindings to the response. They
+ * are mirrored here as OPTIONAL — the client does not consume them yet (booting into the assigned profile
+ * is SP-B), so an older payload without them is still valid, exactly the graceful-widening rule the rest
+ * of this file follows. All non-secret config; the reader's credentials never ride this response.
  */
 export interface DeviceIdentity {
   deviceId: string;
   kind: string;
   stationId: string | null;
+  /** The `tills` row a sale-capable device rings against (§16.4); `null` for a `kds_station`. */
+  tillId?: string | null;
+  /** The assigned layout profile (§16.3); `null` when unassigned. Consumed in SP-B. */
+  layoutProfileId?: string | null;
+  /** The per-device receipt printer (§16.3); `null` when none. */
+  receiptPrinterId?: string | null;
+  /** Whether this device has a cash drawer (§16.3). */
+  hasCashDrawer?: boolean;
+  /** The card-payment provider config token (§16.3), `"none"` for no integrated card. */
+  cardProvider?: string;
+  /** The provider's reader identifier (§16.3); `null` when none. A public id, NOT a credential. */
+  cardReaderId?: string | null;
 }
 
 /**

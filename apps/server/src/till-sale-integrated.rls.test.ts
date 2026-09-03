@@ -650,7 +650,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       // Place it: open → placed, NO fiscal document filed yet (ticket_then_pay issues at pay). Placing
       // FIRES one ticket item to the default station, so the order shows on that station's queue,
       // uncollected.
-      await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+      await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
       expect(await saleCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
       expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
@@ -915,7 +915,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         id,
         lines: [{ productId: cafe.id, quantity: "1" }],
       });
-      await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+      await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
       await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
@@ -1102,7 +1102,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       id,
       lines: [{ productId: cafe.id, quantity }],
     });
-    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     return { id, saleId: await saleIdFor(id) };
   }
 

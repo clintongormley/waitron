@@ -357,13 +357,35 @@ describe("till-lock-screen", () => {
     expect(query(el, "[data-setup-handheld]")).toBeNull();
   });
 
+  // Till (SP-A.2 device unification): the roster view carries a THIRD set-up affordance beside the
+  // kitchen-display + waiter-handheld ones, so a FRESH counter can reach the till enrol view; it emits
+  // `setup-till`, which the app turns into the till enrol screen. Same roster-only placement.
+  it("emits setup-till from the till set-up affordance (roster view)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const spy = vi.fn();
+    el.addEventListener("setup-till", spy);
+    click(el, "[data-setup-till]");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("hides the till set-up affordance in PIN mode (roster view only, like setup-device)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(query(el, "[data-setup-till]")).not.toBeNull();
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    expect(query(el, "[data-setup-till]")).toBeNull();
+  });
+
   // §C2 containment/identity: an ALREADY-ENROLLED device (a handheld, or a KDS) returns to the lock
   // screen on every logout and cold boot. It must NOT see the device-setup affordances — tapping "Set
   // up as kitchen display" would take the enrolled phone into the KDS enrol view, where any valid
   // pairing code would SILENTLY replace its device cookie with a `kds_station` identity, bricking the
   // phone as a handheld mid-shift (and escaping the face-set to `station`). `deviceEnrolled` (the app
-  // passes `handheldMode || deviceMode`) hides both affordances; a fresh browser still shows them.
-  it("hides BOTH device-setup affordances once the device is enrolled (deviceEnrolled)", async () => {
+  // passes `handheldMode || deviceMode || tillEnrolled`) hides all three affordances (device / handheld
+  // / till); a fresh browser still shows them.
+  it("hides ALL THREE device-setup affordances once the device is enrolled (deviceEnrolled)", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       deviceEnrolled: true,
@@ -371,14 +393,15 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(query(el, "[data-setup-device]")).toBeNull();
     expect(query(el, "[data-setup-handheld]")).toBeNull();
+    expect(query(el, "[data-setup-till]")).toBeNull();
     // The roster login is untouched — an enrolled handheld's waiter still picks their name and PINs in.
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
   });
 
-  it("keeps BOTH device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {
+  it("keeps ALL THREE device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {
     // Prove-by-deletion counterpart: with `deviceEnrolled` false (the default — a fresh browser has no
-    // device cookie yet) both the kitchen-display and waiter-handheld set-up controls must remain, or a
-    // first-time enrolment would be impossible.
+    // device cookie yet) all three set-up controls (kitchen-display, waiter-handheld, till) must remain,
+    // or a first-time enrolment would be impossible.
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       deviceEnrolled: false,
@@ -386,5 +409,6 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(query(el, "[data-setup-device]")).not.toBeNull();
     expect(query(el, "[data-setup-handheld]")).not.toBeNull();
+    expect(query(el, "[data-setup-till]")).not.toBeNull();
   });
 });

@@ -8,11 +8,13 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
+import { createPostgresDb } from "@waitron/db";
 import {
   ADMIN_PIN,
   buildDevEnv,
   devSetup,
   inspectVenues,
+  mintTillPairingCode,
   parseEnvFile,
   renderEnvFile,
   resolveSeedLocale,
@@ -250,6 +252,30 @@ describe("devSetup against real Postgres", () => {
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
+  });
+
+  it("mints a single-use `till` pairing code bound to the provisioned till", async () => {
+    // SP-A.2 device unification: dev:setup mints a `till`-kind pairing code so the dev can enrol the
+    // counter till (the sale routes now require a `waitron_device` cookie carrying a till_id). The code
+    // is bound to the provisioned till via generatePairingCode's till gate — a `till` kind with a
+    // non-null till_id — so the enrolled device rings against the real register.
+    const db = await createPostgresDb(suite.pg.uri);
+    let result: { code: string };
+    try {
+      result = await mintTillPairingCode(db, first.env);
+    } finally {
+      await db.close();
+    }
+    // A plaintext code the operator reads into the pairing screen (never stored in plaintext).
+    expect(result.code).toMatch(/^[0-9A-Z-]{4,}$/);
+    // Exactly one till-kind code row, bound to the provisioned till (read as the RLS-bypassing admin).
+    const { rows } = await suite.admin.execute<{ n: number }>(
+      sql`select count(*)::int as n from device_pairing_codes
+          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
+            and device_kind = 'till'
+            and till_id = ${first.env.WAITRON_TILL_TILL_ID}`,
+    );
+    expect(rows[0]!.n).toBe(1);
   });
 
   it("refuses to provision a second venue when the .env no longer names the DB's venue", async () => {

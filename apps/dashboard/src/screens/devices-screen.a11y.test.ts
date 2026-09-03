@@ -2,7 +2,14 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
-import type { DashboardApi, DeviceRow, Station } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceRow,
+  LayoutProfile,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 
 /**
  * The Devices screen scanned by axe in both themes, in two states: the default list + generate form, and
@@ -55,10 +62,38 @@ const devices: DeviceRow[] = [
   },
 ];
 
+const tills: Till[] = [
+  { id: "t1", label: "Caja 1", locationId: "loc1", receiptPrinterId: null },
+  { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
+];
+
+const profiles: LayoutProfile[] = [
+  { id: "p1", name: "Comedor", definition: { areas: [] } },
+  { id: "p2", name: "Barra", definition: { areas: [] } },
+];
+
+const printers: Printer[] = [
+  {
+    id: "pr1",
+    name: "Cocina",
+    transport: "network_tcp",
+    agentId: null,
+    host: "10.0.0.9",
+    port: 9100,
+    usbPath: null,
+    pollId: null,
+    ticketScope: "station",
+    active: true,
+  },
+];
+
 function stubApi(): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
+    listTills: vi.fn().mockResolvedValue(tills),
+    listProfiles: vi.fn().mockResolvedValue(profiles),
+    listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
@@ -94,6 +129,29 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=kind-select]")!;
     kind.value = "handheld";
     kind.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the till kind (till + hardware pickers) accessibly", async () => {
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    // Switch the kind picker to a till — the till picker + the hardware pickers (receipt printer,
+    // cash-drawer switch, card provider) render, and with the Stripe Terminal provider the card-reader
+    // field joins them, so the whole till-form state is in the a11y tree.
+    const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=kind-select]")!;
+    kind.value = "till";
+    kind.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    const provider = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      "[data-test=card-provider-select]",
+    )!;
+    provider.value = "stripe_terminal";
+    provider.dispatchEvent(new Event("change"));
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });

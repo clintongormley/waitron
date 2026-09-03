@@ -144,6 +144,16 @@ export const en = {
   "device.handheld_enrol_title": "Set up this waiter handheld",
   "device.handheld_enrol_hint": "Enter the pairing code shown on the dashboard",
   "device.handheld_enrol_submit": "Set up",
+  // Till enrol (SP-A.2 device unification) — the twin of the `device.setup_handheld`/`device.handheld_enrol_*`
+  // keys above, for a sale-capable COUNTER TILL rather than a waiter's phone. `device.setup_till` is the lock
+  // screen's third affordance (beside `device.setup`/`device.setup_handheld`) that opens the till enrol view;
+  // `device.till_enrol_*` are that view's title/hint/submit (the code-field label reuses `device.enrol_code`,
+  // which names no device type). A refused code shows the shared generic `device.enrol_failed`, exactly as the
+  // handheld view does — the operator's only recovery is a fresh code from the manager either way.
+  "device.setup_till": "Set up this till",
+  "device.till_enrol_title": "Set up this till",
+  "device.till_enrol_hint": "Enter the pairing code shown on the dashboard",
+  "device.till_enrol_submit": "Set up",
   "device.enrol_failed": "That pairing code was not accepted. Ask a manager for a new one.",
   // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
   // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
@@ -482,6 +492,10 @@ export const es: Record<StringKey, string> = {
   "device.handheld_enrol_title": "Configurar este terminal de camarero",
   "device.handheld_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
   "device.handheld_enrol_submit": "Configurar",
+  "device.setup_till": "Configurar esta caja",
+  "device.till_enrol_title": "Configurar esta caja",
+  "device.till_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
+  "device.till_enrol_submit": "Configurar",
   "device.enrol_failed":
     "No se aceptó ese código de emparejamiento. Pide uno nuevo a un responsable.",
   "expo.open": "Pase",

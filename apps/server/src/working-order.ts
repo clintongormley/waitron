@@ -14,6 +14,7 @@ import {
   type SaleId,
   type StationThresholds,
   subtractDecimal,
+  type TillId,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -3056,12 +3057,19 @@ export interface PlaceOrderResult {
  * accountability rests on a real operator (the session's `personId`, wired by the till), so there is
  * no system sentinel to fall back to. The amendment's local wall-clock is `deps.clock.now()` — the
  * venue's trusted clock, the same source `recordSale` reads for a sale's `issued_at`/offset.
+ *
+ * `saleTillId` is the DEVICE till (SP-A.2 §16.4): the deferred fiscal record's `till_id` is the
+ * authenticated device's till, while the `order_placed` amendment's `capturedByTillId` stays the box's
+ * CONFIGURED register (`cfg.tillId`) — matching `cancelPlacedOrder`, so a re-homed box's place/cancel
+ * history for one order agrees. Only the fiscal record carries the device till; `nodeId`/`seriesId`
+ * stay `cfg`.
  */
 export async function placeOrder(
   deps: TillSaleDeps,
   cfg: TillConfig,
   id: string,
   operatorId: string,
+  saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
   return withTenant(
     deps.db,
@@ -3090,9 +3098,12 @@ export async function placeOrder(
       let placeResult: PlaceOrderResult = { id, status: "placed" };
       if (cfg.orderFlow === "invoice_first") {
         const priced = await priceStoredOrder(tx, id);
+        // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
+        // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/
+        // `seriesId` stay `cfg` — the chain is keyed by the node's SIF, not the device.
         const { saleId, fiscal } = await recordSale(tx, deps.backend, {
           tenantId: cfg.tenantId,
-          tillId: cfg.tillId,
+          tillId: saleTillId,
           nodeId: cfg.nodeId,
           seriesId: cfg.seriesId,
           workingOrderId: brandWorkingOrderId(id),
@@ -3129,6 +3140,9 @@ export async function placeOrder(
       // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
       // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
       // wall offset are hashed and stored so the entry reprints in venue time (#52).
+      // `capturedByTillId` is the box's CONFIGURED register (`cfg.tillId`), NOT the device till the
+      // fiscal record above carries (SP-A.2 §16.4) — this matches `cancelPlacedOrder`, so a re-homed
+      // box's `order_placed`/`order_cancelled` pair for one order stays on the same register.
       const now = deps.clock.now();
       await appendOrderAmendment(tx, {
         tenantId: cfg.tenantId,

@@ -617,6 +617,62 @@
       "when": 1788207353448,
       "tag": "0087_clever_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1788369159551,
+      "tag": "0088_stiff_iron_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1788369166770,
+      "tag": "0089_normal_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1788369427852,
+      "tag": "0090_burly_vulture",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1788369428347,
+      "tag": "0091_moaning_sharon_carter",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1788369978822,
+      "tag": "0092_slippery_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1788369986173,
+      "tag": "0093_round_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1788370295390,
+      "tag": "0094_green_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1788370298916,
+      "tag": "0095_parched_meteorite",
+      "breakpoints": true
     }
   ]
 }

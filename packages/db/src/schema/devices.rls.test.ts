@@ -396,6 +396,52 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     });
   });
 
+  it("devices: a till binds NO station (per-kind CHECK names only kds_station)", async () => {
+    // A till is a first-class till device that rings sales under its node's SIF (spec §16); like a
+    // handheld it binds NO kitchen station. The CHECK is written `(kind = 'kds_station') = (station
+    // IS NOT NULL)`, so EVERY non-kds_station kind (handheld AND till) must carry a NULL station —
+    // WITHOUT the SQL ever naming the 'till' literal (which would trip Postgres's "new enum value in
+    // the same transaction" restriction if the CHECK were rewritten alongside the ADD VALUE).
+    const withStation = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
+              values (${TENANT_A}, ${LOCATION_A}, 'till', ${STATION_A}, 'Bad till', ${TOKEN_HASH})`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
+
+    // A till WITHOUT a station succeeds — the sale-capable, station-less binding.
+    const ok = await asApp(TENANT_A, (tx) =>
+      tx.execute<{ id: string }>(
+        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
+            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Good till', ${TOKEN_HASH}) returning id`,
+      ),
+    );
+    expect(ok.rows).toHaveLength(1);
+  });
+
+  it("device_pairing_codes: a till binds NO station (per-kind CHECK names only kds_station)", async () => {
+    const withStation = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+              values (${TENANT_A}, ${LOCATION_A}, 'sha-till-bad', 'till', ${STATION_A}, 'Bad till code')`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
+
+    const ok = await asApp(TENANT_A, (tx) =>
+      tx.execute<{ id: string }>(
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-till-ok', 'till', ${null}, 'Good till code') returning id`,
+      ),
+    );
+    expect(ok.rows).toHaveLength(1);
+  });
+
   // ---- FORCE ROW LEVEL SECURITY ------------------------------------------------------------
 
   it("both tables have FORCE row level security (proof by deletion of the FORCE flag)", async () => {

@@ -24,6 +24,15 @@ export type { CardContract } from "./card-contract.js";
 // MAX_TAB_TITLE_LENGTH / validateProfile are already re-exported above.
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export { DEFAULT_PROFILES } from "./default-profiles.js";
+export {
+  listProfiles,
+  getProfile,
+  createProfile,
+  updateProfile,
+  deleteProfile,
+  getProfileForFormFactor,
+} from "./profile-store.js";
+export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts (and

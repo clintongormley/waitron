@@ -15,9 +15,12 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import {
+  bindingFkField,
   encodePairingCode,
   enrolDevice,
   generatePairingCode,
+  kindRequiresStation,
+  kindRequiresTill,
   normalizePairingCode,
 } from "./device.js";
 import "./errors.js";
@@ -156,9 +159,15 @@ describe("device pairing-code generation + enrolment", () => {
     // A handheld is a roving, location-wide waiter device (spec §D2): it binds no kitchen station, so
     // generatePairingCode must NOT call requireLiveStation and must store station_id = NULL. The Task-1
     // CHECK ((device_kind = 'handheld' AND station_id IS NULL)) would reject any non-null station here.
+    // It IS sale-capable, so it carries a till_id (SP-A.2 §16.4) — the seeded till.
     const cfg = await setupVenue();
     const { code } = await asApp(cfg, (tx) =>
-      generatePairingCode(tx, cfg, { kind: "handheld", stationId: null, label: "Waiter phone" }),
+      generatePairingCode(tx, cfg, {
+        kind: "handheld",
+        stationId: null,
+        tillId: cfg.tillId,
+        label: "Waiter phone",
+      }),
     );
     const codeSha256 = createHash("sha256").update(code).digest("hex");
     const { rows } = await db.execute<{ device_kind: string; station_id: string | null }>(
@@ -235,5 +244,68 @@ describe("normalizePairingCode", () => {
     expect(normalizePairingCode("ABCD-EFGH")).toBe("ABCDEFGH"); // hyphen stripped
     expect(normalizePairingCode("ABCD EFGH")).toBe("ABCDEFGH"); // space stripped
     expect(normalizePairingCode("  ab-cd ef-gh ")).toBe("ABCDEFGH"); // combined
+  });
+});
+
+describe("kindRequiresStation", () => {
+  it("only kds_station binds a station; handheld and till carry none", () => {
+    // The code-side twin of the per-kind station CHECK. A kds_station is an always-on screen tied to
+    // one station; a handheld is a roving, location-wide waiter device and a till is a first-class till
+    // device that rings sales under its node's SIF (spec §16) — neither binds a station.
+    expect(kindRequiresStation("kds_station")).toBe(true);
+    expect(kindRequiresStation("handheld")).toBe(false);
+    expect(kindRequiresStation("till")).toBe(false);
+  });
+});
+
+describe("bindingFkField", () => {
+  // The 23503 → field accessor, exercised with CRAFTED errors (no DB) so every branch is covered: the
+  // `tables.ts` `isZoneFkViolation` / `uniqueViolationConstraint` idiom. The end-to-end 23503 translation
+  // is proven against real Postgres in device.rls.test.ts; here we pin the constraint-name mapping and
+  // the deliberate NON-matches (a different constraint, a different SQLSTATE, no constraint name).
+  const fk = (constraint: string): Error =>
+    Object.assign(new Error("fk"), { code: "23503", constraint });
+
+  it("maps each device-binding composite FK's constraint name to its input field", () => {
+    expect(bindingFkField(fk("device_pairing_codes_till_fk"))).toBe("tillId");
+    expect(bindingFkField(fk("device_pairing_codes_receipt_printer_fk"))).toBe("receiptPrinterId");
+    expect(bindingFkField(fk("device_pairing_codes_layout_profile_fk"))).toBe("layoutProfileId");
+  });
+
+  it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {
+    const wrapped = new Error("outer", {
+      cause: new Error("mid", { cause: fk("device_pairing_codes_till_fk") }),
+    });
+    expect(bindingFkField(wrapped)).toBe("tillId");
+  });
+
+  it("returns undefined for a 23503 on a NON-binding constraint (rethrown raw, not mislabelled)", () => {
+    // A 23503 on the direct tenant/location FKs is not a binding fault — the catch rethrows it raw.
+    expect(bindingFkField(fk("device_pairing_codes_location_id_locations_id_fk"))).toBeUndefined();
+  });
+
+  it("returns undefined when the 23503 carries no constraint name (PGlite may omit it)", () => {
+    expect(bindingFkField(Object.assign(new Error("fk"), { code: "23503" }))).toBeUndefined();
+  });
+
+  it("returns undefined for a non-23503 error, a self-referential cause loop, and nullish input", () => {
+    expect(bindingFkField(Object.assign(new Error("dup"), { code: "23505" }))).toBeUndefined();
+    const looped: { code?: string; cause?: unknown } = {};
+    looped.cause = looped; // a self-referential cause must not spin forever
+    expect(bindingFkField(looped)).toBeUndefined();
+    expect(bindingFkField(null)).toBeUndefined();
+    expect(bindingFkField(undefined)).toBeUndefined();
+  });
+});
+
+describe("kindRequiresTill", () => {
+  it("the sale-capable kinds (till, handheld) require a till; kds_station carries none", () => {
+    // The code-side twin of the per-kind `device.till_required` gate (SP-A.2 §16.4). A till and a
+    // handheld both ring sales under their node's SIF and must name the tills row they file against; a
+    // kds_station rings no sale and must name none. Deliberately the complement of kindRequiresStation
+    // TODAY, but a separate predicate (a future kind need not preserve that coincidence).
+    expect(kindRequiresTill("till")).toBe(true);
+    expect(kindRequiresTill("handheld")).toBe(true);
+    expect(kindRequiresTill("kds_station")).toBe(false);
   });
 });
