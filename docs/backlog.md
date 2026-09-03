@@ -282,17 +282,28 @@ vs gated on an unbuilt foundation or an external dependency:
 - **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
   pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
-  the two follow-ups under *Onboarding*). With both landed, the remaining Track-2 items are a design pass
-  (membership & rejoin) or foundation-gated (reserved-SIF) — no pure ready-to-build code slice is queued.
-- **Membership & rejoin wire-protocol — DESIGN LANDED 2026-09-02** (owner-review pending). Spec:
-  [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md).
-  Resolves promotion-failover §9 item 1: a signed, self-verifying membership document (`term` + per-node
-  identity keys chained from setup, stored in a new `node_membership` singleton), distributed over
-  `/sync-api/hello`; a demote-never-promote witness rule; a drain-then-restore rejoin (re-add, not
-  fast-forward, gated on the disposal guard); and primary-wins + a conflict surface for the shared/config
-  class. Topology scoped to max 3 (2 local + 1 cloud); forgery-resistant signing rooted by a chain from
-  setup (break-glass NOT pulled in). **Next:** an implementation plan → build (unblocks promote Slice 5 +
-  the conflict watcher).
+  the two follow-ups under *Onboarding*). With those landed and **membership Slice 1 shipped (#197)**, the
+  next ready-to-build code slice is **membership Slice 2 (the `node_membership` storage singleton)** — see
+  the membership row below; reserved-SIF remains foundation-gated.
+- **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
+  2026-09-02, owner-review still pending). Spec:
+  [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
+  Slice-1 plan: [document-foundation](superpowers/plans/2026-09-02-membership-slice-1-document-foundation.md).
+  Resolves promotion-failover §9 item 1. **#197 shipped `@waitron/membership`** (pure leaf, deps
+  `@waitron/shared` only, 64 tests / 100% cov): the signed, self-verifying membership document — canonical
+  serialization, Ed25519 sign/verify, endorsement-chain trust rooted at setup, `verifyMembershipDocument`
+  (strict-shape — a verified document IS exactly its signed content, spec §3), `acceptMembershipDocument`
+  (the authentic + strictly-newer fence; demote-never-promote). `MAX_ENDORSEMENTS`/`MAX_NODES` = 8.
+  **Slices remaining, each its own plan:** (2) **storage** — the `node_membership` singleton + accessors
+  [ready-to-build NEXT]; (3) **distribution** over `/sync-api/hello` + local adoption; (4) **setup/adopt**
+  key endorsement into the trust set; (5) **promotion integration** (`promote` mints the next document);
+  (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
+  **Follow-ups recorded from #197:** two efficiency micro-opts were consciously skipped in
+  `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
+  `MAX_ENDORSEMENTS`, revisit only if the cap grows; `term` is a JS `number` in Slice 1 but the Slice-2
+  `node_membership` storage boundary is `bigint` — reconcile there; the break-glass-rooted (option B)
+  signing hardening stays deferred with break-glass.
 - **Foundation-first, then its dependents (fiscal-adjacent, owner-gated):** **reserved-SIF staging**
   mints the installation number + disjoint series → unblocks promote **Slice 3**, the C2a promote
   action, and starting the primary-only workers on promotion.
