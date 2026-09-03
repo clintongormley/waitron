@@ -63,10 +63,11 @@ export interface SyncPullResult extends ApplyBatchResult {
   /** Did this pull advance the (subscriber, origin, lane) cursor? Derived by reading that cursor before
    * and after applyBatch. The drain's progress guard against a full-but-all-parked page (Fix A). */
   advanced: boolean;
-  /** The RAW `membership` field the peer advertised on /sync-api/hello (design §5), or `undefined`
-   * from an older peer that does not serve it. Threaded out UNVERIFIED — the injected adopt callback
-   * runs the @waitron/membership accept fence against it; this transport layer never inspects it. */
-  readonly membership?: unknown;
+  /** The RAW `membership` field the peer advertised on /sync-api/hello (design §5): the signed
+   * document, `null` from a current peer that holds no document yet, or `undefined` from an older peer
+   * that does not serve the field at all. Threaded out UNVERIFIED — the injected adopt callback runs
+   * the @waitron/membership accept fence against it; this transport layer never inspects it. */
+  membership?: unknown;
 }
 
 const trimSlash = (url: string): string => url.replace(/\/$/, "");
