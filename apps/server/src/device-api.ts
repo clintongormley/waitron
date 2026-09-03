@@ -139,9 +139,11 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *     at all): dropping the cookie the CALLER's own browser is carrying is always harmless (the device
  *     row is untouched, still active), so — unlike every other route here — this one runs no guard and
  *     is mounted identically in dev and production (SP-C).
- *  3. DEVICE-GUARDED routes (`GET /api/device/station`, `POST /api/device/ticket-items/:id/advance`) —
- *     each calls `requireDevice` FIRST (401 otherwise) and scopes every read/bump to the device's OWN
- *     bound station; a bump of another station's item is `device.forbidden_station` (403).
+ *  3. DEVICE-GUARDED routes (`GET /api/device/me`, `GET /api/device/station`, `POST
+ *     /api/device/ticket-items/:id/advance`) — each calls `requireDevice` FIRST (401 otherwise) and
+ *     resolves to the CALLER's own device: `me` returns that device's identity, while the station
+ *     routes scope every read/bump to the device's OWN bound station (a bump of another station's item
+ *     is `device.forbidden_station`, 403).
  *  4. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`) — each calls
  *     `requireManagementSession` (401), then funnels its DB work through the local `gated` helper, which

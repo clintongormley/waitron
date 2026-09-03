@@ -6,12 +6,12 @@
 // The generated `.env` carries `WAITRON_ENV=dev` (SP-C), so `pnpm dev` boots with the dev per-tab
 // device switcher ON (`config.devMode`, Task 1). This does NOT touch the fiscal side: `dev` is a
 // dev-only input that `deploymentEnvironment` (apps/server/src/config.ts) maps to `preproduction` —
-// same AEAT endpoints, same Stripe mode, same `DeploymentEnvironment` union — so the venue this
-// script provisions is still stamped/behaves as `preproduction` throughout. `devSetup` here never
-// calls `stampDeployment` at all (unlike the `/setup-api/provision` HTTP route or
-// `waitron-provision instance`), so the database's `deployment` singleton is left unstamped by this
-// flow either way; `assertDeploymentMatches` (boot.ts) treats an unstamped database as matching any
-// host environment.
+// same AEAT endpoints, same Stripe mode, same per-record `entorno` — so the venue this script
+// provisions still BEHAVES AS `preproduction` throughout. Note this is a runtime mapping, not a
+// stored stamp: `devSetup` here never calls `stampDeployment` at all (unlike the `/setup-api/provision`
+// HTTP route or `waitron-provision instance`), so the database's `deployment` singleton is left
+// UNSTAMPED by this flow, and `assertDeploymentMatches` (boot.ts) treats an unstamped database as
+// matching any host environment.
 //
 // FISCAL NOTE (CLAUDE.md §5): re-registering a till starts a NEW hash chain and mints a fresh
 // installation number. So this REUSES an already-provisioned venue (an existing `.env` naming a

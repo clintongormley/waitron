@@ -266,6 +266,19 @@ describe("till-dev-chooser", () => {
     expect(resetDevice).toHaveBeenCalledOnce();
   });
 
+  it("handles a rejected reset inline rather than throwing an unhandled rejection", async () => {
+    const resetDevice = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
+      api: stubApi({ resetDevice }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-reset]")!.click();
+    await flush(el);
+    expect(resetDevice).toHaveBeenCalledOnce();
+    // The rejected `{ code }` renders on the inline error surface — no unhandled promise rejection.
+    expect(el.shadowRoot!.querySelector(".reset .error")!.textContent).toContain("server.internal");
+  });
+
   it("renders the dev-mode-off message when getDevDevices rejects", async () => {
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({

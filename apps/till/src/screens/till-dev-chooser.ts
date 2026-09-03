@@ -122,6 +122,8 @@ export class TillDevChooser extends LitElement {
   @state() private devOff = false;
   /** The error CODE of a rejected mint, rendered inline (never a user-facing surface — see class note). */
   @state() private mintError?: string;
+  /** The error CODE of a rejected cookie reset, rendered inline (same dev-only surface as {@link mintError}). */
+  @state() private resetError?: string;
   /** Reentry guard: one mint at a time. */
   @state() private minting = false;
 
@@ -138,7 +140,8 @@ export class TillDevChooser extends LitElement {
   }
 
   /** Read the device list. Any rejection (the 404 when the dev route is absent, chiefly) flips
-   * {@link devOff}; Lit never paints a detached element, so no `isConnected` guard is needed. */
+   * {@link devOff}. No `isConnected` guard is needed: nothing user-visible happens on a late resolve —
+   * a detached shadow root is never painted to screen, and the element is about to be GC'd. */
   async #load(): Promise<void> {
     try {
       this.list = await this.api.getDevDevices();
@@ -185,9 +188,13 @@ export class TillDevChooser extends LitElement {
     }
   }
 
-  /** Drop this browser's device cookie identity (a fresh, unenrolled tab). */
+  /** Drop this browser's device cookie identity (a fresh, unenrolled tab). A rejected reset shows its
+   * `{ code }` inline (never an unhandled promise rejection) — the same dev-only surface as a mint. */
   #reset(): void {
-    void this.api.resetDevice();
+    this.resetError = undefined;
+    void this.api.resetDevice().catch((error) => {
+      this.resetError = (error as { code?: string }).code ?? "server.internal";
+    });
   }
 
   override render(): TemplateResult {
@@ -341,6 +348,7 @@ export class TillDevChooser extends LitElement {
 
   #resetSection(): TemplateResult {
     return html`<section class="reset">
+      ${this.resetError ? html`<p class="error" role="alert">${this.resetError}</p>` : nothing}
       <wt-button data-reset variant="secondary" @click=${() => this.#reset()}>
         Reset this browser's cookie identity
       </wt-button>

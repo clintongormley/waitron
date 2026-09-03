@@ -217,8 +217,9 @@ describe("devSetup against real Postgres", () => {
       expect(first.env[key]).toMatch(/^[0-9a-f-]{36}$/);
     }
     expect(first.env.DATABASE_URL).toBe(suite.pg.uri);
-    // dev-setup boots pnpm dev with the switcher on (WAITRON_ENV=dev) while the deployment stamp
-    // stays preproduction — the assertion below on config.environment proves that half.
+    // dev-setup boots pnpm dev with the switcher on (WAITRON_ENV=dev) while the venue still behaves as
+    // preproduction — proven by the `config.environment` toBe("preproduction") assertion in the
+    // loadConfig `it()` block below (dev-setup writes no deployment stamp at all).
     expect(first.env.WAITRON_ENV).toBe("dev");
     // The demo seeds English by default, and the till boots against it.
     expect(written.WAITRON_TILL_LOCALE).toBe("en-GB");
