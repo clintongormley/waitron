@@ -88,7 +88,12 @@ export type { MirrorConnection } from "./mirror-config.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";
-export { isPgError, isUniqueViolation, uniqueViolationConstraint } from "./unique-violation.js";
+export {
+  isPgError,
+  isUniqueViolation,
+  pgErrorConstraint,
+  uniqueViolationConstraint,
+} from "./unique-violation.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**

@@ -49,19 +49,21 @@ export function isUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * The NAME of the violated unique constraint from a `23505` error (or anything it wraps), or
- * `undefined` when the SQLSTATE is not `23505` or the driver reported no constraint name. Walks the
- * same cause chain as {@link isPgError}: node-postgres puts the constraint on the `23505` layer's
- * `.constraint`; PGlite may omit it, so `undefined` means "unknown", NOT "no violation".
+ * The NAME of the violated constraint from an error (or anything it wraps) whose SQLSTATE is
+ * `sqlstate`, or `undefined` when no wrapped layer carries that SQLSTATE or the driver reported no
+ * constraint name. Walks the same cause chain as {@link isPgError}: node-postgres puts the
+ * constraint on the matching layer's `.constraint`; PGlite may omit it, so `undefined` means
+ * "unknown", NOT "no violation".
  *
- * A write path that maps a duplicate to a domain error uses this to translate ONLY its own
- * constraint and re-throw a different `23505` (a PK, or a constraint added later) rather than
- * mislabelling every unique violation. `@waitron/identity`'s `asEmailTaken` is the first caller.
+ * The constraint-returning twin of {@link isPgError}, parameterised on the SQLSTATE so a write path
+ * can key on the constraint name for whichever class it translates: `23505` (unique) via
+ * {@link uniqueViolationConstraint}, or `23503` (foreign key) as `apps/server`'s `bindingFkField`
+ * does to map a device-binding FK to its input field.
  */
-export function uniqueViolationConstraint(error: unknown): string | undefined {
+export function pgErrorConstraint(error: unknown, sqlstate: string): string | undefined {
   let current: unknown = error;
   for (let depth = 0; current != null && depth < 5; depth++) {
-    if (typeof current === "object" && (current as { code?: unknown }).code === UNIQUE_VIOLATION) {
+    if (typeof current === "object" && (current as { code?: unknown }).code === sqlstate) {
       const constraint = (current as { constraint?: unknown }).constraint;
       return typeof constraint === "string" ? constraint : undefined;
     }
@@ -70,4 +72,17 @@ export function uniqueViolationConstraint(error: unknown): string | undefined {
     current = next;
   }
   return undefined;
+}
+
+/**
+ * The NAME of the violated unique constraint from a `23505` error (or anything it wraps), or
+ * `undefined` when the SQLSTATE is not `23505` or the driver reported no constraint name. The
+ * {@link pgErrorConstraint} walk fixed to `23505`.
+ *
+ * A write path that maps a duplicate to a domain error uses this to translate ONLY its own
+ * constraint and re-throw a different `23505` (a PK, or a constraint added later) rather than
+ * mislabelling every unique violation. `@waitron/identity`'s `asEmailTaken` is the first caller.
+ */
+export function uniqueViolationConstraint(error: unknown): string | undefined {
+  return pgErrorConstraint(error, UNIQUE_VIOLATION);
 }

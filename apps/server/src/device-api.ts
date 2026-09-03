@@ -317,19 +317,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // no row of the tenant is caught by the composite FK → `device.binding_invalid`, in the verb.
       const optionalBindingUuid = (v: unknown, field: string): string | null =>
         v === undefined || v === null ? null : requireBodyUuid(v, field);
+      // The string sibling of `optionalBindingUuid`: an absent/`null` value yields `fallback`, a
+      // present one is screened to a string (`management.request_invalid` naming the field otherwise).
+      const optionalBindingString = <F extends string | null>(
+        v: unknown,
+        field: string,
+        fallback: F,
+      ): string | F => (v === undefined || v === null ? fallback : requireString(v, field));
       const tillId = optionalBindingUuid(body.tillId, "tillId");
       const layoutProfileId = optionalBindingUuid(body.layoutProfileId, "layoutProfileId");
       const receiptPrinterId = optionalBindingUuid(body.receiptPrinterId, "receiptPrinterId");
-      const cardReaderId =
-        body.cardReaderId === undefined || body.cardReaderId === null
-          ? null
-          : requireString(body.cardReaderId, "cardReaderId");
+      const cardReaderId = optionalBindingString(body.cardReaderId, "cardReaderId", null);
       // `card_provider` defaults to `'none'` (no integrated card) and `has_cash_drawer` to false; a
       // present value is screened to its type, else `management.request_invalid` naming the field.
-      const cardProvider =
-        body.cardProvider === undefined || body.cardProvider === null
-          ? "none"
-          : requireString(body.cardProvider, "cardProvider");
+      const cardProvider = optionalBindingString(body.cardProvider, "cardProvider", "none");
       if (
         body.hasCashDrawer !== undefined &&
         body.hasCashDrawer !== null &&

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isUniqueViolation, uniqueViolationConstraint } from "./unique-violation.js";
+import {
+  isUniqueViolation,
+  pgErrorConstraint,
+  uniqueViolationConstraint,
+} from "./unique-violation.js";
 
 // Mirrors packages/fiscal-verifactu/src/chain.test.ts's identical suite for its own,
 // independently-written copy of this exact check — see ./unique-violation.ts's own doc comment
@@ -36,6 +40,50 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation(null)).toBe(false);
     expect(isUniqueViolation(undefined)).toBe(false);
     expect(isUniqueViolation("dup key")).toBe(false);
+  });
+});
+
+describe("pgErrorConstraint", () => {
+  // The SQLSTATE-parameterised walk that `uniqueViolationConstraint` (fixed to 23505) and
+  // apps/server's `bindingFkField` (fixed to 23503) both delegate to.
+  it("returns the constraint name from a bare error whose code matches the sqlstate", () => {
+    expect(
+      pgErrorConstraint(
+        Object.assign(new Error("fk"), {
+          code: "23503",
+          constraint: "device_pairing_codes_till_fk",
+        }),
+        "23503",
+      ),
+    ).toBe("device_pairing_codes_till_fk");
+  });
+
+  it("returns the constraint name through a Drizzle-wrapped cause chain", () => {
+    const inner = Object.assign(new Error("fk"), { code: "23503", constraint: "some_fk" });
+    expect(pgErrorConstraint(new Error("outer", { cause: inner }), "23503")).toBe("some_fk");
+  });
+
+  it("returns undefined when the matching layer carries no constraint name (e.g. PGlite)", () => {
+    expect(pgErrorConstraint(Object.assign(new Error("fk"), { code: "23503" }), "23503")).toBe(
+      undefined,
+    );
+  });
+
+  it("returns undefined when no wrapped layer carries the requested sqlstate", () => {
+    // A 23505 layer is not a match when 23503 was asked for — the SQLSTATE is the selector.
+    expect(
+      pgErrorConstraint(
+        Object.assign(new Error("dup"), { code: "23505", constraint: "some_uq" }),
+        "23503",
+      ),
+    ).toBe(undefined);
+  });
+
+  it("returns undefined for a non-object value and terminates on a self-referential chain", () => {
+    expect(pgErrorConstraint(null, "23503")).toBe(undefined);
+    const looped: { code: string; cause?: unknown } = { code: "23505" };
+    looped.cause = looped;
+    expect(pgErrorConstraint(looped, "23503")).toBe(undefined);
   });
 });
 

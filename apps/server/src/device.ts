@@ -4,7 +4,13 @@ import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deviceKind, devicePairingCodes, devices, isUniqueViolation } from "@waitron/db";
+import {
+  deviceKind,
+  devicePairingCodes,
+  devices,
+  isUniqueViolation,
+  pgErrorConstraint,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { hashSecret } from "@waitron/identity";
 import type { TillConfig } from "./till-config.js";
@@ -133,33 +139,21 @@ const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "layoutPr
 
 /**
  * If `error` (or anything it wraps) is a 23503 on one of the device-binding composite FKs, the input
- * FIELD that FK guards; otherwise `undefined`. Walks the cause chain because Drizzle wraps every failed
- * query in a `DrizzleQueryError` whose own `.code` is undefined — the real SQLSTATE and `.constraint`
- * name live on `.cause` (node-postgres), one level deeper still under PGlite. The `isZoneFkViolation`
- * idiom (`tables.ts`) and `@waitron/db`'s `uniqueViolationConstraint` shape, fixed to the 23503 the
- * binding writes translate. It reads the CONSTRAINT NAME, not merely the 23503 code, so a 23503 on a
+ * FIELD that FK guards; otherwise `undefined`. Reuses `@waitron/db`'s `pgErrorConstraint` to walk the
+ * cause chain and read the offending constraint name — Drizzle wraps every failed query in a
+ * `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and `.constraint` name live
+ * on `.cause` (node-postgres), one level deeper still under PGlite — then maps that name through
+ * {@link BINDING_FK_FIELD}. It keys on the CONSTRAINT NAME, not merely the 23503 code, so a 23503 on a
  * DIFFERENT constraint (the tenant/location direct FKs) — or one whose driver reported no constraint
- * name — returns `undefined` and is rethrown raw rather than mislabelled `device.binding_invalid`.
- * Stops at a fixed depth so a self-referential `cause` cannot spin forever. Exported for the
- * crafted-error unit tests, NOT from a package barrel (this is an application, not a library).
+ * name — returns `undefined` and is rethrown raw rather than mislabelled `device.binding_invalid`. The
+ * `isZoneFkViolation` idiom (`tables.ts`). Exported for the crafted-error unit tests, NOT from a
+ * package barrel (this is an application, not a library).
  */
 export function bindingFkField(
   error: unknown,
 ): "tillId" | "receiptPrinterId" | "layoutProfileId" | undefined {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      (current as { code?: unknown }).code === FOREIGN_KEY_VIOLATION
-    ) {
-      const constraint = (current as { constraint?: unknown }).constraint;
-      return typeof constraint === "string" ? BINDING_FK_FIELD[constraint] : undefined;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return undefined;
-    current = next;
-  }
-  return undefined;
+  const constraint = pgErrorConstraint(error, FOREIGN_KEY_VIOLATION);
+  return constraint === undefined ? undefined : BINDING_FK_FIELD[constraint];
 }
 
 /**
