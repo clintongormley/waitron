@@ -42,8 +42,8 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
       on conflict (id) do nothing`);
     await admin.execute(sql`
       insert into tills (id, tenant_id, location_id, name) values
-        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Caja A'),
-        (${TILL_B}, ${TENANT_B}, ${LOCATION_B}, 'Caja B')
+        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A'),
+        (${TILL_B}, ${TENANT_B}, ${LOCATION_B}, 'Till B')
       on conflict (id) do nothing`);
     await admin.execute(sql`
       insert into layout_profiles (id, tenant_id, name, definition) values
