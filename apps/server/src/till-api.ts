@@ -685,6 +685,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           if (device.layoutProfileId != null) {
             profile = (await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId))?.definition;
           }
+          // The `?.definition` (getProfile's return is optional) then `??=` is belt-and-braces: a
+          // NON-null `layoutProfileId` that resolves to NO profile is UNREACHABLE by construction, so it
+          // is intentionally untested. The composite FK `devices(tenant_id, layout_profile_id) →
+          // layout_profiles(tenant_id, id)` is ON DELETE RESTRICT
+          // (packages/db/drizzle/0095_parched_meteorite.sql:16), enforced even on PGlite: a device can
+          // neither be enrolled with a non-existent profile id (FK violation at insert) nor keep a
+          // reference to a profile deleted out from under it (RESTRICT blocks the delete). The `??=` still
+          // yields a valid form-factor default should that invariant ever be relaxed.
           profile ??= await getProfileForFormFactor(
             tx,
             deps.cfg.tenantId,
