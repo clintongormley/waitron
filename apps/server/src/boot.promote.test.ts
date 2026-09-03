@@ -25,6 +25,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
+import { establishNodeIdentity } from "./node-identity.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 
@@ -89,9 +90,17 @@ let migrationsRoot: string;
 // SUPERUSER uri (`suite.pg.uri`) instead, so this pool needs no CREATE / UPDATE-on-deployment grant.
 let appDatabaseUrl: string;
 
-/** Seed the boot till's tenant + location as the container superuser (RLS bypassed), so boot's
+// The box key ring, built from the SAME credentials key boot loads from `KEY_ENV` — so the identity
+// this suite seals is the one the in-process promote unseals to sign the minted membership document.
+const PROMOTE_RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+/** Seed the boot till's tenant + location + node as the container superuser (RLS bypassed), so boot's
  * `readOrderFlow` / `readVenueLocale` reads resolve — the same minimal identity boot.test.ts's drain
- * suite seeds. `order_flow` defaults to `prepay`. */
+ * suite seeds — plus a node identity (sealed signing key + stamped `nodes.public_key`) so the promote's
+ * membership-document mint has a key to sign with. `order_flow` defaults to `prepay`. */
 async function seedTillIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
@@ -102,6 +111,16 @@ async function seedTillIdentity(admin: Database): Promise<void> {
     values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
             array['en']::text[], 'Hospitality')
     on conflict do nothing`);
+  await admin.execute(sql`
+    insert into nodes (id, tenant_id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote node')
+    on conflict do nothing`);
+  await establishNodeIdentity(
+    { ownerDb: admin, ring: PROMOTE_RING },
+    TILL_ENV.WAITRON_TILL_TENANT_ID,
+    TILL_ENV.WAITRON_TILL_NODE_ID,
+  );
 }
 
 beforeAll(async () => {

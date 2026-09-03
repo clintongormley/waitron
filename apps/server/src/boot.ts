@@ -1641,7 +1641,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
       try {
         return await promoteLocalSecondaryToPrimary(
-          { appDb: db, ownerDb, holders, log },
+          {
+            appDb: db,
+            ownerDb,
+            holders,
+            log,
+            ring,
+            tenantId: till.tenantId,
+            nodeId: till.nodeId,
+          },
           attestation,
         );
       } finally {
