@@ -331,9 +331,11 @@ vs gated on an unbuilt foundation or an external dependency:
 - **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
   pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
-  the two follow-ups under *Onboarding*). With Slice 1 (#197) and **Slice 2 (storage) shipped (#198)**,
-  the next ready-to-build code slice is **membership Slice 3 (distribution over `/sync-api/hello` + local
-  adoption)** — see the membership row below; reserved-SIF remains foundation-gated.
+  the two follow-ups under *Onboarding*). With Slices 1 (#197), 2 (storage, #198) and **3 (distribution,
+  #202) shipped**, the next ready-to-build code slice is **membership Slice 4 (setup/adopt — key
+  endorsement into the trust set)**, which turns the Slice-3 adoption mechanism LIVE (Slice 3 ships it
+  inert behind an empty trust-set seam) — see the membership row below; reserved-SIF remains
+  foundation-gated.
 - **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
   2026-09-02, owner-review still pending). Spec:
   [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
@@ -351,16 +353,34 @@ vs gated on an unbuilt foundation or an external dependency:
   (type-only dep on `@waitron/membership`). Owner decisions: `GRANT SELECT` to `app_user` only, owner-role
   writes; plain-upsert dumb setter (accept fence stays in `@waitron/membership`); `term` reconciled by
   deriving the column from `document.body.term` on write. **Slices remaining, each its own plan:**
-  (3) **distribution** over `/sync-api/hello` + local adoption **[ready-to-build NEXT]**; (4) **setup/adopt**
-  key endorsement into the trust set; (5) **promotion integration** (`promote` mints the next document);
-  (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
-  surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
-  **Follow-ups recorded from #198 (carry into Slice 3):** the **`app_user` INSERT/UPDATE write grant on
-  `node_membership` was deliberately deferred** — Slice 2 grants SELECT only (owner-role writes), so the
-  Slice-3 runtime-adoption writer (a node persisting a gossiped newer document on the app pool) must add
-  that grant in its own migration when its role is known. The `document` column is `jsonb` (driver parses
-  on read, Drizzle serialises on write; the simplify pass switched it from `text`). The `term` `number`↔`bigint`
-  reconciliation (#197 follow-up) is resolved in `writeNodeMembership`.
+  (3) **distribution** over `/sync-api/hello` + local adoption **LANDED #202** (plan:
+  [membership-slice-3-distribution](superpowers/plans/2026-09-03-membership-slice-3-distribution.md));
+  (4) **setup/adopt** key endorsement into the trust set **[ready-to-build NEXT]**; (5) **promotion
+  integration** (`promote` mints the next document); (6) **rejoin — drain-then-restore** [fiscal-adjacent
+  → owner sign-off before land]; (7) **conflict surface** (config down-only + ops conflict log). Unblocks
+  promote Slice 5 + the conflict watcher.
+  **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
+  membership }` (the held signed document or `null`); the pull worker threads that field out of the
+  handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
+  callback (same contract as `reportCursor`, so `@waitron/sync` stays transport-only, no membership/db
+  dep); `apps/server/membership-adopt.ts` verifies authenticity then persists via the new typed
+  `persistNodeMembershipIfNewer` accessor on `@waitron/db` (a term-guarded `onConflictDoUpdate({setWhere})`,
+  the atomic monotonic backstop for the two-lane race — a **sibling** to the still-dumb
+  `writeNodeMembership`); migration `0097_node_membership_write_grant.sql` adds the #198-deferred
+  `GRANT INSERT, UPDATE` (no DELETE). Boot wires adoption with an **inert empty trust-set seam** (`{}`), so
+  production adoption is a no-op (every doc `untrusted_signer`) **until Slice 4 fills the trust set** — the
+  mechanism is proven live only via a fixture-trust-set e2e. **Follow-ups from #202 (carry into Slice 4+):**
+  (a) the **#198 write-grant deferral is now resolved** (0097 grants app_user INSERT/UPDATE). (b) `adoptMembership`
+  makes the **atomic persist the sole authority on "strictly newer"** — it reports `accepted` iff the guarded
+  upsert changed the row (a Copilot-caught TOCTOU: the earlier read-then-accept could report a document
+  adopted that a concurrent higher term had already superseded); it no longer pre-reads the term (an
+  efficiency finding, resolved by the same change). (c) `acceptMembershipDocument` (the read-based Slice-1
+  fence) is **no longer used by the adoption path** — it remains the general-purpose fence for
+  non-persisting callers (e.g. a till deciding routing, Slice 5+); when a persisting caller needs the
+  two-part test, the atomic guard is the race-safe way to enforce the "newer" half. (d) boot's thin
+  `adoptMembership` wrapper closure is **not directly unit-tested** (boot tests use unreachable peers so the
+  drain throws before the callback fires; the module it calls is 100% covered + e2e-proven) — a candidate
+  boot-wiring assertion for a later slice.
   **Follow-ups recorded from #197:** two efficiency micro-opts were consciously skipped in
   `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
   `MAX_ENDORSEMENTS`, revisit only if the cap grows; the break-glass-rooted (option B)
