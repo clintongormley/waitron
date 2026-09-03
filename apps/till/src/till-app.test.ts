@@ -4074,20 +4074,73 @@ describe("till-app", () => {
       expect(grid.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull();
     });
 
-    it("returns a handheld to the Floor tab on back-to-floor (no drill to pop)", async () => {
+    it("exercises the DEFENSIVE #onBackToFloor card-mount branch: a synthetic back-to-floor with no drill switches to the Floor tab", async () => {
+      // NB: the EMBEDDED table-order card cannot itself emit `back-to-floor` — its Back is suppressed by
+      // the `embedded` seam (`till-table-order-screen` renders no `.back` when embedded). This fires a
+      // SYNTHETIC event to cover the defensive `else` branch of `#onBackToFloor` (a `back-to-floor` with
+      // no drill open → switch to the Floor tab), which real handheld UI does not reach today; the REAL
+      // handheld return path (tapping the Floor tab) is asserted by the next test. The branch is kept for
+      // a future non-suppressed Back, so it needs its own coverage.
       const el = await toHandheldFloor();
       emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
       await flush(el);
       const grid = el.shadowRoot!.querySelector("till-card-grid")!;
       const cardTableOrder = grid.shadowRoot!.querySelector("till-table-order-screen")!;
       expect(cardTableOrder).not.toBeNull();
-      // The embedded table-order screen's Back emits `back-to-floor`; on the card mount there is no drill,
-      // so the app switches the active tab back to the Floor tab (the `floor-plan` card's tab).
+      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull(); // no drill → the defensive branch
       emit(cardTableOrder, "back-to-floor");
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
-      // Back on the Floor tab, no drill was ever involved.
+      expect(shell(el)!.activeTabKey).toBe("floor"); // #floorTabKey() resolved the `floor-plan` card's tab
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+    });
+
+    it("returns a handheld to the Floor tab via the REAL path — tapping the Floor tab — refreshing occupancy", async () => {
+      // What actually happens in the app: the waiter on the Order tab taps the Floor TAB, firing the
+      // shell's `tab-select` → `#onTabSelect("floor")`, which switches the active tab AND (the floor tab
+      // needs the floor read-model, already loaded once) re-reads live occupancy via `#refreshFloor`. This
+      // guards the SP-B2.1 "no stale floor" invariant for the handheld tab-switch return, proven here by a
+      // SECOND `getTablesState` fetch that flips t1 from free → occupied.
+      const occupiedT1: TableState = {
+        ...freeTable,
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-new",
+        tabLineCount: 1,
+        tabTotal: "3.00",
+      };
+      // A stateful floor read: FREE while the waiter is on the floor / opening the tab, OCCUPIED once the
+      // tab is open. Robust to however many loads the login floor landing runs (it loads the floor read-
+      // model more than once) — the assertion turns on the Floor-tab RETURN re-reading AFTER `occupied` flips.
+      let occupied = false;
+      const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // → Order tab card
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("order");
+      const before = getTablesState.mock.calls.length;
+      occupied = true; // the tab is now open — the floor read-model would show t1 occupied
+      emit(shell(el)!, "tab-select", { key: "floor" }); // the REAL return: tap the Floor tab
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      // The Floor-tab return RE-READ occupancy (a fresh `getTablesState`), not merely switched tabs.
+      expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
+      // The Floor tab re-read occupancy (tables-only refresh): t1 now renders the SECOND fetch (occupied),
+      // not the stale free one — so a re-tap resumes the open tab instead of re-firing `openTab`.
+      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      const floorScreen = grid.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+      expect(floorScreen).not.toBeNull();
+      expect(floorScreen!.tables).toEqual([occupiedT1]);
     });
   });
 

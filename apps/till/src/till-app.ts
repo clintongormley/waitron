@@ -1974,23 +1974,29 @@ export class TillApp extends LitElement {
   }
 
   /** Return to the FLOOR from a screen that emits `back-to-floor` — the table-order screen's Back (FP-1).
-   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, and how table-order was
-   * mounted decides how it unwinds (the mirror of {@link #onOpenTable}'s two mount points): a TILL opened
-   * it as a DRILL, so pop the drill back to the floor tab; a handheld/tablet opened it as the Order TAB,
-   * so there is no drill — switch the active tab back to the Floor tab (the `floor-plan` card's tab).
+   * On the shell surface ({@link #inShell}) the floor is the underlying TAB. Today only a TILL reaches
+   * here: it opened table-order as a DRILL (via {@link #onOpenTable}), so pop the drill back to the floor
+   * tab. The `else` is a DEFENSIVE fallback — a handheld/tablet mounts table-order as the EMBEDDED Order
+   * TAB card, whose Back is SUPPRESSED by the `embedded` seam (`till-table-order-screen` renders no `.back`
+   * when embedded — `screens/till-table-order-screen.ts` `#back()` is unwired there), so the card CANNOT
+   * currently emit `back-to-floor`; the handheld returns to Floor by tapping the Floor TAB
+   * ({@link #onTabSelect}), which also refreshes occupancy. The branch is kept so a future non-suppressed
+   * Back (or any other card-mount `back-to-floor`) still lands on the Floor tab rather than nowhere.
    * EITHER way re-read the live occupancy ({@link #refreshFloor}, tables-only — zones + statuses are
    * static within a session): the mount just opened a tab / rang a round, and NEITHER `openTab` nor the
    * table-service actions update the app-owned `.tables`, so a bare unwind would re-render the floor from
    * a STALE read-model — the table the waiter just opened still showing FREE, so a re-tap fires `openTab`
    * again and the server throws `tab.already_open` (SP-B2.1 review; the reasoning applies to the tab
-   * switch identically). Off the shell it reloads and shows the legacy `floor` screen exactly as before
-   * ({@link #onShowFloor}). */
+   * switch identically — which is why `#onTabSelect` refreshes too). Off the shell it reloads and shows
+   * the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
   #onBackToFloor(): void {
     if (this.#inShell()) {
       this.errorKey = undefined;
       if (this.drill !== undefined)
         this.#popDrill(); // drill mount (till): pop back to the floor tab
-      else this.activeTabKey = this.#floorTabKey() ?? this.activeTabKey; // card mount: switch to Floor tab
+      // DEFENSIVE: the embedded card mount's Back is suppressed, so this is unreached by real UI today;
+      // the handheld returns to Floor via the Floor tab (`#onTabSelect`). Kept for a future unsuppressed Back.
+      else this.activeTabKey = this.#floorTabKey() ?? this.activeTabKey;
       void this.#refreshFloor();
     } else {
       void this.#onShowFloor();
