@@ -17,9 +17,10 @@ import { useTemplateDb } from "./testing/lifecycle.js";
 describe("node_membership grants", () => {
   const suite = useTemplateDb({ template: "core" });
 
-  it("app_user holds SELECT on node_membership and NOT INSERT/UPDATE/DELETE (owner-only write)", async () => {
-    // app_user MUST hold SELECT (a node reads the held document on the app pool at boot) and MUST NOT
-    // hold any write — the document is written owner-role only until Slice 3 adds runtime adoption.
+  it("app_user holds SELECT+INSERT+UPDATE on node_membership and NOT DELETE (runtime adoption write, Slice 3)", async () => {
+    // Slice 3 adds the runtime-adoption write grant (#198 deferral): the pull worker persists a
+    // gossiped, accepted document on the app pool (membership-adopt.ts / persistIfNewer). It never
+    // DELETEs the singleton — supersession is an UPDATE to a higher term — so DELETE stays denied.
     const rows = await suite.admin.execute<{
       sel: boolean;
       ins: boolean;
@@ -32,12 +33,13 @@ describe("node_membership grants", () => {
         has_table_privilege('app_user', 'node_membership', 'UPDATE') as upd,
         has_table_privilege('app_user', 'node_membership', 'DELETE') as del
     `);
-    expect(rows.rows[0]).toEqual({ sel: true, ins: false, upd: false, del: false });
+    expect(rows.rows[0]).toEqual({ sel: true, ins: true, upd: true, del: false });
   });
 
   it("round-trips the whole document through the jsonb column on real Postgres", async () => {
-    // Owner connection (suite.admin) — app_user holds no INSERT (asserted above). Proves the jsonb
-    // read returns a parsed object equal to what was written, on the real pg driver as well as PGlite.
+    // Owner connection (suite.admin) — the owner/promote write path (app_user's INSERT/UPDATE is the
+    // runtime-adoption path, not this). Proves the jsonb read returns a parsed object equal to what
+    // was written, on the real pg driver as well as PGlite.
     const document: SignedMembershipDocument = {
       body: {
         term: 4,

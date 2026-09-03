@@ -100,6 +100,8 @@ import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
+import type { TrustSet } from "@waitron/membership";
+import { adoptMembership as adoptMembershipDocument } from "./membership-adopt.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -1136,6 +1138,28 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // A mirror's ONE peer is the relay it dials, built from the DB config + the vault token above; a
     // primary's peers come from WAITRON_SYNC_PEERS (loadSyncConfig).
     const peers = isMirror && mirrorPeer !== undefined ? [mirrorPeer] : syncConfig.peers;
+    // The membership trust set (design §4). SLICE-4 SEAM: empty today, so every gossiped document is
+    // untrusted_signer and adoption is a production no-op until setup/adopt populates it. Kept as a
+    // named local so Slice 4 replaces this one line with a real read.
+    const membershipTrustSet: TrustSet = {};
+    // Best-effort membership gossip on the pull handshake (design §5): the pull worker hands each peer's
+    // advertised /hello document here; the accept fence + term-guarded persist run on the app-role pool
+    // (localSyncDb is a member of app_user, holding the Slice-3 INSERT/UPDATE grant on node_membership).
+    // A rejection (untrusted / not-newer) is the quiet normal case; a real DB/transport fault is caught
+    // and logged by runSyncPull as sync.membership_adopt_failed. Shared by both lanes (idempotent — the
+    // persist's WHERE guard is monotonic under the two-lane race).
+    const adoptMembership = async (raw: unknown): Promise<void> => {
+      const outcome = await adoptMembershipDocument(
+        { db: localSyncDb, trustSet: membershipTrustSet },
+        raw,
+      );
+      // Unreachable in production: the trust set is empty (above), so `accepted` is never true until
+      // Slice 4 populates it — the mechanism is exercised end-to-end with a fixture trust set in
+      // membership-gossip.e2e.test.ts instead. The false branch (a rejected document) is the covered
+      // production path.
+      /* v8 ignore next */
+      if (outcome.accepted) log("info", "membership.adopted", { term: outcome.document.body.term });
+    };
     const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
       runSyncPull({
         localDb: localSyncDb,
@@ -1151,6 +1175,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         maxBackoffMs: config.maxTickMs,
         log,
         lane,
+        adoptMembership,
       });
     // The ORDERED lane at the existing idle interval (config.minTickMs) and the FAST payments lane at
     // the tighter syncConfig.fastMinIdleMs, both against the same peers/localDb/http, both under the one

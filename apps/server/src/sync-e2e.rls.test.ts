@@ -46,7 +46,8 @@ let sourceReader: Database;
 let sourceWriter: Database;
 // The Bearer token a subscriber presents to the source. It must be one an `enrolPeer` minted on the
 // SOURCE (spec §9): the mounted source authenticates every /hello + /log request against source's
-// `sync_peers` through `sourceReader` (a sync_tailer member). The peer's own subscriber_id is
+// `sync_peers` through `sourceReader` (a sync_tailer + app_user member — the production source serve
+// pool, boot.ts:1053; app_user is needed for the /hello node_membership read). The peer's own subscriber_id is
 // irrelevant to /hello + /log — they need only a valid peer — so one enrolment serves every pull below.
 let sourcePeerToken: string;
 
@@ -138,7 +139,7 @@ beforeAll(async () => {
   targetAdmin = target.admin;
   await seedParents(targetAdmin); // the SAME parents on the target so the sale's FKs resolve
   targetApplier = await target.pg.connectAs("sync_applier", "ap");
-  sourceReader = await source.pg.connectAs("sync_reader", "rp");
+  sourceReader = await source.pg.connectAs("sync_applier", "ap");
   sourceWriter = await source.pg.connectAs("app_login", "app_pw");
   // Mint the subscriber's Bearer token on the SOURCE (enrolPeer runs as the superuser admin — setup
   // bypasses grants). Every `peer` below presents this token; the mounted source resolves it to this

@@ -63,6 +63,11 @@ export interface SyncPullResult extends ApplyBatchResult {
   /** Did this pull advance the (subscriber, origin, lane) cursor? Derived by reading that cursor before
    * and after applyBatch. The drain's progress guard against a full-but-all-parked page (Fix A). */
   advanced: boolean;
+  /** The RAW `membership` field the peer advertised on /sync-api/hello (design §5): the signed
+   * document, `null` from a current peer that holds no document yet, or `undefined` from an older peer
+   * that does not serve the field at all. Threaded out UNVERIFIED — the injected adopt callback runs
+   * the @waitron/membership accept fence against it; this transport layer never inspects it. */
+  membership?: unknown;
 }
 
 const trimSlash = (url: string): string => url.replace(/\/$/, "");
@@ -103,7 +108,8 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
   if (hello.status !== 200) {
     throw new Error(`sync pull: peer /sync-api/hello responded ${hello.status}`);
   }
-  const sourceEnvironment = (JSON.parse(await hello.text()) as { environment: string }).environment;
+  const helloBody = JSON.parse(await hello.text()) as { environment: string; membership?: unknown };
+  const sourceEnvironment = helloBody.environment;
 
   const before = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
   const url = `${base}/sync-api/log?originId=${peer.nodeId}&after=${before.toString()}&limit=${deps.batchLimit}&lane=${lane}`;
@@ -124,7 +130,12 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
   // must break on it rather than re-pull the identical page forever (see the progress guard in
   // runSyncPull).
   const after = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
-  return { ...result, fetched: rows.length, advanced: after > before };
+  return {
+    ...result,
+    fetched: rows.length,
+    advanced: after > before,
+    membership: helloBody.membership,
+  };
 }
 
 export interface RunSyncPullDeps extends SyncPullDeps {
@@ -150,6 +161,12 @@ export interface RunSyncPullDeps extends SyncPullDeps {
     peer: PullPeer,
     report: { lane: SyncLane; lastAppliedSeq: string },
   ) => Promise<void>;
+  /** Best-effort membership gossip (design §5): called once per peer per drain with the RAW
+   * `membership` document that peer advertised on /hello. Injected so the loop stays a pure transport
+   * (the accept fence + persist live in apps/server). A throw is logged sync.membership_adopt_failed
+   * and swallowed — like reportCursor, it must NEVER fail the peer or grow its backoff (the pull is
+   * never blocked on adoption, spec §5). Absent → no gossip. */
+  adoptMembership?: (rawMembership: unknown) => Promise<void>;
 }
 
 /** The next backoff for a peer: minIdleMs on the first failure, then doubling, capped at maxBackoffMs. */
@@ -233,9 +250,21 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
         // progress — every row cross-origin-parked, so re-pulling it would busy-loop; breaking yields
         // to the round-robin so another peer delivers the parents. Keyed on `fetched` + `advanced`,
         // never `applied` — see the drain note above.
+        let last: SyncPullResult | undefined;
         while (!deps.signal.aborted) {
-          const result = await pullOnce(deps, peer);
-          if (result.fetched < deps.batchLimit || !result.advanced) break;
+          last = await pullOnce(deps, peer);
+          if (last.fetched < deps.batchLimit || !last.advanced) break;
+        }
+        // Best-effort membership adoption (spec §5): hand the peer's advertised document to the
+        // injected callback. Its OWN try/catch — an adopt failure is a witness optimisation missing,
+        // never a pull failure, so it is logged and swallowed here and must NEVER grow the peer's
+        // backoff (same posture as the cursor report below). Runs only when a hello was fetched.
+        if (deps.adoptMembership !== undefined && last !== undefined) {
+          try {
+            await deps.adoptMembership(last.membership);
+          } catch {
+            deps.log("warn", "sync.membership_adopt_failed", { originId: peer.nodeId, lane });
+          }
         }
         // Best-effort cursor report (spec §3.1): read the (subscriber, origin=peer, lane) cursor and
         // report it to the peer so the SOURCE gains cross-node visibility for retention. Wrapped in its

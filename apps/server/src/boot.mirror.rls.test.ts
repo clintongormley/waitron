@@ -322,6 +322,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(await source.json()).toEqual({
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "preproduction",
+        membership: null, // no document adopted → the handshake carries a null membership (design §5)
       });
 
       // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a sync_retention connection):

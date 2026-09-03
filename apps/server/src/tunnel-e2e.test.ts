@@ -115,7 +115,9 @@ beforeAll(async () => {
   await seedParents(mirrorAdmin); // the SAME parents on the mirror so the applied sales' FKs resolve
   await stampEnv(mirrorAdmin, "production"); // a mirror must be environment-stamped before it applies
   mirrorApplier = await mirror.pg.connectAs("sync_applier", "ap");
-  sourceReader = await source.pg.connectAs("sync_reader", "rp");
+  // The source serve pool matches production (boot.ts:1053): a sync_tailer + app_user member, since
+  // /hello now also reads node_membership (app_user's SELECT); sync_reader alone would 500 there.
+  sourceReader = await source.pg.connectAs("sync_applier", "ap");
   sourceWriter = await source.pg.connectAs("app_login", "app_pw");
   // Mint the mirror's Bearer token on the SOURCE (enrolPeer runs as the superuser admin — setup
   // bypasses grants). The mounted source resolves this token to the `e2e-mirror` peer on each call.

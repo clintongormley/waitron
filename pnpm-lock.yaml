@@ -114,6 +114,9 @@ importers:
       '@waitron/layouts':
         specifier: workspace:*
         version: link:../../packages/layouts
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../../packages/membership
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations

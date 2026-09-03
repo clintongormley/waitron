@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { type Database } from "@waitron/db";
 import {
   runSyncPull,
+  syncPullOnce,
   type HttpClient,
   type PullPeer,
   type SyncPullDeps,
@@ -373,5 +375,117 @@ describe("runSyncPull loop control", () => {
     expect(logs.some((l) => l.code === "sync.pull_failed")).toBe(false);
     // The loop still made progress: it slept and came round again rather than dying on the report error.
     expect(rounds).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// --- membership gossip (Slice 3) ---
+// A hello response now carries the held membership document. syncPullOnce threads the RAW parsed
+// `membership` field out through its result, and runSyncPull hands it to an injected best-effort
+// adoptMembership callback. The callback failing must NEVER fail the pull (spec §5: adoption is a
+// witness optimisation, never a blocker) — same contract as reportCursor.
+//
+// These tests exercise the REAL syncPullOnce (not an injected pullOnce), so the raw membership is
+// threaded through the genuine /hello parse. The fake DB below answers each of syncPullOnce's queries
+// by dispatching on the emitted SQL text: the local cursor read (0n), applyBatch's environment
+// handshake (stamped 'production'), and applyBatch's empty-batch cursor read (no rows).
+describe("membership gossip over /hello", () => {
+  const DOC = { body: { term: 4, nodes: [] }, signerNodeId: "A", signature: "s", endorsements: [] };
+  const dialect = new PgDialect();
+
+  function membershipFakeDb(): Database {
+    const execute = async (query: unknown): Promise<{ rows: unknown[] }> => {
+      const text = dialect.sqlToQuery(query as Parameters<PgDialect["sqlToQuery"]>[0]).sql;
+      // readDeploymentEnvironment: the table-exists probe, then the stamp read.
+      if (text.includes("to_regclass")) return { rows: [{ exists: true }] };
+      if (text.includes("from deployment")) return { rows: [{ environment: "production" }] };
+      // syncPullOnce's own cursor read (coalesce ... as seq) → 0n before and after → advanced:false.
+      if (text.includes("coalesce(last_applied_seq")) return { rows: [{ seq: "0" }] };
+      // applyBatch's readCursors (`from sync_cursor`, no coalesce) → no origins → empty.
+      return { rows: [] };
+    };
+    return { execute } as unknown as Database;
+  }
+
+  const baseDeps: SyncPullDeps = {
+    localDb: membershipFakeDb(),
+    subscriberId: "node-a",
+    tenantId: "tenant",
+    localEnvironment: "production",
+    http: throwingHttp, // overridden per test with a real hello+log stub
+    batchLimit: 500,
+  };
+  const peer = peerA;
+  const baseRunDeps = {
+    ...baseDeps,
+    peers: [peer] as readonly PullPeer[],
+    sleep: async (): Promise<void> => {},
+    minIdleMs: 100,
+    maxBackoffMs: 800,
+    log: noopLog,
+  };
+
+  function helloThenEmptyLog(hello: unknown): HttpClient {
+    return async (url: string) => {
+      if (url.endsWith("/sync-api/hello")) {
+        return { status: 200, text: async () => JSON.stringify(hello) };
+      }
+      // /sync-api/log → an empty page (short, so the drain stops after one iteration); any other
+      // endpoint (the best-effort /sync-api/cursor report) → 200 with an empty body.
+      return { status: 200, text: async () => "" };
+    };
+  }
+
+  it("syncPullOnce carries the raw membership field out in its result", async () => {
+    const result = await syncPullOnce(
+      {
+        ...baseDeps,
+        http: helloThenEmptyLog({ nodeId: "A", environment: "production", membership: DOC }),
+      },
+      peer,
+    );
+    expect(result.membership).toEqual(DOC);
+  });
+
+  it("syncPullOnce back-compat: an older peer omitting membership yields undefined (no throw)", async () => {
+    const result = await syncPullOnce(
+      { ...baseDeps, http: helloThenEmptyLog({ nodeId: "A", environment: "production" }) },
+      peer,
+    );
+    expect(result.membership).toBeUndefined();
+  });
+
+  it("runSyncPull invokes adoptMembership with the served document after a drain", async () => {
+    const seen: unknown[] = [];
+    const controller = new AbortController();
+    await runSyncPull({
+      ...baseRunDeps,
+      http: helloThenEmptyLog({ nodeId: "A", environment: "production", membership: DOC }),
+      adoptMembership: async (raw) => {
+        seen.push(raw);
+        controller.abort(); // one round is enough
+      },
+      signal: controller.signal,
+    });
+    expect(seen).toEqual([DOC]);
+  });
+
+  it("a throwing adoptMembership is logged sync.membership_adopt_failed and does NOT fail the pull", async () => {
+    const logs: Array<[string, string]> = [];
+    const controller = new AbortController();
+    await runSyncPull({
+      ...baseRunDeps,
+      http: helloThenEmptyLog({ nodeId: "A", environment: "production", membership: DOC }),
+      log: (level, code) => {
+        logs.push([level, code]);
+        if (code === "sync.membership_adopt_failed") controller.abort();
+      },
+      adoptMembership: async () => {
+        throw new Error("adopt boom");
+      },
+      signal: controller.signal,
+    });
+    // The adopt failure was observable as a warn, and the peer was NOT recorded as a pull failure.
+    expect(logs).toContainEqual(["warn", "sync.membership_adopt_failed"]);
+    expect(logs.some(([, code]) => code === "sync.pull_failed")).toBe(false);
   });
 });

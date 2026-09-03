@@ -42,6 +42,7 @@
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
+    "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",

@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { createPgliteDb } from "./client.js";
-import { readNodeMembership, writeNodeMembership } from "./node-membership.js";
+import {
+  persistNodeMembershipIfNewer,
+  readNodeMembership,
+  writeNodeMembership,
+} from "./node-membership.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
@@ -76,5 +80,34 @@ describe("node_membership accessors", () => {
       pg.db.execute(sql`insert into node_membership (id, term, document) values (2, 1, '{}')`),
     );
     expect(error).toBeDefined();
+  });
+});
+
+describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)", () => {
+  // A separate PGlite instance (not the suite above's) so this describe's beforeEach reset is
+  // independent of the other describe's ordering — moved from apps/server/src/membership-adopt.test.ts,
+  // where it exercised the same accessor before it lived here.
+  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+  // Order-independent (CLAUDE.md §4): clear the singleton before each case rather than relying on
+  // execution order.
+  beforeEach(async () => {
+    await pg.db.execute(sql`delete from node_membership`);
+  });
+
+  it("upserts when there is no held document", async () => {
+    expect(await persistNodeMembershipIfNewer(pg.db, doc(3))).toBe(true);
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(3);
+  });
+
+  it("is monotonic — a lower term is a no-op, a higher term overwrites", async () => {
+    await persistNodeMembershipIfNewer(pg.db, doc(5));
+    // The atomic WHERE guard rejects the not-newer term: proven by deletion — removing `setWhere`
+    // from persistNodeMembershipIfNewer makes this assertion fail (the term-3 write overwrites 5
+    // instead of being rejected). Restored after confirming the failure.
+    expect(await persistNodeMembershipIfNewer(pg.db, doc(3))).toBe(false);
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(5);
+    expect(await persistNodeMembershipIfNewer(pg.db, doc(7))).toBe(true);
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(7);
   });
 });
