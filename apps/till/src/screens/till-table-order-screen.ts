@@ -128,6 +128,10 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* The pending-round drawer handle (+ its Back sibling): a SIBLING of the header (never inside it),
+         so the drawer handle survives when the standalone header is dropped in an embedded card host
+         (SP-B2.2) — it is table BODY function, not shell chrome. Back lives here too but is dropped when
+         embedded (the card host owns nav). Mirrors the floor and station screens' actions extraction. */
       .head-actions {
         display: flex;
         align-items: center;
@@ -362,6 +366,16 @@ export class TillTableOrderScreen extends LitElement {
    * it permits a handheld cash or manual-card tender and fences only the INTEGRATED reader (`/api/pay`).
    * The tab total stays visible either way. */
   @property({ type: Boolean }) canSettle = true;
+  /**
+   * Whether this screen is mounted INSIDE a card host (SP-B2.2) rather than as a standalone screen.
+   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the `.back`
+   * button) — the card host supplies that chrome — but KEEPS the pending-round `.drawer-handle` (with
+   * its pending `.badge`), which is table BODY function (the waiter still opens the tab drawer from
+   * inside a card, spec §7), rendered in the always-present `.head-actions` bar. Mirrors the floor and
+   * station screens' `embedded` seam. Default `false` keeps the standalone screen (its own header +
+   * Back) exactly as before, so every existing table-order test stays green.
+   */
+  @property({ type: Boolean }) embedded = false;
   /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
    * the floor screen renders. The move/join/merge/transfer action flow (TS-3/TS-4) reads it for its
    * target lists: FREE tables to move/join onto, and OTHER open tabs to merge/transfer with. Empty until
@@ -902,28 +916,41 @@ export class TillTableOrderScreen extends LitElement {
         data-order-id=${this.orderId ?? nothing}
         aria-label=${t("table.title")}
       >
-        <header class="head">
-          <h1 class="title">${t("table.title")}</h1>
-          <div class="head-actions">
-            <wt-button
-              class="drawer-handle"
-              data-open-drawer
-              variant="secondary"
-              aria-label=${t("table.open_drawer")}
-              @click=${() => this.#toggleDrawer()}
-            >
-              ${t("table.open_drawer")}
-              ${
-                pending.length > 0
-                  ? html`<span class="badge" data-pending-badge>${pending.length}</span>`
-                  : nothing
-              }
-            </wt-button>
-            <wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
-              ${t("table.back")}
-            </wt-button>
-          </div>
-        </header>
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("table.title")}</h1>
+              </header>`
+        }
+        <div class="head-actions">
+          <wt-button
+            class="drawer-handle"
+            data-open-drawer
+            variant="secondary"
+            aria-label=${t("table.open_drawer")}
+            @click=${() => this.#toggleDrawer()}
+          >
+            ${t("table.open_drawer")}
+            ${
+              pending.length > 0
+                ? html`<span class="badge" data-pending-badge>${pending.length}</span>`
+                : nothing
+            }
+          </wt-button>
+          ${
+            this.embedded
+              ? nothing
+              : html`<wt-button
+                  class="back"
+                  data-back
+                  variant="secondary"
+                  @click=${() => this.#back()}
+                >
+                  ${t("table.back")}
+                </wt-button>`
+          }
+        </div>
         <div class="layout">
           <div class="grid-region">
             <till-menu-switcher
