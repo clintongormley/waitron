@@ -30,6 +30,9 @@ export const tenantThemes = pgTable(
   {
     tenantId: uuid("tenant_id").primaryKey(),
     theme: jsonb("theme").notNull(),
+    // Timestamp: `mode: "string"` follows the NEWER `devices` precedent (devices.ts), NOT `till_layouts`
+    // (which uses `mode: "date"`) — an inert Drizzle read-type choice, not a column-type difference; the
+    // "same precedent as till_layouts" note above is about the jsonb decision only, not this column.
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

@@ -802,6 +802,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
+      // Resolve the calling device ONCE and thread it to both device guards below (the capability
+      // firewall and `requireSaleTillId`): `tryReadDevice` opens a `withTenant` tx and runs the CPU-heavy
+      // scrypt `verifySecret`, so a single read keeps both — and the one gated `last_seen_at` sighting —
+      // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
+      const device = await tryReadDevice(deps, c);
       // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
       // device's assigned profile to declare `integrated-card-payment`. This generalises the old
       // hardcoded handheld check — a handheld carries a capability-less profile (or none), so it is
@@ -809,7 +814,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // write, so the fence holds even if the client were bypassed. An ordinary till carries no device
       // cookie and passes. (A handheld may still settle a cash or manual-card sale on `/api/sales`,
       // node-keyed, which runs NO capability guard — only the INTEGRATED leg here is fenced.)
-      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay");
+      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const body = await c.req.json<IntegratedPayRequest>();
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
       // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
@@ -831,7 +836,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). Resolved AFTER the capability
       // firewall + provider guard so those refusals keep their existing status; the reader-identity till
       // (`provider.collect`) moves to the same device till, consistent with the fiscal record it files.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
+      // Threads the once-resolved `device` so the fail-closed `unauthorized`/`till_required` checks reuse
+      // the binding read above rather than a second scrypt pass.
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const outcome = await payWorkingOrderIntegrated(
         { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
         saleCfg,
@@ -961,12 +968,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // settlement is a cash or manual-card sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
       // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
       // device cookie and passes.
-      await assertNotHandheld(deps, c, "place");
+      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
+      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      const device = await tryReadDevice(deps, c);
+      await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       // SP-A.2 §16.4 cutover: a Mode-I place files a deferred chained invoice under the AUTHENTICATED
       // device's `till_id`, not env (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). The
       // place-amendment `capturedByTillId` moves to the same device till, consistent with that invoice.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         saleCfg,
@@ -1308,13 +1318,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // a handheld's settlement path is a cash or manual-card sale on `/api/sales`), so it is refused
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
-      await assertNotHandheld(deps, c, "collect");
+      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
+      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      const device = await tryReadDevice(deps, c);
+      await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await c.req.json<{ tender: TillTender }>();
       // SP-A.2 §16.4 cutover: collect settles under the AUTHENTICATED device's `till_id`, not env — Mode T
       // files `recordSale` immediate, Mode I settles the deferred invoice. Only `tillId` changes;
       // `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c) };
+      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         saleCfg,

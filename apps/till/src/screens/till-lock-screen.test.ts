@@ -383,8 +383,9 @@ describe("till-lock-screen", () => {
   // up as kitchen display" would take the enrolled phone into the KDS enrol view, where any valid
   // pairing code would SILENTLY replace its device cookie with a `kds_station` identity, bricking the
   // phone as a handheld mid-shift (and escaping the face-set to `station`). `deviceEnrolled` (the app
-  // passes `handheldMode || deviceMode`) hides both affordances; a fresh browser still shows them.
-  it("hides BOTH device-setup affordances once the device is enrolled (deviceEnrolled)", async () => {
+  // passes `handheldMode || deviceMode || tillEnrolled`) hides all three affordances (device / handheld
+  // / till); a fresh browser still shows them.
+  it("hides ALL THREE device-setup affordances once the device is enrolled (deviceEnrolled)", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       deviceEnrolled: true,
@@ -397,10 +398,10 @@ describe("till-lock-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
   });
 
-  it("keeps BOTH device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {
+  it("keeps ALL THREE device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {
     // Prove-by-deletion counterpart: with `deviceEnrolled` false (the default — a fresh browser has no
-    // device cookie yet) both the kitchen-display and waiter-handheld set-up controls must remain, or a
-    // first-time enrolment would be impossible.
+    // device cookie yet) all three set-up controls (kitchen-display, waiter-handheld, till) must remain,
+    // or a first-time enrolment would be impossible.
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       deviceEnrolled: false,

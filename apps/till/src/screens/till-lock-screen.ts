@@ -149,12 +149,13 @@ export class TillLockScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
 
   /**
-   * Whether THIS browser is already an enrolled device — a waiter's handheld or a KDS (`till-app`
-   * passes `handheldMode || deviceMode`). An enrolled handheld returns to this lock screen on every
-   * logout and cold boot, so the device-setup affordances are gated on this being `false`
-   * (device-identity §C2): showing "Set up as kitchen display" to an already-enrolled phone would let a
-   * waiter re-enrol it as a `kds_station` — silently replacing its device cookie and escaping the phone
-   * shell. A FRESH browser (`false`, the default) still shows both so a first-time enrolment works.
+   * Whether THIS browser is already an enrolled device — a waiter's handheld, a KDS, or a till
+   * (`till-app` passes `this.handheldMode || this.deviceMode || this.tillEnrolled`, `till-app.ts:1894`).
+   * An enrolled handheld returns to this lock screen on every logout and cold boot, so the device-setup
+   * affordances are gated on this being `false` (device-identity §C2): showing "Set up as kitchen
+   * display" to an already-enrolled phone would let a waiter re-enrol it as a `kds_station` — silently
+   * replacing its device cookie and escaping the phone shell. A FRESH browser (`false`, the default)
+   * still shows all three (device / handheld / till) so a first-time enrolment works.
    */
   @property({ type: Boolean }) deviceEnrolled = false;
 
@@ -244,9 +245,9 @@ export class TillLockScreen extends LitElement {
       ${this.#renderRoster()}
       <div class="device-setup">
         <!-- Device-setup affordances (device-identity §5a / handheld Task 8), shown only to a FRESH
-             browser. An already-enrolled device (deviceEnrolled) hides both — see §C2: a waiter must
-             not be able to re-enrol an in-service handheld as a KDS (swapping its device cookie) or
-             escape the phone shell to the station screen. -->
+             browser. An already-enrolled device (deviceEnrolled) hides all three (device / handheld /
+             till) — see §C2: a waiter must not be able to re-enrol an in-service handheld as a KDS
+             (swapping its device cookie) or escape the phone shell to the station screen. -->
         ${
           this.deviceEnrolled
             ? nothing

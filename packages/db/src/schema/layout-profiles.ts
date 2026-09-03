@@ -13,9 +13,11 @@ import { tenants } from "./tenants.js";
  * jsonb. Same rationale — and same precedent — as `till_layouts` (layouts.ts).
  *
  * FK `restrict`, not cascade: removing a tenant must never silently discard its authored profiles.
- * The `/* v8 ignore next *\/` on the thunk arrow matches the till_layouts reasoning — drizzle-kit
- * resolves it in a separate CLI process, so v8 would otherwise count the never-invoked arrow as an
- * uncovered function.
+ * The `/* v8 ignore next *\/` on the thunk arrow addresses the SAME v8 quirk `till_layouts` documents —
+ * drizzle-kit resolves the FK in a separate CLI process, so v8 counts the never-invoked arrow as an
+ * uncovered function — but by a DIFFERENT remedy: `till_layouts` sidesteps it with the array
+ * `foreignKey({...})` form (no thunk), whereas this table keeps the `.references(() => …)` thunk and
+ * silences the false uncovered-function with the v8-ignore.
  *
  * `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`. The `FORCE`, the tenant-isolation policy and
  * the app_user grants (SELECT/INSERT/UPDATE/DELETE — profiles are deletable) are hand-written in the
@@ -31,6 +33,9 @@ export const layoutProfiles = pgTable(
       .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     definition: jsonb("definition").notNull(),
+    // Timestamps: `mode: "string"` follows the NEWER `devices` precedent (devices.ts), NOT `till_layouts`
+    // (which uses `mode: "date"`) — an inert Drizzle read-type choice, not a column-type difference; the
+    // "same precedent as till_layouts" note above is about the jsonb decision only, not these columns.
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

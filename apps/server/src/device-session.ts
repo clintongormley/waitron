@@ -223,15 +223,22 @@ export async function requireDevice(
  * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard (UUID-validated,
  * `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the env value it replaces
  * (`till-config.ts`).
+ *
+ * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard reads
+ * the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTenant` read run once
+ * per request instead of twice. Passing `null` means "resolved, no device" (fail-closed → `unauthorized`);
+ * OMITTING it preserves the original behaviour — this reads the binding itself. Undefined (omitted), not
+ * null, is the "read it yourself" signal, so the fail-closed null path is unchanged either way.
  */
 export async function requireSaleTillId(
   deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
+  device?: DeviceBinding | null,
 ): Promise<TillId> {
-  const device = await tryReadDevice(deps, c);
-  if (device === null) throw new AppError("device.unauthorized", {});
-  if (device.tillId === null) throw new AppError("device.till_required", {});
-  return tillId(device.tillId);
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  if (resolved === null) throw new AppError("device.unauthorized", {});
+  if (resolved.tillId === null) throw new AppError("device.till_required", {});
+  return tillId(resolved.tillId);
 }
 
 /**
@@ -248,14 +255,20 @@ export async function requireSaleTillId(
  * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which
  * never posts to a sale route anyway) also passes. ONLY an active `handheld` binding is refused, with
  * `device.forbidden_action` naming the attempted `action`.
+ *
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): a settlement route reads
+ * the binding ONCE and threads it here and to `requireSaleTillId`, so scrypt runs once per request. `null`
+ * means "resolved, no device" (passes, like an absent cookie); OMITTING it preserves the original
+ * behaviour — this reads the binding itself.
  */
 export async function assertNotHandheld(
   deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
   action: string,
+  device?: DeviceBinding | null,
 ): Promise<void> {
-  const device = await tryReadDevice(deps, c);
-  if (device?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  if (resolved?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
 }
 
 /**
@@ -283,21 +296,28 @@ export async function assertNotHandheld(
  * A handheld carrying a capability-less profile (e.g. the phone-portrait default, `capabilities: []`)
  * is therefore still refused pay + drawer — the handheld-firewall behaviour is PRESERVED, now enforced
  * by the capability rather than by the kind.
+ *
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
+ * binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt run once per
+ * request (the profile `getProfile` read below is a separate query and always runs). `null` means
+ * "resolved, no device" (passes, branch 1); OMITTING it preserves the original behaviour — this reads
+ * the binding itself, which is why the other capability call-site (`/api/drawer/open`) need not change.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
   capability: CapabilityFlag,
   action: string,
+  device?: DeviceBinding | null,
 ): Promise<void> {
-  const device = await tryReadDevice(deps, c);
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
   // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
-  if (device === null) return;
+  if (resolved === null) return;
   // (2) No assigned profile ⇒ no declared capabilities ⇒ refuse.
-  if (device.layoutProfileId === null) {
+  if (resolved.layoutProfileId === null) {
     throw new AppError("device.forbidden_action", { action });
   }
-  const layoutProfileId = device.layoutProfileId;
+  const layoutProfileId = resolved.layoutProfileId;
   // (3) Resolve the profile in the SAME tx shape `tryReadDevice` uses (RLS as `app_user`).
   const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
     await asAppUser(tx);

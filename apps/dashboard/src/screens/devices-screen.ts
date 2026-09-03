@@ -280,8 +280,10 @@ export class DevicesScreen extends LitElement {
     this.devices = await this.api.listDevices();
   }
 
-  /** Capture the picked device kind. Switching to a handheld hides the station field; #generate gates the
-   * station requirement on this value. Same defensive `stopPropagation` as the station picker. */
+  /** Capture the picked device kind — the value the whole add-device form surfaces its per-kind fields
+   * off. A `kds_station` shows the station field; `till`/`handheld` show the till field (:617); `till`
+   * additionally surfaces the hardware fields (:641, via {@link #renderTillHardware}). #generate gates
+   * the station requirement on this value. Same defensive `stopPropagation` as the station picker. */
   #onKindChange(event: Event): void {
     event.stopPropagation();
     this.kind = (event.target as HTMLSelectElement).value;
