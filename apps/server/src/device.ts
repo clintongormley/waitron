@@ -12,6 +12,7 @@ import {
   pgErrorConstraint,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { FormFactor } from "@waitron/layouts";
 import { hashSecret } from "@waitron/identity";
 import type { TillConfig } from "./till-config.js";
 import { requireLiveStation } from "./kitchen.js";
@@ -121,6 +122,25 @@ export function kindRequiresStation(kind: DeviceKind): boolean {
  * but kept a SEPARATE predicate because a future kind need not preserve that coincidence. */
 export function kindRequiresTill(kind: DeviceKind): boolean {
   return kind === "till" || kind === "handheld";
+}
+
+/**
+ * Derive a layout FORM FACTOR from a device KIND for the profile fallback (SP-B1). A device row
+ * carries only `kind` (`packages/db/src/schema/devices.ts`), never a form factor, so the mapping is
+ * fixed here beside the other "what a device kind implies" predicates. `handheld` → `phone-portrait`:
+ * the codebase treats a handheld as a phone (the phone shell in `till-app`, and `device-session.ts`'s
+ * own doc pairs a handheld with the phone-portrait default). `tablet-landscape` is not reachable via
+ * device kind today.
+ */
+export function deviceFormFactor(kind: DeviceKind): FormFactor {
+  switch (kind) {
+    case "till":
+      return "till";
+    case "kds_station":
+      return "kds";
+    case "handheld":
+      return "phone-portrait";
+  }
 }
 
 /** The pg SQLSTATE for a foreign-key violation, as `@waitron/printing`'s `printers.ts` and

@@ -69,6 +69,13 @@ const heldTab: TabDef = {
   cards: [{ type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] }],
 };
 
+const prepTab: TabDef = {
+  key: "counter",
+  title: "Counter",
+  columns: 12,
+  cards: [{ type: "prep-queue", colSpan: 6, rowSpan: 3, config: {}, visibleWhen: ["has-items"] }],
+};
+
 describe("till-card-grid", () => {
   it("renders each card element in a spanning cell on a fluid grid", async () => {
     const store = new WorkingOrderStore();
@@ -170,14 +177,6 @@ describe("till-card-grid", () => {
 
   it("hides a prep-queue card gated on has-items when the queue is empty", async () => {
     const store = new WorkingOrderStore();
-    const prepTab: TabDef = {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "prep-queue", colSpan: 6, rowSpan: 3, config: {}, visibleWhen: ["has-items"] },
-      ],
-    };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: prepTab,
       store,
@@ -188,14 +187,6 @@ describe("till-card-grid", () => {
 
   it("shows a prep-queue card gated on has-items when the queue has items", async () => {
     const store = new WorkingOrderStore();
-    const prepTab: TabDef = {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "prep-queue", colSpan: 6, rowSpan: 3, config: {}, visibleWhen: ["has-items"] },
-      ],
-    };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: prepTab,
       store,

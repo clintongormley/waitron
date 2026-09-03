@@ -15,7 +15,7 @@ import {
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { getLayout, getProfile, getProfileForFormFactor } from "@waitron/layouts";
-import type { FormFactor, ProfileDef } from "@waitron/layouts";
+import type { ProfileDef } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -92,7 +92,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import type { DeviceKind } from "./device.js";
+import { deviceFormFactor } from "./device.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -101,24 +101,6 @@ import { requireUuidParam } from "./request-screens.js";
 // `error-boundary.ts` these routes wrap through is what answers with `server.internal` now, and it
 // emits that as a bare literal, so it needs no such import of its own. See errors.ts.
 import "./errors.js";
-
-/**
- * Derive a layout FORM FACTOR from a device KIND for the profile fallback (SP-B1). A device row
- * carries only `kind` (`packages/db/src/schema/devices.ts`), never a form factor, so the mapping is
- * fixed here. `handheld` → `phone-portrait`: the codebase treats a handheld as a phone (the phone
- * shell in `till-app`, and `device-session.ts`'s own doc pairs a handheld with the phone-portrait
- * default). `tablet-landscape` is not reachable via device kind today.
- */
-export function deviceFormFactor(kind: DeviceKind): FormFactor {
-  switch (kind) {
-    case "till":
-      return "till";
-    case "kds_station":
-      return "kds";
-    case "handheld":
-      return "phone-portrait";
-  }
-}
 
 /**
  * Everything the till's HTTP routes need, defined COMPLETE now even though the session routes below

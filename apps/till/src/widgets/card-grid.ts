@@ -72,9 +72,9 @@ export class TillCardGrid extends LitElement {
     </div>`;
   }
 
-  #cell(card: CardInstance): TemplateResult {
+  #cell(card: CardInstance): TemplateResult | typeof nothing {
     const element = this.#element(card);
-    if (element === nothing) return html``;
+    if (element === nothing) return nothing;
     return html`<div
       class="cell"
       style="grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}"
