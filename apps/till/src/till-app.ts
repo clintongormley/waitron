@@ -422,7 +422,7 @@ export class TillApp extends LitElement {
    * The device's assigned layout PROFILE as received from `GET /api/till` (SP-B1), or `undefined` when
    * the server omits it — an older server that predates SP-B1, or a request with no enrolled-device
    * cookie (the server resolves a profile for every enrolled device, assigned or the form-factor
-   * default, so a present cookie always yields one). {@link counterTab}
+   * default, so a present cookie always yields one). The `#counterTab()` helper
    * selects this profile's `counter` tab and threads it to `till-counter-screen`; a screen handed no tab
    * falls back to the region-model layout (Task 4), so an unprofiled boot is unaffected. The profile is a
    * LOCAL mirror shape ({@link ProfileDef}), bundle-decoupled from `@waitron/layouts` like {@link LayoutDef}.
