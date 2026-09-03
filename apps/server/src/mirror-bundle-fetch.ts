@@ -19,7 +19,15 @@ import { assertSafePrimaryUrl } from "./primary-url.js";
 import "./errors.js";
 
 /**
- * Fetch a `MirrorBundle` from the primary at `primaryUrl` using the operator's admin `credential`.
+ * Fetch a `MirrorBundle` from the primary at `primaryUrl` using the operator's admin `credential`,
+ * carrying the mirror's own `standby` identity (membership promotion R2) for the primary to reserve +
+ * endorse. Only the standby's PUBLIC half + nodeId travel — the private key is minted and sealed
+ * mirror-side (`generateStandbyIdentity`/`establishReservedStandbyIdentity`), never sent.
+ *
+ * The standby fields ride the SAME JSON body as the credential, flattened as `standbyNodeId` /
+ * `standbyPublicKey`: the primary's route screens both alongside the credential in one body read, and
+ * a malformed standby there is refused `mirror.standby_invalid` (400) rather than folded into the
+ * credential's `password.invalid` (401).
  *
  * ANY failure — a network error reaching the primary, a non-2xx response, or a body that does not
  * parse as JSON — maps to `mirror.bundle_fetch_failed` (Task 6), which the adopt route reports to the
@@ -30,6 +38,7 @@ import "./errors.js";
 export async function fetchMirrorBundle(
   primaryUrl: string,
   credential: AdoptCredential,
+  standby: { nodeId: string; publicKey: string },
 ): Promise<MirrorBundle> {
   // Defense in depth: re-run the SSRF guard at the fetch boundary (setup-api validates before it reaches
   // here, but this fetcher must be safe for any caller — it never builds a request from an unvalidated
@@ -49,7 +58,11 @@ export async function fetchMirrorBundle(
     response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(credential),
+      body: JSON.stringify({
+        ...credential,
+        standbyNodeId: standby.nodeId,
+        standbyPublicKey: standby.publicKey,
+      }),
     });
   } catch {
     throw new AppError("mirror.bundle_fetch_failed", {});

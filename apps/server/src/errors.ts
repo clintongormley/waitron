@@ -1381,10 +1381,11 @@ declare module "@waitron/shared" {
      *
      * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
      * same `sync.*`/`tunnel.*` no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
-     * standby's key is not echoed. `mirror.*` names the DOMAIN CONCEPT — a read-only mirror node —
-     * never the throwing package (`tenant.not_found`'s note above gives the rule); `server.*` is
-     * reserved for facts about the process itself, and "the standby identity is malformed" is a fact
-     * about the mirror-bundle request. Never renamed once shipped.
+     * standby's key is not echoed. `mirror.*` names the DOMAIN CONCEPT — here the cloud-mirror
+     * adoption handshake, specifically the standby identity a bundle request must carry for the primary
+     * to reserve + endorse — never the throwing package (`tenant.not_found`'s note above gives the
+     * rule); `server.*` is reserved for facts about the process itself, and "the standby identity is
+     * malformed" is a fact about the mirror-bundle request, not the process. Never renamed once shipped.
      */
     "mirror.standby_invalid": Record<string, never>;
     /**
