@@ -30,7 +30,7 @@ import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { deviceFormFactor, enrolDevice, generatePairingCode } from "./device.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -294,6 +294,14 @@ async function enrolTillDeviceCookie(
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
+
+describe("deviceFormFactor", () => {
+  it("maps each device kind to a form factor", () => {
+    expect(deviceFormFactor("till")).toBe("till");
+    expect(deviceFormFactor("kds_station")).toBe("kds");
+    expect(deviceFormFactor("handheld")).toBe("phone-portrait");
+  });
+});
 
 describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   it("POST opens a session and sets an httpOnly SameSite=Strict cookie; DELETE ends it", async () => {
@@ -936,29 +944,34 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till OMITS `profile` for a device whose layoutProfileId is null", async () => {
-    // A device cookie whose device carries NO assigned profile resolves nothing: the `profile` key is
-    // ABSENT (never null), and every pre-existing boot field is unchanged. This is the device-present,
-    // profile-absent branch — distinct from the no-cookie exact-shape assertion above.
+  it("falls back to the form-factor default profile for an enrolled device with no assigned profile", async () => {
+    const cookie = await enrolTillDeviceCookie(suite.db, null);
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
     try {
-      const cookie = await enrolTillDeviceCookie(suite.db, null);
-      const app = new Hono();
-      mountTillApi(app, deps(suite.db), collect([]));
-
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body).not.toHaveProperty("profile");
-      // The rest of the payload is intact — issuer identity + card fields + default layout still present.
-      expect(body).toMatchObject({
-        venueName: "Test SL",
-        cardProvider: "none",
-        layout: DEFAULT_LAYOUT,
-        receipt: DEFAULT_RECEIPT,
-      });
+      const body = (await res.json()) as {
+        profile: unknown;
+        layout: LayoutDef;
+        receipt: ReceiptConfig;
+      };
+      // No stored profile of this form factor → the built-in default for a till device.
+      expect(body.profile).toEqual(DEFAULT_PROFILES.till);
+      expect(body.layout).toEqual(DEFAULT_LAYOUT);
+      expect(body.receipt).toEqual(DEFAULT_RECEIPT);
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
     }
+  });
+
+  it("omits the profile entirely when the request carries no device cookie", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/till"); // no cookie header
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).not.toHaveProperty("profile");
   });
 });
 

@@ -13,7 +13,7 @@ import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
-import { LAYOUT_A, type LayoutDef } from "./layout.js";
+import { LAYOUT_A, type LayoutDef, type ProfileDef } from "./layout.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -3786,6 +3786,25 @@ describe("till-app", () => {
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(ticket(el)!.receipt).toEqual({});
+    });
+  });
+
+  describe("layout profile (SP-B1)", () => {
+    // A `till` profile whose `counter` tab is what #boot reads and #counterTab() selects. Only the
+    // fields the assertion checks (key/columns) are load-bearing; the rest complete a valid ProfileDef.
+    const counterProfile: ProfileDef = {
+      formFactor: "till",
+      capabilities: [],
+      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
+    };
+
+    it("threads the profile's counter tab into the counter screen", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: counterProfile }),
+      });
+      await toCounter(el);
+      const c = counter(el)!;
+      expect(c.counterTab).toMatchObject({ key: "counter", columns: 12 });
     });
   });
 

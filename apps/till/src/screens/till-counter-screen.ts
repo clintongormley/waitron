@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
-import { LAYOUT_A, type LayoutDef, type WidgetInstance } from "../layout.js";
+import { LAYOUT_A, type LayoutDef, type TabDef, type WidgetInstance } from "../layout.js";
 // Side-effect imports: registering each widget element so the layout below can render its tag. The
 // screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
 import "../widgets/product-grid.js";
@@ -12,6 +12,10 @@ import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
 import "../widgets/station-queue.js";
+// The SP-B1 grid renderer (Task 3). When a counter TAB is supplied the screen delegates its widget
+// body to this element, which lays the tab's cards on a fluid grid; the region model below stays the
+// fallback for when no tab is supplied (its removal is B4). Named only as a tag, never as a class.
+import "../widgets/card-grid.js";
 // The multi-menu switcher shown above the grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
 // The menu DIET filter shown above the grid (dietary-classification, Task 7) — narrows the tiles to a
@@ -110,6 +114,14 @@ export class TillCounterScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      /* The grid path (SP-B1) stacks the menu/diet chrome above the card grid, which owns its own
+         internal grid — so it overrides the region model's two-column body layout. */
+      .grid-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
       /* Narrow screens (a phone or a split view) stack the aside UNDER the grid, one column. */
       @media (max-width: 48rem) {
         .body {
@@ -188,6 +200,13 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The arrangement to render. Defaults to slice 1's {@link LAYOUT_A}; a later editor supplies its own. */
   @property({ attribute: false }) layout: LayoutDef = LAYOUT_A;
+  /**
+   * The profile's COUNTER tab (SP-B1). When set, the screen delegates its widget body to
+   * {@link TillCardGrid} — the cards laid on a fluid grid — instead of the region model. When unset
+   * (undefined), the {@link layout} region model below renders unchanged as the fallback (its removal
+   * is B4). Task 5 wires this from the boot profile.
+   */
+  @property({ attribute: false }) counterTab?: TabDef;
   /**
    * The till's integrated-card wiring (Task 9), threaded straight through to the pay widget's own
    * `cardProvider` — see `till-tender-pay`'s INTEGRATED CARD doc for what each value does. Defaults
@@ -306,6 +325,58 @@ export class TillCounterScreen extends LitElement {
     }
   }
 
+  /**
+   * The menu switcher + diet filter shown above the grid. Rendered identically in both the region
+   * fallback (inside `.region-main`) and the grid path (above `till-card-grid`), so switching to the
+   * profile tab keeps the same menu/diet chrome. The diet filter is shown only when some product
+   * carries a published diet ({@link #hasDietData}).
+   */
+  #menuControls(): TemplateResult {
+    return html`
+      <till-menu-switcher
+        class="menu-switcher"
+        .menus=${this.menus}
+        .selectedId=${this.selectedMenuId}
+      ></till-menu-switcher>
+      ${
+        this.#hasDietData()
+          ? html`<till-diet-filter
+              class="diet-filter"
+              .selected=${this.selectedDiet}
+              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
+                this.#pickDiet(e.detail.predicate)}
+            ></till-diet-filter>`
+          : nothing
+      }
+    `;
+  }
+
+  /**
+   * The sale body when a counter TAB is supplied (SP-B1): the menu/diet chrome above, then the profile
+   * tab's cards laid out by {@link TillCardGrid}. The grid is fed the SAME data the region `#widget`
+   * bindings use today — crucially `#gridProducts()` (menu + diet narrowed), never the raw `products`,
+   * so `till-card-grid` stays dumb and today's filtering behaviour is preserved here.
+   */
+  #gridBody(tab: TabDef): TemplateResult {
+    return html`<div class="body grid-body">
+      ${this.#menuControls()}
+      <till-card-grid
+        .tab=${tab}
+        .store=${this.store}
+        .products=${this.#gridProducts()}
+        .heldOrders=${this.heldOrders}
+        .stationQueue=${this.stationQueue}
+        .defaultStationId=${this.defaultStationId}
+        .busy=${this.busy}
+        .orderFlow=${this.orderFlow}
+        .stage=${this.stage}
+        .cardProvider=${this.cardProvider}
+        .tipsEnabled=${this.tipsEnabled}
+        .cardOutcome=${this.cardOutcome}
+      ></till-card-grid>
+    </div>`;
+  }
+
   override render() {
     const inRegion = (region: WidgetInstance["region"]) =>
       this.layout.filter((widget) => widget.region === region);
@@ -347,30 +418,17 @@ export class TillCounterScreen extends LitElement {
                 .invoiceLocale=${this.invoiceLocale}
                 @close-allergens=${() => this.#closeAllergens()}
               ></till-allergen-screen>`
-            : html`<div class="body">
-                <div class="region region-main">
-                  <till-menu-switcher
-                    class="menu-switcher"
-                    .menus=${this.menus}
-                    .selectedId=${this.selectedMenuId}
-                  ></till-menu-switcher>
-                  ${
-                    this.#hasDietData()
-                      ? html`<till-diet-filter
-                          class="diet-filter"
-                          .selected=${this.selectedDiet}
-                          @diet-filter-selected=${(
-                            e: CustomEvent<{ predicate: DietPredicate | null }>,
-                          ) => this.#pickDiet(e.detail.predicate)}
-                        ></till-diet-filter>`
-                      : nothing
-                  }
-                  ${inRegion("main").map((widget) => this.#widget(widget))}
-                </div>
-                <div class="region region-aside">
-                  ${inRegion("aside").map((widget) => this.#widget(widget))}
-                </div>
-              </div>`
+            : this.counterTab !== undefined
+              ? this.#gridBody(this.counterTab)
+              : html`<div class="body">
+                  <div class="region region-main">
+                    ${this.#menuControls()}
+                    ${inRegion("main").map((widget) => this.#widget(widget))}
+                  </div>
+                  <div class="region region-aside">
+                    ${inRegion("aside").map((widget) => this.#widget(widget))}
+                  </div>
+                </div>`
         }
       </div>
     `;

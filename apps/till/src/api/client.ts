@@ -19,7 +19,7 @@
 // The till's LOCAL layout/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
 // exactly like every interface below. `GET /api/till` carries the authored-or-default arrangement +
 // receipt trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
-import type { LayoutDef, ReceiptConfig } from "../layout.js";
+import type { LayoutDef, ProfileDef, ReceiptConfig } from "../layout.js";
 // `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
@@ -89,13 +89,14 @@ export interface TillInfo {
   layout: LayoutDef;
   receipt: ReceiptConfig;
   /**
-   * The CALLING device's assigned layout PROFILE (SP-A.2 §16.3) — present ONLY when the boot request
-   * carried a device cookie for a device with a resolvable profile, ABSENT otherwise. ADDITIVE: the app
-   * still renders from {@link layout}/{@link receipt} above; booting into the profile model is SP-B, which
-   * lands the typed local `ProfileDef` mirror (never imported from `@waitron/layouts` — the bundle rule)
-   * and the consumer that reads this. Left `unknown` here so no consumer can use it un-narrowed before then.
+   * The CALLING device's assigned layout PROFILE (SP-A.2 §16.3) — present for ANY enrolled device: the
+   * device's explicitly assigned profile, or the form-factor DEFAULT the server falls back to when the
+   * device has none. ABSENT only when the boot request carried no device cookie at all (an
+   * un-enrolled/pre-pairing request). ADDITIVE: the app still renders from {@link layout}/{@link receipt}
+   * above. A LOCAL mirror of the server's `ProfileDef`, never imported from `@waitron/layouts` — the
+   * bundle rule. Consumed by SP-B1: the counter renders from this profile's counter tab.
    */
-  profile?: unknown;
+  profile?: ProfileDef;
 }
 
 /**

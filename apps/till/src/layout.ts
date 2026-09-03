@@ -52,3 +52,54 @@ export const LAYOUT_A: LayoutDef = [
   { type: "held-orders", region: "aside", config: {} },
   { type: "prep-queue", region: "aside", config: {} },
 ];
+
+// ---------------------------------------------------------------------------
+// SP-B profile model — a LOCAL mirror of `@waitron/layouts` (`packages/layouts/src/profile.ts`),
+// bundle-decoupled exactly like `LayoutDef`/`ReceiptConfig` above — deliberately NOT imported from
+// `@waitron/layouts` (the bundle rule). The server validates every profile on write; the client
+// trusts the shape it receives. Keep in sync with profile.ts if that model changes.
+// ---------------------------------------------------------------------------
+
+export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
+
+export type CapabilityFlag = "integrated-card-payment" | "open-cash-drawer" | "act-as-kds";
+
+export type CardType =
+  | "product-grid"
+  | "basket"
+  | "total"
+  | "tender-pay"
+  | "held-orders"
+  | "prep-queue"
+  | "notifications"
+  | "floor-plan"
+  | "table-layout-editor"
+  | "kds-board"
+  | "expo"
+  | "table-order";
+
+export interface CardInstance {
+  type: CardType;
+  colSpan: number;
+  rowSpan: number;
+  config: Record<string, unknown>;
+  visibleWhen?: string[];
+}
+
+export interface TabDef {
+  key: string;
+  title: string;
+  columns: number;
+  cards: CardInstance[];
+}
+
+export interface ThemeOverride {
+  tokens: Record<string, string>;
+}
+
+export interface ProfileDef {
+  formFactor: FormFactor;
+  tabs: TabDef[];
+  capabilities: CapabilityFlag[];
+  theme?: ThemeOverride;
+}

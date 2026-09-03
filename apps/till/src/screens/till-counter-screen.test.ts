@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
-import { LAYOUT_A, type LayoutDef } from "../layout.js";
+import { LAYOUT_A, type LayoutDef, type TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
@@ -19,6 +19,18 @@ const cafe: TillProduct = {
 };
 
 const products: TillProduct[] = [cafe];
+
+const counterTab: TabDef = {
+  key: "counter",
+  title: "Counter",
+  columns: 12,
+  cards: [
+    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+    { type: "total", colSpan: 4, rowSpan: 1, config: {} },
+    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+  ],
+};
 
 const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
@@ -121,6 +133,19 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("till-basket")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-total")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+  });
+
+  it("renders the grid renderer when a counter tab is supplied", async () => {
+    const { el } = await mount({ counterTab });
+    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+    // legacy region containers are gone in the grid path
+    expect(el.shadowRoot!.querySelector(".region-aside")).toBeNull();
+  });
+
+  it("falls back to the region model when no counter tab is supplied", async () => {
+    const { el } = await mount({});
+    expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".region-main")).not.toBeNull();
   });
 
   it("passes the SAME store instance to every widget (they coordinate through one store)", async () => {
