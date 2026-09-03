@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { Database } from "./client.js";
+import type { Database, Transaction } from "./client.js";
 import { deployment } from "./schema/deployment.js";
 import "./errors.js";
 
@@ -169,7 +169,16 @@ export async function readDeploymentAxes(
  * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
  * read-only mirror cannot hold singletons; a promotion flips the mode first (the promote action's job). */
 export async function setSingletonRole(db: Database, role: SingletonRole): Promise<void> {
-  const result = await db.execute<{ id: number }>(
+  await db.transaction((tx) => setSingletonRoleTx(tx, role));
+}
+
+/** Sets the singleton-ownership role on a caller-provided transaction (see `setSingletonRole` for the
+ * full contract — owner-role write, fail-loud on a 0-row update, `deployment_role_valid_ck` refuses
+ * `'primary'` on a mirror). Exists so the promotion path (design §10) can commit this flip in the
+ * SAME transaction as the membership-document write (`writeNodeMembershipTx`), so both land or neither
+ * does. `setSingletonRole` is this on its own transaction. */
+export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): Promise<void> {
+  const result = await tx.execute<{ id: number }>(
     sql`update deployment set singleton_role = ${role} where id = 1 returning id`,
   );
   if (result.rows.length === 0) {

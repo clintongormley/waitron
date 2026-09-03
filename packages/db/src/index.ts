@@ -79,6 +79,7 @@ export {
   readSingletonRole,
   setDeploymentMode,
   setSingletonRole,
+  setSingletonRoleTx,
   stampDeployment,
 } from "./deployment.js";
 export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./deployment.js";
@@ -89,6 +90,7 @@ export {
   persistNodeMembershipIfNewer,
   readNodeMembership,
   writeNodeMembership,
+  writeNodeMembershipTx,
 } from "./node-membership.js";
 export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./node-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
