@@ -715,6 +715,60 @@ export interface DeviceStation {
 }
 
 /**
+ * The SP-C dev per-tab device chooser's payloads (dev-only routes, honoured server-side ONLY in
+ * devMode). {@link DevDeviceList} is what `GET /api/dev/devices` returns — this venue's enrolled
+ * `devices` plus the option-sources the mint form binds against (`tills`, `stations`, `profiles`);
+ * {@link DevMintRequest}/{@link DevMintResult} are the mint-and-adopt round trip. All LOCAL mirrors
+ * of the server's dev-route shapes, deliberately NOT imported — the same bundle-decoupling rationale
+ * as every other type in this file (see the file header). `kind` stays a plain `string` (not a
+ * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
+ */
+export interface DevDevice {
+  id: string;
+  kind: string;
+  label: string;
+  tillId: string | null;
+  layoutProfileId: string | null;
+  stationId: string | null;
+  active: boolean;
+}
+export interface DevTill {
+  id: string;
+  name: string;
+  locationId: string;
+}
+export interface DevStation {
+  id: string;
+  name: string;
+  displayOrder: number;
+  isDefault: boolean;
+  active: boolean;
+}
+export interface DevProfile {
+  id: string;
+  name: string;
+}
+export interface DevDeviceList {
+  devices: DevDevice[];
+  tills: DevTill[];
+  stations: DevStation[];
+  profiles: DevProfile[];
+}
+export interface DevMintRequest {
+  kind: string;
+  label: string;
+  tillId?: string;
+  stationId?: string;
+  layoutProfileId?: string;
+}
+export interface DevMintResult {
+  deviceId: string;
+  kind: string;
+  stationId: string | null;
+  label: string;
+}
+
+/**
  * One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item carrying the
  * display fields the pass renders: the line's snapshotted `name` map + `qty`, the RESOLVED station name
  * (the cross-station label {@link StationQueueItem} deliberately omits, so the expediter sees the grill
@@ -1382,6 +1436,19 @@ export class TillApi {
    */
   async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
     await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
+  }
+
+  /** SP-C dev chooser: list this venue's enrolled devices + binding option-sources (dev-only route). */
+  getDevDevices(): Promise<DevDeviceList> {
+    return this.#request<DevDeviceList>("/api/dev/devices", "GET");
+  }
+  /** SP-C dev chooser: mint-and-adopt a new device (dev-only route). */
+  mintDevDevice(req: DevMintRequest): Promise<DevMintResult> {
+    return this.#request<DevMintResult>("/api/dev/devices", "POST", req);
+  }
+  /** SP-C: drop this browser's device cookie identity. */
+  resetDevice(): Promise<void> {
+    return this.#request<void>("/api/device/reset", "POST");
   }
 
   /**
