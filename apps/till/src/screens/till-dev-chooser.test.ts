@@ -255,8 +255,10 @@ describe("till-dev-chooser", () => {
     expect(navigate).toHaveBeenCalledWith("/");
   });
 
-  it("resets this browser's cookie identity", async () => {
+  it("resets this browser's cookie identity AND clears this tab's stored override", async () => {
     const resetDevice = vi.fn().mockResolvedValue(undefined);
+    // This tab has already adopted a device — reset must un-adopt it, not just drop the cookie.
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "adopted1");
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ resetDevice }),
     });
@@ -264,6 +266,8 @@ describe("till-dev-chooser", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-reset]")!.click();
     await flush(el);
     expect(resetDevice).toHaveBeenCalledOnce();
+    // The per-tab override is gone, so the tab reverts to the (now-cleared) cookie identity.
+    expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
   });
 
   it("handles a rejected reset inline rather than throwing an unhandled rejection", async () => {

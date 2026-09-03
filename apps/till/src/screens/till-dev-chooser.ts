@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { selectStyles } from "../select-styles.js";
-import { setDevDeviceId } from "../api/dev-device.js";
+import { clearDevDeviceId, setDevDeviceId } from "../api/dev-device.js";
 import type { DevDeviceList, DevMintRequest, TillApi } from "../api/client.js";
 
 /**
@@ -182,10 +182,14 @@ export class TillDevChooser extends LitElement {
     }
   }
 
-  /** Drop this browser's device cookie identity (a fresh, unenrolled tab). A rejected reset shows its
-   * `{ code }` inline (never an unhandled promise rejection) — the same dev-only surface as a mint. */
+  /** Drop this browser's device identity (a fresh, unenrolled tab): both the server cookie (via
+   * `resetDevice`) AND this tab's sessionStorage override — clearing only the cookie would leave the
+   * override in place, so the tab would keep adopting the same device on the next request. A rejected
+   * reset shows its `{ code }` inline (never an unhandled promise rejection) — the same dev-only surface
+   * as a mint. */
   #reset(): void {
     this.resetError = undefined;
+    clearDevDeviceId();
     void this.api.resetDevice().catch((error) => {
       this.resetError = (error as { code?: string }).code ?? "server.internal";
     });

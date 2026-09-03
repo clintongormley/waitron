@@ -25,6 +25,18 @@ export function setDevDeviceId(id: string): void {
   }
 }
 
+/** Drop this tab's stored device override, so the tab reverts to the cookie identity. Paired with the
+ * dev chooser's cookie reset: clearing the cookie alone would leave the sessionStorage override in place,
+ * so the tab would keep adopting the same device on the next request. Guarded like the accessors above —
+ * a private window / blocked storage degrades to a no-op rather than throwing. */
+export function clearDevDeviceId(): void {
+  try {
+    sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+  } catch {
+    /* private window / blocked storage — nothing to clear */
+  }
+}
+
 /** Wrap a `fetch` so it adds the dev-override header when this tab has a stored device id. */
 export function withDevDeviceHeader(fetchImpl: typeof fetch): typeof fetch {
   return (input, init) => {

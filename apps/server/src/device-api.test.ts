@@ -17,7 +17,10 @@ import "./errors.js";
 // non-superuser role, which neither PGlite nor a stub can show).
 const noopLog: Logger = () => {};
 
-function mountApp(): Hono {
+// `devMode` is OPTIONAL so the omitted-flag case (production shape) is exercised too: the reset route
+// is DEV-ONLY, mounted only under `devMode === true` and 404 otherwise — the same fail-closed shape the
+// `GET`/`POST /api/dev/devices` tests prove in `device-api.rls.test.ts`.
+function mountApp(devMode?: boolean): Hono {
   const app = new Hono();
   mountDeviceApi(
     app,
@@ -25,15 +28,16 @@ function mountApp(): Hono {
       db: undefined as unknown as Database,
       cfg: undefined as unknown as TillConfig,
       secureCookies: false,
+      devMode,
     },
     noopLog,
   );
   return app;
 }
 
-describe("mountDeviceApi — reset", () => {
-  it("POST /api/device/reset clears the device cookie and 204s", async () => {
-    const res = await mountApp().request("/api/device/reset", { method: "POST" });
+describe("mountDeviceApi — reset (dev-only)", () => {
+  it("POST /api/device/reset clears the device cookie and 204s under devMode", async () => {
+    const res = await mountApp(true).request("/api/device/reset", { method: "POST" });
     expect(res.status).toBe(204);
     // Mirrors device-session.test.ts's "clearDeviceCookie expires the cookie" assertion (~line 336):
     // the same cookie name, cleared (Max-Age=0) at the same matching Path.
@@ -41,5 +45,18 @@ describe("mountDeviceApi — reset", () => {
     expect(cookie).toContain(`${DEVICE_COOKIE}=`);
     expect(cookie).toMatch(/Max-Age=0/i);
     expect(cookie).toMatch(/Path=\//i);
+  });
+
+  // The security gate (CLAUDE.md §5/§1): outside devMode the route DOES NOT EXIST, so an unauthenticated
+  // cross-site cookie-clear cannot 401 a live till's sales. Mirrors the dev `GET`/`POST /api/dev/devices`
+  // 404 proofs — false and omitted (the production shape) both 404.
+  it("POST /api/device/reset is absent (404) when devMode is false", async () => {
+    const res = await mountApp(false).request("/api/device/reset", { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/device/reset is absent (404) when devMode is omitted — fail-closed production shape", async () => {
+    const res = await mountApp().request("/api/device/reset", { method: "POST" });
+    expect(res.status).toBe(404);
   });
 });

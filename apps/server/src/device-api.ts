@@ -135,19 +135,17 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *  1. UNAUTHENTICATED enrolment (`POST /api/device/enrol`) — mirrors the till's `POST /api/session`: no
  *     prior-session guard, redeems a pairing code as `app_user` under the tenant, and sets the trusted
  *     device cookie from the token the verb mints. The token leaves ONLY in the cookie (never the body).
- *  2. UNAUTHENTICATED, UNGATED reset (`POST /api/device/reset`) — wires `clearDeviceCookie` (no DB touch
- *     at all): dropping the cookie the CALLER's own browser is carrying is always harmless (the device
- *     row is untouched, still active), so — unlike every other route here — this one runs no guard and
- *     is mounted identically in dev and production (SP-C).
- *  3. DEVICE-GUARDED routes (`GET /api/device/me`, `GET /api/device/station`, `POST
+ *  2. DEVICE-GUARDED routes (`GET /api/device/me`, `GET /api/device/station`, `POST
  *     /api/device/ticket-items/:id/advance`) — each calls `requireDevice` FIRST (401 otherwise) and
  *     resolves to the CALLER's own device: `me` returns that device's identity, while the station
  *     routes scope every read/bump to the device's OWN bound station (a bump of another station's item
  *     is `device.forbidden_station`, 403).
- *  4. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
+ *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`) — each calls
  *     `requireManagementSession` (401), then funnels its DB work through the local `gated` helper, which
  *     `authorizeManager`s `device.manage` (403) before the op runs, in exactly one place.
+ *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
+ *     and mint-and-adopt (`GET`/`POST /api/dev/devices`) and the cookie reset (`POST /api/device/reset`).
  */
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
@@ -205,16 +203,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         },
         200,
       );
-    }),
-  );
-
-  // ── Reset (drop THIS browser's device identity) ──────────────────────────────────────────────────────
-  // Wires `clearDeviceCookie`: the device row is untouched (still active) — the browser simply reverts
-  // to un-enrolled and can re-enrol. `sameSite: Strict` means a cross-site POST cannot reach the cookie.
-  app.post("/api/device/reset", (c) =>
-    run(c, log, async () => {
-      clearDeviceCookie(c);
-      return c.body(null, 204);
     }),
   );
 
@@ -521,6 +509,22 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           },
           201,
         );
+      }),
+    );
+    // ── Reset (drop THIS browser's device identity) ──────────────────────────────────────────────────
+    // DEV-ONLY: mounted only under devMode (404 otherwise), used by the `?dev` chooser to drop this
+    // browser's stored device cookie so the tab reverts to un-enrolled and can re-adopt. It is
+    // unauthenticated and reads no body — it just emits a cookie deletion — so it MUST NOT exist on a
+    // production/preproduction host: there a cross-site-triggered clear (a bare `<form method=post>`,
+    // no token, no preflight) would drop a LIVE till/KDS's device cookie, after which `requireSaleTillId`
+    // 401s its `POST /api/sales` — a till that cannot sell (CLAUDE.md §5). The devMode gate is what makes
+    // this safe, not any cookie attribute: `sameSite` governs whether the cookie is SENT, not whether a
+    // Set-Cookie can CLEAR one, and this handler never reads the incoming cookie. The device row is
+    // untouched (still active) — only the browser's copy of the cookie is cleared.
+    app.post("/api/device/reset", (c) =>
+      run(c, log, async () => {
+        clearDeviceCookie(c);
+        return c.body(null, 204);
       }),
     );
   }

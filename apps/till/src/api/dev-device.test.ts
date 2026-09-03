@@ -3,6 +3,7 @@ import {
   withDevDeviceHeader,
   readDevDeviceId,
   setDevDeviceId,
+  clearDevDeviceId,
   DEV_DEVICE_STORAGE_KEY,
   DEV_DEVICE_HEADER,
 } from "./dev-device.js";
@@ -38,6 +39,21 @@ describe("readDevDeviceId / setDevDeviceId", () => {
       throw new Error("blocked");
     });
     expect(() => setDevDeviceId("dev-123")).not.toThrow();
+    spy.mockRestore();
+  });
+
+  it("clearDevDeviceId removes a stored override", () => {
+    setDevDeviceId("dev-123");
+    clearDevDeviceId();
+    expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+    expect(readDevDeviceId()).toBeNull();
+  });
+
+  it("swallows a throwing removeItem (blocked/private-window storage)", () => {
+    const spy = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(() => clearDevDeviceId()).not.toThrow();
     spy.mockRestore();
   });
 });

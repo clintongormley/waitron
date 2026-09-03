@@ -132,10 +132,11 @@ function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">)
  * The lookup runs as `app_user` inside `withTenant`, so RLS hides another tenant's devices exactly as a
  * missing cookie would, and the `active = true` filter is what makes revocation INSTANT: a revoked row
  * is simply not found, with no token lifetime to expire. `verifySecret` (scrypt, `@waitron/identity`)
- * is constant-time — the token is NEVER compared with `===`. On success the sighting is recorded
- * (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the binding
- * returned; nothing is logged, and the token never leaves this function. The `last_seen_at` write
- * happens ONLY on the success path, so a firewall probe on a non-device request is a pure read.
+ * is constant-time — the token is NEVER compared with `===`. On a successful COOKIE read the sighting is
+ * recorded (`last_seen_at = now()`, gated to at most one write per minute — see the UPDATE below) and the
+ * binding returned; nothing is logged, and the token never leaves this function. That `last_seen_at` write
+ * happens ONLY on the cookie success path, so a firewall probe on a non-device request is a pure read — and
+ * so is the devMode override branch above, which resolves the binding by id and writes nothing.
  *
  * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
  * group carrying only `{ tenantId }` can gate on it without contriving a full config.
@@ -148,7 +149,9 @@ export async function tryReadDevice(
   // device with NO token check. The header WINS over the cookie and does not fall back to it — an
   // override that names a bad device is a clean miss (`null` → `device.unauthorized`), not a silent
   // switch to the cookie's identity. Resolved by the SAME id-selected, RLS-scoped, `active = true`
-  // read the cookie path uses below, minus `verifySecret`.
+  // read the cookie path uses below, minus `verifySecret` AND minus the `last_seen_at = now()` sighting
+  // write that path performs — intentional: the dev backdoor is a pure read, mutating no real device's
+  // last-seen state.
   if (deps.devMode === true) {
     const override = c.req.header(DEV_DEVICE_HEADER);
     if (override !== undefined) {
