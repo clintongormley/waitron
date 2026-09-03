@@ -24,7 +24,7 @@ import {
 
 const sampleEnv: DevEnv = {
   DATABASE_URL: "postgres://postgres:pg@localhost:5432/postgres",
-  WAITRON_ENV: "preproduction",
+  WAITRON_ENV: "dev",
   WAITRON_HTTP_PORT: "8080",
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -43,7 +43,7 @@ describe("renderEnvFile", () => {
       .filter((line) => line.trim() !== "" && !line.startsWith("#"));
     expect(lines).toEqual([
       "DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres",
-      "WAITRON_ENV=preproduction",
+      "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
@@ -113,6 +113,19 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     seriesId: "44444444-4444-4444-4444-444444444444",
     locationId: "55555555-5555-5555-5555-555555555555",
   };
+
+  it("sets WAITRON_ENV=dev so the switcher is on under pnpm dev", () => {
+    // deploymentEnvironment("dev") maps to "preproduction" (config.ts) — this is a DEV-only input
+    // that turns the switcher on and never touches the fiscal stamp (see devSetup's own
+    // "against real Postgres" suite, which pins config.environment to "preproduction" separately).
+    const env = buildDevEnv({
+      databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+      credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
+      ids,
+      seedLocale: "en",
+    });
+    expect(env.WAITRON_ENV).toBe("dev");
+  });
 
   it.each([
     ["en", "en-GB"],
@@ -204,7 +217,9 @@ describe("devSetup against real Postgres", () => {
       expect(first.env[key]).toMatch(/^[0-9a-f-]{36}$/);
     }
     expect(first.env.DATABASE_URL).toBe(suite.pg.uri);
-    expect(first.env.WAITRON_ENV).toBe("preproduction");
+    // dev-setup boots pnpm dev with the switcher on (WAITRON_ENV=dev) while the deployment stamp
+    // stays preproduction — the assertion below on config.environment proves that half.
+    expect(first.env.WAITRON_ENV).toBe("dev");
     // The demo seeds English by default, and the till boots against it.
     expect(written.WAITRON_TILL_LOCALE).toBe("en-GB");
     expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");

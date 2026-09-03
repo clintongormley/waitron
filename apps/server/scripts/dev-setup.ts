@@ -3,6 +3,16 @@
 // migrated, seeded venue. A trimmed `till-demo.ts` that stops after provisioning + seeding and
 // writes the ids down, plus a reuse guard that never re-provisions a live dev database.
 //
+// The generated `.env` carries `WAITRON_ENV=dev` (SP-C), so `pnpm dev` boots with the dev per-tab
+// device switcher ON (`config.devMode`, Task 1). This does NOT touch the fiscal side: `dev` is a
+// dev-only input that `deploymentEnvironment` (apps/server/src/config.ts) maps to `preproduction` —
+// same AEAT endpoints, same Stripe mode, same `DeploymentEnvironment` union — so the venue this
+// script provisions is still stamped/behaves as `preproduction` throughout. `devSetup` here never
+// calls `stampDeployment` at all (unlike the `/setup-api/provision` HTTP route or
+// `waitron-provision instance`), so the database's `deployment` singleton is left unstamped by this
+// flow either way; `assertDeploymentMatches` (boot.ts) treats an unstamped database as matching any
+// host environment.
+//
 // FISCAL NOTE (CLAUDE.md §5): re-registering a till starts a NEW hash chain and mints a fresh
 // installation number. So this REUSES an already-provisioned venue (an existing `.env` naming a
 // tenant the database still holds) and REFUSES to provision when the database already holds a venue
@@ -171,7 +181,7 @@ export function buildDevEnv(input: {
   const { databaseUrl, credentialsKey, ids, seedLocale } = input;
   return {
     DATABASE_URL: databaseUrl,
-    WAITRON_ENV: "preproduction",
+    WAITRON_ENV: "dev",
     WAITRON_HTTP_PORT: "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
