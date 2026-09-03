@@ -30,6 +30,12 @@ export const PURPOSES = {
   /** The per-peer sync bearer token a cloud mirror presents when it pulls (sync cloud-mirror C2b).
    * Sealed under the mirror's OWN box key at adopt; a mirror-local operational secret, one field. */
   "sync.mirror_token": ["token"],
+  /** The node's own Ed25519 membership identity PRIVATE key (base64 PKCS8 DER), sealed under the box
+   * key at setup (design §4 — apps/server/src/node-identity.ts). A box-local operational secret, one
+   * field, the exact shape of `sync.mirror_token`. Never leaves the box: a value sealed under one box
+   * key cannot be opened under another (GCM auth fails). Set only on the PROVISION path — a cloud
+   * mirror runs as the primary's nodeId and never signs, so it seals none. */
+  "membership.node_key": ["privateKey"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;
