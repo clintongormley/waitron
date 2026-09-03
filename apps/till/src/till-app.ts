@@ -1608,10 +1608,17 @@ export class TillApp extends LitElement {
     // Load the tab's lines so the table-order screen renders populated. A failed read degrades to an
     // empty tab (see {@link #loadTabLines}) rather than blocking the transition.
     await this.#loadTabLines();
-    // On the shell surface the table-order screen is a drill-in OVER the floor tab (which stays active
-    // underneath); the legacy path shows the `table-order` screen exactly as before.
-    if (this.#inShell()) this.#pushDrill({ kind: "table-order" });
-    else this.#setScreen("table-order");
+    // On the shell surface, WHERE the table-order screen mounts depends on the profile (SP-B §5 "two
+    // mount points"): a handheld/tablet whose profile authors an `order` tab (a `table-order` card)
+    // SWITCHES to that tab — the tab bar owns the navigation, so the screen mounts as that tab's card
+    // (no drill, no second Back). A TILL authors no such tab, so it keeps B2.1's drill-in OVER the floor
+    // tab (which stays active underneath). The legacy path shows the `table-order` screen as before.
+    if (this.#inShell()) {
+      const orderTabKey = this.#tableOrderTabKey();
+      if (orderTabKey !== undefined)
+        this.activeTabKey = orderTabKey; // card mount (handheld/tablet)
+      else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
+    } else this.#setScreen("table-order");
   }
 
   /**
@@ -1967,17 +1974,23 @@ export class TillApp extends LitElement {
   }
 
   /** Return to the FLOOR from a screen that emits `back-to-floor` — the table-order screen's Back (FP-1).
-   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, so this POPS the drill back
-   * to it AND re-reads the live occupancy ({@link #refreshFloor}, tables-only — zones + statuses are
-   * static within a session): the drill just opened a tab / rang a round, and NEITHER `openTab` nor the
-   * table-service actions update the app-owned `.tables`, so a bare pop would re-render the floor from a
-   * STALE read-model — the table the waiter just opened still showing FREE, so a re-tap fires `openTab`
-   * again and the server throws `tab.already_open` (SP-B2.1 review). Off the shell it reloads and shows
-   * the legacy `floor` screen exactly as before ({@link #onShowFloor}). */
+   * On the shell surface ({@link #inShell}) the floor is the underlying TAB, and how table-order was
+   * mounted decides how it unwinds (the mirror of {@link #onOpenTable}'s two mount points): a TILL opened
+   * it as a DRILL, so pop the drill back to the floor tab; a handheld/tablet opened it as the Order TAB,
+   * so there is no drill — switch the active tab back to the Floor tab (the `floor-plan` card's tab).
+   * EITHER way re-read the live occupancy ({@link #refreshFloor}, tables-only — zones + statuses are
+   * static within a session): the mount just opened a tab / rang a round, and NEITHER `openTab` nor the
+   * table-service actions update the app-owned `.tables`, so a bare unwind would re-render the floor from
+   * a STALE read-model — the table the waiter just opened still showing FREE, so a re-tap fires `openTab`
+   * again and the server throws `tab.already_open` (SP-B2.1 review; the reasoning applies to the tab
+   * switch identically). Off the shell it reloads and shows the legacy `floor` screen exactly as before
+   * ({@link #onShowFloor}). */
   #onBackToFloor(): void {
     if (this.#inShell()) {
       this.errorKey = undefined;
-      this.#popDrill();
+      if (this.drill !== undefined)
+        this.#popDrill(); // drill mount (till): pop back to the floor tab
+      else this.activeTabKey = this.#floorTabKey() ?? this.activeTabKey; // card mount: switch to Floor tab
       void this.#refreshFloor();
     } else {
       void this.#onShowFloor();
@@ -2096,6 +2109,22 @@ export class TillApp extends LitElement {
    * a fallback (a stale/absent key never leaves the shell bodiless). */
   #activeTab(): TabDef | undefined {
     return this.profile?.tabs.find((tab) => tab.key === this.activeTabKey) ?? this.profile?.tabs[0];
+  }
+
+  /** The key of the tab whose cards mount a `table-order` card (a handheld/tablet `order` tab), or
+   * undefined when the profile authors none. When present, opening a table SWITCHES to that tab (the
+   * card mount, SP-B §5); a TILL profile authors none and reaches table-order as an open-table drill-in
+   * instead ({@link #onOpenTable}). */
+  #tableOrderTabKey(): string | undefined {
+    return this.profile?.tabs.find((tab) => tab.cards.some((card) => card.type === "table-order"))
+      ?.key;
+  }
+
+  /** The key of the tab whose cards mount a `floor-plan` card (the shell's Floor tab), or undefined.
+   * On the card mount, `back-to-floor` switches back to this tab ({@link #onBackToFloor}). */
+  #floorTabKey(): string | undefined {
+    return this.profile?.tabs.find((tab) => tab.cards.some((card) => card.type === "floor-plan"))
+      ?.key;
   }
 
   /**

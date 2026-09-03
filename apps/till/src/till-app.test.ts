@@ -4011,6 +4011,86 @@ describe("till-app", () => {
     });
   });
 
+  describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
+    // A phone-portrait profile: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
+    // card). Because the profile AUTHORS a tab whose cards mount a `table-order` card, opening a table on
+    // a handheld SWITCHES to that Order tab (the card mount, SP-B §5) rather than pushing a drill-in — the
+    // tab bar owns the navigation, so there is no drill and no second Back. A till (no `order` tab) keeps
+    // the B2.1 drill push/pop, asserted by the sibling "drill-in stack" describe.
+    const phoneProfile: ProfileDef = {
+      formFactor: "phone-portrait",
+      capabilities: [],
+      tabs: [
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+        {
+          key: "order",
+          title: "Order",
+          columns: 12,
+          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
+    const shell = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+
+    /** Boots a handheld with the phone profile and logs the waiter in — landing on the FLOOR tab (the
+     * phone profile's first tab, mirroring the legacy face-set's post-login floor landing). */
+    async function toHandheldFloor(): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      return el;
+    }
+
+    it("switches a handheld to the Order tab (card mount) when a table is opened, not a drill-in", async () => {
+      const el = await toHandheldFloor();
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      await flush(el);
+      const s = shell(el)!;
+      // Switched to the Order tab — the card mount, not a drill.
+      expect(s.activeTabKey).toBe("order");
+      // NO drill-in: the tab bar owns the navigation.
+      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+      // The table-order screen mounts as the Order tab's card, nested in the card grid's OWN shadow root
+      // (a card mount, not the app-root drill), so pierce the grid to find it.
+      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(grid).not.toBeNull();
+      expect(grid.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull();
+    });
+
+    it("returns a handheld to the Floor tab on back-to-floor (no drill to pop)", async () => {
+      const el = await toHandheldFloor();
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+      await flush(el);
+      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      const cardTableOrder = grid.shadowRoot!.querySelector("till-table-order-screen")!;
+      expect(cardTableOrder).not.toBeNull();
+      // The embedded table-order screen's Back emits `back-to-floor`; on the card mount there is no drill,
+      // so the app switches the active tab back to the Floor tab (the `floor-plan` card's tab).
+      emit(cardTableOrder, "back-to-floor");
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      // Back on the Floor tab, no drill was ever involved.
+      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+    });
+  });
+
   describe("drill-in stack (SP-B2.1)", () => {
     // A `till` profile: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
     // grid, not an empty tab) + a `floor` tab (a `floor-plan` card). Station/Expo/Schedule are NOT tabs,
