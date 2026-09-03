@@ -121,31 +121,51 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 LANDED #204 (2026-09-03); B2 next.** The HA-Sections editor UI
-  plus making screens render from grid profiles (wrap the bespoke floor/KDS/table-order screens as
-  cards; phased). The schedule risk. Removes the old widget model
+- **SP-B — grid editor + rendering — B1 LANDED #204; B2 split into B2.1 (LANDED #206, 2026-09-03) + B2.2 (next).**
+  The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
+  floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
   [sp-b-grid-editor-and-rendering](superpowers/specs/2026-09-03-sp-b-grid-editor-and-rendering-design.md);
   B1 plan: [sp-b1-grid-renderer-and-counter](superpowers/plans/2026-09-03-sp-b1-grid-renderer-and-counter.md).
   Decisions (brainstorm 2026-09-03): **rendering-first slicing** — **B1** grid renderer + counter
-  renders from profile · **B2** wrap the four bespoke screens as full-span cards + tabs/drill-in nav ·
-  **B3** dashboard grid editor (placeholder tiles *for v1*; live renders a committed follow-on) + API
-  client + reassign-profile route · **B4** drop old widget model + rehome receipt into a new
-  `tenant_receipts` table. **Fluid width only** (no column reflow; orientation = form-factor).
-  Not H2, but must preserve the sale path.
+  renders from profile · **B2** wrap the four bespoke screens as full-span cards + tabs/drill-in nav
+  (**owner split into B2.1 + B2.2**, spec + two plans below) · **B3** dashboard grid editor (placeholder
+  tiles *for v1*; live renders a committed follow-on) + API client + reassign-profile route · **B4**
+  drop old widget model + rehome receipt into a new `tenant_receipts` table. **Fluid width only** (no
+  column reflow; orientation = form-factor). Not H2, but must preserve the sale path. SP-B2 design:
+  [sp-b2-till-tab-shell](superpowers/specs/2026-09-03-sp-b2-till-tab-shell-and-card-wrap-design.md);
+  B2.1 plan: [sp-b2-1-tab-shell](superpowers/plans/2026-09-03-sp-b2-1-tab-shell-and-light-card-wrap.md).
   - **B1 LANDED #204:** `GET /api/till` resolves a `ProfileDef` for every enrolled device (explicit →
     else form-factor default via `deviceFormFactor`; cookieless unchanged); till-local `ProfileDef`
     mirror + `till-card-grid` fluid renderer; the counter renders from its profile `counter` tab with
     the region model kept as a fallback (removed in B4); `till-app` boots the counter into its profile.
     Owner call: the default counter drops the prep-queue rail (SP-A's `DEFAULT_PROFILES.till` has no
     prep-queue card) — **shipped as-is**; revisit default-profile content separately if wanted.
-  - **B2 follow-ups carried from B1 review (fold into the SP-B2 spec):** (a) capability→absent +
-    permission→locked card gating (first real cases are big cards); (b) an app-level sale test driven
-    through the grid path (B1 covers it via the region-model sale test + the card-grid composed-event
-    bubble test); (c) reconcile the boot `profile.capabilities` list with server-enforced capabilities
-    for a default-fallback device (server fencing is already the safe direction); (d) `visibleWhen`
-    fails **closed** for a card type with no state mapping — fine now, an awareness note when B2 adds
-    gated card types.
+  - **B2.1 LANDED #206 (2026-09-03):** the `till-tab-shell` (tab bar from `profile.tabs` + relocated
+    header chrome + a `drill` overlay slot) and a transient **drill-in nav stack** in `till-app` that
+    replaces the `screen`-enum for the authenticated operator surface **when a profile is present**;
+    the legacy `screen`-enum stays as a fallback (removed in B4). Every tab renders through
+    `till-card-grid`, which gained the three visibility axes — **capability→absent** (with a hard
+    `tender-pay` cash carve-out that always renders), **permission→locked** (`inert` dimmed cell; only
+    `table-layout-editor`/`till.configure`), and **`visibleWhen` fail-OPEN** for uncomputable state.
+    **expo** and **floor-plan** are wrapped as embedded full-span cards (an `embedded` prop suppresses
+    their own header/Back). The four B1-review follow-ups (a)-(d) are all folded in — note (d) is now
+    fail-**open** (was fail-closed). Not fiscal; the sale path was verified end-to-end through the
+    shell. Reachability kept profile-neutral (station/expo/schedule reachable as affordance drill-ins;
+    default-profile content + capability-driven reachability deferred to the B3 editor).
+  - **B2.2 (next):** wrap the two **heavy** bespoke screens — **station** (kds-board; device-mode/enrol
+    paths) and **table-order** (internal `WorkingOrderStore`, largest event surface) — as embedded
+    cards; land the first **reachable** kds-board capability→absent skip (un-skip its two
+    `it.skip` tests in `card-grid.test.ts`); and **re-enable the handheld shell** (handhelds + kds
+    devices stay on the legacy `screen`-enum in B2.1 because their primary card — table-order/kds-board
+    — renders `nothing` until wrapped, so `#shellActive()` excludes them). B2.2 gets its own plan.
+  - **B2.1 deferrals (recorded, not blocking):** the boot-into-floor prefetch in `#onLoggedIn`
+    (`#tabNeedsFloorData(firstTab)`) is written but **not deletion-proven** — no shipped profile is
+    floor-first (till is counter-first), so the branch is unreachable today; add a floor-first-profile
+    test when B3/B2.2 introduces one. A redundant "STILL hides" held-orders test in `card-grid.test.ts`
+    duplicates existing coverage (harmless). Copilot's overall verdict on #206 was "needs a closer
+    look / final human review" (expected for a change this size) — all its concrete findings were
+    fixed and threads resolved before land.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
