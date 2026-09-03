@@ -687,6 +687,13 @@
       "when": 1788437921753,
       "tag": "0097_node_membership_write_grant",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1788453928602,
+      "tag": "0098_node_public_key",
+      "breakpoints": true
     }
   ]
 }

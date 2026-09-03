@@ -36,6 +36,13 @@ export const nodes = pgTable(
     name: text("name").notNull(),
     filingModule: text("filing_module"),
     taxModule: text("tax_module"),
+    // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor (design
+    // §4). Nullable like filing_module/tax_module above: pre-production, and bare-node fixtures carry
+    // none — a keyless node is simply not a trust anchor (readMembershipTrustSet filters nulls). The
+    // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. This column rides
+    // adoptVenue's verbatim node-row copy, so a mirror inherits the primary's anchor with no bundle
+    // change. Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
+    publicKey: text("public_key"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
