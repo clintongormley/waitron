@@ -468,6 +468,32 @@ produces) and the check read only the first match. Then a third round, for this 
 first version stated row 2 as the unconditional rule and asserted the `has_*` blindness above,
 and four sites had copied the sentence.
 
+**Multi-table writes share ONE transaction, and `withTenant` IS that transaction.** The house
+primitive is `withTenant(db, tenantId, fn)` (`packages/db/src/tenancy.ts`), which is
+`db.transaction(...)` underneath: it opens a transaction, binds the tenant GUC transaction-locally,
+and hands the callback a `tx`. The established shape is that write-path functions **take a
+`tx: Transaction` and never open their own**, and a route handler opens **exactly one `withTenant`
+per request** and threads `tx` into every write — so a sale's rows and its fiscal record commit or
+roll back together. `recordSale` states the why in its own header: "the atomicity between the sale
+rows and the fiscal write is the entire point, and an interface hiding the transaction would let a
+backend break it silently" (`packages/core/src/record-sale.ts:167`, whose first parameter is `tx`,
+not `db`). This is a **convention, not a compiler guarantee**: passing a raw `db` where a `tx` is
+wanted is not a type error, because `Database` is assignable to `Transaction` (the extra `driver`/
+`close` fields go one way only — `packages/db/src/client.ts:61`), and both expose
+`.insert`/`.update`/`.delete`. There is no lint rule either (an ESLint backstop was scoped and
+declined, 2026-09-03).
+
+**Splitting one logical change across two transactions is a deliberate, commented decision — never a
+default.** Two paths do it, both because a non-DB step sits between the writes that no single
+transaction can span, and both say so in their own header: `provisionVenue`'s tenant-exists guard is
+"NOT atomic with `applyVenue`", serialized instead by a one-shot latch
+(`apps/server/src/provision.ts:31`); `adoptFromPrimary` runs six independently-committed steps (a
+file write and a vault seal among them) and documents that a mid-orchestration failure "leaves the
+mirror half-adopted", made safe by idempotent re-run (`apps/server/src/adopt.ts:70`). When you split
+a transaction, the reason goes in a comment beside it. **No static check catches the inverse
+mistake** — two `withTenant` calls that should have been one look identical to these deliberate
+splits — so it is a review judgment, not something a guard can find.
+
 **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
 deployed, so there is no data anyone needs preserved: schema changes drop and recreate, developer
 databases are recreated, and CI builds fresh every run. A backfill for an empty database is code
