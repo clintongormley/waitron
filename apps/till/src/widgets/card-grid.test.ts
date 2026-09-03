@@ -97,6 +97,16 @@ const expoTab: TabDef = {
   cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {} }],
 };
 
+// A big card whose data-condition state the host CANNOT compute (`#currentState("expo")` is
+// undefined), but which carries a visibleWhen gate. Under B1 this was hidden (fail closed); SP-B2.1
+// follow-up d fails it OPEN so a self-fetching big card never silently vanishes.
+const gatedBigCard: TabDef = {
+  key: "expo",
+  title: "Expo",
+  columns: 12,
+  cards: [{ type: "expo", colSpan: 12, rowSpan: 8, config: {}, visibleWhen: ["has-tickets"] }],
+};
+
 describe("till-card-grid", () => {
   it("renders each card element in a spanning cell on a fluid grid", async () => {
     const store = new WorkingOrderStore();
@@ -319,6 +329,15 @@ describe("till-card-grid", () => {
     expect(expo?.embedded).toBe(true);
   });
 
+  it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: gatedBigCard, store });
+    // expo renders `till-expo-screen` (Task 5); `#currentState("expo")` is undefined, so the gate
+    // cannot be evaluated — fail open means the CELL is present (not filtered out).
+    expect(el.shadowRoot!.querySelectorAll(".cell").length).toBe(1);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+  });
+
   it("ALWAYS renders tender-pay even without integrated-card-payment (cash path, sale-critical)", async () => {
     const store = new WorkingOrderStore();
     // tender-pay carries a required capability (integrated-card-payment) in CARD_REQUIRED_CAPABILITY,
@@ -378,10 +397,11 @@ describe("till-card-grid", () => {
     expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
   });
 
-  it("fails a visibleWhen gate closed for a card type with no data-condition mapping", async () => {
+  it("passes a visibleWhen gate OPEN for a card type with no data-condition mapping (follow-up d)", async () => {
     const store = new WorkingOrderStore();
-    // `basket` has no data-condition state, so a visibleWhen gate on it can never be satisfied — the
-    // host hides it rather than showing a card whose condition it cannot evaluate.
+    // `basket` has no data-condition state (`#currentState → undefined`), so the host cannot evaluate
+    // a visibleWhen gate on it. SP-B2.1 follow-up d fails such a card OPEN — it renders rather than
+    // silently vanishing (B1 hid it, fail closed).
     const gatedBasketTab: TabDef = {
       key: "counter",
       title: "Counter",
@@ -392,6 +412,19 @@ describe("till-card-grid", () => {
       tab: gatedBasketTab,
       store,
     });
-    expect(el.shadowRoot!.querySelector("till-basket")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+  });
+
+  it("STILL hides a card whose host-COMPUTED state is out of the visibleWhen list (fail-open is undefined-only)", async () => {
+    const store = new WorkingOrderStore();
+    // Regression that fail-open only opens the `#currentState → undefined` branch, never the
+    // computed-but-mismatched one: held-orders' state IS computable — `heldOrders: []` yields "empty",
+    // which is NOT in the gate, so the card stays HIDDEN exactly as under B1.
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: heldTab,
+      store,
+      heldOrders: [],
+    });
+    expect(el.shadowRoot!.querySelector("till-held-orders")).toBeNull();
   });
 });

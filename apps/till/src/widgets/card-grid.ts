@@ -218,7 +218,11 @@ export class TillCardGrid extends LitElement {
     const states = card.visibleWhen;
     if (states === undefined || states.length === 0) return true;
     const current = this.#currentState(card.type);
-    return current !== undefined && states.includes(current);
+    // Fail OPEN when the host cannot compute this card's state (e.g. a self-fetching big card): a card
+    // the host can't evaluate must not silently vanish (SP-B2.1 follow-up d). Cards the host CAN compute
+    // (held-orders, prep-queue) still hide when their state is out of the list.
+    if (current === undefined) return true;
+    return states.includes(current);
   }
 
   /** Each card's data-condition state, computed from data the host already holds (spec §7). */
