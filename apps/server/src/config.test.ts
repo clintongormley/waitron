@@ -5,6 +5,7 @@ import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import {
   deploymentEnvironment,
+  isDevMode,
   loadConfig,
   loadMirrorSyncConfig,
   loadSyncConfig,
@@ -75,6 +76,9 @@ describe("loadConfig", () => {
       // Production numbering can never be reused, so the safe environment is the default and
       // production must be typed out. This assertion is the guard on that.
       environment: "preproduction",
+      // MIN_ENV sets no WAITRON_ENV, so this is not a dev host — the dev device switcher (SP-C) is
+      // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
+      devMode: false,
       httpPort: 8080,
       // /health is unauthenticated (spec §9); loopback-only is the safe default.
       httpHost: "127.0.0.1",
@@ -714,6 +718,28 @@ describe("deploymentEnvironment", () => {
       code: "server.config_invalid",
       params: { variable: "WAITRON_ENV", reason: "not_a_deployment_environment" },
     });
+  });
+});
+
+describe("WAITRON_ENV=dev", () => {
+  it("deploymentEnvironment maps dev to preproduction (fiscal-inert)", () => {
+    expect(deploymentEnvironment({ WAITRON_ENV: "dev" })).toBe("preproduction");
+  });
+  it("isDevMode is true only for the literal dev", () => {
+    expect(isDevMode({ WAITRON_ENV: "dev" })).toBe(true);
+    expect(isDevMode({ WAITRON_ENV: "preproduction" })).toBe(false);
+    expect(isDevMode({ WAITRON_ENV: "production" })).toBe(false);
+    expect(isDevMode({})).toBe(false);
+  });
+  it("production and devMode are mutually exclusive for every input", () => {
+    for (const raw of ["production", "preproduction", "dev", undefined]) {
+      const env = { WAITRON_ENV: raw } as Record<string, string | undefined>;
+      const isProd = deploymentEnvironment(env) === "production";
+      expect(isProd && isDevMode(env)).toBe(false);
+    }
+  });
+  it("an unknown value still throws server.config_invalid", () => {
+    expect(() => deploymentEnvironment({ WAITRON_ENV: "staging" })).toThrow();
   });
 });
 
