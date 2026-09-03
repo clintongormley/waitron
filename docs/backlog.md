@@ -83,8 +83,8 @@ Decomposition + order **A → C → B** (each its own spec → plan):
   CSS-injection-safe `validateThemeOverride`, built-in default profiles, `profile.invalid`/`theme.invalid`
   error families. No DB/API/rendering/device/fiscal (those are later slices). Plan:
   [sp-a1-data-model](superpowers/plans/2026-09-02-layout-profiles-sp-a1-data-model.md).
-- **SP-A.2 — device unification & hardware (BUILT — in PR, owner signed off the H2 receipt 2026-09-03;
-  pending `/land-branch`).** Shipped: `till` device kind, device→profile FK + static per-device hardware
+- **SP-A.2 — device unification & hardware — LANDED #199 (2026-09-03; owner signed off the H2 receipt).**
+  Shipped: `till` device kind, device→profile FK + static per-device hardware
   bindings, enrolment extension (carries profile/`till_id`/hardware; `device.till_required`/
   `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
   (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
