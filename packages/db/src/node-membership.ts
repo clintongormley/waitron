@@ -41,9 +41,9 @@ export async function readNodeMembership(db: Database): Promise<SignedMembership
  * `number` term with this bigint column). Deriving it here keeps the column and the in-blob term in
  * step for writes through this accessor; the DB does not enforce it, so a raw SQL write could set
  * them apart.
- * `app_user` holds no INSERT/UPDATE on `node_membership` (the grant read-back asserts it), so this
- * runs on the provisioning/owner connection, never the app pool — until Slice 3 adds runtime
- * adoption and, with it, the write grant.
+ * `app_user` now holds INSERT/UPDATE on `node_membership` (Slice 3's runtime-adoption grant), but the
+ * runtime adoption write is the term-guarded `persistIfNewer` in apps/server, not this accessor: this
+ * stays the dumb plain-upsert setter for the owner/promote paths (owner decision, Slice 2).
  */
 export async function writeNodeMembership(
   db: Database,
