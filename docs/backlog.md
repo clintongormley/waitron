@@ -83,18 +83,27 @@ Decomposition + order **A → C → B** (each its own spec → plan):
   CSS-injection-safe `validateThemeOverride`, built-in default profiles, `profile.invalid`/`theme.invalid`
   error families. No DB/API/rendering/device/fiscal (those are later slices). Plan:
   [sp-a1-data-model](superpowers/plans/2026-09-02-layout-profiles-sp-a1-data-model.md).
-- **SP-A.2 — device unification & hardware (NEXT for track A; H2-gated).** `till` device kind, device→profile
-  FK + per-device hardware bindings (static; modelled for transient NFC readers), enrolment extension,
-  server-side enforcement of the profile capability flags + card required-permission/capability, theme
-  storage (tenant + per-profile). **Carries the fiscal §7 gate** — verify by container that `till_id`/`node_id`
-  consumers are untouched + owner sign-off before landing. **Fold in the SP-A.1 deferrals below.**
-  - *SP-A.1 deferrals to resolve in SP-A.2:* (a) decide whether `validateProfile` folds in
-    `validateThemeOverride` so a profile's `theme` round-trips (today it is dropped); (b) add a dedicated
-    `bad_capabilities` error reason (cleaner than the current `not_object` overload for a bad capability
-    flag, and `bad_tab` for a non-array `cards`); (c) source `THEMEABLE_TOKENS` from the real
-    `packages/ui/src/tokens` registry with a cross-package consistency test + the owner's decision on which
-    tokens are themeable (SP-A.1 ships a provisional verified-real set); (d) defensively copy the returned
-    card `config` (SP-A.1 copies `visibleWhen` but `config` still aliases the input).
+- **SP-A.2 — device unification & hardware (BUILT — in PR, owner signed off the H2 receipt 2026-09-03;
+  pending `/land-branch`).** Shipped: `till` device kind, device→profile FK + static per-device hardware
+  bindings, enrolment extension (carries profile/`till_id`/hardware; `device.till_required`/
+  `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
+  (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
+  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code.
+  The fiscal cutover — a sale's `till_id` now resolves from the authenticated device — passed its §7/§16.4
+  container+mutation receipt (`till_id` inert to the huella; `nodeId`/series stay on the node; only
+  `sales.till_id` moved). SP-A.1 deferrals (a)-(d) all folded in.
+  - *SP-A.2 follow-ups (deferred, pre-production-only edges):*
+    1. **Location-consistency guard** — a sale-capable device's assigned register (`till_id`) should live
+       in the box's configured location; nothing enforces `device.till.location == cfg.locationId` today, so
+       a mis-provisioned device could stamp a fiscal record's operation-description with a different site.
+       Add a guard at enrol or first sale. Not reachable in dev; no crash.
+    2. **Register-identity redesign (own spec, H2).** Owner question 2026-09-03: should the durable `tills`
+       table be subsumed into the device/enrollment (the enrollment *is* the register), with a generated
+       register identifier stamped instead of a `tills.id`? `till_id` is confirmed fiscally informational
+       (chain/series keyed on the NODE, `series.ts:19`), BUT `tills` is referenced by ~7 tables + provisioning
+       + the sync/replication bundle, and changing what an immutable record's `till_id` holds needs a new H2
+       receipt — a real initiative, not a cleanup. Needs its own brainstorm + full fiscal trace; capture the
+       "a moved till is a new register" philosophy there.
 - **SP-C — dev per-tab device switcher** — per-tab `sessionStorage` identity + dev-only override header
   + a device-reset route. Small; unblocks side-by-side testing.
 - **SP-B — grid editor + rendering** — the HA-Sections editor UI + making screens render from grid
