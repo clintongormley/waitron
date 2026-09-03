@@ -346,11 +346,27 @@ vs gated on an unbuilt foundation or an external dependency:
   `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
   the two follow-ups under *Onboarding*). With Slices 1 (#197), 2 (storage, #198), 3 (distribution,
   #202) and **4 (setup/adopt, #203) shipped**, membership adoption is now **LIVE** (boot reads a real
-  trust set from `nodes.public_key`; the Slice-3 empty-seam no-op is gone). The next membership slice is
-  **Slice 5 (promotion integration — `promote` mints the next signed document)**, which composes with
-  **reserved-SIF staging** (foundation-gated — see below) since a promoted node needs both a signed
-  membership doc and its own SIF/installation number; Slice 5 is therefore **not cleanly ready-to-build
-  until reserved-SIF lands**. Slice 6 (rejoin) is owner-gated; Slice 7 (conflict surface) follows.
+  trust set from `nodes.public_key`; the Slice-3 empty-seam no-op is gone). **Slice 5 (promotion
+  integration) was reframed by the owner on 2026-09-03 into the reserved standby identity & membership
+  promotion arc** (spec:
+  [reserved-standby-identity-and-promotion](superpowers/specs/2026-09-03-reserved-standby-identity-and-promotion-design.md)):
+  a standby gets its full **dormant identity at join** (own nodeId + membership keypair + reserved
+  installation número + disjoint series), activated on promotion with no connectivity needed; the primary
+  is the sole allocator; dormancy falls out of node-keying (no new schema). Decomposed **R1 → R2 → R3**,
+  with **H2** (fiscal-record sync to mirrors) sequenced, not gated. **R1 (document lifecycle — seed the
+  term-0 document at setup + mint the next document on local-secondary promotion) LANDED #205** (plan:
+  [membership-promotion-r1-document-lifecycle](superpowers/plans/2026-09-03-membership-promotion-r1-document-lifecycle.md)):
+  `buildNextMembershipDocument`/`nextStandings` (pure, `@waitron/membership`),
+  `writeNodeMembershipTx`/`setSingletonRoleTx` (`@waitron/db`), `seedTermZeroMembership` +
+  `mintNextMembershipDocument` (`apps/server`), and `promoteLocalSecondaryToPrimary` minting the next
+  document with the singleton flip + document write in ONE owner transaction. **R2 (reserve the cloud's
+  dormant identity at adopt) NEXT** (needs its own plan), then **R3 (cloud promotion)**; **H2
+  (fiscal-record sync to mirrors)** is independent. R1 review recorded an **R3 sharp edge** in spec §8:
+  promote's unguarded upsert can regress `term` under a concurrent newer gossip — R3's promote write must
+  term-guard. Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
+  (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
+  in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the
+  §5 unrecoverable invariants + owner review-at-land are unchanged; only the scheduling gate is lifted).
 - **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
   2026-09-02, owner-review still pending). Spec:
   [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
