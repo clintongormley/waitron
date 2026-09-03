@@ -54,7 +54,9 @@ export interface SetupDeps {
    * document right after `establishIdentity` seals the identity key. A fresh primary signs its own
    * single-node org chart (design §6 R1), so a document exists before any promotion needs to bump one.
    * Optional like the other provision deps so an unwired box refuses via the deps gate. Provision path
-   * only — a mirror inherits the primary's document through replication and mints none. */
+   * only — a mirror inherits the primary's document via membership gossip/adoption (`/sync-api/hello`
+   * → `persistNodeMembershipIfNewer`), NOT the `packages/sync` replication lane (`node_membership` is
+   * not enrolled there), and mints none. */
   seedMembership?: (tenantId: string, nodeId: string) => Promise<void>;
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */
