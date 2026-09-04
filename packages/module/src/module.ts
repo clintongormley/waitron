@@ -107,30 +107,27 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
     }
   }
 
-  // Repeatedly emit the EARLIEST-in-input-order ready (in-degree 0, not yet emitted) module. The
-  // rescan-from-top is the stable tie-break: it always picks the lowest input index among the ready
-  // set. O(V^2) scans for V modules — V is the module count (≤ a dozen), so this is negligible.
+  // Repeatedly emit the EARLIEST-in-input-order ready (in-degree 0) module, removing it from a
+  // shrinking `remaining` list. `findIndex` over `remaining` — which preserves input order — is the
+  // stable tie-break: it always picks the lowest input index among the ready set. O(V^2) scans for V
+  // modules — V is the module count (≤ a dozen), so this is negligible. A scan that finds nothing
+  // ready while modules remain means the graph has a cycle: those `remaining` modules are exactly the
+  // ones that could not be ordered.
   const ordered: WaitronModule[] = [];
-  const emitted = new Set<string>();
-  let advanced = true;
-  while (ordered.length < modules.length && advanced) {
-    advanced = false;
-    for (const m of modules) {
-      if (emitted.has(m.name) || inDegree.get(m.name) !== 0) continue;
-      ordered.push(m);
-      emitted.add(m.name);
-      advanced = true;
-      for (const d of dependents.get(m.name) ?? []) {
-        // `d` is a requiring module's name, so it is always a seeded inDegree key.
-        inDegree.set(d, inDegree.get(d)! - 1);
-      }
-      break; // restart from the top so the next pick is the earliest ready node.
+  const remaining = modules.slice();
+  for (;;) {
+    const idx = remaining.findIndex((m) => inDegree.get(m.name) === 0);
+    if (idx === -1) break;
+    const [next] = remaining.splice(idx, 1);
+    ordered.push(next);
+    for (const d of dependents.get(next.name) ?? []) {
+      // `d` is a requiring module's name, so it is always a seeded inDegree key.
+      inDegree.set(d, inDegree.get(d)! - 1);
     }
   }
 
-  if (ordered.length < modules.length) {
-    const inCycle = modules.filter((m) => !emitted.has(m.name)).map((m) => m.name);
-    throw new AppError("module.dependency_cycle", { modules: inCycle });
+  if (remaining.length > 0) {
+    throw new AppError("module.dependency_cycle", { modules: remaining.map((m) => m.name) });
   }
 
   return ordered.map((m) => m.migrations);
