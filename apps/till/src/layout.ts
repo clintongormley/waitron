@@ -54,10 +54,10 @@ export const LAYOUT_A: LayoutDef = [
 ];
 
 // ---------------------------------------------------------------------------
-// SP-B profile model — a LOCAL mirror of `@waitron/layouts` (`packages/layouts/src/profile.ts`),
+// SP-B canvas model — a LOCAL mirror of `@waitron/layouts` (`packages/layouts/src/canvas.ts`),
 // bundle-decoupled exactly like `LayoutDef`/`ReceiptConfig` above — deliberately NOT imported from
-// `@waitron/layouts` (the bundle rule). The server validates every profile on write; the client
-// trusts the shape it receives. Keep in sync with profile.ts if that model changes.
+// `@waitron/layouts` (the bundle rule). The server validates every canvas on write; the client
+// trusts the shape it receives. Keep in sync with canvas.ts if that model changes.
 // ---------------------------------------------------------------------------
 
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
@@ -97,7 +97,7 @@ export interface ThemeOverride {
   tokens: Record<string, string>;
 }
 
-export interface ProfileDef {
+export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
   capabilities: CapabilityFlag[];
@@ -105,7 +105,7 @@ export interface ProfileDef {
 }
 
 // Minimal mirror of the per-card contract axes the till needs to GATE the view (SP-B2). The server
-// validates every profile on write via `validateProfile` (`packages/layouts/src/validate-profile.ts`),
+// validates every canvas on write via `validateCanvas` (`packages/layouts/src/validate-canvas.ts`),
 // which enforces the per-card `CARD_CONTRACTS` in `packages/layouts/src/card-contract.ts`; the client
 // only needs the required-capability / required-permission per card to hide/lock a cell. Keep in sync with
 // CARD_CONTRACTS if a card's contract changes. `tender-pay`'s capability is deliberately NOT enforced
