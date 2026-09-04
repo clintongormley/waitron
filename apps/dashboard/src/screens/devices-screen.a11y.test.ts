@@ -2,14 +2,7 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
-import type {
-  DashboardApi,
-  DeviceRow,
-  LayoutProfile,
-  Printer,
-  Station,
-  Till,
-} from "../api/client.js";
+import type { Canvas, DashboardApi, DeviceRow, Printer, Station, Till } from "../api/client.js";
 
 /**
  * The Devices screen scanned by axe in both themes, in two states: the default list + generate form, and
@@ -50,7 +43,7 @@ const devices: DeviceRow[] = [
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
-    layoutProfileId: "p1",
+    canvasId: "p1",
   },
   {
     id: "d2",
@@ -60,7 +53,7 @@ const devices: DeviceRow[] = [
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
-    layoutProfileId: null,
+    canvasId: null,
   },
 ];
 
@@ -69,7 +62,7 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
 ];
 
-const profiles: LayoutProfile[] = [
+const canvases: Canvas[] = [
   { id: "p1", name: "Comedor", definition: { areas: [] } },
   { id: "p2", name: "Barra", definition: { areas: [] } },
 ];
@@ -94,7 +87,7 @@ function stubApi(): DashboardApi {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
     listTills: vi.fn().mockResolvedValue(tills),
-    listProfiles: vi.fn().mockResolvedValue(profiles),
+    listCanvases: vi.fn().mockResolvedValue(canvases),
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),

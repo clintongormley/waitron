@@ -2,14 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type {
-  DashboardApi,
-  DeviceRow,
-  LayoutProfile,
-  Printer,
-  Station,
-  Till,
-} from "../api/client.js";
+import type { Canvas, DashboardApi, DeviceRow, Printer, Station, Till } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
 
 afterEach(cleanupWidgets);
@@ -47,7 +40,7 @@ const devices: DeviceRow[] = [
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
-    layoutProfileId: "p1",
+    canvasId: "p1",
   },
   {
     id: "d2",
@@ -57,7 +50,7 @@ const devices: DeviceRow[] = [
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
-    layoutProfileId: null,
+    canvasId: null,
   },
 ];
 
@@ -66,7 +59,7 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
 ];
 
-const profiles: LayoutProfile[] = [
+const canvases: Canvas[] = [
   { id: "p1", name: "Comedor", definition: { areas: [] } },
   { id: "p2", name: "Barra", definition: { areas: [] } },
 ];
@@ -91,7 +84,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
     listTills: vi.fn().mockResolvedValue(tills),
-    listProfiles: vi.fn().mockResolvedValue(profiles),
+    listCanvases: vi.fn().mockResolvedValue(canvases),
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
@@ -130,7 +123,7 @@ function pickKind(el: DevicesScreen, value: string): void {
   select.dispatchEvent(new Event("change"));
 }
 
-/** Pick a value in one of the native <select>s (till/profile/printer/card-provider) and fire `change`. */
+/** Pick a value in one of the native <select>s (till/canvas/printer/card-provider) and fire `change`. */
 function pickSelect(el: DevicesScreen, testId: string, value: string): void {
   const select = q(el, `[data-test=${testId}]`) as HTMLSelectElement;
   select.value = value;
@@ -159,9 +152,9 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
-    // The generate form's till/profile/hardware pickers are fed from these three list verbs.
+    // The generate form's till/canvas/hardware pickers are fed from these three list verbs.
     expect(api.listTills).toHaveBeenCalledTimes(1);
-    expect(api.listProfiles).toHaveBeenCalledTimes(1);
+    expect(api.listCanvases).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=device-row-d1]")).toBeTruthy();
     expect(q(el, "[data-test=device-row-d2]")).toBeTruthy();
@@ -353,22 +346,22 @@ describe("devices-screen", () => {
     expect(q(el, "[data-test=card-reader-id]")).toBeNull();
   });
 
-  // The assigned-profile picker is shown for EVERY kind (it is a device-wide binding, not till-only).
-  it("shows the assigned-profile picker for every kind", async () => {
+  // The assigned-canvas picker is shown for EVERY kind (it is a device-wide binding, not till-only).
+  it("shows the assigned-canvas picker for every kind", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    expect(q(el, "[data-test=profile-select]")).toBeTruthy(); // kds_station
+    expect(q(el, "[data-test=canvas-select]")).toBeTruthy(); // kds_station
     pickKind(el, "handheld");
     await el.updateComplete;
-    expect(q(el, "[data-test=profile-select]")).toBeTruthy();
+    expect(q(el, "[data-test=canvas-select]")).toBeTruthy();
     pickKind(el, "till");
     await el.updateComplete;
-    expect(q(el, "[data-test=profile-select]")).toBeTruthy();
+    expect(q(el, "[data-test=canvas-select]")).toBeTruthy();
   });
 
-  // A till with every optional binding set: the payload carries tillId + the assigned profile + all the
+  // A till with every optional binding set: the payload carries tillId + the assigned canvas + all the
   // hardware bindings, with the card reader id present because the provider is a Stripe Terminal reader.
   it("generates a till code with the tillId and every optional binding", async () => {
     const api = stubApi();
@@ -378,7 +371,7 @@ describe("devices-screen", () => {
     pickKind(el, "till");
     await el.updateComplete;
     pickSelect(el, "till-select", "t2");
-    pickSelect(el, "profile-select", "p1");
+    pickSelect(el, "canvas-select", "p1");
     pickSelect(el, "receipt-printer-select", "pr1");
     toggleCashDrawer(el, true);
     pickSelect(el, "card-provider-select", "stripe_terminal");
@@ -392,7 +385,7 @@ describe("devices-screen", () => {
     expect(api.createDeviceCode).toHaveBeenCalledWith({
       kind: "till",
       tillId: "t2",
-      layoutProfileId: "p1",
+      canvasId: "p1",
       receiptPrinterId: "pr1",
       hasCashDrawer: true,
       cardProvider: "stripe_terminal",
@@ -402,7 +395,7 @@ describe("devices-screen", () => {
     expect(text(el, "[data-test=code-value]")).toBe("ABCD2345");
   });
 
-  // A till with only the required till picked: the optional bindings default (profile none, no printer,
+  // A till with only the required till picked: the optional bindings default (canvas none, no printer,
   // no cash drawer, card provider 'none'), so they are NOT sent — the payload is tillId + label only.
   it("generates a till code with only the tillId when no optional binding is set", async () => {
     const api = stubApi();
@@ -671,10 +664,10 @@ describe("devices-screen", () => {
     expect(banner).toContain(codeMessage("device.not_found", "es-ES"));
   });
 
-  // Each ACTIVE row carries its own layout-profile <select> (reassign-<id>): a "" default option
-  // (form-factor default) plus one per tenant profile, PRESELECTED to the device's current
-  // layoutProfileId. d1's fixture is bound to p1, so its select opens on p1.
-  it("renders a per-row reassign select preselected to the device's current profile", async () => {
+  // Each ACTIVE row carries its own canvas <select> (reassign-<id>): a "" default option
+  // (form-factor default) plus one per tenant canvas, PRESELECTED to the device's current
+  // canvasId. d1's fixture is bound to p1, so its select opens on p1.
+  it("renders a per-row reassign select preselected to the device's current canvas", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -682,16 +675,16 @@ describe("devices-screen", () => {
     const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
     expect(select).toBeTruthy();
     const options = Array.from(select.querySelectorAll("option"));
-    // The default (form-factor) option plus one per profile.
+    // The default (form-factor) option plus one per canvas.
     expect(options.map((o) => o.value)).toEqual(["", "p1", "p2"]);
-    expect(options[0]!.textContent?.trim()).toBe(t("devices.profile_none", "es-ES"));
+    expect(options[0]!.textContent?.trim()).toBe(t("devices.canvas_none", "es-ES"));
     // Preselected to d1's current binding (p1), not the first option.
     expect(select.value).toBe("p1");
   });
 
-  // Picking a profile reassigns the device to it and reloads the list (mirrors revoke's reload). Proven
+  // Picking a canvas reassigns the device to it and reloads the list (mirrors revoke's reload). Proven
   // by deletion: drop the reassignDevice call and the API is never hit.
-  it("reassigns a device to the picked profile, then reloads the list", async () => {
+  it("reassigns a device to the picked canvas, then reloads the list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -705,7 +698,7 @@ describe("devices-screen", () => {
 
   // Picking the "" default clears the assignment — reassignDevice is called with null (form-factor
   // default), not the empty string.
-  it("clears a device's profile when Default is picked", async () => {
+  it("clears a device's canvas when Default is picked", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);

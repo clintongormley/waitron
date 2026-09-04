@@ -1757,7 +1757,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: true,
       lastSeenAt: "2026-08-25T14:30:00.000Z",
       enrolledAt: "2026-08-20T09:00:00.000Z",
-      layoutProfileId: "p1",
+      canvasId: "p1",
     },
     {
       id: "d2",
@@ -1767,7 +1767,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: false,
       lastSeenAt: null,
       enrolledAt: "2026-08-19T09:00:00.000Z",
-      layoutProfileId: null,
+      canvasId: null,
     },
   ];
 
@@ -1823,36 +1823,36 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("reassignDevice POSTs { layoutProfileId } to the device's assign-profile route (204)", async () => {
+  it("reassignDevice POSTs { canvasId } to the device's assign-canvas route (204)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.reassignDevice("d1", "p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-profile", {
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ layoutProfileId: "p1" }),
+      body: JSON.stringify({ canvasId: "p1" }),
     });
   });
 
-  it("reassignDevice sends { layoutProfileId: null } to clear the assignment", async () => {
+  it("reassignDevice sends { canvasId: null } to clear the assignment", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.reassignDevice("d1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-profile", {
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ layoutProfileId: null }),
+      body: JSON.stringify({ canvasId: null }),
     });
   });
 
-  it("reassignDevice rejects with { code } on a UUID-shaped unknown/foreign profile (binding invalid)", async () => {
+  it("reassignDevice rejects with { code } on a UUID-shaped unknown/foreign canvas (binding invalid)", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
-    // A UUID-shaped id that names no profile of this tenant is what actually reaches the FK and yields
+    // A UUID-shaped id that names no canvas of this tenant is what actually reaches the FK and yields
     // `device.binding_invalid` — a MALFORMED (non-UUID) id would be screened to `management.request_invalid`
     // before it, so use a well-formed uuid here to match the real route contract.
     await expect(

@@ -587,7 +587,7 @@ export interface Course {
  * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
  * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
  * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
- * redeemed its pairing code. `layoutProfileId` is the device's currently-assigned layout profile (null =
+ * redeemed its pairing code. `canvasId` is the device's currently-assigned canvas (null =
  * the form-factor default). The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
  * server orders NEWEST-enrolled first; the screen renders that order as-is. NOT imported from `apps/server`
  * (the #70 bundle rule the shapes above follow); a mismatch surfaces as a runtime shape error a view test
@@ -601,17 +601,17 @@ export interface DeviceRow {
   active: boolean;
   lastSeenAt: string | null;
   enrolledAt: string;
-  layoutProfileId: string | null;
+  canvasId: string | null;
 }
 
-/** One `GET /management-api/profiles` row — a tenant layout profile as the profile picker needs it. The
- * server answers `{ profiles: [{ id, name, definition }] }`; this is one element. `definition` is the
+/** One `GET /management-api/canvases` row — a tenant canvas as the canvas picker needs it. The
+ * server answers `{ canvases: [{ id, name, definition }] }`; this is one element. `definition` is the
  * opaque layout JSON, typed `unknown` DELIBERATELY: the dashboard's device-enrolment picker binds only a
- * profile's `{ id, name }`, and importing `@waitron/layouts`' real definition type would drag that
+ * canvas's `{ id, name }`, and importing `@waitron/layouts`' real definition type would drag that
  * package's barrel + Node builtins into the browser bundle (the #70 rule the printing/till shapes follow).
  * A layout editor that must read the definition parses it at its own edge; a mismatch surfaces as a
  * runtime shape error a view test catches, not a compile break. */
-export interface LayoutProfile {
+export interface Canvas {
   id: string;
   name: string;
   definition: unknown;
@@ -1821,8 +1821,8 @@ export class DashboardApi {
    * value: a `"kds_station"` binds to a station (`stationId` required; a bad/absent/retired station rejects
    * `{ code: "station.not_found" }`); a sale-capable `"till"`/`"handheld"` binds to a till (`tillId`
    * required — the server rejects a missing one `{ code: "device.till_required" }`), while a
-   * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned layout
-   * profile (`layoutProfileId`, any kind) and the till's static hardware (`receiptPrinterId`,
+   * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned
+   * canvas (`canvasId`, any kind) and the till's static hardware (`receiptPrinterId`,
    * `hasCashDrawer`, `cardProvider` (`none`/`stripe_terminal`/`stripe_on_device`), `cardReaderId`). An
    * omitted optional binding is left at the server default (`card_provider='none'`, `has_cash_drawer=false`,
    * others NULL). A well-formed id naming no tenant row rejects `{ code: "device.binding_invalid" }`. */
@@ -1830,7 +1830,7 @@ export class DashboardApi {
     kind: string;
     stationId?: string;
     tillId?: string;
-    layoutProfileId?: string;
+    canvasId?: string;
     receiptPrinterId?: string;
     hasCashDrawer?: boolean;
     cardProvider?: string;
@@ -1842,15 +1842,15 @@ export class DashboardApi {
     return this.#request<{ code: string }>("/management-api/device-codes", "POST", input);
   }
 
-  /** `GET /management-api/profiles` — this tenant's layout profiles (`till.configure`-gated server-side;
-   * every role that reaches the Devices screen holds it). The server answers `{ profiles: [...] }`; this
-   * unwraps to the array. Each profile's `definition` is the opaque layout JSON — typed `unknown` here
-   * because the dashboard's profile PICKER needs only `{ id, name }`, and importing the real
+  /** `GET /management-api/canvases` — this tenant's canvases (`till.configure`-gated server-side;
+   * every role that reaches the Devices screen holds it). The server answers `{ canvases: [...] }`; this
+   * unwraps to the array. Each canvas's `definition` is the opaque layout JSON — typed `unknown` here
+   * because the dashboard's canvas PICKER needs only `{ id, name }`, and importing the real
    * `@waitron/layouts` definition type would drag that package's barrel + Node builtins into the browser
    * bundle (the #70 bundle rule the printing/till shapes follow). */
-  listProfiles(): Promise<LayoutProfile[]> {
-    return this.#request<{ profiles: LayoutProfile[] }>("/management-api/profiles", "GET").then(
-      (r) => r.profiles,
+  listCanvases(): Promise<Canvas[]> {
+    return this.#request<{ canvases: Canvas[] }>("/management-api/canvases", "GET").then(
+      (r) => r.canvases,
     );
   }
 
@@ -1861,16 +1861,16 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }
 
-  /** `POST /management-api/devices/:id/assign-profile` — reassign (or clear) a device's layout profile
-   * (device.manage-gated): `layoutProfileId` a tenant profile's id, or `null` to fall back to the
+  /** `POST /management-api/devices/:id/assign-canvas` — reassign (or clear) a device's canvas
+   * (device.manage-gated): `canvasId` a tenant canvas's id, or `null` to fall back to the
    * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`.
-   * A UUID-shaped id that names no profile of this tenant (unknown or foreign) reaches the composite FK
+   * A UUID-shaped id that names no canvas of this tenant (unknown or foreign) reaches the composite FK
    * and rejects `{ code: "device.binding_invalid" }`; a MALFORMED (non-UUID) id is screened earlier and
-   * rejects `{ code: "management.request_invalid" }`. The dashboard only ever sends a real profile id or
+   * rejects `{ code: "management.request_invalid" }`. The dashboard only ever sends a real canvas id or
    * `null`, so those two rejects are defense-in-depth. */
-  reassignDevice(id: string, layoutProfileId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/assign-profile`, "POST", {
-      layoutProfileId,
+  reassignDevice(id: string, canvasId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/assign-canvas`, "POST", {
+      canvasId,
     });
   }
 
