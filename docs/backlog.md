@@ -868,6 +868,22 @@ scheduling are built — but two items want confirming before go-live (the digit
 status; the applicable provincial convenio + figures), and the **gestoría's payroll package + import
 layout is the one build dependency** (it fixes the D3 export format, so D3 stays deferred until known).
 
+**Data protection (RGPD/GDPR) is a third track — never scoped end-to-end.** Waitron stores personal
+data (customers via loyalty/receipts, staff via `persons` + registro de jornada, and the cloud
+mirror replicates it off-box), yet no one has mapped our obligations as a whole. Pieces exist in
+isolation — the biometric-clock-in DPIA (workforce plan §2.4, AEPD 2023 guidance; biometrics off by
+default), and data export/portability flagged as a GDPR duty in
+[cloud-services-inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) — but nothing
+answers the whole-system question. **The task is to scope it before engaging a DPO/lawyer:**
+(1) build a data map (what personal data, where — box vs cloud mirror, how long retained);
+(2) settle the **controller vs processor** split — is Waitron an *encargado del tratamiento* for the
+venue's data, and does that need a DPA (the *encargo de tratamiento a efectos del RGPD* question
+already sitting in [asesor-questions §RGPD](compliance/asesor-questions.md)); (3) the venue-facing
+duties (privacy notice, lawful basis/consent, subject-access + erasure + portability, breach
+notification, retention limits) and which of them Waitron must *build* vs the venue must *operate*.
+Blocks nothing today, but the retention/erasure/export mechanics become build work once scoped, so
+it wants doing before go-live rather than after.
+
 ---
 
 ## Debt and odd jobs
