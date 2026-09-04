@@ -335,7 +335,13 @@ function deviceCookieFrom(res: Response): string {
 async function enrolWithCode(
   app: Hono,
   managerCookie: string,
-  codeBody: { kind: string; stationId?: string; tillId?: string; label: string },
+  codeBody: {
+    kind: string;
+    stationId?: string;
+    tillId?: string;
+    layoutProfileId?: string;
+    label: string;
+  },
 ): Promise<{ deviceId: string; jar: string }> {
   const codeRes = await send(app, "POST", "/management-api/device-codes", {
     cookie: managerCookie,
@@ -876,6 +882,155 @@ describe("Device API over real Postgres", () => {
       cookie: venue.managerCookie,
     });
     expect(malformed.status).toBe(404);
+  });
+
+  // ── Reassign a device's layout profile (SP-B3.1) ─────────────────────────────────────────────────────
+  describe("layout-profile reassignment", () => {
+    it("GET /management-api/devices exposes each device's layoutProfileId (a set one and a null one)", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedProfile(venue.cfg);
+      // A `till` device enrolled WITH a profile binding, and a plain `kds_station` with none.
+      const withProfile = await enrolWithCode(app, venue.managerCookie, {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        layoutProfileId: profileId,
+        label: "Caja con perfil",
+      });
+      const withoutProfile = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const res = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as { id: string; layoutProfileId: string | null }[];
+      expect(rows.find((r) => r.id === withProfile.deviceId)!.layoutProfileId).toBe(profileId);
+      expect(rows.find((r) => r.id === withoutProfile.deviceId)!.layoutProfileId).toBeNull();
+    });
+
+    it("POST …/assign-profile sets, then clears (null), a device's layout profile", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedProfile(venue.cfg);
+      const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const assign = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+        cookie: venue.managerCookie,
+        body: { layoutProfileId: profileId },
+      });
+      expect(assign.status).toBe(204);
+      expect((await deviceBindings(deviceId)).layout_profile_id).toBe(profileId);
+
+      // An explicit `null` clears the binding back to null.
+      const clear = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+        cookie: venue.managerCookie,
+        body: { layoutProfileId: null },
+      });
+      expect(clear.status).toBe(204);
+      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+    });
+
+    it("assign-profile rejects a nonexistent profile id → 400 device.binding_invalid, device untouched", async () => {
+      // The composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` refuses a well-formed
+      // id that names no profile of THIS tenant, translated by `bindingFkField` to the SAME code+field the
+      // enrol path raises. The FK aborts the UPDATE atomically, so the device stays untouched (asserted
+      // below). Proof: `device.test.ts` pins the constraint-name → field mapping this route relies on.
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+        cookie: venue.managerCookie,
+        body: { layoutProfileId: randomUUID() },
+      });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { field: string } } },
+      ).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+      });
+      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+    });
+
+    it("assign-profile rejects a CROSS-TENANT profile id → 400 device.binding_invalid (RLS hides it, never a leak)", async () => {
+      // The load-bearing isolation proof: a REAL profile owned by ANOTHER tenant can never bind, because
+      // the composite FK looks for `(tenantA, foreignId)` in layout_profiles and misses (B's row is
+      // `(tenantB, foreignId)`) — so it takes the SAME binding_invalid path an unknown id does, never a
+      // success, never a cross-tenant binding, never a leak of B's row. The FK's tenant_id column is the
+      // structural isolation here, independent of RLS.
+      const venueA = await setupVenue();
+      const venueB = await setupVenue();
+      const app = mountApp(venueA.cfg);
+      const foreignProfile = await seedProfile(venueB.cfg); // owned by tenant B
+      const { deviceId } = await enrolAt(app, venueA.managerCookie, venueA.defaultStationId);
+
+      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+        cookie: venueA.managerCookie,
+        body: { layoutProfileId: foreignProfile },
+      });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { field: string } } },
+      ).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+      });
+      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+    });
+
+    it("assign-profile with an unknown or malformed device id → 404 device.not_found", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedProfile(venue.cfg);
+      const unknown = randomUUID();
+      const res = await send(app, "POST", `/management-api/devices/${unknown}/assign-profile`, {
+        cookie: venue.managerCookie,
+        body: { layoutProfileId: profileId },
+      });
+      expect(res.status).toBe(404);
+      expect(
+        (await res.json()) as { error: { code: string; params: { deviceId: string } } },
+      ).toMatchObject({ error: { code: "device.not_found", params: { deviceId: unknown } } });
+
+      const malformed = await send(
+        app,
+        "POST",
+        "/management-api/devices/not-a-uuid/assign-profile",
+        { cookie: venue.managerCookie, body: { layoutProfileId: null } },
+      );
+      expect(malformed.status).toBe(404);
+    });
+
+    it("assign-profile is tenant-isolated: a manager of A cannot reassign B's device → 404, B untouched", async () => {
+      // The WRITE is RLS-scoped: tenant A's UPDATE never sees tenant B's device row → 0 rows → 404. The
+      // target is `null` (a clear) so no profile FK is involved — this isolates the DEVICE-write RLS,
+      // distinct from the profile-binding FK the cross-tenant-PROFILE test above exercises. B's device
+      // keeps its own profile — A's attempt changes nothing.
+      const venueA = await setupVenue();
+      const venueB = await setupVenue();
+      const appA = mountApp(venueA.cfg);
+      const appB = mountApp(venueB.cfg);
+      const bProfile = await seedProfile(venueB.cfg);
+      const { deviceId: bDevice } = await enrolAt(
+        appB,
+        venueB.managerCookie,
+        venueB.defaultStationId,
+      );
+      const setB = await send(appB, "POST", `/management-api/devices/${bDevice}/assign-profile`, {
+        cookie: venueB.managerCookie,
+        body: { layoutProfileId: bProfile },
+      });
+      expect(setB.status).toBe(204);
+
+      const res = await send(appA, "POST", `/management-api/devices/${bDevice}/assign-profile`, {
+        cookie: venueA.managerCookie,
+        body: { layoutProfileId: null },
+      });
+      expect(res.status).toBe(404);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "device.not_found" },
+      });
+      expect((await deviceBindings(bDevice)).layout_profile_id).toBe(bProfile);
+    });
   });
 
   it("rate-limits enrol: the (cap+1)th attempt is 429 BEFORE the DB (no code consumed), then the window resets", async () => {

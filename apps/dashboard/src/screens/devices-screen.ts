@@ -226,6 +226,16 @@ export class DevicesScreen extends LitElement {
     if (this.#profileSelect.value) this.#profileSelect.value.value = this.selectedProfile;
     if (this.#printerSelect.value) this.#printerSelect.value.value = this.selectedPrinter;
     if (this.#cardProviderSelect.value) this.#cardProviderSelect.value.value = this.cardProvider;
+    // Reconcile every per-row reassign <select> to its device's ACTUAL binding (server truth). These are
+    // dynamic (one per device), so they carry no ref — query them and map each back by its `data-test` id.
+    // This both preselects (options now exist) and, after a FAILED reassign that re-renders without a
+    // reload, snaps the control off the operator's rejected pick back to `device.layoutProfileId`.
+    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
+      '[data-test^="reassign-"]',
+    )) {
+      const device = this.devices.find((d) => `reassign-${d.id}` === select.dataset.test);
+      if (device !== undefined) select.value = device.layoutProfileId ?? "";
+    }
   }
 
   /** (Re)load the devices + stations. Called on connect and after every mutation. A rejection anywhere
@@ -439,6 +449,21 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** Reassign device `id`'s layout profile to `layoutProfileId` (null = the form-factor default), then
+   * reload the device list (the station set is unchanged) so the row reflects the new binding. A rejection
+   * becomes the `errorKey` banner (the `#revoke` idiom); the caller void-invokes this off the select's
+   * `change`, so a rejection surfaces as the banner rather than an unhandled rejection. Unlike revoke this
+   * is a single-click action — reassigning a layout is reversible (pick another), so no confirm gate. */
+  async #onReassign(id: string, layoutProfileId: string | null): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.reassignDevice(id, layoutProfileId);
+      await this.#reloadDevices();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   /** Resolve a device's `stationId` to the loaded station's display name; a null id (a future non-station
    * kind) or a station no longer in the active list (retired) both fall back to the neutral placeholder. */
   #stationName(stationId: string | null): string {
@@ -529,6 +554,30 @@ export class DevicesScreen extends LitElement {
               >
             </span>
           </div>
+          ${
+            device.active
+              ? // The select's live value is reconciled to `device.layoutProfileId` in `updated()` (after
+                // its <option> children exist), NOT by a per-option `?selected` attribute — the same
+                // post-render pattern the enrol-form selects use. This is what makes a FAILED reassign snap
+                // the control back to the device's actual profile (the re-render runs `updated()` again)
+                // rather than stranding on the operator's rejected pick; `?selected` never resets the live
+                // `.selected` property once the operator has interacted.
+                html`<select
+                  data-test="reassign-${device.id}"
+                  aria-label=${`${t("devices.reassign")} ${device.label}`}
+                  @change=${(e: Event) =>
+                    void this.#onReassign(
+                      device.id,
+                      (e.target as HTMLSelectElement).value === ""
+                        ? null
+                        : (e.target as HTMLSelectElement).value,
+                    )}
+                >
+                  <option value="">${t("devices.profile_none")}</option>
+                  ${this.profiles.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+                </select>`
+              : nothing
+          }
           ${
             device.active
               ? html`<wt-button

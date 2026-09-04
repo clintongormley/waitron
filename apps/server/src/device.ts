@@ -148,13 +148,18 @@ export function deviceFormFactor(kind: DeviceKind): FormFactor {
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
- * The three device-binding composite FKs on `device_pairing_codes` (migration 0095) and the input
- * FIELD each guards — a 23503 on one means a supplied binding id names no row of THIS tenant.
+ * The device-binding composite FKs and the input FIELD each guards — a 23503 on one means a supplied
+ * binding id names no row of THIS tenant. Three are on `device_pairing_codes` (mint time, migration
+ * 0095); `devices_layout_profile_fk` is the twin on the `devices` table itself (also 0095), tripped when
+ * an already-enrolled device is REASSIGNED to a layout profile that no row of this tenant matches — the
+ * composite `(tenant_id, layout_profile_id)` makes that check both tenant-isolated and atomic with the
+ * UPDATE (no read-then-write race), so `assign-profile` translates it here rather than pre-checking.
  */
 const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "layoutProfileId"> = {
   device_pairing_codes_till_fk: "tillId",
   device_pairing_codes_receipt_printer_fk: "receiptPrinterId",
   device_pairing_codes_layout_profile_fk: "layoutProfileId",
+  devices_layout_profile_fk: "layoutProfileId",
 };
 
 /**
