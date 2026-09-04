@@ -6,6 +6,14 @@ import { AppError } from "@waitron/shared";
 import manifest from "../migrations.manifest.json" with { type: "json" };
 import "./errors.js";
 
+/**
+ * This module's own directory, computed once. From source it is `packages/migrations/src`; inside a
+ * bundle esbuild collapses `import.meta.url` to the bundle's own URL, so it is the bundle's
+ * directory — the same value the resolution logic used when it was computed per-call, just hoisted
+ * to compute-once (it was recomputed once per set inside `migrationOptionsFor`'s `.map()`).
+ */
+const MANIFEST_DIR = dirname(fileURLToPath(import.meta.url));
+
 export interface MigrationSet {
   name: string;
   table: string;
@@ -22,11 +30,49 @@ export function manifestSets(): MigrationSet[] {
 }
 
 /**
- * Where each set's SQL actually lives.
+ * Where a single set's SQL lives, resolved exactly as {@link migrationOptionsFor} resolves it — the
+ * `root === null` from-source branch and the bundle-root branch both live here so a second consumer
+ * (`expectedSchemaVersion`, which reads `<folder>/meta/_journal.json`) shares one implementation
+ * rather than copy-pasting the path logic. The resolution rules — and why the base is
+ * `import.meta.url`'s parent, not `process.cwd()` — are documented on {@link migrationOptionsFor}.
+ */
+export function resolveMigrationsFolder(set: MigrationSet, root: string | null): string {
+  return root === null
+    ? resolve(MANIFEST_DIR, "..", set.from)
+    : join(isAbsolute(root) ? root : resolve(MANIFEST_DIR, "..", root), set.name);
+}
+
+/**
+ * {@link resolveMigrationsFolder} plus the guard that the resolved folder carries a real drizzle
+ * journal (`meta/_journal.json`), throwing the classified `migrations.set_missing` when it does not.
+ * Shared by {@link migrationOptionsFor} and `expectedSchemaVersion` (`schema-version.ts`) so both use
+ * one journal-existence check with one error code and param shape. Package-internal — deliberately
+ * NOT on the barrel, same as `resolveMigrationsFolder`.
+ *
+ * One check collapses two distinct filesystem states into the same rejection: the folder is absent,
+ * or the folder exists but carries no `meta/_journal.json` (empty, or populated with something else).
+ * That collapse is deliberate — Drizzle's own migrator only rejects the absent case on its own; an
+ * empty folder reads to it as "zero migrations", which would boot clean against an unmigrated
+ * database and fail later, somewhere else. This refuses both up front, before Drizzle ever sees
+ * either.
+ */
+export function resolveExistingMigrationsFolder(set: MigrationSet, root: string | null): string {
+  const folder = resolveMigrationsFolder(set, root);
+  if (!existsSync(join(folder, "meta", "_journal.json"))) {
+    throw new AppError("migrations.set_missing", { name: set.name, folder });
+  }
+  return folder;
+}
+
+/**
+ * Where each set's SQL actually lives, plus a guard that the folder carries a real journal.
  *
  * `root === null` means "running from source": resolve each `from` against `here`'s parent.
  * Otherwise every set lives at `<root>/<name>` — an ABSOLUTE `root` is used as-is; a RELATIVE one
  * resolves against that same `here`-derived base, never the process's current working directory.
+ * The path resolution plus the journal-existence guard live in
+ * {@link resolveExistingMigrationsFolder}, shared with `expectedSchemaVersion`; this function maps
+ * each resolved folder to its `MigrationOptions`.
  *
  * What that base IS is not a constant, because `here` comes from `import.meta.url`:
  *
@@ -64,21 +110,8 @@ export function migrationOptionsFor(
   sets: readonly MigrationSet[],
   root: string | null,
 ): MigrationOptions[] {
-  const here = dirname(fileURLToPath(import.meta.url));
   return sets.map((set) => {
-    const migrationsFolder =
-      root === null
-        ? resolve(here, "..", set.from)
-        : join(isAbsolute(root) ? root : resolve(here, "..", root), set.name);
-    // One check collapses two distinct filesystem states into the same rejection: the folder is
-    // absent, or the folder exists but carries no `meta/_journal.json` (empty, or populated with
-    // something else). That collapse is deliberate — Drizzle's own migrator only rejects the
-    // absent case on its own; an empty folder reads to it as "zero migrations", which would boot
-    // clean against an unmigrated database and fail later, somewhere else. This check refuses both
-    // up front, before Drizzle ever sees either.
-    if (!existsSync(join(migrationsFolder, "meta", "_journal.json"))) {
-      throw new AppError("migrations.set_missing", { name: set.name, folder: migrationsFolder });
-    }
+    const migrationsFolder = resolveExistingMigrationsFolder(set, root);
     return { migrationsFolder, migrationsTable: set.table };
   });
 }

@@ -120,6 +120,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../../packages/module
       '@waitron/payments':
         specifier: workspace:*
         version: link:../../packages/payments
@@ -657,6 +660,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -697,9 +703,25 @@ importers:
       '@waitron/workforce-es':
         specifier: workspace:*
         version: link:../workforce-es
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/module:
+    dependencies:
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

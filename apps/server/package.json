@@ -44,6 +44,7 @@
     "@waitron/layouts": "workspace:*",
     "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
+    "@waitron/module": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/printing": "workspace:*",

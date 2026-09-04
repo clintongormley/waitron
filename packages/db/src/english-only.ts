@@ -19,6 +19,7 @@ export const GENERIC_PACKAGES = [
   "catalogue",
   "sync",
   "membership",
+  "module",
   "layouts",
   "recipes",
   "purchasing",

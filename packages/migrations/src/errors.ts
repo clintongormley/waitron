@@ -36,5 +36,12 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** A manifest set's folder is absent, or present with no `meta/_journal.json`. */
     "migrations.set_missing": { name: string; folder: string };
+    /**
+     * A set's `table` is not a drizzle journal-table name (`__drizzle_migrations_<lowercase>`).
+     * `appliedSchemaVersion` interpolates the table name into a `count(*)` over it — an identifier
+     * a bind parameter cannot carry (§3) — so the name is validated before it reaches the SQL,
+     * rather than trusting that "callers only pass safe values".
+     */
+    "migrations.invalid_table": { table: string };
   }
 }

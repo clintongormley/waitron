@@ -18,6 +18,7 @@
   "dependencies": {
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   },
   "devDependencies": {
@@ -33,7 +34,6 @@
     "@waitron/sync": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
-    "drizzle-orm": "^0.45.2",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
