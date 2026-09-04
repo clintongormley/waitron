@@ -1,4 +1,4 @@
-import { check, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -22,6 +22,12 @@ export const mirrorConfig = pgTable(
     relayUrl: text("relay_url").notNull(),
     boxHostname: text("box_hostname").notNull(),
     boxCaPem: text("box_ca_pem").notNull(),
+    // The nodeId of the PRIMARY this mirror pulls from — its sync ORIGIN, distinct from this node's
+    // OWN identity (config.till.nodeId). Split out here (membership R3a) so the mirror can run under its
+    // own id as SUBSCRIBER while still applying the primary's rows (origin = this value). Written
+    // owner-role at adopt = designated.nodeId (the primary's). NOT NULL: every mirror has exactly one
+    // origin; the table is empty until adopt, so the ADD COLUMN NOT NULL is safe pre-production.
+    originNodeId: uuid("origin_node_id").notNull(),
     adoptedAt: timestamp("adopted_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("mirror_config_singleton_ck", sql`${t.id} = 1`)],

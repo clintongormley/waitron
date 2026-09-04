@@ -6,7 +6,11 @@ export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 
 export interface DailyCloseInput {
   tenantId: TenantId;
-  nodeId: NodeId;
+  /** Omit → aggregate across ALL the tenant's nodes (RLS + the tenant predicate scope it), the same
+   * venue-wide shape `PeriodVatInput` allows. Node-grain callers (the fiscal daily close, the
+   * dashboard's per-till daily-close view) pass a node; the dashboard OVERVIEW omits it so its
+   * takings/counts aggregate the whole venue (report-api overview, membership promotion R3a). */
+  nodeId?: NodeId;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
   /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
@@ -148,7 +152,10 @@ export interface CloseCounts {
 
 export interface DailyClose {
   tenantId: TenantId;
-  nodeId: NodeId;
+  /** The node this close is grain-scoped to, or omitted for a venue-wide close (mirrors
+   * `DailyCloseInput.nodeId`). The fiscal `recordDailyClose` always supplies a node; the venue-wide
+   * overview does not read this field. */
+  nodeId?: NodeId;
   businessDay: string;
   timeZone: string;
   vat: VatSummary;

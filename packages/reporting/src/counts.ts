@@ -1,13 +1,15 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { activeSalesClause, businessDayClause } from "./business-day.js";
+import { activeSalesClause, businessDayClause, nodeScopeClause } from "./business-day.js";
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
- * Operational record counts for one (tenant, node) over one business day. `sales` and `corrections`
- * are issued-in-day (excluding voided; `sales` also excludes F3-canje substitutes — same exclusions
- * as the VAT half). `voids` counts void EVENTS whose voided_at falls in the day, for this node's
- * sales. Belt-and-suspenders tenant/node predicates over RLS.
+ * Operational record counts for one (tenant, node) — or the whole tenant when `input.nodeId` is
+ * omitted — over one business day. `sales` and `corrections` are issued-in-day (excluding voided;
+ * `sales` also excludes F3-canje substitutes — same exclusions as the VAT half). `voids` counts void
+ * EVENTS whose voided_at falls in the day, for this node's sales. The node predicate is applied via
+ * `nodeScopeClause` only when a node is fixed (a venue-wide overview omits it). Belt-and-suspenders
+ * tenant/node predicates over RLS.
  */
 export async function computeCloseCounts(
   tx: Transaction,
@@ -19,7 +21,7 @@ export async function computeCloseCounts(
       count(*) filter (where s.corrects_sale_id is not null)::int as corrections
     from sales s
     where s.tenant_id = ${input.tenantId}
-      and s.node_id = ${input.nodeId}
+      ${nodeScopeClause(input.nodeId)}
       and ${businessDayClause(sql`s.issued_at`, input)}
       and ${activeSalesClause(input)}
   `);
@@ -29,7 +31,7 @@ export async function computeCloseCounts(
     from sale_voids sv
     join sales s on s.id = sv.sale_id and s.tenant_id = ${input.tenantId}
     where sv.tenant_id = ${input.tenantId}
-      and s.node_id = ${input.nodeId}
+      ${nodeScopeClause(input.nodeId)}
       and ${businessDayClause(sql`sv.voided_at`, input)}
   `);
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { addDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
-import { businessDayClause } from "./business-day.js";
+import { businessDayClause, nodeScopeClause } from "./business-day.js";
 import type {
   CashUp,
   DailyCloseInput,
@@ -11,10 +11,12 @@ import type {
 } from "./types.js";
 
 /**
- * Operational cash-up for one (tenant, node) over one business day, anchored on settlement. Reads
- * `tenders` joined to `sales` (for node scoping and till_id); groups by (till, method). `cashTakings`
- * per till is Σ cash-method amount (design §5). Post-settlement refunds are out of scope (tenders are
- * always positive). Belt-and-suspenders tenant/node predicates over RLS.
+ * Operational cash-up for one (tenant, node) — or the whole tenant when `input.nodeId` is omitted —
+ * over one business day, anchored on settlement. Reads `tenders` joined to `sales` (for node scoping
+ * and till_id); groups by (till, method). `cashTakings` per till is Σ cash-method amount (design §5).
+ * The node predicate is applied via `nodeScopeClause` only when a node is fixed (a venue-wide overview
+ * omits it, relying on RLS + the tenant predicate). Post-settlement refunds are out of scope (tenders
+ * are always positive). Belt-and-suspenders tenant/node predicates over RLS.
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
   const { rows } = await tx.execute<{
@@ -31,7 +33,7 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
     from tenders t
     join sales s on s.id = t.sale_id and s.tenant_id = ${input.tenantId}
     where t.tenant_id = ${input.tenantId}
-      and s.node_id = ${input.nodeId}
+      ${nodeScopeClause(input.nodeId)}
       and ${businessDayClause(sql`t.settled_at`, input)}
     group by s.till_id, t.method
     -- ::text so byMethod is alphabetical (card, cash, other, ...). Ordering the tender_method ENUM

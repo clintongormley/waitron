@@ -3672,6 +3672,11 @@ export interface StationQueueGroup {
  * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
  * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
  * used (CLAUDE.md §4).
+ *
+ * On a mirror this `cfg.nodeId` filter is the mirror's OWN reserved id, not the origin whose replicated
+ * rows carry the primary's — see the latent-mirror-trap comment on the `GET /api/working-orders` cluster
+ * in till-api.ts (membership promotion R3a) for why that is safe today and what must change before it
+ * is not.
  */
 /**
  * Read a set of PARENT dish lines' CHILD modifier lines AND compute their AS-SERVED allergen profiles
@@ -4105,6 +4110,8 @@ export interface ExpoOrder {
  * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
  * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.rls.test.ts), the
  * same split `listStationQueue` uses (CLAUDE.md §4).
+ *
+ * Same mirror caveat as `listStationQueue`'s own `cfg.nodeId` filter above — see that comment.
  */
 export async function listExpoQueue(
   tx: Transaction,

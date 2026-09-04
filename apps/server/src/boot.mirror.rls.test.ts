@@ -86,6 +86,11 @@ const SYNC_PEERS = JSON.stringify([
 const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
 const MIRROR_BOX_HOSTNAME = "mirror-box.local";
 const MIRROR_SYNC_TOKEN = "mirror-peer-token";
+// The sync ORIGIN — the PRIMARY's node id, DISTINCT from this mirror's own `WAITRON_TILL_NODE_ID`
+// (membership promotion R3a: the mirror runs under its own identity, and `mirror_config.origin_node_id`
+// is the separate primary node whose rows it pulls). The relay is unreachable here so no pull completes;
+// this only has to be a well-formed, distinct id to model the split faithfully.
+const MIRROR_ORIGIN_NODE = "77777777-7777-4777-8777-777777777777";
 // The vault key ring the boot's `loadKeyRing(env)` builds from KEY_ENV — used here to SEAL the sync
 // token the same way `adoptFromPrimary` would, so the boot's `readMirrorToken` (app_user) unseals it.
 const RING = loadKeyRing(KEY_ENV);
@@ -166,6 +171,7 @@ beforeAll(async () => {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
+    originNodeId: MIRROR_ORIGIN_NODE,
   });
   await sealMirrorToken(mirror.admin, RING, TILL_ENV.WAITRON_TILL_TENANT_ID, MIRROR_SYNC_TOKEN);
 
@@ -278,6 +284,20 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(printJobs.status).toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).toBe(404);
+
+      // Till/KDS reads, unlike device/print above, ARE mounted on a mirror (`mountTillApi` is not
+      // wrapped in boot.ts's `!isMirror` mount guard) and are node-scoped by `cfg.nodeId` — which on a
+      // mirror is the mirror's OWN reserved id (R3a), not the primary's, whose id replicated
+      // `working_orders` rows still carry. That mismatch would return an empty list rather than erroring,
+      // so the guard against it is upstream: a till session needs `POST /api/session` (login), which the
+      // read-only gate already 403s above, so `requireSession` 401s here BEFORE the node-scoped filter in
+      // `listHeldOrders` ever runs (till-api.ts's comment on this route cluster spells out the same
+      // reasoning). This pins that today's safety is session-shaped, not routing-shaped — if a later
+      // slice (till-side reroute, R3b+) makes a till session reachable on a mirror, this assertion's
+      // premise breaks and the reads must be rerouted to the displayed-data node first.
+      const heldOrders = await fetch(`${base}/api/working-orders`);
+      expect(heldOrders.status).toBe(401);
+      expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
 
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'

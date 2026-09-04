@@ -812,6 +812,52 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     );
   }
 
+  // The mirror's link to its primary through B's tunnel (C2b, spec §7): the box CA + hostname
+  // `tunnelHttpClient` validates the box's TLS leaf against, the relay URL it dials, the per-peer sync
+  // token, and — from membership promotion R3a — the sync ORIGIN. All read from the DATABASE
+  // (`mirror_config`, written owner-role at adopt) and the vault (`sync.mirror_token`, sealed under the
+  // mirror's OWN box key), NEVER from env. A mirror REQUIRES them: an absent/partial `mirror_config` is
+  // a loud `server.config_invalid` (fail-closed), and an absent or unsealable token throws its own loud
+  // `credentials.*` error — never a silent no-op. The identity is now SPLIT (R3a): the subscriber it
+  // pulls as is its OWN id (`config.till.nodeId`, persisted by adopt), while the ORIGIN it pulls is the
+  // PRIMARY's id (`mirror_config.origin_node_id` = `loaded.originNodeId`) — the two are DISTINCT, and
+  // the local pull cursor is keyed `(subscriber = own, origin = primary, lane)`. `mirrorPeer.nodeId` is
+  // therefore the origin, and `dataNodeId` (below) the same origin, so the mirror's node-scoped reads
+  // resolve the replicated venue data (whose rows keep the primary's node_id). Read ONLY on a mirror (a
+  // primary sets none), and wrapped in the same db-cleanup guard the `loadKeyRing` load above uses, so a
+  // throw closes the pool rather than leaking it (only `db` is open here — the sync/retention pools are
+  // not yet). The token is never logged. Hoisted ABOVE the mounts because `mountReportApi` needs
+  // `dataNodeId`.
+  let mirror: MirrorConnection | undefined;
+  let mirrorPeer: { nodeId: string; url: string; token: string } | undefined;
+  // The node whose DATA this server DISPLAYS in its node-scoped read paths (report-api's per-till/fiscal
+  // reports). On a PRIMARY it is the node's own id; on a MIRROR it is the ORIGIN — the primary whose
+  // replicated sales the mirror holds — because those rows keep the primary's node_id, so scoping by the
+  // mirror's own id would return nothing. Distinct from `config.till.nodeId`, which stays the node's OWN
+  // identity for every WRITE / capture-origin path (membership promotion R3a).
+  let dataNodeId: string = config.till.nodeId;
+  if (isMirror) {
+    try {
+      const loaded = await readMirrorConfig(db);
+      if (loaded === null) {
+        // The registered `server.config_invalid` shape is `{ variable, reason }` (errors.ts). The
+        // "variable" is no longer an env name — the mirror's connection config lives in the DB now — so
+        // it names the DB record instead; `reason` says the mirror requires it.
+        throw new AppError("server.config_invalid", {
+          variable: "mirror_config",
+          reason: "mirror_requires_mirror_config",
+        });
+      }
+      mirror = loaded;
+      dataNodeId = loaded.originNodeId;
+      const token = await readMirrorToken(db, ring, config.till.tenantId);
+      mirrorPeer = { nodeId: loaded.originNodeId, url: loaded.relayUrl, token };
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+  }
+
   const reconciler = new StripeReconciler({
     db,
     nodeId: config.till.nodeId,
@@ -1012,12 +1058,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   mountBookingsApi(app, { db, cfg: till }, log);
   // The dashboard's gated reporting surface on the SAME app, the identical convention. Reuses the EXACT
   // `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above receives so
-  // the two cannot drift, plus `till.nodeId` — THIS server's own node, which the `/reports/overview`
-  // route scopes today's takings/counts/open-tables/top-sellers to (the modelo 303 export ignores it and
-  // aggregates ALL of the obligado's nodes). No fiscal backend, card provider or media store — READ-ONLY
-  // routes over the filed commercial record + the venue's dining tables. Routes only — no database work
-  // at boot; the `report.export`/`report.view` gates run per request, and the pipeline SELECTs only.
-  mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
+  // the two cannot drift. `nodeId` here is `dataNodeId` — the node whose DATA this server DISPLAYS, not
+  // its own identity: on a MIRROR that is the ORIGIN (the primary whose replicated sales it holds), so
+  // the per-till/fiscal reports (daily-close view, period, cash-up, VAT, overdue) resolve the venue's
+  // data rather than the mirror's empty own node (membership promotion R3a); on a primary it is the own
+  // id. The `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes),
+  // and the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media store —
+  // READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes only — no
+  // database work at boot; the `report.export`/`report.view` gates run per request, SELECTs only.
+  mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
   // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
   // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
   // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
@@ -1068,40 +1117,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none). Torn down in
   // close() below.
   const syncConfig = isMirror ? loadMirrorSyncConfig(env) : loadSyncConfig(env);
-  // The mirror's link to its primary through B's tunnel (C2b, spec §7): the box CA + hostname
-  // `tunnelHttpClient` validates the box's TLS leaf against, the relay URL it dials, and the per-peer
-  // sync token — all read from the DATABASE (`mirror_config`, written owner-role at adopt) and the
-  // vault (`sync.mirror_token`, sealed under the mirror's OWN box key), NEVER from env. A mirror
-  // REQUIRES them: an absent/partial `mirror_config` is a loud `server.config_invalid` (fail-closed),
-  // and an absent or unsealable token throws its own loud `credentials.*` error — never a silent
-  // no-op. The peer's `nodeId` is this node's own id: the mirror adopted the primary's identity, so
-  // the subscriber and the origin it pulls are the same adopted node (design §5/§7), and the token was
-  // enrolled with that same node as its subscriber (mirror-bundle.ts). Read ONLY on a mirror (a
-  // primary sets none), and wrapped in the same db-cleanup guard the `loadKeyRing` load above uses, so
-  // a throw closes the pool rather than leaking it (only `db` is open here — the sync and retention
-  // pools below are not yet). The token is never logged.
-  let mirror: MirrorConnection | undefined;
-  let mirrorPeer: { nodeId: string; url: string; token: string } | undefined;
-  if (isMirror) {
-    try {
-      const loaded = await readMirrorConfig(db);
-      if (loaded === null) {
-        // The registered `server.config_invalid` shape is `{ variable, reason }` (errors.ts). The
-        // "variable" is no longer an env name — the mirror's connection config lives in the DB now — so
-        // it names the DB record instead; `reason` says the mirror requires it.
-        throw new AppError("server.config_invalid", {
-          variable: "mirror_config",
-          reason: "mirror_requires_mirror_config",
-        });
-      }
-      mirror = loaded;
-      const token = await readMirrorToken(db, ring, config.till.tenantId);
-      mirrorPeer = { nodeId: config.till.nodeId, url: loaded.relayUrl, token };
-    } catch (error) {
-      await db.close();
-      throw error;
-    }
-  }
   const syncController = new AbortController();
   let syncDb: Database | undefined;
   let syncWorker: Promise<void> | undefined;

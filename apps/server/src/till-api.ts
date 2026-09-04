@@ -920,6 +920,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The cross-till held list for this node: every OPEN working order any register on the node can
   // retrieve. SESSION-GUARDED — the operator must be logged in to see parked orders. `listHeldOrders`
   // is node- and (via RLS) tenant-scoped from `deps.cfg`; the browser names nothing.
+  //
+  // LATENT MIRROR TRAP (whole-branch review, membership promotion R3a): this and every other till/KDS
+  // read below that filters by `deps.cfg.nodeId` (`getHeldOrder`; `listStationQueue`/`listExpoQueue` in
+  // working-order.ts) is scoped to the SERVER'S OWN node id. Since R3a a mirror runs under its OWN
+  // reserved id, distinct from the primary it replicates from — but `working_orders`/`ticket_items` are
+  // sync-enrolled, so a replicated row on a mirror still carries the PRIMARY's `node_id`. Filtering by
+  // the mirror's own id would therefore return EMPTY on a mirror, not the primary's data (unlike
+  // `report-api.ts`, which was fixed to resolve `dataNodeId` = the origin on a mirror — see its comment
+  // near `mirror-e2e.rls.test.ts:39`). These reads were NOT given the same fix, deliberately:
+  // `deps.cfg.nodeId` also stamps WRITE origin on this surface (sale/park/fire — `cfg.nodeId` at
+  // record-sale.ts:79-82 and elsewhere in this file), so blanket-swapping it for the origin would corrupt
+  // that. The routing fix belongs to the till-side reroute slice (R3b+).
+  //
+  // It is safe TODAY only because no till session can exist on a mirror to REACH this filter:
+  // `POST /api/session` (till PIN login) is a write, and the read-only gate (`read-only-gate.ts`) 403s
+  // every non-GET on a mirror with no path exceptions, so `requireSession` — which every route below
+  // calls FIRST — always 401s (`session.required`) before `listHeldOrders`/`getHeldOrder` ever run. The
+  // ambient viewer (`mirror-session.ts`) only auto-authenticates the MANAGEMENT session, never a till
+  // one. `boot.mirror.rls.test.ts` pins this reachability with a guard test; if a later slice makes a
+  // till session reachable on a mirror (the till-side reroute itself, or an ambient till viewer), THAT
+  // slice must route these reads through the displayed-data node — the way `report-api` does — before
+  // whatever makes the session reachable ships.
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

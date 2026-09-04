@@ -100,8 +100,11 @@ export async function adoptFromPrimary(
   await setDeploymentMode(deps.ownerDb, "mirror");
   // Establish the standby's DORMANT identity from the reserved bundle (design §6 R2), after the tenant +
   // parent rows exist (the vault + node/series FKs are restrict) and before the token seal. All inert:
-  // the reserved SIF is keyed to the standby's OWN nodeId, so no sale (which resolves `config.till.nodeId`
-  // — unchanged, the primary's) touches it and the box stays read-only until an R3 promotion. The
+  // the reserved SIF is keyed to the standby's OWN nodeId, which from R3a is ALSO `config.till.nodeId`
+  // (the mirror runs under its own identity, persisted below). Inertness therefore rests on the box
+  // being a READ-ONLY MIRROR — the read-only gate refuses every write, so no sale is ever recorded to
+  // resolve it — NOT on an id mismatch; on an R3b promotion the mode flips and this same reserved SIF
+  // is activated as the (now-primary) node's live chain. The
   // standby's node mirrors the primary's modules: read the primary's designated node row from the bundle
   // (camelCase `$inferInsert` rows, `Record<string, unknown>`) for its name + filing/tax modules.
   const primaryNode = bundle.rows.nodes.find((n) => n.id === designated.nodeId);
@@ -118,16 +121,27 @@ export async function adoptFromPrimary(
     },
   );
   await sealMirrorToken(deps.ownerDb, deps.ring, designated.tenantId, bundle.syncToken);
+  // The mirror's connection config, plus its sync ORIGIN — the PRIMARY's node id (`designated.nodeId`)
+  // (membership promotion R3a). The mirror now runs under its OWN identity (`nodeId` below is the
+  // standby's own), so the node whose replicated rows it pulls can no longer be read off
+  // `config.till.nodeId`; it is persisted here and read back at boot to drive the pull peer's origin
+  // and the mirror's node-scoped read paths (report-api).
   await writeMirrorConfig(deps.ownerDb, {
     relayUrl: bundle.relayUrl,
     boxHostname: bundle.boxHostname,
     boxCaPem: bundle.boxCaPem,
+    originNodeId: designated.nodeId,
   });
   await deps.persistTrading({
     tenantId: designated.tenantId,
     locationId: designated.locationId,
     tillId: designated.tillId,
-    nodeId: designated.nodeId,
+    // The mirror's OWN node id (the standby minted in memory above), NOT `designated.nodeId` — from
+    // R3a `config.till.nodeId` is the mirror's own identity (the subscriber it pulls as, the origin it
+    // stamps its own writes with once promoted). `tenantId`/`locationId`/`tillId` stay the shared
+    // venue's `designated.*`; `seriesId` stays `designated.*` here (inert on a read-only mirror) and is
+    // corrected to the cloud's own reserved series at R3b.
+    nodeId: standby.nodeId,
     seriesId: designated.seriesId,
     databaseUrl: deps.databaseUrl,
     migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
