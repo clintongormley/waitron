@@ -23,7 +23,11 @@ import {
   type Database,
 } from "@waitron/db";
 import { enrolPeer } from "@waitron/sync";
-import { currentSif, reserveInstallationNumber } from "@waitron/fiscal-verifactu";
+import {
+  currentSif,
+  deriveReservedSeriesCodes,
+  reserveInstallationNumber,
+} from "@waitron/fiscal-verifactu";
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
@@ -114,48 +118,46 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // Reserve the standby's dormant fiscal identity (reserved-standby-identity design §6 R2). The counter
-  // bump + the SIF/series reads share ONE `withTenant` transaction so the reservation is consistent:
-  // `currentSif` reads the primary's live SIF, `reserveInstallationNumber` bumps the primary's OWN
-  // `contadores_instalacion` (the primary is the sole allocator per NIF), and the series read derives
-  // disjoint codes from the number just reserved. `currentSif` throwing `sif.not_registered` correctly
-  // surfaces an unprovisioned primary — an impossible state for a trading primary — and is left to
-  // propagate.
-  const reserved = await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
-    const primarySif = await currentSif(
-      tx,
-      brandTenantId(deps.designated.tenantId),
-      brandNodeId(deps.designated.nodeId),
-    );
-    const numeroInstalacion = await reserveInstallationNumber(tx, {
-      nif: primarySif.nif,
-      idSistemaInformatico: primarySif.idSistemaInformatico,
-    });
-    const primarySeries = await tx
-      .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-      .from(invoiceSeries)
-      .where(eq(invoiceSeries.nodeId, brandNodeId(deps.designated.nodeId)));
-    const series = primarySeries.map((s) => ({
-      code: `${s.code}-${numeroInstalacion}`,
-      purpose: s.purpose,
-    }));
-    return {
-      nif: primarySif.nif,
-      idSistemaInformatico: primarySif.idSistemaInformatico,
-      numeroInstalacion,
-      series,
-    };
-  });
+  // Reserve the standby's dormant fiscal identity (reserved-standby-identity design §6 R2) and unseal
+  // the primary's identity key IN PARALLEL — the two have no data dependency (the endorsement needs only
+  // the private key + `deps.standby`, never `reserved`).
+  //
+  // The reservation's counter bump + SIF/series reads share ONE `withTenant` transaction so it is
+  // consistent: `currentSif` reads the primary's live SIF, `reserveInstallationNumber` bumps the
+  // primary's OWN `contadores_instalacion` (the primary is the sole allocator per NIF), and the series
+  // codes are derived disjoint from the number just reserved. `currentSif` throwing `sif.not_registered`
+  // correctly surfaces an unprovisioned primary — an impossible state for a trading primary — and is left
+  // to propagate.
+  //
+  // The primary's identity PRIVATE key is unsealed as `app_user` inside `readNodeIdentityKey`'s own
+  // transaction; `endorseKey` (below) signs canonicalize({nodeId, publicKey}) so the endorsement chains
+  // the standby's key back to the primary's setup-established trust anchor (reserved-standby-identity §4).
+  const [reserved, primaryPrivateKey] = await Promise.all([
+    withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
+      const primarySif = await currentSif(
+        tx,
+        brandTenantId(deps.designated.tenantId),
+        brandNodeId(deps.designated.nodeId),
+      );
+      const numeroInstalacion = await reserveInstallationNumber(tx, {
+        nif: primarySif.nif,
+        idSistemaInformatico: primarySif.idSistemaInformatico,
+      });
+      const primarySeries = await tx
+        .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.nodeId, brandNodeId(deps.designated.nodeId)));
+      const series = deriveReservedSeriesCodes(primarySeries, numeroInstalacion);
+      return {
+        nif: primarySif.nif,
+        idSistemaInformatico: primarySif.idSistemaInformatico,
+        numeroInstalacion,
+        series,
+      };
+    }),
+    readNodeIdentityKey(deps.appDb, deps.ring, deps.designated.tenantId),
+  ]);
 
-  // Endorse the standby's identity key with the primary's identity PRIVATE key (reserved-standby-identity
-  // design §4). The key is unsealed as `app_user` inside `readNodeIdentityKey`'s own transaction;
-  // `endorseKey` signs canonicalize({nodeId, publicKey}) so the endorsement chains the standby's key back
-  // to the primary's setup-established trust anchor.
-  const primaryPrivateKey = await readNodeIdentityKey(
-    deps.appDb,
-    deps.ring,
-    deps.designated.tenantId,
-  );
   const endorsement = endorseKey(
     deps.standby.nodeId,
     deps.standby.publicKey,
@@ -178,12 +180,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     boxCaPem,
     relayUrl: deps.relayUrl,
     syncToken: token,
-    reservedIdentity: {
-      nif: reserved.nif,
-      idSistemaInformatico: reserved.idSistemaInformatico,
-      numeroInstalacion: reserved.numeroInstalacion,
-      series: reserved.series,
-      endorsement,
-    },
+    reservedIdentity: { ...reserved, endorsement },
   };
 }

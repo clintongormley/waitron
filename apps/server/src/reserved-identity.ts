@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
+import { generateNodeKeyPair } from "@waitron/membership";
 import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import {
   insertReservedNodeTx,
@@ -9,6 +9,8 @@ import {
 } from "@waitron/db";
 import { writeReservedSif } from "@waitron/fiscal-verifactu";
 import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { NODE_KEY_PURPOSE } from "./node-identity.js";
+import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
 
 export interface StandbyIdentity {
@@ -24,14 +26,6 @@ export interface StandbyIdentity {
 export function generateStandbyIdentity(): StandbyIdentity {
   const { publicKey, privateKey } = generateNodeKeyPair();
   return { nodeId: randomUUID(), publicKey, privateKey };
-}
-
-export interface ReservedIdentityBundle {
-  nif: string;
-  idSistemaInformatico: string;
-  numeroInstalacion: number;
-  series: readonly { code: string; purpose: string }[];
-  endorsement: Endorsement;
 }
 
 /**
@@ -52,20 +46,20 @@ export async function establishReservedStandbyIdentity(
     nodeName: string;
     filingModule: string | null;
     taxModule: string | null;
-    reserved: ReservedIdentityBundle;
+    reserved: ReservedIdentity;
   },
 ): Promise<void> {
   const tenant = brandTenantId(args.tenantId);
   await withTenant(deps.ownerDb, tenant, async (tx) => {
     const existing = await tryGetCredential(tx, deps.ring, {
       tenantId: tenant,
-      purpose: "membership.node_key",
+      purpose: NODE_KEY_PURPOSE,
     });
     if (existing !== null) return; // already established — idempotent no-op
 
     await putCredential(tx, deps.ring, {
       tenantId: tenant,
-      purpose: "membership.node_key",
+      purpose: NODE_KEY_PURPOSE,
       value: { privateKey: args.standby.privateKey },
     });
     await insertReservedNodeTx(tx, {

@@ -17,6 +17,7 @@ export {
   writeReservedSif,
 } from "./registro-sif.js";
 export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
+export { deriveReservedSeriesCodes } from "./reserved-series.js";
 // The drainer itself, not only `VerifactuBackend.drain`. The `apps/*` host calls this directly:
 // constructing a backend to reach it would demand a `TrustedClock` and a `db` handle the drainer
 // never touches.

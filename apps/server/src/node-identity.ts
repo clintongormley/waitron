@@ -4,6 +4,9 @@ import { setNodePublicKeyTx, withTenant, type Database } from "@waitron/db";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
 
+/** The credentials-vault purpose for the node's Ed25519 membership private key. Single source of truth. */
+export const NODE_KEY_PURPOSE = "membership.node_key";
+
 /**
  * Establish this node's membership identity (design §4) at setup: generate an Ed25519 keypair, then in
  * ONE tenant transaction seal the PRIVATE half in the box vault under `membership.node_key` and stamp
@@ -36,7 +39,7 @@ export async function establishNodeIdentity(
   await withTenant(deps.ownerDb, tenant, async (tx) => {
     await putCredential(tx, deps.ring, {
       tenantId: tenant,
-      purpose: "membership.node_key",
+      purpose: NODE_KEY_PURPOSE,
       value: { privateKey },
     });
     await setNodePublicKeyTx(tx, nodeId, publicKey);
@@ -56,7 +59,7 @@ export function readNodeIdentityKey(
 ): Promise<string> {
   const tenant = brandTenantId(tenantId);
   return withTenant(appDb, tenant, async (tx) => {
-    const c = await getCredential(tx, ring, { tenantId: tenant, purpose: "membership.node_key" });
+    const c = await getCredential(tx, ring, { tenantId: tenant, purpose: NODE_KEY_PURPOSE });
     return c.privateKey as string;
   });
 }

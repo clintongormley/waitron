@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
@@ -28,16 +28,7 @@ export async function insertReservedNodeTx(
   tx: Transaction,
   node: ReservedNodeInput,
 ): Promise<void> {
-  await tx.insert(nodes).values({
-    id: node.id,
-    tenantId: node.tenantId,
-    locationId: node.locationId,
-    name: node.name,
-    filingModule: node.filingModule,
-    taxModule: node.taxModule,
-    publicKey: node.publicKey,
-    endorsement: node.endorsement,
-  });
+  await tx.insert(nodes).values(node);
 }
 
 export interface ReservedSeriesInput {
@@ -57,14 +48,7 @@ export async function insertReservedSeriesTx(
   series: readonly ReservedSeriesInput[],
 ): Promise<void> {
   if (series.length === 0) return;
-  await tx.insert(invoiceSeries).values(
-    series.map((s) => ({
-      tenantId: s.tenantId,
-      nodeId: s.nodeId,
-      code: s.code,
-      purpose: s.purpose,
-    })),
-  );
+  await tx.insert(invoiceSeries).values([...series]);
 }
 
 /**
@@ -82,7 +66,9 @@ export function readNodeEndorsement(
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
       .from(nodes)
-      .where(and(eq(nodes.tenantId, tenantId), eq(nodes.id, nodeId)))
+      // `nodes` is FORCE-RLS and this read runs inside `withTenant`, so the tenant GUC policy already
+      // scopes it — no `eq(nodes.tenantId, …)` needed (matches sibling `readMembershipTrustSet`).
+      .where(eq(nodes.id, nodeId))
       .limit(1);
     return row?.endorsement ?? null;
   });
