@@ -109,9 +109,11 @@ function requireDeclarationType(raw: string | undefined): string {
 /** Reads THIS server's venue clock — the `time_zone`/`day_cutover` of the node's location — the inputs
  * `currentBusinessDay`/`computeDailyClose` consume (spec D9). `day_cutover` is a `time` ("HH:MM:SS"),
  * sliced to the "HH:MM" the reporting validators expect. A missing node is not user input: `cfg.nodeId`
- * is this server's OWN node (from `till.nodeId`), and `nodes.location_id` is `NOT NULL` with an FK to
- * `locations.id` (`nodes_location_id_locations_id_fk`, migration 0015_nodes), so the expected invariant
- * is that its location row is present; a missing one is an invariant break → an opaque 500 via `run`,
+ * is the node whose data this server DISPLAYS — its own id on a primary, the replicated ORIGIN (the
+ * primary's node) on a mirror — and its `nodes` row is always present (own at setup, or the primary's
+ * via `adoptVenue`); `nodes.location_id` is `NOT NULL` with an FK to `locations.id`
+ * (`nodes_location_id_locations_id_fk`, migration 0015_nodes), so the expected invariant is that its
+ * location row is present; a missing one is an invariant break → an opaque 500 via `run`,
  * never a registered code (the `tenants`-row guard in the modelo 303 route below does the same). The
  * `l.tenant_id = n.tenant_id` join predicate is satisfied under RLS, which scopes both tables to this
  * server's one tenant. The explicit `n.tenant_id` predicate is belt-and-suspenders over RLS, matching
@@ -129,20 +131,23 @@ async function resolveVenueClock(
   const row = rows[0];
   /* v8 ignore start */
   if (row === undefined) {
-    // Expected-unreachable: this server's own node exists and `nodes.location_id` (NOT NULL, FK to
-    // locations.id — 0015_nodes) guarantees its location row (mirrors the modelo 303 route's
-    // whoami-style tenant guard). A misconfigured node becomes an opaque 500 via `run`.
+    // Expected-unreachable: the node row (own on a primary, the replicated origin on a mirror) is
+    // always present, and `nodes.location_id` (NOT NULL, FK to locations.id — 0015_nodes) guarantees
+    // its location row (mirrors the modelo 303 route's whoami-style tenant guard). A misconfigured
+    // node becomes an opaque 500 via `run`.
     throw new Error(`report-api: no node/location row for ${nodeId}`);
   }
   /* v8 ignore stop */
   return { timeZone: row.time_zone, dayCutover: row.day_cutover.slice(0, 5) };
 }
 
-/** Counts THIS node's dining tables and how many carry an open tab, for the overview's open-tables tile.
- * `dining_tables` is LOCATION-scoped, not node-scoped, so it is scoped by the node's location (join
- * `nodes` on the tenant-consistent `location_id`); `tab_id is not null` is the open flag (design §2b).
- * Inactive tables (deactivated, `active = false`) are excluded. The explicit `tenant_id` predicate is
- * belt-and-suspenders over RLS, the aggregate idiom the reporting reads use. */
+/** Counts the dining tables at `nodeId`'s LOCATION (the shared venue's, not the node's own) and how many
+ * carry an open tab, for the overview's open-tables tile. `dining_tables` is LOCATION-scoped, not
+ * node-scoped, so it is scoped by the node's location (join `nodes` on the tenant-consistent
+ * `location_id`) — on a mirror that node is the replicated origin, the same venue as the primary;
+ * `tab_id is not null` is the open flag (design §2b). Inactive tables (deactivated, `active = false`)
+ * are excluded. The explicit `tenant_id` predicate is belt-and-suspenders over RLS, the aggregate idiom
+ * the reporting reads use. */
 async function countOpenTables(
   tx: Transaction,
   tenantId: TenantId,
