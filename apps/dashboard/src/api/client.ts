@@ -1863,8 +1863,11 @@ export class DashboardApi {
 
   /** `POST /management-api/devices/:id/assign-profile` — reassign (or clear) a device's layout profile
    * (device.manage-gated): `layoutProfileId` a tenant profile's id, or `null` to fall back to the
-   * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`
-   * and a bad/foreign profile `{ code: "device.binding_invalid" }`. */
+   * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`.
+   * A UUID-shaped id that names no profile of this tenant (unknown or foreign) reaches the composite FK
+   * and rejects `{ code: "device.binding_invalid" }`; a MALFORMED (non-UUID) id is screened earlier and
+   * rejects `{ code: "management.request_invalid" }`. The dashboard only ever sends a real profile id or
+   * `null`, so those two rejects are defense-in-depth. */
   reassignDevice(id: string, layoutProfileId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/assign-profile`, "POST", {
       layoutProfileId,

@@ -1847,12 +1847,17 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     });
   });
 
-  it("reassignDevice rejects with { code } on a foreign/bad profile (binding invalid)", async () => {
+  it("reassignDevice rejects with { code } on a UUID-shaped unknown/foreign profile (binding invalid)", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDevice("d1", "foreign")).rejects.toMatchObject({
+    // A UUID-shaped id that names no profile of this tenant is what actually reaches the FK and yields
+    // `device.binding_invalid` — a MALFORMED (non-UUID) id would be screened to `management.request_invalid`
+    // before it, so use a well-formed uuid here to match the real route contract.
+    await expect(
+      api.reassignDevice("d1", "11111111-1111-4111-8111-111111111111"),
+    ).rejects.toMatchObject({
       code: "device.binding_invalid",
     });
   });
