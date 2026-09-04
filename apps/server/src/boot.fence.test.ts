@@ -497,6 +497,17 @@ describe("boot fence drain (real Postgres): a fenced node serves its own-origin 
         carrierAppliedSeq: ownSeq,
       });
 
+      // 7a. Prove the read-only gate is ACTIVE in THIS boot (not only in Case A's): a NON-exempt write
+      //     POST is refused before its route — the same cookieless `POST /management-api/catalogues`
+      //     Case A uses. So this one case proves both halves: the gate rejects an ordinary write, and
+      //     retire is exempted from it.
+      const write = await fetch(`${base}/management-api/catalogues`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(write.status).toBe(403);
+      expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
       // 7. The read-only-gate exemption (retire/evict R3): POST /api/box/retire is the ONE management
       //    write a fenced node serves. The read-only gate IS mounted (this node is fenced, as Case A's
       //    403 on POST /management-api/catalogues proves), yet this POST is NOT rejected with

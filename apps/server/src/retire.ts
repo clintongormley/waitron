@@ -14,7 +14,7 @@ import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
   /** The app pool — `node_membership` read/write and the identity-key read, all app-role. `app_user`
-   * holds SELECT on `node_membership` (0097) and, via `readNodeIdentityKey`, SELECT on
+   * holds SELECT on `node_membership` (0096) and, via `readNodeIdentityKey`, SELECT on
    * `tenant_credentials` (0001_credentials_rls.sql); `evicted` flips no deployment axis, so unlike the
    * promote paths this action needs NO owner pool — `app_user` holds INSERT/UPDATE on `node_membership`
    * (0097), which is all the term-guarded persist requires. */

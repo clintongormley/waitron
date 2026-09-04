@@ -1618,6 +1618,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // uses, returning the plain `DrainProgress` retire consumes (no `carrierNodeId` wrapper); absent, a
   // fenced node reads as `no_carrier`. `readDrainProgress` is the imported @waitron/sync function
   // box-status's disposal surface already uses; `readRetireDrain` is the local closure.
+  // Boot-captured staleness: `fenced`/`carrierNodeId` are bound here at boot and `retireSelf` trusts
+  // the injected reader rather than re-deriving the carrier, so a runtime carrier change is not
+  // reflected until the next boot — and a fenced node does not restart on a carrier change
+  // (`shouldFenceRestart` is false once `bootFenced`). This is the SAME boot-captured behaviour
+  // box-status's `readDisposal` has (both landed in #219), and it is fail-safe: it never yields a
+  // false `drained:true`.
   const readRetireDrain =
     lagPool !== undefined && fenced && carrierNodeId !== undefined
       ? () =>
