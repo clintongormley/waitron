@@ -1,6 +1,8 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes THIS file throws directly —
-// `device.forbidden_station` and `device.not_found` (the route-owned faults), `management.request_invalid`
-// (the body/id screens) and `ticket.invalid_transition` (the malformed-item-id screen). The device
+// `device.forbidden_station` and `device.not_found` (the route-owned faults), `device.binding_invalid`
+// (the assign-profile route's own `getProfile` pre-check, the SAME code the enrol path's composite-FK
+// translation raises), `management.request_invalid` (the body/id screens) and `ticket.invalid_transition`
+// (the malformed-item-id screen). The device
 // pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
 // `station.not_found` reach here through the value imports of the verbs/guard that throw them
 // (`device.js`, `device-session.js`, `working-order.js`); `device.pairing_rate_limited` reaches here
@@ -15,7 +17,7 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { listProfiles } from "@waitron/layouts";
+import { getProfile, listProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
@@ -23,7 +25,12 @@ import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-sess
 import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import { requireBodyUuid, requireEnum, requireString } from "./request-screens.js";
+import {
+  requireBodyUuid,
+  requireEnum,
+  requireNullableBodyUuid,
+  requireString,
+} from "./request-screens.js";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -141,9 +148,10 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *     routes scope every read/bump to the device's OWN bound station (a bump of another station's item
  *     is `device.forbidden_station`, 403).
  *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
- *     /management-api/devices`, `POST /management-api/devices/:id/revoke`) — each calls
- *     `requireManagementSession` (401), then funnels its DB work through the local `gated` helper, which
- *     `authorizeManager`s `device.manage` (403) before the op runs, in exactly one place.
+ *     /management-api/devices`, `POST /management-api/devices/:id/revoke`, `POST
+ *     /management-api/devices/:id/assign-profile`) — each calls `requireManagementSession` (401), then
+ *     funnels its DB work through the local `gated` helper, which `authorizeManager`s `device.manage`
+ *     (403) before the op runs, in exactly one place.
  *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
  *     and mint-and-adopt (`GET`/`POST /api/dev/devices`) and the cookie reset (`POST /api/device/reset`).
  */
@@ -384,6 +392,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             id: devices.id,
             kind: devices.deviceKind,
             stationId: devices.stationId,
+            layoutProfileId: devices.layoutProfileId,
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,
@@ -414,6 +423,45 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .where(eq(devices.id, id))
           .returning({ id: devices.id }),
       );
+      if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Reassign a device's layout profile (device.manage) ────────────────────────────────────────────────
+  app.post("/management-api/devices/:id/assign-profile", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. The
+      // same id screen the revoke route above runs before `gated`.
+      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+      // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen the
+      // target: an explicit `null` clears the binding, a present value must be a UUID SHAPE (a non-uuid
+      // would `22P02` at the bare-uuid column), else a clean `management.request_invalid` 400 naming the
+      // field — the shared `requireNullableBodyUuid` screen.
+      const body = await readJsonBody<{ layoutProfileId?: unknown }>(c);
+      const layoutProfileId = requireNullableBodyUuid(body.layoutProfileId, "layoutProfileId");
+      const updated = await gated(sessionId, async (tx) => {
+        // A non-null target must be one of THIS tenant's own profiles. `getProfile` is RLS-scoped
+        // (`withTenant` + `asAppUser`), so a well-formed id that is unknown OR belongs to another tenant
+        // reads back `undefined` and is refused as `device.binding_invalid` naming the field — the SAME
+        // code+shape the enrol path's composite-FK translation raises for a bad `layoutProfileId`
+        // binding (errors.ts), NOT `profile.not_found` (the profile-CRUD concept, wrong here). This is
+        // what keeps a cross-tenant id from ever binding (RLS hides it) and turns an FK 500 into a 400.
+        if (layoutProfileId !== null) {
+          const profile = await getProfile(tx, deps.cfg.tenantId, layoutProfileId);
+          if (profile === undefined) {
+            throw new AppError("device.binding_invalid", { field: "layoutProfileId" });
+          }
+        }
+        // 0 rows updated (unknown or RLS-hidden device id) → `device.not_found`, the revoke idiom.
+        return tx
+          .update(devices)
+          .set({ layoutProfileId })
+          .where(eq(devices.id, id))
+          .returning({ id: devices.id });
+      });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
     }),
