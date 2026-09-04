@@ -318,18 +318,31 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editar ─────────────────────────────────────────────────────────────────────────────────────
 
-  /** Open the editor for an existing canvas. Parses its definition into a PRIVATE editable draft
-   * (`structuredClone`, so structural edits never touch the shared list row) and enters editor mode.
-   * The list already carries the full canvas (definition included) from `listCanvases`, so no extra
-   * `getCanvas` round-trip is needed here — B7's save writes the draft back.  */
-  #openEditor(canvas: Canvas): void {
-    const parsed = this.#parseDefinition(canvas.definition);
-    this.editingId = canvas.id;
-    this.draft = parsed ? structuredClone(parsed) : null;
-    this.draftName = canvas.name;
-    this.activeTabIndex = 0;
-    this.selection = null;
-    this.mode = "editor";
+  /** Open the editor for an existing canvas. FETCHES the canvas fresh via `getCanvas(id)` (spec §6.2)
+   * rather than reusing the possibly-stale list snapshot, then parses its definition into a PRIVATE
+   * editable draft (`structuredClone`, so structural edits never touch the store's copy) and enters
+   * editor mode. Routed through the screen's `errorKey` pattern: a `getCanvas` rejection — or a
+   * definition the defensive parse rejects — sets the banner and stays in LIST mode rather than
+   * entering a broken editor (and never becomes an unhandled rejection; the caller `void`-invokes it).
+   * B7's save writes the draft back. */
+  async #openEditor(id: string): Promise<void> {
+    this.errorKey = null;
+    try {
+      const canvas = await this.api.getCanvas(id);
+      const parsed = this.#parseDefinition(canvas.definition);
+      if (parsed === null) {
+        this.errorKey = "canvas.invalid";
+        return;
+      }
+      this.draft = structuredClone(parsed);
+      this.draftName = canvas.name;
+      this.editingId = id;
+      this.activeTabIndex = 0;
+      this.selection = null;
+      this.mode = "editor";
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
   }
 
   // ── Editor: draft mutation (all edits assign a fresh CanvasDef; never mutate in place) ───────────
@@ -532,7 +545,7 @@ export class CanvasEditorScreen extends LitElement {
               variant="primary"
               size="sm"
               data-test="edit-${canvas.id}"
-              @click=${() => this.#openEditor(canvas)}
+              @click=${() => void this.#openEditor(canvas.id)}
               >${t("action.edit")}</wt-button
             >
             <wt-button

@@ -174,16 +174,42 @@ describe("canvas-editor-screen list mode", () => {
     expect(placeholder.getAttribute("data-form-factor")).toBe("phone-portrait");
   });
 
-  it("Editar enters editor mode for the chosen canvas", async () => {
+  it("Editar loads the canvas via getCanvas and enters editor mode", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
-    await el.updateComplete;
+    await flush(el); // getCanvas resolves, mode → editor
+    // Edit-open fetches the freshest definition rather than reusing the list snapshot (spec §6.2).
+    expect(api.getCanvas).toHaveBeenCalledWith("c1");
     expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c1]")).toBeNull();
     const placeholder = el.shadowRoot!.querySelector("[data-test=editor-placeholder]")!;
     expect(placeholder.getAttribute("data-editing-id")).toBe("c1");
     expect(placeholder.getAttribute("data-form-factor")).toBe("till");
+  });
+
+  it("Editar shows the error banner and stays in list mode when getCanvas fails", async () => {
+    const api = stubApi({ getCanvas: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    // Stayed in list mode — no editor UI, the row is still shown.
+    expect(el.shadowRoot!.querySelector("[data-test=editor-placeholder]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c1]")).toBeTruthy();
+  });
+
+  it("Editar shows the error banner and stays in list mode when the fetched definition is malformed", async () => {
+    const api = stubApi({
+      getCanvas: vi.fn().mockResolvedValue({ id: "c1", name: "X", definition: { nope: true } }),
+    });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test=editor-placeholder]")).toBeNull();
   });
 
   it("shows the load error in a banner", async () => {
