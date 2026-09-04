@@ -565,6 +565,13 @@ export const en = {
   "canvas_editor.card.kds-board": "Kitchen board",
   "canvas_editor.card.expo": "Expo",
   "canvas_editor.card.table-order": "Table order",
+  // Canvas editor — editor mode (SP-B3.2 Task B6)
+  "canvas_editor.new_tab": "New tab",
+  "canvas_editor.add_tab": "Add tab",
+  "canvas_editor.palette_title": "Cards",
+  "canvas_editor.colspan": "Width (columns)",
+  "canvas_editor.rowspan": "Height (rows)",
+  "canvas_editor.remove_card": "Remove card",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1065,6 +1072,13 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.card.kds-board": "Panel de cocina",
   "canvas_editor.card.expo": "Pase",
   "canvas_editor.card.table-order": "Comanda de mesa",
+  // Editor de lienzos — modo edición (SP-B3.2 Tarea B6)
+  "canvas_editor.new_tab": "Nueva pestaña",
+  "canvas_editor.add_tab": "Añadir pestaña",
+  "canvas_editor.palette_title": "Tarjetas",
+  "canvas_editor.colspan": "Ancho (columnas)",
+  "canvas_editor.rowspan": "Alto (filas)",
+  "canvas_editor.remove_card": "Eliminar tarjeta",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
