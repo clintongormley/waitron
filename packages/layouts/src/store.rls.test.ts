@@ -8,8 +8,8 @@ import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "./defaults.js";
-import { getLayout, putLayout, putReceipt } from "./store.js";
-import type { LayoutDef, ReceiptConfig } from "./types.js";
+import { getLayout, putLayout } from "./store.js";
+import type { LayoutDef } from "./types.js";
 
 // Real Postgres, not PGlite: the store both AUTHORIZES (authorizeManager reads persons +
 // management_sessions under the app role's RLS + grants) and UPSERTS till_layouts under
@@ -139,36 +139,6 @@ describe("layouts store under real row-level security", () => {
     expect(await rowCount(tenantId)).toBe(1);
     const result = await asApp(tenantId, (tx) => getLayout(tx, tenantId));
     expect(result.definition).toEqual(saleLayout(6));
-  });
-
-  it("putLayout and putReceipt each update only their own column — neither clobbers the other", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const definition = saleLayout(5);
-    const receipt: ReceiptConfig = { footerMessage: "Gracias por su visita" };
-
-    // Author the RECEIPT first: this INSERTs the row with definition = DEFAULT_LAYOUT, receipt set.
-    await asApp(tenantId, (tx) =>
-      putReceipt(tx, { managementSessionId: session, tenantId, receipt }),
-    );
-    // Now author the LAYOUT: the ON CONFLICT UPDATE touches definition + updated_at only, so the
-    // previously-authored receipt must survive. Deleting `updated_at`/setting receipt here is what a
-    // clobbering upsert would look like.
-    await asApp(tenantId, (tx) =>
-      putLayout(tx, { managementSessionId: session, tenantId, definition }),
-    );
-    const afterLayout = await asApp(tenantId, (tx) => getLayout(tx, tenantId));
-    expect(afterLayout.definition).toEqual(definition);
-    expect(afterLayout.receipt).toEqual(receipt); // the receipt survived the putLayout
-
-    // And the reverse: a putReceipt must not clobber the authored definition.
-    const receipt2: ReceiptConfig = { headerSubtitle: "Calle Mayor 1" };
-    await asApp(tenantId, (tx) =>
-      putReceipt(tx, { managementSessionId: session, tenantId, receipt: receipt2 }),
-    );
-    const afterReceipt = await asApp(tenantId, (tx) => getLayout(tx, tenantId));
-    expect(afterReceipt.receipt).toEqual(receipt2);
-    expect(afterReceipt.definition).toEqual(definition); // the layout survived the putReceipt
   });
 
   it("keeps one tenant's authored layout invisible to another — RLS isolation", async () => {

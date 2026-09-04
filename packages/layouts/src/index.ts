@@ -6,7 +6,7 @@ export { WIDGET_CONFIG } from "./widget-config.js";
 export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 export { MAX_RECEIPT_FIELD_LENGTH, validateLayout, validateReceiptConfig } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
-export { getLayout, putLayout, putReceipt } from "./store.js";
+export { getLayout, putLayout } from "./store.js";
 
 // Layout-canvas data model (SP-A.1). Coexists with the widget model above during the transition.
 export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS } from "./canvas.js";
@@ -33,6 +33,7 @@ export {
   getCanvasForFormFactor,
 } from "./canvas-store.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
+export { getReceipt, putReceipt } from "./receipt-store.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts (and
