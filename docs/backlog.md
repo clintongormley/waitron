@@ -209,6 +209,52 @@ editor + rendering) is the sole remaining sub-project of this track.**
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
+### Waitron module system (NEW — 2026-09-04; architecture landed on main; framework + fiscal exemplar)
+
+Turn each domain into an optional, swappable **module** owning its own schema+migrations, sync enrolment,
+UI cards, vocabulary, theme, privileges and cronjobs, plugged into a generic core that imports nothing
+domain-specific (composition-root DI + an open registry set). Emerged from the H2 fiscal-sync work hitting
+the english-only guard: the generic sync layer *imports* domain schema, so the owner ruled to invert it —
+the generic mechanism knows nothing; each domain declares its own. Generalised across schema/sync/UI/
+vocabulary. **H2 fiscal-record sync is now SP-3 of this initiative**, not a standalone track. Architecture:
+[module-system-architecture](superpowers/specs/2026-09-04-module-system-architecture-design.md).
+
+**Scope (owner, 2026-09-04): framework + fiscal exemplar.** Prove the framework on fiscal (the swappability
+driver — country-selected: Spain → `fiscal-verifactu`). Extracting the other core-trapped domains
+(kitchen/catalogue/tables/…) into modules, and the runtime **code-distribution** mechanism (signed bundles
+across nodes; fiscal is its first future consumer), are **designed seams, deferred**.
+
+**Key model decisions** (in the architecture spec): enablement = an on-box desired-state module config file
+reconciled against the `deployment` stamp at boot; the module set is deployment-wide (bootstrapped at adopt,
+flowed down from the primary, applied on reboot); **soft-disable keeps data**; each node runs its OWN
+migrations (sync replicates rows, not DDL) with a **schema-version handshake** so a subscriber never applies
+rows newer than its migrated schema (owner chose this over DDL-over-sync).
+
+**Decomposition (each its own spec → plan → PR):**
+
+- **SP-1a — module contract + migration source inversion — LANDED #212 (2026-09-04).** `@waitron/module`
+  (`WaitronModule` + `orderedMigrationSets`), `expected/appliedSchemaVersion` primitives, `ALL_MODULES`
+  (nine descriptors) in the composition root, boot deriving its migration list from `ALL_MODULES`
+  (behaviour-preserving; manifest kept as a live source for provisioning/dev/bundling, the two encodings held
+  equal by a pin). **Descriptors are centralized for SP-1a** (generic fields only); **package-ownership
+  begins in SP-2** (first domain content). Copilot caught two real ones no other layer did (a false
+  `name`==table-suffix claim; `drizzle-orm` had to become a production dep). Spec:
+  [sp-1a](superpowers/specs/2026-09-04-module-sp1a-contract-and-migration-source.md).
+- **SP-1b — enablement + reconcile (NEXT candidate):** config file, deployment-stamp reconcile, migration
+  filter, provisioning gate, soft-disable. **Must gate provisioning's migrate/seed by the same enablement**,
+  else filtered-boot and unfiltered-provisioning diverge (SP-1a whole-branch-review forward-warning).
+- **SP-1c — versioned migration ordering** (compatibility check + dependency graph/version gates replacing
+  the linear manifest).
+- **SP-1d — cross-node config replication** (adopt bootstrap + flow-down; coordinates with the R-series adopt).
+- **SP-2 — full sync inversion + schema-version gate** (sync consumes module-declared enrolments, imports no
+  domain schema; every package declares its own; the node-skew gate). Descriptor package-ownership begins here.
+- **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
+  standalone H2 spec/plan (branch `feat/h2-fiscal-record-sync`, never merged) are reference material for this.
+- **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
+  B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
+
+SP-1b/1c/1d and SP-2 are parallel-safe with the B3.2 layout-editor session; SP-4 waits for it.
+
 ### Product work still open (beneath the two tracks)
 
 The demo Phase-0/Phase-1 Tier-A/B/C build is finished (git history); what remains is the open
@@ -311,8 +357,8 @@ for the projected remainder.
 
 - **Engage a fiscal advisor** — a parallel *human* task (long lead time), not a build; worth starting,
   blocks nothing. See *The advisor gap*.
-- **Sync completion beyond the landed lanes** (Track 2) — fiscal-lane / hash-chain sync (H2,
-  owner-gated), multi-tenant transport, cloud-mirror C-remainder. See *Open threads → Sync*.
+- **Sync completion beyond the landed lanes** (Track 2) — fiscal-lane / hash-chain sync (H2, **now SP-3
+  of the module system** above), multi-tenant transport, cloud-mirror C-remainder. See *Open threads → Sync*.
 - **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
   intra-community 32–39) + two pre-filing caveats: AEAT filing completeness (asesor-gated), not an owner
   takings view. See *Open threads → Reporting*.
@@ -593,10 +639,11 @@ vs gated on an unbuilt foundation or an external dependency:
   on real hosting). Plan:
   [cloud-mirror-hardening](superpowers/plans/2026-08-29-cloud-mirror-hardening-followups.md).
 - **Multi-tenant transport** — a whole-log reader role.
-- **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
-  far; a separate owner-reviewed slice. Design in flight on `feat/h2-fiscal-record-sync` (enrol the six
-  fiscal tables — `registros_facturacion` insert-only + `registro_sif`/`cadenas`/`envios`/`envio_flujo`/
-  `acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber; transport-agnostic).
+- **Fiscal-lane / hash-chain sync (H2) → now SP-3 of the module system** (see the module-system section
+  above). Enrol the six fiscal tables — `registros_facturacion` insert-only + `registro_sif`/`cadenas`/
+  `envios`/`envio_flujo`/`acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber;
+  transport-agnostic. The standalone H2 spec/plan live on branch `feat/h2-fiscal-record-sync` (never merged)
+  as reference material; SP-3 delivers it as the fiscal module's own sync enrolment, riding SP-2's inversion.
 - **Disposal guard: durability ≠ convergence (open, from the H2 design review 2026-09-04).** The failover
   disposal guard (promotion-failover §5.1) retires a node "once its owned partition has fully replicated to
   at least one surviving node (peer *or* cloud)." That counts a tail that reached **only the passive cloud
