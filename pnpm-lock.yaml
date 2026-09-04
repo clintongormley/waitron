@@ -69,6 +69,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/layouts':
+        specifier: workspace:*
+        version: link:../../packages/layouts
       axe-core:
         specifier: ^4.12.1
         version: 4.12.1
