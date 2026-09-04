@@ -722,6 +722,20 @@
       "when": 1788561235632,
       "tag": "0102_talented_nighthawk",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1788546473325,
+      "tag": "0103_shiny_major_mapleleaf",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1788546484475,
+      "tag": "0104_acoustic_shaman",
+      "breakpoints": true
     }
   ]
 }

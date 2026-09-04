@@ -26,6 +26,7 @@ export * from "./purchase-invoices.js";
 export * from "./layouts.js";
 export * from "./canvases.js";
 export * from "./tenant-themes.js";
+export * from "./tenant-receipts.js";
 export * from "./table-service-statuses.js";
 export * from "./working-order-counters.js";
 export * from "./sales.js";
