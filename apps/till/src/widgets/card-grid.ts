@@ -107,8 +107,9 @@ export class TillCardGrid extends LitElement {
    * station screen (kds-board card), which passes it straight to its queue widget. */
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
-   * login, one bound station) rather than the session-gated operator path — threaded straight through. */
-  @property() deviceMode = false;
+   * login, one bound station) rather than the session-gated operator path — threaded straight through.
+   * `{type: Boolean}` matches the source `till-station-screen.deviceMode`, though it is always property-bound. */
+  @property({ type: Boolean }) deviceMode = false;
   /** The device station the app already probed at cold boot, handed to the embedded station screen so it
    * does not re-fetch on mount (device-mode only; undefined on the operator path). */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;

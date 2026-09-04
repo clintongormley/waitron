@@ -763,10 +763,13 @@ export class TillApp extends LitElement {
     }
     // SP-B2.1 Finding 1: if the shell BOOTS showing a tab whose cards need the floor read-model (a
     // profile whose first tab is the floor), load it now — the tab-select prefetch only fires on a tab
-    // CHANGE, so the INITIAL tab needs its own load. Guarded on the tab (a counter-first till never
-    // reaches this) and on `#inShell()` (a handheld stays legacy — its floor landing already loaded via
-    // `#onShowFloor` above — so this never double-loads).
-    if (this.#inShell()) {
+    // CHANGE, so the INITIAL tab needs its own load. Guarded on `#inShell()` and the tab: a counter-first
+    // till's first tab needs no floor read. `!#floorLoaded` avoids a double-load — a handheld's landing
+    // ran `#onShowFloor` above (which loaded the floor and set the flag), so it is skipped here; only a
+    // NON-handheld floor-first profile (which landed on the counter, so `#onShowFloor` never ran) still
+    // loads. (Since SP-B2.2 the handheld is IN-SHELL, not legacy — this guard is what keeps its login to
+    // one floor load.)
+    if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
       if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
     }
@@ -1435,7 +1438,7 @@ export class TillApp extends LitElement {
   }
 
   /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
-   * stage back to `"order"`, back to the counter. `cardOutcome` is cleared too — a new, unrelated
+   * stage back to `"order"`, back to the device's home tab (see below). `cardOutcome` is cleared too — a new, unrelated
    * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. The
    * active menu reverts to the location default: a menu switch is TEMPORARY (see {@link #onMenuSelected})
    * and a new order is exactly the boundary it must not cross, so a waiter who switched for the last sale
@@ -1446,12 +1449,18 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     this.selectedCatalogueId = this.#defaultCatalogueId();
-    // On the shell surface the ticket was a drill-in over the counter tab: pop it back to the counter tab
-    // (the basket, just cleared, is ready for the next customer). The legacy path shows the `counter`
-    // screen exactly as before.
+    // On the shell surface the ticket was a drill-in: pop it and land on the device's HOME tab — the
+    // profile's first tab, a till's `counter` (ready for the next walk-up) or a handheld/tablet's `floor`
+    // (ready to pick the next table). NOT a hardcoded `"counter"`: a handheld authors no counter tab, so
+    // that was a phantom key. A handheld reaches here after settling a TAB (pay-tab → ticket → New sale),
+    // and the just-closed table is now stale in the floor read-model, so refresh it if the home tab shows
+    // the floor (mirrors #onBackToFloor / #onTabSelect's no-stale-floor guard) — a re-tap must resume
+    // nothing. A till's counter home needs no floor read. The legacy path shows the `counter` screen.
     if (this.#inShell()) {
-      this.activeTabKey = "counter";
+      const home = this.profile?.tabs[0];
+      this.activeTabKey = home?.key;
       this.#popDrill();
+      if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
     } else {
       this.#setScreen("counter");
     }

@@ -386,6 +386,18 @@ git commit -s -m "feat(till): re-enable the profile shell for handheld + kds dev
 
 ## Task 7: `till-app` — handheld table-order mount duality + landing
 
+> **Correction (2026-09-04, as shipped — superseding the `back-to-floor` design below):** the
+> embedded table-order card **suppresses its own Back** (the `embedded` seam), so it can never emit
+> `back-to-floor`; a handheld returns to Floor by **tapping the Floor tab** (`#onTabSelect`), which
+> already refreshes occupancy. So the shipped code does **not** switch tabs on `back-to-floor` and the
+> `#floorTabKey()` helper was **removed** in the simplify pass — `#onBackToFloor`'s shell branch is the
+> B2.1 unconditional `#popDrill()` (reached only by a till's drill). Step 1's second snippet below
+> ("returns a handheld to the Floor tab on back-to-floor") fires an event the shipped screen never
+> emits; the shipped test drives the **real** path (`tab-select` → floor). Two review fixes also landed
+> here: `#onNewSale` lands on the device's **home tab** (`profile.tabs[0]`, not a hardcoded `"counter"`
+> a handheld has no tab for) and refreshes a stale floor; and `#onLoggedIn`'s floor prefetch is guarded
+> on `!#floorLoaded` so a handheld login loads the floor once, not twice.
+
 **Files:**
 - Modify: `apps/till/src/till-app.ts` (`#onOpenTable` `:1590-1611`; `#onBackToFloor` `:1972-1980`; `#onLoggedIn` landing `:729-759`; add `#tableOrderTabKey`/`#floorTabKey` helpers)
 - Test: `apps/till/src/till-app.test.ts`

@@ -4122,6 +4122,48 @@ describe("till-app", () => {
       expect(floorScreen).not.toBeNull();
       expect(floorScreen!.tables).toEqual([occupiedT1]);
     });
+
+    it("lands a handheld on its home (floor) tab after a new sale, refreshing the stale floor — not a phantom counter tab", async () => {
+      // A handheld authors NO `counter` tab, so #onNewSale must land it on its HOME tab (the profile's
+      // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
+      // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
+      // return must re-read occupancy — a re-tap must resume nothing. (A hardcoded activeTabKey="counter"
+      // fell back to the floor tab via #activeTab but SKIPPED the refresh, leaving the closed table
+      // showing occupied — SP-B2.2 review finding.)
+      const occupiedT1: TableState = {
+        ...freeTable,
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo-new",
+        tabLineCount: 1,
+        tabTotal: "3.00",
+      };
+      let occupied = false;
+      const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        listStatuses: vi.fn().mockResolvedValue([status]),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false }); // → Order tab card
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("order");
+      const before = getTablesState.mock.calls.length;
+      occupied = true; // the tab has been settled server-side; the floor read-model would now reflect it
+      emit(shell(el)!, "new-sale"); // the ticket view's "New sale" after settling the tab
+      await flush(el);
+      // Lands on the device's HOME tab (floor), NOT a phantom `"counter"` a handheld never authors.
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      // AND re-read occupancy (a fresh getTablesState), so the just-closed table is no longer stale.
+      expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
+    });
   });
 
   describe("drill-in stack (SP-B2.1)", () => {
