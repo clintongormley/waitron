@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 // Side-effect import: register <canvas-grid-preview> (the shared thumbnail/canvas unit, Task B4) so
@@ -12,16 +13,20 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
+  CAPABILITY_FLAGS,
   CARD_CONTRACTS,
   CARD_TYPES,
   DEFAULT_CANVASES,
   FORM_FACTORS,
+  GRID_MAX_COLUMNS,
   type CanvasDef,
+  type CapabilityFlag,
   type CardInstance,
   type CardType,
   type FormFactor,
   type TabDef,
 } from "./canvas-editor/card-contracts.js";
+import { validateCanvasDraft } from "./canvas-editor/validate-canvas.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 
 /**
@@ -44,14 +49,18 @@ const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
  * Duplicar / Eliminar controls. It also offers a Crear dialog (name + form-factor) that seeds a fresh
  * draft from the built-in default for that form factor and enters EDITOR mode.
  *
- * EDITOR mode (Task B6) is the structural draft editor: a tab bar (select/add tab), the interactive
- * `<canvas-grid-preview>` as the canvas, a palette that appends a card at its default spans, and — when
- * a card tile is selected — a property panel with colSpan/rowSpan steppers, remove, and ↑/↓ reorder.
+ * EDITOR mode (Tasks B6/B7) is the draft editor. B6 is the structural layer: a tab bar (select/add
+ * tab), the interactive `<canvas-grid-preview>` as the canvas, a palette that appends a card at its
+ * default spans, and — when a card tile is selected — a property panel with colSpan/rowSpan steppers,
+ * remove, and ↑/↓ reorder. B7 adds the rest of the property panel (per-card CONFIG + `visibleWhen`
+ * toggles + permission/capability notes), TAB settings (title/columns/delete, with a last-tab guard),
+ * CANVAS settings (name/form-factor/capabilities), and the real SAVE (`#save`): it refuses an empty
+ * name, runs the light client validator (`validateCanvasDraft`) — a broken draft shows the banner and
+ * does not write — then `createCanvas`/`updateCanvas` on `editingId` and returns to the reloaded list.
  * Every draft edit goes through `#updateDraft`, which assigns a FRESH `CanvasDef` (never mutates in
- * place) so Lit and the preview re-render. The card CONFIG/visibleWhen/warnings panel, tab-settings,
- * canvas-settings and the actual SAVE are Task B7 — the `Guardar` button is an inert seam here and
- * `Cancelar` returns to the list, clearing the draft. The editor root keeps the B5
- * `editor-placeholder` seam (its `data-editing-id`/`data-form-factor` attributes) that B7 builds on.
+ * place) so Lit and the preview re-render. `Cancelar` returns to the list, clearing the draft. The
+ * editor root keeps the B5 `editor-placeholder` seam (its `data-editing-id`/`data-form-factor`
+ * attributes).
  *
  * DEFENSIVE PARSE. A canvas's `definition` crosses the client boundary as opaque `unknown` (the #70
  * bundle rule — the dashboard never imports `@waitron/layouts`' real type). `#parseDefinition` shallow-
@@ -60,8 +69,10 @@ const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
  *
  * ERROR HANDLING mirrors the sibling screens (printers/staff): every loader/mutation is fully
  * `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling
- * back to `server.internal`) rendered in a `role="alert"` banner; `codeMessage` maps it to localised
- * copy at the render edge.
+ * back to `server.internal`) rendered in a `role="alert"` banner. The list banner maps its code with
+ * `codeMessage`; the editor banner uses `#message`, which routes the client validator's
+ * `canvas_editor.*` keys through `t` and the server's `canvas.*`/`server.*` codes through `codeMessage`
+ * — so one banner shows both kinds localised.
  */
 @customElement("dashboard-canvas-editor-screen")
 export class CanvasEditorScreen extends LitElement {
@@ -196,6 +207,21 @@ export class CanvasEditorScreen extends LitElement {
         flex-wrap: wrap;
         margin-top: var(--wt-space-3);
       }
+      .panel-subtitle {
+        display: block;
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+        margin-bottom: var(--wt-space-2);
+      }
+      .toggles {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        align-items: flex-start;
+      }
+      .warning {
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -236,6 +262,9 @@ export class CanvasEditorScreen extends LitElement {
   /** What the property panel targets: a card by index, the tab, the whole canvas, or nothing selected.
    * B6 wires only the `card` branch; `tab`/`canvas` are B7's settings panels. */
   @state() private selection: { card: number } | { tab: true } | { canvas: true } | null = null;
+
+  /** True while a `#save` write is in flight, so Guardar disables itself and no second write races. */
+  @state() private saving = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -460,19 +489,185 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = { card: to };
   }
 
-  /** Discard the draft and return to the list. */
+  /** Discard the draft and return to the list, clearing the error banner too. */
   #cancelEditor(): void {
     this.mode = "list";
     this.draft = null;
     this.draftName = "";
     this.editingId = null;
     this.selection = null;
+    this.errorKey = null;
   }
 
-  /** SAVE is Task B7 — an inert seam here so the button exists and themes correctly without yet
-   * writing anything to the server. B7 fills this in (create vs update on `editingId`). */
-  #saveDraft(): void {
-    // Intentionally empty: wired in B7.
+  // ── Property panel: card config / visibleWhen ────────────────────────────────────────────────────
+
+  #onConfigColumns(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.#setConfigColumns(event.detail.value);
+  }
+
+  /** Set (or, on an empty entry, CLEAR) the selected product-grid card's `config.columns` — a number
+   * clamped to 1..12, an empty box removing the key so the config never carries a stray value. */
+  #setConfigColumns(raw: string): void {
+    const draft = this.draft;
+    const index = this.#selectedCardIndex();
+    if (draft === null || index === null) return;
+    const trimmed = raw.trim();
+    this.#updateActiveTab((tab) => ({
+      ...tab,
+      cards: tab.cards.map((card, i) => {
+        if (i !== index) return card;
+        if (trimmed === "") {
+          const config = { ...card.config };
+          delete config.columns;
+          return { ...card, config };
+        }
+        const value = Number.parseInt(trimmed, 10);
+        if (Number.isNaN(value)) return card;
+        return { ...card, config: { ...card.config, columns: Math.min(Math.max(value, 1), 12) } };
+      }),
+    }));
+  }
+
+  /** Toggle the selected card's membership of a visibility `state`. The result is rebuilt in the
+   * contract's declared state order (deterministic, not click order), and an EMPTY result OMITS
+   * `visibleWhen` entirely rather than storing `[]` — the shape the server and validator expect. */
+  #onVisibleToggle(event: CustomEvent<{ checked: boolean }>, state: string): void {
+    event.stopPropagation();
+    const draft = this.draft;
+    const index = this.#selectedCardIndex();
+    if (draft === null || index === null) return;
+    const checked = event.detail.checked;
+    this.#updateActiveTab((tab) => ({
+      ...tab,
+      cards: tab.cards.map((card, i) => {
+        if (i !== index) return card;
+        const allStates = CARD_CONTRACTS[card.type].visibilityStates;
+        const has = new Set(card.visibleWhen ?? []);
+        if (checked) has.add(state);
+        else has.delete(state);
+        const next = allStates.filter((s) => has.has(s));
+        if (next.length === 0) {
+          const rest = { ...card };
+          delete rest.visibleWhen;
+          return rest;
+        }
+        return { ...card, visibleWhen: next };
+      }),
+    }));
+  }
+
+  // ── Property panel: tab settings ─────────────────────────────────────────────────────────────────
+
+  #selectTabSettings(): void {
+    this.selection = { tab: true };
+  }
+
+  #onTabTitle(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const value = event.detail.value;
+    this.#updateActiveTab((tab) => ({ ...tab, title: value }));
+  }
+
+  #onTabColumns(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const value = Number.parseInt(event.detail.value, 10);
+    if (Number.isNaN(value)) return;
+    const columns = Math.min(Math.max(value, 1), GRID_MAX_COLUMNS);
+    this.#updateActiveTab((tab) => ({ ...tab, columns }));
+  }
+
+  /** Remove the active tab. A no-op at the last tab (the button is also disabled there) so a canvas
+   * never ends up tab-less. `activeTabIndex` clamps back into range and the selection clears. */
+  #deleteTab(): void {
+    const draft = this.draft;
+    if (draft === null || draft.tabs.length <= 1) return;
+    const index = this.activeTabIndex;
+    const tabs = draft.tabs.filter((_, i) => i !== index);
+    this.#updateDraft({ ...draft, tabs });
+    this.activeTabIndex = Math.min(index, tabs.length - 1);
+    this.selection = null;
+  }
+
+  // ── Property panel: canvas settings ──────────────────────────────────────────────────────────────
+
+  #selectCanvasSettings(): void {
+    this.selection = { canvas: true };
+  }
+
+  #onCanvasName(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.draftName = event.detail.value;
+  }
+
+  #onCanvasFormFactor(event: Event): void {
+    event.stopPropagation();
+    const draft = this.draft;
+    if (draft === null) return;
+    this.#updateDraft({
+      ...draft,
+      formFactor: (event.target as HTMLSelectElement).value as FormFactor,
+    });
+  }
+
+  /** Toggle a canvas capability flag, rebuilt in the declared flag order (deterministic). */
+  #onCapToggle(event: CustomEvent<{ checked: boolean }>, flag: CapabilityFlag): void {
+    event.stopPropagation();
+    const draft = this.draft;
+    if (draft === null) return;
+    const set = new Set(draft.capabilities);
+    if (event.detail.checked) set.add(flag);
+    else set.delete(flag);
+    const capabilities = CAPABILITY_FLAGS.filter((f) => set.has(f));
+    this.#updateDraft({ ...draft, capabilities });
+  }
+
+  // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
+
+  /** Resolve a banner key to localised copy: the client validator + name guard return
+   * `canvas_editor.*` StringKeys (rendered with `t`), while the server rejects with `canvas.*` /
+   * `server.*` codes (rendered with `codeMessage`). Routing on the prefix lets the ONE banner show
+   * both without the caller having to know which kind it holds. */
+  #message(key: string): string {
+    return key.startsWith("canvas_editor.") ? t(key as StringKey) : codeMessage(key);
+  }
+
+  /**
+   * Persist the draft: refuse an empty NAME first (the server accepts `""`, so it is guarded here),
+   * then run the light client validator (`validateCanvasDraft`) — a broken draft sets the banner and
+   * does NOT write. Only a clean draft reaches the server: `updateCanvas` when editing an existing
+   * canvas, `createCanvas` for a fresh one, after which the editor returns to the (reloaded) list. A
+   * server rejection (a `canvas.*` code) stays in the editor with the banner shown. Guardar disables
+   * itself while the write is in flight.
+   */
+  async #save(): Promise<void> {
+    const draft = this.draft;
+    if (draft === null) return;
+    const name = this.draftName.trim();
+    if (name === "") {
+      this.errorKey = "canvas_editor.err_no_name";
+      return;
+    }
+    const err = validateCanvasDraft(draft);
+    if (err) {
+      this.errorKey = err;
+      return;
+    }
+    const id = this.editingId;
+    this.saving = true;
+    try {
+      await this.#mutate(async () => {
+        if (id !== null) await this.api.updateCanvas(id, name, draft);
+        else await this.api.createCanvas(name, draft);
+        this.mode = "list";
+        this.draft = null;
+        this.draftName = "";
+        this.editingId = null;
+        this.selection = null;
+      });
+    } finally {
+      this.saving = false;
+    }
   }
 
   // ── Duplicar ───────────────────────────────────────────────────────────────────────────────────
@@ -697,6 +892,13 @@ export class CanvasEditorScreen extends LitElement {
       <wt-button size="sm" variant="ghost" data-test="add-tab" @click=${() => this.#addTab()}
         >${t("canvas_editor.add_tab")}</wt-button
       >
+      <wt-button
+        size="sm"
+        variant="ghost"
+        data-test="tab-settings"
+        @click=${() => this.#selectTabSettings()}
+        >${t("canvas_editor.tab_settings")}</wt-button
+      >
     </div>`;
   }
 
@@ -719,10 +921,58 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The card property panel (Task B6 scope): colSpan/rowSpan steppers, remove, and ↑/↓ reorder. The
-   * config/visibleWhen/warnings section is Task B7. */
+  /** The config section for the selected card: a field per `configFields` entry (only product-grid's
+   * `columns` today), or a "no settings" note when the card takes none. */
+  #renderConfig(card: CardInstance): TemplateResult | typeof nothing {
+    const fields = CARD_CONTRACTS[card.type].configFields;
+    if (fields.length === 0) {
+      return html`<p class="field" data-test="no-config">${t("canvas_editor.no_config")}</p>`;
+    }
+    return html`${fields.map((field) =>
+      field === "columns"
+        ? html`<wt-input
+            class="field"
+            type="number"
+            data-test="config-columns"
+            label=${t("canvas_editor.config_columns")}
+            .value=${card.config.columns === undefined ? "" : String(card.config.columns)}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onConfigColumns(e)}
+          ></wt-input>`
+        : nothing,
+    )}`;
+  }
+
+  /** The visibility section: one switch per declared visibility state, toggling `visibleWhen`
+   * membership. Absent for a card with no visibility states. */
+  #renderVisibleWhen(card: CardInstance): TemplateResult | typeof nothing {
+    const states = CARD_CONTRACTS[card.type].visibilityStates;
+    if (states.length === 0) return nothing;
+    const active = new Set(card.visibleWhen ?? []);
+    return html`<div class="field" data-test="visible-when">
+      <span class="panel-subtitle">${t("canvas_editor.visible_when")}</span>
+      <div class="toggles">
+        ${states.map(
+          (state) =>
+            html`<wt-switch
+              data-test="visible-${state}"
+              label=${state}
+              .checked=${active.has(state)}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                this.#onVisibleToggle(e, state)}
+            ></wt-switch>`,
+        )}
+      </div>
+    </div>`;
+  }
+
+  /** The card property panel: colSpan/rowSpan steppers, per-card config + visibility, permission /
+   * capability notes, then remove and ↑/↓ reorder. */
   #renderCardPanel(tab: TabDef, index: number): TemplateResult {
     const card = tab.cards[index]!;
+    const contract = CARD_CONTRACTS[card.type];
+    const capabilityUnmet =
+      contract.requiredCapability !== undefined &&
+      !(this.draft?.capabilities ?? []).includes(contract.requiredCapability);
     return html`<div class="panel" data-test="card-panel">
       <h2 class="panel-title">${t(`canvas_editor.card.${card.type}` as StringKey)}</h2>
       <wt-input
@@ -741,6 +991,21 @@ export class CanvasEditorScreen extends LitElement {
         .value=${String(card.rowSpan)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onRowSpan(e)}
       ></wt-input>
+      ${this.#renderConfig(card)} ${this.#renderVisibleWhen(card)}
+      ${
+        contract.requiredPermission !== undefined
+          ? html`<p class="field" data-test="permission-note">
+              ${t("canvas_editor.permission_note")}
+            </p>`
+          : nothing
+      }
+      ${
+        capabilityUnmet
+          ? html`<p class="field warning" data-test="capability-warning">
+              ${t("canvas_editor.capability_warning")}
+            </p>`
+          : nothing
+      }
       <div class="panel-actions">
         <wt-button
           size="sm"
@@ -767,6 +1032,85 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
+  /** The tab-settings panel (selection = tab): the active tab's title + column count, and a Delete
+   * that is disabled at the last tab (the last-tab guard). */
+  #renderTabSettings(draft: CanvasDef): TemplateResult | typeof nothing {
+    const tab = draft.tabs[this.activeTabIndex];
+    if (tab === undefined) return nothing;
+    return html`<div class="panel" data-test="tab-settings-panel">
+      <h2 class="panel-title">${t("canvas_editor.tab_settings")}</h2>
+      <wt-input
+        class="field"
+        data-test="tab-title"
+        label=${t("canvas_editor.tab_title")}
+        .value=${tab.title}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTabTitle(e)}
+      ></wt-input>
+      <wt-input
+        class="field"
+        type="number"
+        data-test="tab-columns"
+        label=${t("canvas_editor.tab_columns")}
+        .value=${String(tab.columns)}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTabColumns(e)}
+      ></wt-input>
+      <div class="panel-actions">
+        <wt-button
+          size="sm"
+          variant="danger"
+          data-test="tab-delete"
+          ?disabled=${draft.tabs.length === 1}
+          @click=${() => this.#deleteTab()}
+          >${t("canvas_editor.tab_delete")}</wt-button
+        >
+      </div>
+    </div>`;
+  }
+
+  /** The canvas-settings panel (selection = canvas): the canvas NAME (edits `draftName`), its form
+   * factor, and a switch per capability flag. */
+  #renderCanvasSettings(draft: CanvasDef): TemplateResult {
+    return html`<div class="panel" data-test="canvas-settings-panel">
+      <h2 class="panel-title">${t("canvas_editor.canvas_settings")}</h2>
+      <wt-input
+        class="field"
+        data-test="canvas-name"
+        label=${t("canvas_editor.name")}
+        .value=${this.draftName}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCanvasName(e)}
+      ></wt-input>
+      <label class="field"
+        >${t("canvas_editor.form_factor_label")}
+        <select
+          data-test="canvas-form-factor"
+          .value=${draft.formFactor}
+          @change=${(e: Event) => this.#onCanvasFormFactor(e)}
+        >
+          ${FORM_FACTORS.map(
+            (ff) =>
+              html`<option value=${ff} ?selected=${ff === draft.formFactor}>
+                ${t(`canvas_editor.form_factor.${ff}` as StringKey)}
+              </option>`,
+          )}
+        </select>
+      </label>
+      <div class="field" data-test="capabilities">
+        <span class="panel-subtitle">${t("canvas_editor.capabilities")}</span>
+        <div class="toggles">
+          ${CAPABILITY_FLAGS.map(
+            (flag) =>
+              html`<wt-switch
+                data-test="cap-${flag}"
+                label=${flag}
+                .checked=${draft.capabilities.includes(flag)}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onCapToggle(e, flag)}
+              ></wt-switch>`,
+          )}
+        </div>
+      </div>
+    </div>`;
+  }
+
   /** Editor mode (Task B6): tab bar, interactive canvas, palette and — when a card is selected — its
    * property panel; Guardar (inert, B7) and Cancelar. The editor root keeps the B5 `editor-placeholder`
    * seam so the `data-editing-id`/`data-form-factor` hooks the later tasks read still resolve. */
@@ -776,6 +1120,17 @@ export class CanvasEditorScreen extends LitElement {
     const selectedCardIndex = this.#selectedCardIndex();
     const selectedCard =
       selectedCardIndex !== null && activeTab?.cards[selectedCardIndex] !== undefined;
+    const selection = this.selection;
+    const panel =
+      draft === null
+        ? nothing
+        : selectedCard && activeTab !== null && selectedCardIndex !== null
+          ? this.#renderCardPanel(activeTab, selectedCardIndex)
+          : selection !== null && "tab" in selection
+            ? this.#renderTabSettings(draft)
+            : selection !== null && "canvas" in selection
+              ? this.#renderCanvasSettings(draft)
+              : nothing;
     return html`
       <div
         class="editor"
@@ -788,12 +1143,22 @@ export class CanvasEditorScreen extends LitElement {
           <div class="actions">
             <wt-button
               variant="secondary"
+              data-test="canvas-settings"
+              @click=${() => this.#selectCanvasSettings()}
+              >${t("canvas_editor.canvas_settings")}</wt-button
+            >
+            <wt-button
+              variant="secondary"
               data-test="editor-cancel"
               @click=${() => this.#cancelEditor()}
-              >${t("action.cancel")}</wt-button
+              >${t("canvas_editor.cancel")}</wt-button
             >
-            <wt-button variant="primary" data-test="editor-save" @click=${() => this.#saveDraft()}
-              >${t("action.save")}</wt-button
+            <wt-button
+              variant="primary"
+              data-test="save"
+              ?disabled=${this.saving}
+              @click=${() => void this.#save()}
+              >${t("canvas_editor.save")}</wt-button
             >
           </div>
         </div>
@@ -809,19 +1174,12 @@ export class CanvasEditorScreen extends LitElement {
               }}
             ></canvas-grid-preview>
           </div>
-          <aside class="sidebar">
-            ${this.#renderPalette()}
-            ${
-              selectedCard && activeTab !== null && selectedCardIndex !== null
-                ? this.#renderCardPanel(activeTab, selectedCardIndex)
-                : nothing
-            }
-          </aside>
+          <aside class="sidebar">${this.#renderPalette()} ${panel}</aside>
         </div>
       </div>
       ${
         this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+          ? html`<p class="error" role="alert">${this.#message(this.errorKey)}</p>`
           : nothing
       }
     `;

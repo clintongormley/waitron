@@ -572,6 +572,34 @@ export const en = {
   "canvas_editor.colspan": "Width (columns)",
   "canvas_editor.rowspan": "Height (rows)",
   "canvas_editor.remove_card": "Remove card",
+  // Property panel — per-card config, visibility, notes (B7)
+  "canvas_editor.no_config": "No settings",
+  "canvas_editor.config_columns": "Product columns",
+  "canvas_editor.visible_when": "Show only when",
+  "canvas_editor.permission_note": "Only shown to staff with the required permission",
+  "canvas_editor.capability_warning":
+    "This card needs a capability that this canvas doesn't have — enable it in canvas settings",
+  // Tab settings (B7)
+  "canvas_editor.tab_settings": "Tab settings",
+  "canvas_editor.tab_title": "Tab name",
+  "canvas_editor.tab_columns": "Columns",
+  "canvas_editor.tab_delete": "Delete tab",
+  // Canvas settings (B7)
+  "canvas_editor.canvas_settings": "Canvas settings",
+  "canvas_editor.name": "Name",
+  "canvas_editor.capabilities": "Capabilities",
+  "canvas_editor.save": "Save",
+  "canvas_editor.cancel": "Cancel",
+  // Client-side validation banners (B7) — the keys validate-canvas.ts returns, plus the empty-name guard
+  "canvas_editor.err_no_name": "Enter a name for this canvas",
+  "canvas_editor.err_no_tabs": "Add at least one tab",
+  "canvas_editor.err_duplicate_tab": "Two tabs share the same key",
+  "canvas_editor.err_bad_tab": "Give every tab a name of 60 characters or fewer",
+  "canvas_editor.err_bad_columns": "A tab's column count must be between 1 and 24",
+  "canvas_editor.err_bad_span": "A card's size must fit within its tab",
+  "canvas_editor.err_bad_visible_when": "A card has an unknown visibility state",
+  "canvas_editor.err_bad_config": "Check the card's settings",
+  "canvas_editor.err_missing_required": "A till canvas must include every sale card",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1079,6 +1107,34 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.colspan": "Ancho (columnas)",
   "canvas_editor.rowspan": "Alto (filas)",
   "canvas_editor.remove_card": "Eliminar tarjeta",
+  // Panel de propiedades — configuración por tarjeta, visibilidad, notas (B7)
+  "canvas_editor.no_config": "Sin ajustes",
+  "canvas_editor.config_columns": "Columnas de productos",
+  "canvas_editor.visible_when": "Mostrar solo cuando",
+  "canvas_editor.permission_note": "Solo se muestra al personal con el permiso necesario",
+  "canvas_editor.capability_warning":
+    "Esta tarjeta necesita una capacidad que este lienzo no tiene: actívala en los ajustes del lienzo",
+  // Ajustes de pestaña (B7)
+  "canvas_editor.tab_settings": "Ajustes de pestaña",
+  "canvas_editor.tab_title": "Nombre de la pestaña",
+  "canvas_editor.tab_columns": "Columnas",
+  "canvas_editor.tab_delete": "Eliminar pestaña",
+  // Ajustes del lienzo (B7)
+  "canvas_editor.canvas_settings": "Ajustes del lienzo",
+  "canvas_editor.name": "Nombre",
+  "canvas_editor.capabilities": "Capacidades",
+  "canvas_editor.save": "Guardar",
+  "canvas_editor.cancel": "Cancelar",
+  // Avisos de validación en cliente (B7)
+  "canvas_editor.err_no_name": "Introduce un nombre para este lienzo",
+  "canvas_editor.err_no_tabs": "Añade al menos una pestaña",
+  "canvas_editor.err_duplicate_tab": "Dos pestañas comparten la misma clave",
+  "canvas_editor.err_bad_tab": "Da a cada pestaña un nombre de 60 caracteres o menos",
+  "canvas_editor.err_bad_columns": "El número de columnas de una pestaña debe estar entre 1 y 24",
+  "canvas_editor.err_bad_span": "El tamaño de una tarjeta debe caber en su pestaña",
+  "canvas_editor.err_bad_visible_when": "Una tarjeta tiene un estado de visibilidad desconocido",
+  "canvas_editor.err_bad_config": "Revisa los ajustes de la tarjeta",
+  "canvas_editor.err_missing_required": "Un lienzo de TPV debe incluir todas las tarjetas de venta",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

@@ -87,6 +87,21 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The layout isn't valid",
     es: "La disposición no es válida",
   },
+  // Canvas editor (SP-B3.2) — the server's canvas create/update/get rejections the editor RENDERS
+  // (it defines no new codes, only maps these): a since-deleted canvas on edit/update, a name that
+  // collides with another canvas in the tenant, and a definition the server's validateCanvas refuses.
+  "canvas.not_found": {
+    en: "That canvas no longer exists",
+    es: "Ese lienzo ya no existe",
+  },
+  "canvas.name_taken": {
+    en: "A canvas with that name already exists",
+    es: "Ya existe un lienzo con ese nombre",
+  },
+  "canvas.invalid": {
+    en: "The canvas isn't valid",
+    es: "El lienzo no es válido",
+  },
   "receipt.invalid": {
     en: "The receipt settings aren't valid",
     es: "Los ajustes del recibo no son válidos",
