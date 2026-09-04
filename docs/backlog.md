@@ -636,10 +636,10 @@ vs gated on an unbuilt foundation or an external dependency:
   integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**,
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
-  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED** (2026-09-04, this branch),
+  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04),
   R2/R3 remain [fiscal-adjacent → owner sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
-  **Slice 6 R1 (fence-on-rejoin) LANDED** (2026-09-04): a returned/superseded node that holds or
+  **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
   cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
   `deployment_role_valid_ck` permits `(primary, secondary)` per 0071) suppresses the singleton duties
