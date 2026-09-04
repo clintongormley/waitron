@@ -14,19 +14,19 @@ function appWith(isReadOnly: () => boolean): Hono {
 }
 
 describe("readOnlyGate", () => {
-  it("refuses a non-GET with node.read_only 403 when the node is a mirror", async () => {
+  it("refuses a non-GET with node.read_only 403 when read-only", async () => {
     const res = await appWith(() => true).request("/thing", { method: "POST" });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: { code: "node.read_only", params: {} } });
   });
 
-  it("lets a GET through on a mirror", async () => {
+  it("lets a GET through when read-only", async () => {
     const res = await appWith(() => true).request("/thing");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("lets every method through on a primary", async () => {
+  it("lets every method through when not read-only", async () => {
     const res = await appWith(() => false).request("/thing", { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ wrote: true });

@@ -309,6 +309,14 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       // false, so the singleton workers are suppressed by the reconciled axis. 404, not 401.
       const source = await fetch(`${base}/sync-api/log`);
       expect(source.status).toBe(404);
+
+      // The operational PRINT surface is NOT mounted either: a fenced node is `mode='primary'`, so the
+      // verb-based read-only gate alone would let `GET /print-api/agent/jobs` (a write behind a GET —
+      // `claimPrintJobs`) through. The `!fenced` half of boot.ts's `!isMirror && !fenced` mount guard
+      // un-mounts the device/print groups, so the route is absent: 404 (route not mounted), NOT the 401
+      // a mounted-but-unauthenticated agent GET would return. Same 404-not-401 tell as the sync source.
+      const printJobs = await fetch(`${base}/print-api/agent/jobs`);
+      expect(printJobs.status).toBe(404);
     } finally {
       await server.close();
     }
@@ -406,9 +414,10 @@ describe("boot fence gossip (real Postgres): a superseding document adopted at r
       expect(held!.body.term).toBe(6);
 
       // Give any erroneously-scheduled next-tick restart timer ample time to fire, then prove it did not:
-      // a serving-primary document does not fence, so no SIGTERM is ever requested.
+      // a serving-primary document does not fence, so process.kill is never called at all on this path
+      // (the spy has no other legitimate caller here).
       await delay(300);
-      expect(killSpy).not.toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(killSpy).not.toHaveBeenCalled();
     } finally {
       await server.close();
       killSpy.mockRestore();

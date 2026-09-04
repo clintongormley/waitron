@@ -1057,7 +1057,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The operational agent/device groups — NOT mounted under mirror mode. Unlike the dashboard read
+  // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.
+  // Unlike the dashboard read
   // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
   // all sit behind non-GET verbs the read-only gate refuses, the PRINT group exposes a WRITE BEHIND A
   // GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE (packages/printing/src/
@@ -1070,6 +1071,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // those tables anyway, so it loses nothing by their absence; a primary mounts both. This guard skips
   // route REGISTRATION only — every shared boot value (`till`, `secureCookies`) is built above and read
   // by the sibling mounts, so nothing downstream depends on these mounts having run.
+  // FENCED (membership rejoin R1): a returned/superseded node comes up `mode='primary'` (so `isMirror`
+  // is FALSE) but must be FULLY read-only. Because the read-only gate is verb-based it would let the
+  // print write-behind-a-GET through, so a fenced node un-mounts this surface for the SAME reason a
+  // mirror does — hence `!isMirror && !fenced`. The `fenced` local is the boot-captured decision (a
+  // fenced node leaves the fence only by a fresh boot), the same value the read-only gate above reads.
   // ALTITUDE (deliberate, deferred): the landed promotion design (promotion-runbook-design.md §3a
   // "Mount-and-gate everything") makes REQUEST-time gating the eventual form so live mirror→primary
   // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
@@ -1077,7 +1083,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // to the §3a form belongs with promotion Slice 3, which already converts the analogous
   // `singleton_role`-gated workers (sync source / retention / backup / tunnel, §3c — re-gated in #168) to
   // runtime-startable. See read-only-gate.ts's header.
-  if (!isMirror) {
+  if (!isMirror && !fenced) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
     // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
     // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
