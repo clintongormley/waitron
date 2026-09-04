@@ -11,8 +11,16 @@ import type { WaitronModule } from "@waitron/module";
  * own directory names (e.g. `../fiscal-verifactu/drizzle`) — Spanish-ish tokens are fine here because
  * `apps/server` is the composition root and is exempt from the english-only guard (spec §4).
  *
- * Only `name`/`version`/`tier`/`migrations` are populated in this slice; `requires`, `sync`, `cards`
- * and the other seats are declared on the contract but stay empty until their own slices land.
+ * `name`/`version`/`tier`/`migrations` and now `requires` are populated. `requires` carries the
+ * verified cross-set dependency graph (spec §3): every non-core module depends on `core`. Cross-set
+ * dependencies arrive via BOTH foreign-key references AND `CREATE TRIGGER … ON <table>` targets — a
+ * module that installs a capture trigger on another module's table needs that table migrated first.
+ * There are three inter-module edges: `workforce → identity` (workforce FKs `persons`, which
+ * identity owns), and `sync → identity` + `sync → payments` (sync's capture triggers attach to
+ * identity's `persons`/`webauthn_credentials` and payments' `payments`/`payment_refunds`/
+ * `payment_policy`). All ranges are `"*"` because every module is workspace-locked at version
+ * `0.0.0`. `sync` (as a domain seat), `cards` and the other seats are declared on the contract but
+ * stay empty until their own slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
@@ -25,6 +33,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "identity",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*" },
     migrations: {
       name: "identity",
       table: "__drizzle_migrations_identity",
@@ -35,6 +44,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "workforce",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*", modules: { identity: "*" } },
     migrations: {
       name: "workforce",
       table: "__drizzle_migrations_workforce",
@@ -45,6 +55,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "workforce-es",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*" },
     migrations: {
       name: "workforce-es",
       table: "__drizzle_migrations_workforce_es",
@@ -55,6 +66,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "fiscal",
     version: "0.0.0",
     tier: "provision-only",
+    requires: { core: "*" },
     migrations: {
       name: "fiscal",
       table: "__drizzle_migrations_fiscal",
@@ -65,6 +77,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "payments",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*" },
     migrations: {
       name: "payments",
       table: "__drizzle_migrations_payments",
@@ -75,6 +88,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "scheduler",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*" },
     migrations: {
       name: "scheduler",
       table: "__drizzle_migrations_scheduler",
@@ -85,6 +99,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "credentials",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*" },
     migrations: {
       name: "credentials",
       table: "__drizzle_migrations_credentials",
@@ -95,6 +110,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "sync",
     version: "0.0.0",
     tier: "toggleable",
+    requires: { core: "*", modules: { identity: "*", payments: "*" } },
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
   },
 ];

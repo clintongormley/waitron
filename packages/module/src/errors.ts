@@ -23,5 +23,27 @@ declare module "@waitron/shared" {
     /** Venue provisioning was attempted while a `provision-only` module (fiscal today) is disabled.
      * `module` is the disabled provision-only module. Refused before any chain is minted (spec §4). */
     "module.provision_only_disabled": { module: string };
+    /** A migrating module declares a dependency (its `requires.core` or a `requires.modules` entry)
+     * that is not present in the set being migrated — e.g. `workforce` enabled while `identity`
+     * (which owns `persons`, a table workforce FKs) is disabled. Refused before the first migration
+     * runs (spec §4), turning a cryptic mid-run FK failure into a clear pre-migration refusal.
+     * `module` requires `requires`. */
+    "module.dependency_missing": { module: string; requires: string };
+    /** The module dependency graph has a cycle; `modules` names the members that could not be
+     * ordered. Unreachable with today's graph (a tree rooted at core), guarded against a future
+     * cross-set edit that introduces one. */
+    "module.dependency_cycle": { modules: readonly string[] };
+    /** A dependency is present but its `version` does not satisfy the declared semver `range`.
+     * Never tripped today (every range is `"*"` against `0.0.0`); real once modules distribute
+     * independently. `module` requires `dependency` `required`; `dependency` is at `actual`. */
+    "module.incompatible_version": {
+      module: string;
+      dependency: string;
+      required: string;
+      actual: string;
+    };
+    /** A `requires` range string is not a valid semver range — a descriptor (code) bug, failed loud
+     * rather than silently treated as "any". `module`'s requirement on `dependency` used `range`. */
+    "module.requires_invalid": { module: string; dependency: string; range: string };
   }
 }
