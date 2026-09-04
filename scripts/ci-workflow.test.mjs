@@ -619,11 +619,17 @@ describe("the sharded jobs", () => {
 describe("the sharded packages' scripts", () => {
   // The sharding MECHANISM lives half in ci.yml (guarded above) and half in each sharded package's
   // `test:shard` / `test:merge` scripts, which ci.yml only NAMES — so the guards above cannot see them.
-  // Most drift there fails LOUD: a `test:shard` missing `--coverage` makes its blob merge to 0/0/0/0
-  // (thresholds fail), and a dropped `--coverage.thresholds.<m>=0` makes the shard enforce a threshold
-  // on its 1/Nth of the files (the shard fails red). But ONE drift is SILENT — a `test:merge` that lost
-  // `--coverage` merges the blobs, checks NO thresholds, and passes green with the coverage gate gone —
-  // which is exactly the class this repo guards. So the script shapes are pinned here.
+  // Some drift there fails LOUD: dropping `--reporter=blob` writes no blob, so `if-no-files-found: error`
+  // fails the upload; dropping a `--coverage.thresholds.<m>=0` makes the shard enforce a threshold on
+  // its 1/Nth of the files, so the shard fails red. But TWO drifts are SILENT, and these cases are the
+  // ONLY thing catching them — no runtime backstop does. Both were run on vitest 3.2.7 (2026-09-04)
+  // rather than reasoned about:
+  //   * a `test:shard` that lost `--coverage` writes a blob with NO coverage map; `--merge-reports
+  //     --coverage` over it reports `All files 0 0 0 0` and passes thresholds VACUOUSLY over the empty
+  //     map — exit 0, green (NOT the "0/0/0/0 fails" an earlier version of this comment claimed);
+  //   * a `test:merge` that lost `--coverage` merges the blobs, checks NO thresholds, and passes green.
+  // Either way the coverage gate is silently gone — exactly the class this repo guards. So the script
+  // shapes are pinned here.
   const scripts = scriptsByPackage();
   const shardedPackages = [...new Set(shardedJobs.map((shard) => shard.pkg))];
 

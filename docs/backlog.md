@@ -1197,7 +1197,8 @@ genuinely-decision-bearing.
   threshold-checks — no tests, no container; ~80s for db measured locally), so the win is sub-linear and
   more shards help only until shard-wall ≈ merge-wall — read the realized per-job durations off the
   first unfiltered `main` run and bump the matrix (`shard: [1..N]` AND the `--shard=i/N` denominator,
-  together) if a single shard still dominates.
+  together) if a single shard still dominates, but keep N at or below the package's test-file count, or
+  an empty shard exits 1 ("No test files found") even with thresholds suppressed.
 - **Job-sharding — remaining lever.** With db/server sharded, the next critical-path candidate is
   `mutation-verifactu` (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance
   the `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.
