@@ -358,11 +358,10 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("prints the tenant's authored receipt trim from tenant_receipts (SP-B4 rehome)", async () => {
-    // The receipt trim now lives in `tenant_receipts`, read via `getReceipt` — NOT the `till_layouts`
-    // `receipt` column. Seed a trim there (raw insert under RLS as the app role — pure setup) and prove
-    // it renders in the printed ticket. Against the pre-rehome code (which read the trim via `getLayout`
-    // from `till_layouts`) this footer is absent, so the assertion fails — the by-source proof for the
-    // repoint.
+    // The receipt trim lives in `tenant_receipts`, read via `getReceipt`. Seed a trim there (raw insert
+    // under RLS as the app role — pure setup) and prove it renders in the printed ticket. Against the
+    // pre-rehome code (which read the trim from the old widget-layout row) this footer is absent, so the
+    // assertion fails — the by-source proof for the repoint.
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });

@@ -16,7 +16,7 @@ import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 // tenant-isolation policy, so the cross-tenant isolation assertion and the "app role can run the whole
 // authorize→upsert path" claim would both be false passes there (CLAUDE.md §4). Seeds run as the
 // superuser owner (RLS bypassed — pure setup); every store call runs under withTenant + asAppUser so
-// it is a genuine RLS subject, exactly as store.rls.test.ts (till_layouts) does. The `core_identity`
+// it is a genuine RLS subject, exactly as the sibling store suites do. The `core_identity`
 // template pairs core + identity migrations so authorizeManager's tables and tenant_themes both exist.
 
 const suite = useTemplateDb({ template: "core_identity" });

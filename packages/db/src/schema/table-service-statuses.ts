@@ -4,14 +4,16 @@ import { tenants } from "./tenants.js";
 /**
  * A venue-configured MANUAL service status a table may carry (design §2a) — "Bill requested",
  * "Needs cleaning". Tenant-wide config (per-location deferred, design §8), the same shape family as
- * #81's `till_layouts`. One status is set on a table at a time via `dining_tables.status_id`
+ * the other per-tenant config tables (`kitchen_stations`, `floor_zones`). One status is set on a
+ * table at a time via `dining_tables.status_id`
  * (a single nullable composite FK, design §2b); this table is the authorable SET.
  *
  * Deactivate, never hard-delete (`active`): a `dining_tables.status_id` may reference a row, so the
  * config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here (the
  * custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
  * SECURITY; the FORCE ROW LEVEL SECURITY, the `table_service_statuses_tenant_isolation` policy and the
- * grant are hand-written in the paired --custom migration, exactly as 0036 does for `till_layouts`.
+ * grant are hand-written in the paired --custom migration, exactly as the other per-tenant config
+ * tables' custom migrations do.
  * The `inmutabilidad` guard in packages/fiscal-verifactu scans every tenant_id-bearing table for both
  * RLS flags, so a missing FORCE here fails that suite.
  */
@@ -22,7 +24,7 @@ export const tableServiceStatuses = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
-      // resolves it in a separate CLI process), the reason orders.ts / layouts.ts use this form.
+      // resolves it in a separate CLI process), the reason orders.ts / canvases.ts use this form.
       /* v8 ignore next */
       .references(() => tenants.id, { onDelete: "restrict" }),
     // The human label the floor plan shows ("Bill requested", "Needs cleaning"). Unique within a venue.

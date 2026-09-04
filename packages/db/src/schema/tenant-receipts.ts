@@ -6,7 +6,7 @@ import { tenants } from "./tenants.js";
  * (`headerSubtitle` / `footerMessage`) renders AROUND the immutable fiscal art on the printed ticket
  * and can never suppress or reorder a mandated element — it is not a fiscal record.
  *
- * ONE ROW PER TENANT (the tenant_themes / till_layouts shape): `tenant_id` is the PRIMARY KEY, so it
+ * ONE ROW PER TENANT (the tenant_themes shape): `tenant_id` is the PRIMARY KEY, so it
  * is both the row identity and the tenant discriminator, and it doubles as the `ON CONFLICT` target
  * the service upserts against. A fresh tenant that has never opened the receipt editor simply has no
  * row — the service returns the built-in DEFAULT_RECEIPT rather than seeding one (no backfill; the

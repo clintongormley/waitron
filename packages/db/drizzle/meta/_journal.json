@@ -736,6 +736,13 @@
       "when": 1788546484475,
       "tag": "0104_acoustic_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1788553957548,
+      "tag": "0105_wise_red_wolf",
+      "breakpoints": true
     }
   ]
 }

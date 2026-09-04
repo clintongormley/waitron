@@ -12,8 +12,8 @@ import { tenants } from "./tenants.js";
 // exercises the USING half. PGlite connects as a superuser that bypasses FORCE ROW LEVEL SECURITY and
 // the policy, so the same assertions there would be a false pass (CLAUDE.md §4). The FORCE flag itself
 // is proven by the fiscal-verifactu `inmutabilidad` metadata scan, which is the only guard that can
-// see it. Mirrors layouts.rls.test.ts (till_layouts): ONE row per tenant (tenant_id PK), MUTABLE
-// config replaced in place — grants SELECT/INSERT/UPDATE, no DELETE.
+// see it. The tenant_themes shape: ONE row per tenant (tenant_id PK), MUTABLE config replaced in
+// place — grants SELECT/INSERT/UPDATE, no DELETE.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -57,8 +57,8 @@ describe("tenant_themes under real row-level security", () => {
   });
 
   it("lets the app role UPDATE its own tenant's theme in place (INSERT then UPDATE grant)", async () => {
-    // tenant_themes carries GRANT SELECT, INSERT, UPDATE — config replaced in place, no DELETE (the
-    // till_layouts shape). Insert then update as the app role under its own GUC so the grant verbs and
+    // tenant_themes carries GRANT SELECT, INSERT, UPDATE — config replaced in place, no DELETE.
+    // Insert then update as the app role under its own GUC so the grant verbs and
     // the policy's USING+WITH CHECK are on the path.
     const tenantId = "33333333-3333-4333-8333-333333333333";
     await suite.admin.insert(tenants).values({

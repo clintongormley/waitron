@@ -83,10 +83,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the form and try again",
     es: "Revisa el formulario e inténtalo de nuevo",
   },
-  "layout.invalid": {
-    en: "The layout isn't valid",
-    es: "La disposición no es válida",
-  },
   // Canvas editor (SP-B3.2) — the server's canvas create/update/get rejections the editor RENDERS
   // (it defines no new codes, only maps these): a since-deleted canvas on edit/update, a name that
   // collides with another canvas in the tenant, and a definition the server's validateCanvas refuses.

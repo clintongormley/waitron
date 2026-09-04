@@ -50,7 +50,6 @@ export {
   purchaseRegime,
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
-export { tillLayouts } from "./schema/layouts.js";
 export { canvases } from "./schema/canvases.js";
 export { tenantThemes } from "./schema/tenant-themes.js";
 export { tenantReceipts } from "./schema/tenant-receipts.js";

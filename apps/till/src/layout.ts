@@ -5,8 +5,8 @@
  * write; the client trusts the shape it receives. Keep in sync with the source if those models change.
  *
  * Two things live here: the NON-FISCAL {@link ReceiptConfig} trim, and the SP-B canvas model (a mirror
- * of `packages/layouts/src/canvas.ts`). The old region/widget layout model (`LayoutDef`/`LAYOUT_A`) was
- * removed in SP-B4 — the counter renders solely from the canvas's `counter` tab now.
+ * of `packages/layouts/src/canvas.ts`). The old region/widget layout model was removed in SP-B4 — the
+ * counter renders solely from the canvas's `counter` tab now.
  */
 
 /**

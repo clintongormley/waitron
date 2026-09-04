@@ -23,7 +23,6 @@ export * from "./catalogue.js";
 export * from "./location-catalogues.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";
-export * from "./layouts.js";
 export * from "./canvases.js";
 export * from "./tenant-themes.js";
 export * from "./tenant-receipts.js";

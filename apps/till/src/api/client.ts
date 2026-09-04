@@ -40,7 +40,7 @@ export type FetchLike = typeof fetch;
  * pay control at all, and whether that control prompts for a tip.
  *
  * `receipt` (receipt editor) is the owner-authored receipt trim, or the built-in default when the tenant
- * has never opened the editor — the server always sends it (`getLayout` returns `DEFAULT_RECEIPT` on
+ * has never opened the editor — the server always sends it (`getReceipt` returns `DEFAULT_RECEIPT` on
  * absence, `till-api.ts`). Like `orderFlow`/`venueName` it carries no secrets, only the footer text. The
  * app threads `receipt` to its ticket and renders the sale body from {@link canvas}.
  */

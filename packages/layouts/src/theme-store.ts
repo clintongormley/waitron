@@ -7,7 +7,7 @@ import { validateThemeOverride } from "./theme.js";
 
 /**
  * The get/put service over `tenant_themes` (design §4/§9, SP-A.2 §16.3). ONE row per tenant, keyed on
- * `tenant_id`, which doubles as the `ON CONFLICT` target — the `putReceipt`/till_layouts shape.
+ * `tenant_id`, which doubles as the `ON CONFLICT` target — the `putReceipt` shape.
  *
  * Every function takes a `(tx, …)` the CALLER has already scoped — the management routes open it with
  * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
@@ -19,8 +19,8 @@ import { validateThemeOverride } from "./theme.js";
  * before any DB write, proven by-deletion in the suite; (2) `validateThemeOverride` — fail-closed on
  * an invalid `theme` (throws `theme.invalid` before the write); (3) an `INSERT … ON CONFLICT
  * (tenant_id) DO UPDATE`. `getTenantTheme` casts the opaque jsonb back to `ThemeOverride` WITHOUT
- * re-validating (the write validated it, the only writer is this service — the `getLayout` rationale
- * in store.ts). The `as` cast re-attaches the shape the plain-jsonb column drops (it is not
+ * re-validating (the write validated it, the only writer is this service — the same
+ * return-a-typed-shape rationale `canvas-store.ts` documents). The `as` cast re-attaches the shape the plain-jsonb column drops (it is not
  * `.$type<>()`-annotated, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
  * `packages/db/src/schema/tenant-themes.ts`).
  */

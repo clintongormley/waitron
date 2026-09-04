@@ -1,14 +1,11 @@
 // The entire public surface of @waitron/layouts. Re-exports only — no logic here.
-export { WIDGET_TYPES } from "./types.js";
-export type { WidgetType, Region, WidgetInstance, LayoutDef, ReceiptConfig } from "./types.js";
-export { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "./defaults.js";
-export { WIDGET_CONFIG } from "./widget-config.js";
+export type { ReceiptConfig } from "./types.js";
+export { DEFAULT_RECEIPT } from "./defaults.js";
 export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
-export { MAX_RECEIPT_FIELD_LENGTH, validateLayout, validateReceiptConfig } from "./validate.js";
+export { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
-export { getLayout, putLayout } from "./store.js";
 
-// Layout-canvas data model (SP-A.1). Coexists with the widget model above during the transition.
+// Layout-canvas data model (SP-A.1).
 export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS } from "./canvas.js";
 export type {
   FormFactor,

@@ -39,12 +39,10 @@ import {
 import {
   createCanvas,
   deleteCanvas,
-  getLayout,
   getReceipt,
   getCanvas,
   getTenantTheme,
   listCanvases,
-  putLayout,
   putReceipt,
   putTenantTheme,
   updateCanvas,
@@ -205,11 +203,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.too_short": 400,
   "password.too_short": 400,
   "management.request_invalid": 400,
-  // The layouts service's validation faults, surfaced by the PUT layout/receipt routes below when
-  // `putLayout`/`putReceipt` reject an invalid `definition`/`receipt` (design D8, fail-closed). Both
-  // are 400 — a well-formed request whose payload the validator refuses. The `?? 400` default already
-  // covers them, but they are listed explicitly as the house style requires (see this map's doc).
-  "layout.invalid": 400,
+  // The layouts service's receipt-validation fault, surfaced by the PUT receipt route below when
+  // `putReceipt` rejects an invalid `receipt` (design D8, fail-closed): 400 — a well-formed request
+  // whose payload the validator refuses. The `?? 400` default already covers it, but it is listed
+  // explicitly as the house style requires (see this map's doc).
   "receipt.invalid": 400,
   // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
   // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
@@ -786,72 +783,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Layout + receipt configuration (Task 7; receipt rehomed in SP-B4) ─────────────────────────
-  // The dashboard's till-layout / receipt-trim editor surface. All four routes are gated
-  // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs under
-  // `withTenant` + `asAppUser`, so RLS scopes both the authorize gate and the store rows to this
-  // dashboard's own tenant. The layout routes read/write `till_layouts`; the receipt routes now
-  // read/write the tenant's own `tenant_receipts` row (SP-B4 — the trim moved out of `till_layouts`).
-  // The two PUTs delegate the authorize + validate + upsert to `@waitron/layouts`'s
-  // `putLayout`/`putReceipt`; the two GETs call `getLayout`/`getReceipt`, which do NOT authorize (they
-  // are shared with the unauthenticated till boot read), so each GET carries its own explicit gate.
-
-  // Read the tenant's authored layout + receipt (or the built-in defaults). Gated on `till.configure`,
-  // NOT merely on holding a session — least-privilege: only a manager/admin who may EDIT the layout may
-  // open the editor (design §7's "403 not-permitted" row). `getLayout` itself deliberately does NOT
-  // authorize — it is SHARED with the unauthenticated till boot read (`GET /api/till`, till-api.ts) —
-  // so this route calls `authorizeManager` explicitly, unlike the PUT routes below whose gate lives
-  // inside the store. Proven by deletion in `management-api.rls.test.ts`: dropping this
-  // `authorizeManager` call flips the staff-role case from 403 to 200.
-  app.get("/management-api/layout", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const { definition, receipt } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "till.configure",
-        });
-        return getLayout(tx, deps.cfg.tenantId);
-      });
-      return c.json({ definition, receipt });
-    }),
-  );
-
-  // Author (full replacement) the tenant's till layout. Gated (401 before any DB work); `putLayout`
-  // then enforces `till.configure` (403 `authorization.not_permitted`) and validates the definition
-  // (400 `layout.invalid`) before the upsert. The parsed body is coerced to `{}` (via `readJsonBody`,
-  // see the login route for why an empty/malformed/`null` body must not reach `run` as a 500) and
-  // screened: a body that
-  // is not a plain object, or one that omits `definition`, is refused as `management.request_invalid`
-  // naming the FIELD (never the value) — the same shape as the staff write routes. A PRESENT
-  // `definition` (even `null` or a malformed shape) flows to `putLayout`, whose `validateLayout`
-  // rejects it as `layout.invalid`, keeping request-shape faults (400 request_invalid) distinct from
-  // payload-validation faults (400 layout.invalid).
-  app.put("/management-api/layout", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ definition?: unknown }>(c);
-      if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body) ||
-        !("definition" in body)
-      ) {
-        throw new AppError("management.request_invalid", { field: "definition" });
-      }
-      const { definition } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        await putLayout(tx, {
-          managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
-          definition,
-        });
-      });
-      return c.body(null, 204);
-    }),
-  );
+  // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
+  // The dashboard's receipt-trim editor surface. Both routes are gated (`requireManagementSession`
+  // first, 401 before any DB work) and every DB touch runs under `withTenant` + `asAppUser`, so RLS
+  // scopes both the authorize gate and the store rows to this dashboard's own tenant. The receipt
+  // routes read/write the tenant's own `tenant_receipts` row (SP-B4 — the trim moved out of the old
+  // widget-layout model, now removed). The PUT delegates the authorize + validate + upsert to
+  // `@waitron/layouts`'s `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is
+  // shared with the unauthenticated till boot read), so it carries its own explicit gate.
 
   // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
   // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on

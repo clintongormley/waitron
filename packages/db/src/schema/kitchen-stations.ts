@@ -31,8 +31,8 @@ import { locations, tenants } from "./tenants.js";
  * so the config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here
  * (the custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
  * SECURITY; the FORCE ROW LEVEL SECURITY, the `kitchen_stations_tenant_isolation` policy and the grant
- * are hand-written in the paired --custom migration, exactly as 0052 does for `floor_zones` and 0036
- * for `till_layouts`. The `inmutabilidad` guard in packages/fiscal-verifactu scans every
+ * are hand-written in the paired --custom migration, exactly as 0052 does for `floor_zones`. The
+ * `inmutabilidad` guard in packages/fiscal-verifactu scans every
  * tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const kitchenStations = pgTable(

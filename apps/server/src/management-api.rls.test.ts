@@ -4,8 +4,7 @@ import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
-import type { LayoutDef } from "@waitron/layouts";
+import { DEFAULT_RECEIPT } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
@@ -818,34 +817,11 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
   });
 });
 
-// ── Task 7: layout + receipt write routes ─────────────────────────────────────────────────────────
-// The dashboard's till-configuration surface: GET the current layout/receipt, PUT a new one of each.
+// ── Task 7: receipt write routes ────────────────────────────────────────────────────────────────
+// The dashboard's receipt-configuration surface: GET the current receipt trim, PUT a new one.
 // Same real-Postgres justification as the staff routes above — every touch runs `withTenant` +
 // `asAppUser`, so RLS scopes the read/write and the authorize gate (persons + management_sessions) to
 // the dashboard's own tenant, which PGlite's superuser connection cannot prove (CLAUDE.md §4).
-
-/** A sale-critical-complete layout (validateLayout requires product-grid + basket + total +
- * tender-pay, design D4) with `columns` on the product grid — the one wired config key (D6). Mirrors
- * `packages/layouts/src/store.rls.test.ts`'s helper. */
-function saleLayout(columns: number): LayoutDef {
-  return [
-    { type: "product-grid", region: "main", config: { columns } },
-    { type: "basket", region: "aside", config: {} },
-    { type: "total", region: "aside", config: {} },
-    { type: "tender-pay", region: "aside", config: {} },
-  ];
-}
-
-/** GET the current layout as `cookie`, asserting the 200 and returning the parsed `{ definition,
- * receipt }` so a round-trip test reads back exactly what a PUT stored. */
-async function getLayoutOverHttp(
-  app: Hono,
-  cookie: string,
-): Promise<{ definition: LayoutDef; receipt: unknown }> {
-  const res = await app.request("/management-api/layout", { headers: { cookie } });
-  expect(res.status).toBe(200);
-  return (await res.json()) as { definition: LayoutDef; receipt: unknown };
-}
 
 /** GET the current receipt trim as `cookie` (its own `tenant_receipts`-backed route, SP-B4), asserting
  * the 200 and returning the parsed `{ receipt }` a round-trip test reads back after a PUT. */
@@ -855,8 +831,8 @@ async function getReceiptOverHttp(app: Hono, cookie: string): Promise<{ receipt:
   return (await res.json()) as { receipt: unknown };
 }
 
-describe("Management API — layout + receipt routes (Task 7)", () => {
-  it("refuses all four routes unauthenticated with 401 management_session.required", async () => {
+describe("Management API — receipt routes (Task 7)", () => {
+  it("refuses both routes unauthenticated with 401 management_session.required", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     const json = { "content-type": "application/json" };
@@ -864,13 +840,7 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     // requireManagementSession runs FIRST on each route, so an unauthenticated request is refused
     // before any DB work — the same 401 the gated staff routes give.
     const cases = [
-      app.request("/management-api/layout"),
       app.request("/management-api/receipt"),
-      app.request("/management-api/layout", {
-        method: "PUT",
-        headers: json,
-        body: JSON.stringify({ definition: saleLayout(3) }),
-      }),
       app.request("/management-api/receipt", {
         method: "PUT",
         headers: json,
@@ -885,7 +855,7 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     }
   });
 
-  it("refuses all four routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
+  it("refuses both routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     // A staff person CAN log in (login checks the credential, not the role) but holds no
@@ -893,19 +863,13 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
-    // Both GETs are gated by the ROUTE's own explicit `authorizeManager` call (getLayout/getReceipt do
-    // not authorize, being shared with the unauthenticated till boot read) — deleting that call flips
-    // the GET from 403 to 200 (the by-deletion proof for the route-level gate, demonstrated in this
-    // task's report). The two PUTs are gated INSIDE putLayout/putReceipt (proven by deletion in the
-    // store rls suites); here the same 403 is exercised end-to-end through the HTTP surface.
+    // The GET is gated by the ROUTE's own explicit `authorizeManager` call (getReceipt does not
+    // authorize, being shared with the unauthenticated till boot read) — deleting that call flips the
+    // GET from 403 to 200 (the by-deletion proof for the route-level gate, demonstrated in this task's
+    // report). The PUT is gated INSIDE putReceipt (proven by deletion in the store rls suite); here the
+    // same 403 is exercised end-to-end through the HTTP surface.
     const cases = [
-      app.request("/management-api/layout", { headers: { cookie } }),
       app.request("/management-api/receipt", { headers: { cookie } }),
-      app.request("/management-api/layout", {
-        method: "PUT",
-        headers: { ...json, cookie },
-        body: JSON.stringify({ definition: saleLayout(3) }),
-      }),
       app.request("/management-api/receipt", {
         method: "PUT",
         headers: { ...json, cookie },
@@ -918,36 +882,6 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
         error: { code: "authorization.not_permitted" },
       });
     }
-  });
-
-  it("GET returns the built-in defaults for a tenant that has never authored a layout", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const body = await getLayoutOverHttp(app, cookie);
-    expect(body).toEqual({ definition: DEFAULT_LAYOUT, receipt: DEFAULT_RECEIPT });
-  });
-
-  it("manager PUT /management-api/layout → 204, then GET reads it back (round-trip)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-    const definition = saleLayout(4);
-
-    const put = await app.request("/management-api/layout", {
-      method: "PUT",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ definition }),
-    });
-    expect(put.status).toBe(204);
-    expect(await put.text()).toBe("");
-
-    // The stored definition reads back verbatim; the receipt half stays at its default (putLayout
-    // never touches it).
-    const body = await getLayoutOverHttp(app, cookie);
-    expect(body.definition).toEqual(definition);
-    expect(body.receipt).toEqual(DEFAULT_RECEIPT);
   });
 
   it("GET /management-api/receipt returns DEFAULT_RECEIPT for a tenant that has never authored one", async () => {
@@ -975,34 +909,8 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     expect(put.status).toBe(204);
     expect(await put.text()).toBe("");
 
-    // The receipt reads back verbatim from its own `tenant_receipts` route (SP-B4) — the two now live
-    // in separate tables, so the layout GET is unaffected and stays at its own default.
+    // The receipt reads back verbatim from its own `tenant_receipts` route (SP-B4).
     expect(await getReceiptOverHttp(app, cookie)).toEqual({ receipt });
-    expect((await getLayoutOverHttp(app, cookie)).definition).toEqual(DEFAULT_LAYOUT);
-  });
-
-  it("PUT /management-api/layout with an invalid definition → 400 layout.invalid", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    // An array missing the sale-critical `total` widget — putLayout's validateLayout refuses it as
-    // `layout.invalid` (missing_required), which STATUS maps to 400. This proves the layouts error
-    // code both reaches `run` and is mapped (not the ?? 400 default masking a mismatch).
-    const invalid = [
-      { type: "product-grid", region: "main", config: {} },
-      { type: "basket", region: "aside", config: {} },
-      { type: "tender-pay", region: "aside", config: {} },
-    ];
-    const res = await app.request("/management-api/layout", {
-      method: "PUT",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ definition: invalid }),
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "layout.invalid" },
-    });
   });
 
   it("PUT /management-api/receipt with an unknown field → 400 receipt.invalid", async () => {
@@ -1029,41 +937,8 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     const json = { "content-type": "application/json" };
 
     // Each degenerate body is refused as `management.request_invalid` naming the FIELD, before the
-    // service is called: an object without the required key, a JSON `null` (coerced to `{}` so it
-    // hits the same guard rather than TypeError-ing → 500), and a bare JSON array (the raw layout
-    // sent at the top level instead of under `{ definition }`).
-    const layoutEmpty = await app.request("/management-api/layout", {
-      method: "PUT",
-      headers: { ...json, cookie },
-      body: JSON.stringify({}),
-    });
-    expect(layoutEmpty.status).toBe(400);
-    expect(
-      (await layoutEmpty.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "definition" } },
-    });
-
-    const layoutNull = await app.request("/management-api/layout", {
-      method: "PUT",
-      headers: { ...json, cookie },
-      body: "null",
-    });
-    expect(layoutNull.status).toBe(400);
-    expect((await layoutNull.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management.request_invalid" },
-    });
-
-    const layoutArray = await app.request("/management-api/layout", {
-      method: "PUT",
-      headers: { ...json, cookie },
-      body: JSON.stringify(saleLayout(3)),
-    });
-    expect(layoutArray.status).toBe(400);
-    expect((await layoutArray.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management.request_invalid" },
-    });
-
+    // service is called: an object without the required key, and a JSON `null` (coerced to `{}` so it
+    // hits the same guard rather than TypeError-ing → 500).
     const receiptEmpty = await app.request("/management-api/receipt", {
       method: "PUT",
       headers: { ...json, cookie },
@@ -1087,7 +962,7 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     });
   });
 
-  it("isolates layout across tenants, and refuses a cross-tenant session under RLS (asAppUser differential)", async () => {
+  it("isolates the receipt trim across tenants, and refuses a cross-tenant session under RLS (asAppUser differential)", async () => {
     // Two independent provisioned venues, each with its own manager. Each app binds ONE tenant via
     // `cfg.tenantId`.
     const a = await setupTenant();
@@ -1097,32 +972,34 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     const cookieA = await login(appA, MANAGER_EMAIL);
     const cookieB = await login(appB, MANAGER_EMAIL);
 
-    // Each manager authors a DISTINCT layout through the full HTTP surface.
-    const putA = await appA.request("/management-api/layout", {
+    // Each manager authors a DISTINCT receipt trim through the full HTTP surface.
+    const receiptA = { footerMessage: "Gracias, tenant A" };
+    const receiptB = { footerMessage: "Hasta pronto, tenant B" };
+    const putA = await appA.request("/management-api/receipt", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: cookieA },
-      body: JSON.stringify({ definition: saleLayout(3) }),
+      body: JSON.stringify({ receipt: receiptA }),
     });
     expect(putA.status).toBe(204);
-    const putB = await appB.request("/management-api/layout", {
+    const putB = await appB.request("/management-api/receipt", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: cookieB },
-      body: JSON.stringify({ definition: saleLayout(7) }),
+      body: JSON.stringify({ receipt: receiptB }),
     });
     expect(putB.status).toBe(204);
 
-    // Each GET returns only its OWN tenant's authored layout — end-to-end per-tenant scoping.
-    expect((await getLayoutOverHttp(appA, cookieA)).definition).toEqual(saleLayout(3));
-    expect((await getLayoutOverHttp(appB, cookieB)).definition).toEqual(saleLayout(7));
+    // Each GET returns only its OWN tenant's authored receipt trim — end-to-end per-tenant scoping.
+    expect((await getReceiptOverHttp(appA, cookieA)).receipt).toEqual(receiptA);
+    expect((await getReceiptOverHttp(appB, cookieB)).receipt).toEqual(receiptB);
 
-    // The load-bearing differential: tenant A's session cookie sent to tenant B's app is refused 401.
+    // The differential that matters: tenant A's session cookie sent to tenant B's app is refused 401.
     // `resolveManagementSession` (inside authorizeManager) looks up the session by id with NO explicit
     // tenant filter, relying entirely on `withTenant` + `asAppUser` RLS to scope it — so A's session
     // row is invisible under B's GUC and the gate throws `management_session.required`. Drop `asAppUser`
     // from the GET route and B's app runs as the superuser owner (RLS bypassed), resolves A's session,
     // authorizes A's manager and answers 200 — flipping this assertion. That is the by-deletion proof
     // the route's `withTenant` + `asAppUser` is doing the tenant scoping, not an explicit filter.
-    const crossed = await appB.request("/management-api/layout", { headers: { cookie: cookieA } });
+    const crossed = await appB.request("/management-api/receipt", { headers: { cookie: cookieA } });
     expect(crossed.status).toBe(401);
     expect((await crossed.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },

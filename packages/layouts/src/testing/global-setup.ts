@@ -10,14 +10,13 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * migrating a container per file. See the plan at
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
- * One template, because the one real-PG suite here migrates exactly the same pair — CORE then
- * IDENTITY. `@waitron/layouts` owns no migrations of its own: `till_layouts` and its FORCE-RLS/policy/
- * grant lines live in `CORE_MIGRATIONS`, and the store's `authorizeManager` gate reads identity's
- * `persons`/`management_sessions`, so IDENTITY has to be present too. Core migrates first (identity's
- * schema builds on it) — that ordering is the runtime's responsibility and nothing enforces it across
- * packages, so it is explicit here; the now-removed INLINE `startMigratedPostgres` in
- * store.rls.test.ts ran the same pair. The suite clones it with
- * `useTemplateDb({ template: "core_identity" })`. apps/server, packages/identity and packages/core
+ * One template, because every real-PG suite here migrates exactly the same pair — CORE then
+ * IDENTITY. `@waitron/layouts` owns no migrations of its own: its tables (`canvases`, `tenant_themes`,
+ * `tenant_receipts`) and their FORCE-RLS/policy/grant lines live in `CORE_MIGRATIONS`, and the stores'
+ * `authorizeManager` gate reads identity's `persons`/`management_sessions`, so IDENTITY has to be
+ * present too. Core migrates first (identity's schema builds on it) — that ordering is the runtime's
+ * responsibility and nothing enforces it across packages, so it is explicit here. The suites clone it
+ * with `useTemplateDb({ template: "core_identity" })`. apps/server, packages/identity and packages/core
  * also name a template `core_identity` (CORE + IDENTITY) in their own globalSetups — that is not a
  * collision: each handle is provided/injected within its own package's run, so the key is scoped to
  * this package.
