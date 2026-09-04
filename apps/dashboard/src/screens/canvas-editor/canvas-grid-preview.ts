@@ -69,8 +69,8 @@ export class CanvasGridPreview extends LitElement {
         cursor: pointer;
       }
       button.tile.selected {
-        outline: 2px solid var(--wt-color-primary);
-        outline-offset: -2px;
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-selected-ring-offset);
       }
       .name {
         font-weight: var(--wt-font-weight-bold);
