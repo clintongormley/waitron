@@ -140,9 +140,26 @@ export async function promoteLocalSecondaryToPrimary(
 }
 
 export interface MirrorPromotionResult extends PromotionResult {
-  /** The cloud's OWN reserved standard series id — the caller persists it into trading.env so the
-   * promoted primary numbers under its disjoint series, not the primary's (spec §4.3). */
+  /** The cloud's OWN reserved standard series id the promote persisted into trading.env, so the promoted
+   * primary numbers under its disjoint series, not the primary's (spec §4.3). Returned so the caller can
+   * assert on it / decide whether to restart. */
   readonly seriesId: string;
+}
+
+export interface MirrorPromoteDeps extends PromoteDeps {
+  /**
+   * Persist the corrected `trading.env` (its `seriesId` = the cloud's OWN reserved standard series) so the
+   * NEXT boot comes up primary numbering under the right series. Injected (the boot supplies
+   * `writeTradingEnv`) so this DB-centric module stays out of the filesystem/process transition.
+   *
+   * Called BEFORE the point-of-no-return (owner decision, 2026-09-04): a corrected `seriesId` is INERT on a
+   * still-read-only mirror, so persisting it early is abortable with no lasting effect if the promote
+   * fails, and it eliminates the crash window a persist-AFTER-PONR leaves — where a crash between the PONR
+   * commit and the env write would reboot the box `mode=primary` still carrying the primary's series, with
+   * no mirror-promote path left to self-heal it. Ordering the persist before the flip is a correctness
+   * invariant, so it lives here rather than in the caller.
+   */
+  readonly persistTradingEnv: (seriesId: string) => Promise<void>;
 }
 
 /**
@@ -185,18 +202,20 @@ export async function commitMirrorPromotionTx(
  * sealed key + the primary's endorsement). No identity ceremony, no SIF re-mint: `currentSif` returns
  * the reserved SIF once the box reboots `mode=primary`.
  *
- * ABORT-BEFORE-PONR (parent spec §7): the fence check, the held/endorsement/series reads, and the
- * in-memory mint all run BEFORE the one owner transaction, so any failure there leaves the mirror
- * exactly as it was. The PONR is ONE owner transaction (`commitMirrorPromotionTx`) — `mode → primary`,
- * `singleton_role → primary`, then the TERM-GUARDED document write; if that write is refused (a
- * concurrent gossip-adopt landed a >= term), the whole transaction aborts with
- * `promotion.membership_superseded` and the flip does not commit against a superseded chart (spec §8
- * "R3 sharp edge"). Idempotent: an already-primary node returns `{ alreadyPrimary: true }` before any
- * mint. The caller persists the returned `seriesId` into trading.env and restarts — the mirror is not
- * selling, so a restart costs nothing (contrast the LIVE local-secondary promote).
+ * ABORT-BEFORE-PONR (parent spec §7): the fence check, the held/endorsement/series reads, the in-memory
+ * mint AND the `trading.env` correction (`persistTradingEnv`, inert on a still-read-only mirror) all run
+ * BEFORE the one owner transaction, so any failure there leaves the mirror exactly as it was. The PONR is
+ * ONE owner transaction (`commitMirrorPromotionTx`) — `mode → primary`, `singleton_role → primary`, then
+ * the TERM-GUARDED document write; if that write is refused (a concurrent gossip-adopt landed a >= term),
+ * the whole transaction aborts with `promotion.membership_superseded` and the flip does not commit against
+ * a superseded chart (spec §8 "R3 sharp edge"). Idempotent: an already-primary node returns
+ * `{ alreadyPrimary: true }` before any mint or persist. Because the env is corrected before the flip,
+ * there is no window where a crash leaves the box primary on the primary's series. The caller only
+ * restarts on `{ alreadyPrimary: false }` — the mirror is not selling, so a restart costs nothing
+ * (contrast the LIVE local-secondary promote).
  */
 export async function promoteMirrorToPrimary(
-  deps: PromoteDeps,
+  deps: MirrorPromoteDeps,
   attestation: FenceAttestation,
 ): Promise<MirrorPromotionResult> {
   assertFenced(attestation); // before PONR: abortable, zero lasting effect
@@ -206,7 +225,9 @@ export async function promoteMirrorToPrimary(
   const seriesId = await readStandardSeriesId(deps.appDb, deps.tenantId, deps.nodeId);
 
   if (deps.holders.mode.current === "primary") {
-    return { alreadyPrimary: true, seriesId }; // already promoted — idempotent no-op
+    // Already promoted — idempotent no-op. trading.env was already corrected before this box's own PONR,
+    // so there is nothing to re-persist here.
+    return { alreadyPrimary: true, seriesId };
   }
 
   // Build the endorsed document BEFORE the PONR: read the held org chart, flip standings (this node →
@@ -226,6 +247,13 @@ export async function promoteMirrorToPrimary(
       endorsements: endorsement === null ? [] : [endorsement],
     },
   );
+
+  // Persist the corrected trading.env BEFORE the point-of-no-return (owner decision, 2026-09-04). A
+  // corrected series is inert on a still-read-only mirror, so this stays abortable-with-no-lasting-effect
+  // like the reads and the mint above — and it closes the crash window a persist-after-PONR would leave
+  // (a crash between the flip and the env write would reboot the box primary on the primary's series with
+  // no mirror-promote path left to recover). See `MirrorPromoteDeps.persistTradingEnv`.
+  await deps.persistTradingEnv(seriesId);
 
   // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3).
   await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document));

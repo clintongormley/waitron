@@ -35,6 +35,7 @@ import {
   commitMirrorPromotionTx,
   promoteLocalSecondaryToPrimary,
   promoteMirrorToPrimary,
+  type MirrorPromoteDeps,
   type PromoteDeps,
 } from "./promote.js";
 
@@ -277,7 +278,10 @@ async function mirror(): Promise<{
   nodeId: string;
   standardSeriesId: string;
   endorsement: Endorsement;
-  deps: (log: PromoteDeps["log"]) => PromoteDeps;
+  deps: (
+    log: PromoteDeps["log"],
+    persistTradingEnv?: (seriesId: string) => Promise<void>,
+  ) => MirrorPromoteDeps;
 }> {
   const db = await createPgliteDb();
   await runMigrations(db, CORE_MIGRATIONS);
@@ -330,7 +334,7 @@ async function mirror(): Promise<{
     nodeId: standby.nodeId,
     standardSeriesId,
     endorsement,
-    deps: (log) => ({
+    deps: (log, persistTradingEnv = async () => {}) => ({
       appDb: db,
       ownerDb: db,
       holders,
@@ -338,6 +342,7 @@ async function mirror(): Promise<{
       ring: RING,
       tenantId,
       nodeId: standby.nodeId,
+      persistTradingEnv,
     }),
   };
 }
@@ -366,13 +371,46 @@ describe("promoteMirrorToPrimary", () => {
     await db.close();
   });
 
-  it("refuses without a fence attestation, leaving the node a mirror", async () => {
-    const { db, deps } = await mirror();
+  it("persists the corrected trading.env BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
+    // The corrected series is INERT on a still-read-only mirror, so persisting trading.env BEFORE the PONR
+    // is abortable with no lasting effect AND closes the crash window a persist-after-PONR would open
+    // (spec §4.3 + owner decision 2026-09-04). Proven by construction: a persist that THROWS must leave
+    // the node a mirror — if the flip had run first, mode would be 'primary' here.
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    const persisted: string[] = [];
     const err = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: false }),
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+          throw new Error("disk full");
+        }),
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect((err as Error).message).toBe("disk full");
+    expect(persisted).toEqual([standardSeriesId]); // called with the cloud's OWN corrected series
+    // The PONR never ran: still a read-only mirror, singleton unclaimed, org chart not bumped.
+    expect(await readDeploymentMode(db)).toBe("mirror");
+    expect(await readSingletonRole(db)).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    await db.close();
+  });
+
+  it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
+    const { db, deps } = await mirror();
+    const persisted: string[] = [];
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+        }),
+        { oldNodeNeutralised: false },
+      ),
     );
     expect(isAppError(err) && err.code).toBe("promotion.fence_not_attested");
     expect(await readDeploymentMode(db)).toBe("mirror"); // no write
+    expect(persisted).toEqual([]); // fence refusal is before any persist
     await db.close();
   });
 

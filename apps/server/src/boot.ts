@@ -1705,29 +1705,38 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           kind: "mirror" as const,
           run: (attestation: FenceAttestation) =>
             withOwnerDb(async (deps) => {
-              const result = await promoteMirrorToPrimary(deps, attestation);
+              const result = await promoteMirrorToPrimary(
+                {
+                  ...deps,
+                  // Correct `trading.env`: the promoted primary numbers under its OWN reserved standard
+                  // series, not the primary's inert `till.seriesId` that adopt wrote (spec §4.3). Every
+                  // OTHER value is re-emitted unchanged from the running config — `syncDatabaseUrl`
+                  // included (harmless on a primary that no longer pulls). The promote calls this BEFORE
+                  // its point-of-no-return (inert on a still-read-only mirror), so a crash can never leave
+                  // the box primary on the primary's series.
+                  persistTradingEnv: async (seriesId) => {
+                    const next: TradingConfig = {
+                      tenantId: till.tenantId,
+                      tillId: till.tillId,
+                      nodeId: till.nodeId,
+                      seriesId,
+                      locationId: till.locationId,
+                      databaseUrl: config.databaseUrl,
+                      migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                      syncDatabaseUrl: config.syncDatabaseUrl,
+                      environment: config.environment,
+                    };
+                    await writeTradingEnv(config.stateDir, next);
+                  },
+                },
+                attestation,
+              );
               if (!result.alreadyPrimary) {
-                // Correct `trading.env`: the promoted primary numbers under its OWN reserved standard
-                // series (`result.seriesId`), not the primary's inert `till.seriesId` that adopt wrote
-                // (spec §4.3). Every OTHER value is re-emitted unchanged from the running config —
-                // `syncDatabaseUrl` included (harmless on a primary that no longer pulls, and it keeps the
-                // mirror-sync pool available should the promote abort before the restart below fires).
-                const next: TradingConfig = {
-                  tenantId: till.tenantId,
-                  tillId: till.tillId,
-                  nodeId: till.nodeId,
-                  seriesId: result.seriesId,
-                  locationId: till.locationId,
-                  databaseUrl: config.databaseUrl,
-                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-                  syncDatabaseUrl: config.syncDatabaseUrl,
-                  environment: config.environment,
-                };
-                await writeTradingEnv(config.stateDir, next);
                 // Restart into `mode=primary` — the same persist-then-restart transition provision/adopt
-                // use. Fire on the NEXT tick so the in-process caller's result is returned first (the
-                // supervisor loop that reboots the box is out of process; `requestRestart` is only wired in
-                // the setup branch, so the inline `process.kill` form is used here).
+                // use (trading.env is already corrected, before the PONR). Fire on the NEXT tick so the
+                // in-process caller's result is returned first (the supervisor loop that reboots the box is
+                // out of process; `requestRestart` is only wired in the setup branch, so the inline
+                // `process.kill` form is used here).
                 setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
               }
               return result;
