@@ -334,8 +334,8 @@ export class DashboardApp extends LitElement {
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
    * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
-   * render) or its twenty nav buttons stay in the tab order and a11y tree while translated off-screen,
-   * so a keyboard user would tab through twenty invisible controls before reaching a visible one. At
+   * render) or its nineteen nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through nineteen invisible controls before reaching a visible one. At
    * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
   @state() private narrow = false;
 
@@ -567,7 +567,7 @@ export class DashboardApp extends LitElement {
       >
         <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
              breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
-             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its twenty nav buttons
+             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nineteen nav buttons
              leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
              control; it is interactive at desktop width and whenever the drawer is open. -->
         ${
@@ -638,7 +638,7 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
-  /** The manager nav — the twenty-face switcher, shown only for a NON-staff session (a `staff` person
+  /** The manager nav — the nineteen-face switcher, shown only for a NON-staff session (a `staff` person
    * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
    * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
    * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.

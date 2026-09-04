@@ -794,8 +794,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
   // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on
-  // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session — like
-  // `GET /management-api/layout`, `getReceipt` itself does NOT authorize (it is shared with the
+  // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
+  // `getReceipt` itself does NOT authorize (it is shared with the
   // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
   // `management-api.rls.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
   // 403 to 200.
@@ -815,7 +815,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Author (full replacement) the tenant's receipt trim, into its own `tenant_receipts` row (SP-B4).
-  // Same gating + body-screen shape as `PUT /management-api/layout`: `putReceipt` enforces
+  // Same gating + body-screen shape as `PUT /management-api/theme`: `putReceipt` enforces
   // `till.configure` and validates the receipt (400 `receipt.invalid`); the body-shape screen refuses a
   // non-object body or an absent `receipt` key as `management.request_invalid` naming the FIELD.
   app.put("/management-api/receipt", (c) =>
@@ -849,10 +849,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // DB touch runs `withTenant` + `asAppUser`, so RLS scopes the canvas/theme rows and the authorize
   // gate to this dashboard's own tenant. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry
   // their own explicit `authorizeManager(..., "till.configure")` — `listCanvases`/`getCanvas`/
-  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/layout`) — while the WRITES
+  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the WRITES
   // delegate the gate to the store fns (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`,
   // proven by-deletion in the store rls suites). A malformed body field is refused as
-  // `management.request_invalid` naming the FIELD before the store call, the layout/receipt shape.
+  // `management.request_invalid` naming the FIELD before the store call, the receipt/theme shape.
 
   // The tenant's canvases, for the editor list. Gated on `till.configure` via the explicit
   // `authorizeManager` (the read fns do not gate). Returns `{ canvases: [{id,name,definition}] }`.

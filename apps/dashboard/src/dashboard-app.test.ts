@@ -706,7 +706,7 @@ describe("dashboard-app", () => {
     expect(nav?.fields.screen).toBe("sales");
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the twenty manager
+  // The grouped static sidebar (Task 11): every group header renders, every one of the nineteen manager
   // faces (a manager session sees the gated `diagnostics` too) keeps its `data-test="nav-<screen>"` id,
   // and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
