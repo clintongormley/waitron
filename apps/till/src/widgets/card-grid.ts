@@ -302,14 +302,10 @@ export class TillCardGrid extends LitElement {
   /**
    * Each card's data-condition state, computed from data the host already holds (spec §7).
    *
-   * `kds-board` (like `expo`) is deliberately NOT a case here — it returns `undefined` from the
-   * `default` arm and so fails OPEN via `#visible` (SP-B2.1 follow-up d). It is a SELF-FETCHING screen:
-   * the host holds no authoritative queue for the operator's PICKED (or the device's BOUND) station —
-   * `stationQueue` is only the DEFAULT station's queue (KDS-1, the counter's own prep-queue widget) — so
-   * the host cannot compute this card's `has-tickets`/`idle` state, and a `visibleWhen` gate on a
-   * kds-board card must not silently vanish it. This matches the landed B2.1 treatment of `expo`, whose
-   * identical host-uncomputable states are handled the same way: the two big self-fetching screens are
-   * both left host-uncomputed, not one computed and one not.
+   * `kds-board` (like `expo`) is deliberately NOT a case here — both are SELF-FETCHING screens whose
+   * `has-tickets`/`idle` the host cannot compute (see the `kds-board` arm in {@link #element} for why
+   * `stationQueue` doesn't cover it), so they return `undefined` from `default` and fail OPEN via
+   * {@link #visible} (SP-B2.1 follow-up d) rather than silently vanish.
    */
   #currentState(type: CardType): string | undefined {
     switch (type) {

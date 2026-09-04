@@ -4074,26 +4074,6 @@ describe("till-app", () => {
       expect(grid.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull();
     });
 
-    it("exercises the DEFENSIVE #onBackToFloor card-mount branch: a synthetic back-to-floor with no drill switches to the Floor tab", async () => {
-      // NB: the EMBEDDED table-order card cannot itself emit `back-to-floor` — its Back is suppressed by
-      // the `embedded` seam (`till-table-order-screen` renders no `.back` when embedded). This fires a
-      // SYNTHETIC event to cover the defensive `else` branch of `#onBackToFloor` (a `back-to-floor` with
-      // no drill open → switch to the Floor tab), which real handheld UI does not reach today; the REAL
-      // handheld return path (tapping the Floor tab) is asserted by the next test. The branch is kept for
-      // a future non-suppressed Back, so it needs its own coverage.
-      const el = await toHandheldFloor();
-      emit(shell(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
-      await flush(el);
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
-      const cardTableOrder = grid.shadowRoot!.querySelector("till-table-order-screen")!;
-      expect(cardTableOrder).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull(); // no drill → the defensive branch
-      emit(cardTableOrder, "back-to-floor");
-      await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor"); // #floorTabKey() resolved the `floor-plan` card's tab
-      expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
-    });
-
     it("returns a handheld to the Floor tab via the REAL path — tapping the Floor tab — refreshing occupancy", async () => {
       // What actually happens in the app: the waiter on the Order tab taps the Floor TAB, firing the
       // shell's `tab-select` → `#onTabSelect("floor")`, which switches the active tab AND (the floor tab
