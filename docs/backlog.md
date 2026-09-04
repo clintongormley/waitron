@@ -671,6 +671,21 @@ vs gated on an unbuilt foundation or an external dependency:
     on reboot**.
   - **`nextStandings` still never emits `evicted`** — R1 only reacts to `sell-only`; the eviction
     producer lands with R2/R3.
+  - **Carry-forward for the promotion-runbook / promote-action slice (fiscal, flagged at R1 land by a
+    finish-branch reviewer):** R1 reconciles a fenced node to `(mode='primary', singleton_role='secondary')`
+    — the SAME axis pair as a healthy "local secondary" — so `promoteLocalSecondaryToPrimary` (which today
+    checks only `mode!=='mirror'` and `singletonRole!=='primary'`, `promote.ts`) cannot tell a fenced node
+    from a promotable one. Invoked against a fenced node it would `nextStandings(self→serving-primary)`,
+    self-sign a new doc, and flip `singleton_role` back to `primary` **live** (no restart) — resuming the
+    fiscal duties while the HTTP read-only gate stays shut only because `fenced` is a boot-captured closure
+    — the "two submitters under one NIF" the design exists to prevent. **Unreachable today** (that promote
+    is in-process/test-only with no endpoint, and the design gates it behind `FenceAttestation`/`assertFenced`
+    + the still-open promotion runbook, wire-protocol §5/§9); R1 changed neither `promote.ts` nor
+    `nextStandings`. **When the promotion runbook lands, its gate must consult the node's own membership
+    standing (`isFenced`/`standingOf`), not just the deployment axes.** Same shape as the wide reviewer's note
+    that a fenced node adopting an *un-fencing* doc persists it without re-promoting in place — R1 never
+    produces such a doc (re-admission is wipe-and-restore), so the in-place transition is out of scope until
+    the R2/R3 eviction/re-admission producers exist.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
   membership }` (the held signed document or `null`); the pull worker threads that field out of the
   handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
