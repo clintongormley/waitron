@@ -14,8 +14,8 @@
 
 - **Route + permission (owner decision 2026-09-04, departing from §8's `PUT /:id` + `till.configure`):** the reassign route is `POST /management-api/devices/:id/assign-profile`, gated **`device.manage`**, added in **`apps/server/src/device-api.ts`** — matching every sibling `/management-api/devices*` route (list/mint/revoke) and the `POST /:id/revoke` action shape. `device.manage` and `till.configure` map to the same roles {manager, admin} today, so no access change.
 - **Error codes name the domain concept; grep siblings; never coin without checking the registry.** A reassign to a non-existent/foreign profile throws **`device.binding_invalid` `{ field: "layoutProfileId" }`** — the SAME code + shape the **enrol** path throws for a bad `layoutProfileId` binding (`apps/server/src/errors.ts:1163`, reachable via `device-api.ts`'s `import "./errors.js"`). An unknown/malformed device id throws **`device.not_found`** (the revoke idiom). Do NOT introduce `profile.not_found` here — that is the profile-CRUD code, not the device-binding one; using it would split one concept across two codes.
-- **RLS is the isolation, not an explicit tenant filter** — every write goes through `gated(sessionId, tx => …)` (`device-api.ts:162`, = `withTenant` + `asAppUser` + `authorizeManager(device.manage)`). A cross-tenant profile id is invisible under RLS, so the `getProfile` pre-check treats it as not-found → `device.binding_invalid` (never leaks another tenant's row).
-- **Null clears.** The route body is `{ layoutProfileId: string | null }`. `null` sets `devices.layout_profile_id = NULL` (device falls back to `getProfileForFormFactor`); a string is pre-checked and set.
+- **Isolation is structural (the composite FK) + RLS on the device write** — every write goes through `gated(sessionId, tx => …)` (`device-api.ts:162`, = `withTenant` + `asAppUser` + `authorizeManager(device.manage)`), so a cross-tenant DEVICE is invisible (0 rows → not_found). A cross-tenant PROFILE can never bind because the composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` looks for `(this_tenant, id)` and misses → `device.binding_invalid` (never a leak). No read-then-write pre-check (see the Task 1 correction).
+- **Null clears.** The route body is `{ layoutProfileId: string | null }`. `null` sets `devices.layout_profile_id = NULL` (device falls back to `getProfileForFormFactor`); a non-null value is set and validated by the FK.
 - **Not fiscal / not H2 / no schema change / no migration.** Touches no sale path, chain, or DB schema.
 - **Bundle rule:** `apps/dashboard`'s `DeviceRow`/`LayoutProfile` mirror types stay local; do NOT import `@waitron/layouts` into the browser bundle (the #70 rule — `LayoutProfile.definition` stays `unknown`).
 - **No hardcoded chrome:** the reassign control uses the same native `<select>` + `wt-*` pattern the enrol-form profile picker already uses (`devices-screen.ts:632-642`); `--wt-*` tokens only.
@@ -26,7 +26,7 @@
 
 ## File Structure
 
-- **Modify** `apps/server/src/device-api.ts` — add the `assign-profile` route (after the revoke route, `:420`); add `layoutProfileId: devices.layoutProfileId` to the `GET /management-api/devices` select (`:383-391`); import `getProfile` from `@waitron/layouts` (already imports `listProfiles`).
+- **Modify** `apps/server/src/device-api.ts` — add the `assign-profile` route (after the revoke route, `:420`); add `layoutProfileId: devices.layoutProfileId` to the `GET /management-api/devices` select (`:383-391`); import `bindingFkField` from `./device.js` to translate the composite-FK 23503 (see the correction under Task 1 — no `getProfile` pre-check).
 - **Modify** the device-api server test (the RLS suite that already covers list/revoke — find it, e.g. `apps/server/src/device-api.*.test.ts`) — reassign sets/clears/rejects; the list returns `layoutProfileId`.
 - **Modify** `apps/dashboard/src/api/client.ts` — add `layoutProfileId: string | null` to `DeviceRow` (`:595-603`); add `reassignDevice(id, layoutProfileId)` (after `revokeDevice`, `:1860`).
 - **Modify** `apps/dashboard/src/api/client.test.ts` (or wherever client methods are tested) — the new method's request shape.
@@ -48,24 +48,24 @@
 > `bindingFkField` unit test pins the new constraint→field mapping.
 
 **Files:**
-- Modify: `apps/server/src/device-api.ts` (list select `:383-391`; new route after `:420`; import `getProfile`)
-- Test: the device-api real-PG RLS suite (grep `describeEachTarget`/`useRealPostgres` + `/management-api/devices` in `apps/server/src/*.test.ts`)
+- Modify: `apps/server/src/device-api.ts` (list select `:383-391`; new route after `:420`; import `bindingFkField` from `./device.js`) + `apps/server/src/device.ts` (extend `BINDING_FK_FIELD` with `devices_layout_profile_fk`) — see the Task 1 correction.
+- Test: the device-api real-PG RLS suite (grep `describeEachTarget`/`useRealPostgres` + `/management-api/devices` in `apps/server/src/*.test.ts`) + `device.test.ts`'s `bindingFkField` unit suite.
 
 **Interfaces:**
-- Consumes: `getProfile(tx, tenantId, id)` (`@waitron/layouts`, returns the row or `undefined`); `devices.layoutProfileId` column (`@waitron/db`); the `gated(sessionId, fn)` helper; `AppError`, `isUuid`.
+- Consumes: `bindingFkField(error)` (`./device.js`, maps a 23503's constraint → the input field); `devices.layoutProfileId` column (`@waitron/db`); the `gated(sessionId, fn)` helper; `AppError`, `isUuid`.
 - Produces:
   - `GET /management-api/devices` rows gain `layoutProfileId: devices.layoutProfileId` (a `string | null`).
-  - `POST /management-api/devices/:id/assign-profile` — `gated` on `device.manage`; body `{ layoutProfileId: string | null }` (screen with `readJsonBody` + a `requireBodyUuid`-or-null screen). Malformed/unknown device id → `device.not_found`. A non-null `layoutProfileId` that `getProfile` does not resolve (unknown OR cross-tenant, RLS-hidden) → `AppError("device.binding_invalid", { field: "layoutProfileId" })`. Else `tx.update(devices).set({ layoutProfileId }).where(eq(devices.id, id)).returning({ id })`; 0 rows → `device.not_found`; success → `204`.
+  - `POST /management-api/devices/:id/assign-profile` — `gated` on `device.manage`; body `{ layoutProfileId: string | null }` (screen with `readJsonBody` + a `requireBodyUuid`-or-null screen). Malformed/unknown device id → `device.not_found`. The `tx.update(devices).set({ layoutProfileId }).where(eq(devices.id, id)).returning({ id })` runs inside a try/catch: a 23503 on the composite FK `devices_layout_profile_fk` (a non-null profile — unknown OR cross-tenant — that names no row of this tenant) → `AppError("device.binding_invalid", { field: "layoutProfileId" })` via `bindingFkField`; 0 rows → `device.not_found`; success → `204`.
 
 - [ ] **Step 1: Write the failing tests (real-PG RLS suite)** — mirror the existing list/revoke tests. Cover: (a) `GET /management-api/devices` returns each device's `layoutProfileId` (enrol one with a profile, assert the field); (b) assign-profile sets a device's profile (assert via the list or a direct read); (c) `layoutProfileId: null` clears it; (d) assigning a profile id that does not exist → `device.binding_invalid` `{field:"layoutProfileId"}`; (e) a **cross-tenant** profile id → same `device.binding_invalid` (RLS hides it — never a leak, never a success); (f) unknown/malformed device id → `device.not_found`; (g) the write is tenant-isolated (a manager of tenant A cannot reassign tenant B's device — `device.not_found`).
 
 - [ ] **Step 2: Run to verify they fail** — `pnpm --filter @waitron/server test <suite> -t "assign-profile|layoutProfileId"` (with `TESTCONTAINERS_RYUK_DISABLED=true`). Expected FAIL (route + list field absent).
 
-- [ ] **Step 3: Implement** — add the list-select field; add the route after revoke (`:420`) following the revoke idiom exactly (id `isUuid` screen → `gated` → work). Import `getProfile`. Pre-check the profile before the update.
+- [ ] **Step 3: Implement** — add the list-select field; add the route after revoke (`:420`) following the revoke idiom exactly (id `isUuid` screen → `gated` → work). Extend `BINDING_FK_FIELD` (`device.ts`) with `devices_layout_profile_fk → "layoutProfileId"`; wrap the UPDATE in a try/catch translating that FK's 23503 via `bindingFkField`.
 
 - [ ] **Step 4: Run to verify pass** — the new suite green; existing device-api tests unaffected.
 
-- [ ] **Step 5: Prove the binding-invalid + isolation guards by deletion** — remove the `getProfile` pre-check → the bad-profile test must fail (an unmapped FK 500 or a silent set); restore. Confirm the cross-tenant test fails for the RIGHT reason (RLS-hidden → not-found), not an incidental one.
+- [ ] **Step 5: Pin the FK translation** — `device.test.ts` asserts `bindingFkField(fk("devices_layout_profile_fk")) === "layoutProfileId"` (crafted error); the cross-tenant + nonexistent RLS tests exercise the end-to-end 23503 translation on real Postgres. The composite FK is atomic with the UPDATE, so there is no read-then-write race to prove around.
 
 - [ ] **Step 6: Coverage + commit** — `pnpm --filter @waitron/server test:coverage` (98/98/98/95).
 ```bash
@@ -133,6 +133,6 @@ git commit -s -m "feat(dashboard): reassign a device's layout profile from the D
 - **Spec coverage (§8 reassign bullet + §3.2/§3.5 gaps):** the route (Task 1), the API client + `DeviceRow.layoutProfileId` (Task 2), the devices-screen control (Task 3). Profile CRUD endpoints already exist (verified) — untouched; the editor that calls them is B3.2.
 - **Owner/convention decisions recorded:** route at `POST /management-api/devices/:id/assign-profile` in device-api.ts gated `device.manage` (matches sibling device routes, not §8's `PUT`/`till.configure` — functionally identical roles today); bad target → `device.binding_invalid {field:"layoutProfileId"}` (matches the enrol binding path, not a new `profile.*` code).
 - **No migration / no grant:** `app_user` already holds UPDATE on `devices` under FORCE RLS (`0061_devices_rls.sql`); this is a data change, not a schema change.
-- **Isolation is the load-bearing test:** RLS + the `getProfile` pre-check mean a cross-tenant profile id can neither be set nor distinguished from a non-existent one — pinned by the cross-tenant test, proven by deletion of the pre-check.
-- **Known implementer lookups:** the exact device-api RLS test suite file + its enrol/list helpers; the dashboard client test file; the `devices.*` i18n keys + locale files; `getProfile`'s return shape (`undefined` when absent).
+- **Isolation is the load-bearing test:** the composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` means a cross-tenant profile id can neither be set nor distinguished from a non-existent one (both → `device.binding_invalid`) — pinned by the cross-tenant test (real foreign profile + superuser read-back) and the `bindingFkField` unit case. The FK is atomic with the UPDATE, so there is no read-then-write window (Copilot's race, addressed by dropping the pre-check).
+- **Known implementer lookups:** the exact device-api RLS test suite file + its enrol/list helpers; the dashboard client test file; the `devices.*` i18n keys + locale files; the `devices_layout_profile_fk` constraint name (migration 0095) for the `BINDING_FK_FIELD` map.
 - **B3.1's honest value:** authored profiles to reassign TO only exist once B3.2 ships; B3.1 delivers the route, the current-profile visibility, and the clear-to-default control now, and de-risks B3.2.

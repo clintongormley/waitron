@@ -1002,8 +1002,9 @@ describe("Device API over real Postgres", () => {
 
     it("assign-profile is tenant-isolated: a manager of A cannot reassign B's device → 404, B untouched", async () => {
       // The WRITE is RLS-scoped: tenant A's UPDATE never sees tenant B's device row → 0 rows → 404. The
-      // target is `null` so the (tenant-A-scoped) pre-check passes and it is the write isolation this
-      // exercises. B's device keeps its own profile — A's attempt changes nothing.
+      // target is `null` (a clear) so no profile FK is involved — this isolates the DEVICE-write RLS,
+      // distinct from the profile-binding FK the cross-tenant-PROFILE test above exercises. B's device
+      // keeps its own profile — A's attempt changes nothing.
       const venueA = await setupVenue();
       const venueB = await setupVenue();
       const appA = mountApp(venueA.cfg);
