@@ -7,6 +7,7 @@ export {
   enabledModules,
   isEnabled,
   parseModuleConfig,
+  parseModuleOverrides,
   serializeModuleConfig,
 } from "./config.js";
 export type { Reconciliation } from "./reconcile.js";

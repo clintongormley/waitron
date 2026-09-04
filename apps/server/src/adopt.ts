@@ -1,7 +1,7 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import { adoptVenue } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
-import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
+import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -140,16 +140,15 @@ export async function adoptFromPrimary(
     boxCaPem: bundle.boxCaPem,
     originNodeId: designated.nodeId,
   });
-  // SP-1d: bootstrap the mirror's own modules.json from the primary's set (carried on the bundle).
-  // Re-validate against THIS node's ALL_MODULES — fail-closed: an unknown/malformed override throws
-  // (module.config_*) and refuses adopt before persistTrading, rather than writing an unparseable
-  // file. In the monorepo build both nodes share ALL_MODULES so this cannot fire; it is the defense
-  // the bundle being external input demands (CLAUDE.md §3, validate rather than trust). Written
-  // unconditionally (even {}), so the mirror's set is explicitly the primary's and re-adopt is
-  // idempotent.
-  await deps.persistModuleConfig(
-    parseModuleConfig({ modules: bundle.moduleOverrides }, ALL_MODULES),
-  );
+  // SP-1d: bootstrap the mirror's own modules.json from the primary's set (carried on the bundle as a
+  // bare override map, not a file envelope — so validate it with `parseModuleOverrides`, no fabricated
+  // `{ modules: … }` wrapper). Re-validate against THIS node's ALL_MODULES — fail-closed: an
+  // unknown/malformed override throws (module.config_*) and refuses adopt before persistTrading, rather
+  // than writing an unparseable file. In the monorepo build both nodes share ALL_MODULES so this cannot
+  // fire; it is the defense the bundle being external input demands (CLAUDE.md §3, validate rather than
+  // trust). Written unconditionally (even {}), so the mirror's set is explicitly the primary's and
+  // re-adopt is idempotent.
+  await deps.persistModuleConfig(parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES));
   await deps.persistTrading({
     tenantId: designated.tenantId,
     locationId: designated.locationId,
