@@ -933,6 +933,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // Let the peer-authenticated sync source through the fence: a fenced node serves its own-origin
         // drain source (R2), and the carrier's cursor report (POST /sync-api/cursor) is how the disposal
         // guard learns its progress. A mirror mounts no /sync-api, so this is a no-op there.
+        // WARNING: the exemption is by the `/sync-api/` PREFIX, so any future mutating route added under
+        // it would inherit this fence bypass automatically. Keep `/sync-api/` writes limited to
+        // operational sync state (today only POST /sync-api/cursor, which writes `sync_cursor` — no
+        // tenant_id, no RLS); a tenant/fiscal-touching route must NEVER live under this prefix.
         (c) => c.req.path.startsWith("/sync-api/"),
       ),
     );
@@ -1274,6 +1278,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // The authoritative replication SOURCE — only the SINGLETON primary serves it (a mirror is a
     // subscriber that pulls + applies and never sources, C2a design §8; a sell-only local secondary must
     // not duplicate the primary's source either). So `mountSyncApi` gates on `isSingletonPrimary`. The
+    // one exception is a FENCED node (membership rejoin R2): the `else if (fenced)` branch below serves a
+    // narrow OWN-ORIGIN-ONLY drain source (`ownOriginOnly` forces originId=self, no worker mounted), which
+    // is NOT a duplicate of this authoritative/all-origin source and re-enables no singleton duty —
+    // `isSingletonPrimary` stays false. The
     // pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
     // pulls through the tunnel HTTP client, a secondary pulls too), so it stays outside this gate.
     if (isSingletonPrimary) {
