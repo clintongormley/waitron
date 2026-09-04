@@ -708,6 +708,20 @@
       "when": 1788561233632,
       "tag": "0100_mirror_config_origin_node",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1788541779951,
+      "tag": "0101_lyrical_gressill",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1788541838761,
+      "tag": "0102_talented_nighthawk",
+      "breakpoints": true
     }
   ]
 }
