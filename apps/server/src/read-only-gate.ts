@@ -13,15 +13,15 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * refuses a CLIENT'S write verb, not the server's own bookkeeping (`mirror-session.ts:49` spells this out).
  *
  * The operational agent/device groups are no longer mounted under `mode='mirror'`: boot.ts wraps both
- * `mountDeviceApi`/`mountPrintApi` in its `if (!isMirror && !fenced)` mount guard (boot.ts). That closes the
- * one actual
+ * `mountDeviceApi`/`mountPrintApi` in its `if (!fencedOrMirror)` mount guard (boot.ts, where
+ * `fencedOrMirror = isMirror || fenced`). That closes the one actual
  * write-behind-a-GET on this surface — `GET /print-api/agent/jobs`, whose `claimPrintJobs` runs a locking
  * `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE` (packages/printing/src/runtime.ts:145-179) that the verb
  * gate cannot catch. (The device group's own writes are all non-safe verbs the gate already refuses; it is
  * dropped from a mirror as part of the same operational surface, not because it hid a write behind a GET.)
  * So on a mirror that print write-GET is UNREACHABLE (404 — no route), not merely inert because its backing
  * tables (`print_*`) are unprovisioned. A FENCED node (membership rejoin R1) is `mode='primary'`, so this
- * verb gate alone would let that write-GET through; the `!fenced` half of the same mount guard un-mounts the
+ * verb gate alone would let that write-GET through; the `fenced` case of that same mount guard un-mounts the
  * operational device/print groups on a fenced node too, so the write-behind-a-GET stays closed (404) for a
  * fenced node exactly as it is for a mirror. This gate is unchanged; only the surface behind it shrank. A future
  * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
