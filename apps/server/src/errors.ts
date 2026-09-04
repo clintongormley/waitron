@@ -1349,6 +1349,51 @@ declare module "@waitron/shared" {
      */
     "promotion.membership_superseded": { heldTerm: number; mintedTerm: number };
     /**
+     * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
+     * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
+     * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
+     * good; a serving node is still trading and is not retirable (design fact (ii)'s "N/A (serving)"
+     * distinction). Refused BEFORE any write. `node.*`, not `server.*`: it is a fact about this node's
+     * role/state in the topology, the same rule `node.read_only` gives — never about the process. No
+     * params: the refusal names no row, so a log line leaks nothing (the `sync.*`/`tunnel.*`
+     * no-leak discipline `node.read_only` follows). Never renamed once shipped.
+     */
+    "node.retire_not_fenced": Record<string, never>;
+    /**
+     * `retireSelf` found the node fenced (`sell-only`) but its held document names no serving-primary
+     * CARRIER — so there is no survivor to carry its replication tail forward and no way to confirm
+     * its drain. Refused FAIL-SAFE (design fact (ii)'s "fenced, undrainable (no carrier)", DISTINCT
+     * from `node.retire_not_fenced`): signalled to this action by an `undefined` drain-progress reader,
+     * which the caller passes exactly when the held chart has no carrier to point the disposal read at.
+     * `node.*`, not `server.*`: it is a fact about this node's state in the topology (`node.read_only`'s
+     * rule). No params — the refusal names no row (the `node.read_only` no-leak discipline). Never
+     * renamed once shipped.
+     */
+    "node.retire_no_carrier": Record<string, never>;
+    /**
+     * `retireSelf` found the node fenced with a carrier, but the disposal guard reports its own-origin
+     * `sync_log` tail has NOT fully drained onto that carrier. Refused until the drain completes — a
+     * node must not leave the chart while rows it originated are still un-shipped, or they would be
+     * lost with it. The gate is the disposal guard's `drained` BOOLEAN alone, NEVER a comparison of
+     * `carrierAppliedSeq >= ownTailSeq`: those two legitimately differ while `drained` is `true`
+     * (`ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the cross-lane MIN — see
+     * `readDrainProgress` in @waitron/sync). `node.*`, not `server.*`: a fact about this node's state
+     * in the topology (`node.read_only`'s rule). No params — the refusal names no row (`node.read_only`'s
+     * no-leak discipline). Never renamed once shipped.
+     */
+    "node.retire_not_drained": Record<string, never>;
+    /**
+     * `retireSelf` minted a `sell-only → evicted` document at term N+1 over the held term N, but a
+     * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the term-guarded
+     * persist (`persistNodeMembershipIfNewer`) ran. The guard refused it — writing would regress the
+     * org chart — so the eviction was NOT applied and the held (newer) chart stands. Idempotent re-run
+     * recovers: it re-reads the now-newer held term and, if that document already evicts this node, is
+     * a no-op. Mirrors `promotion.membership_superseded`'s shape and reasoning. `heldTerm`/`mintedTerm`
+     * are org-chart generation counters, not secrets. `node.*` names the domain concept — a fact about
+     * this node's state in the topology; never renamed once shipped.
+     */
+    "node.retire_superseded": { heldTerm: number; mintedTerm: number };
+    /**
      * A mirror could not be assembled because the PRIMARY it was pointed at has no stamped environment
      * (sync cloud-mirror C2b — the read-only mirror pulls + applies a primary's rows, the topology
      * `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
