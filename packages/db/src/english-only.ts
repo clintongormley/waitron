@@ -25,6 +25,7 @@ export const GENERIC_PACKAGES = [
   "purchasing",
   "printing",
   "diagnostics",
+  "sync-enrolment",
 ] as const;
 
 /** Spanish by design: `verifactu`/`fiscal-verifactu` mirror AEAT's spec, XML and conformance
