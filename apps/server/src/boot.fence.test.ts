@@ -472,10 +472,10 @@ describe("boot fence drain (real Postgres): a fenced node serves its own-origin 
       );
       expect(logGet.status).toBe(200);
 
-      // 5. POST /sync-api/cursor with the carrier's Bearer → 200, NOT the gate's 403: the read-only-gate
-      //    /sync-api/ exemption (Task 4) lets the carrier report how far it has drained through the
-      //    fence. The report records sync_cursor(subscriber=CARRIER, origin=self, ordered) = ownSeq — the
-      //    carrier has fully drained this node's tail.
+      // 5. POST /sync-api/cursor with the carrier's Bearer → 200, NOT the gate's 403: the read-only-gate's
+      //    single-route `POST /sync-api/cursor` exemption lets the carrier report how far it has drained
+      //    through the fence. The report records sync_cursor(subscriber=CARRIER, origin=self, ordered) =
+      //    ownSeq — the carrier has fully drained this node's tail.
       const cursor = await fetch(`${base}/sync-api/cursor`, {
         method: "POST",
         headers: { ...carrierAuth, "content-type": "application/json" },

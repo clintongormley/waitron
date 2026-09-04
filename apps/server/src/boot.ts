@@ -1300,7 +1300,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fenced node can never relay another origin or act as a general source — the narrow reversal of
       // "a sell-only secondary must not source" above. It stays fully fenced otherwise: isSingletonPrimary
       // is false (submitter/reconciler/config-writer + retention stay off), and the read-only gate still
-      // blocks tenant/fiscal writes (its /sync-api/ exemption lets only the peer cursor report through).
+      // blocks tenant/fiscal writes (its single `POST /sync-api/cursor` exemption lets only the peer
+      // cursor report through).
       mountSyncApi(
         app,
         {
