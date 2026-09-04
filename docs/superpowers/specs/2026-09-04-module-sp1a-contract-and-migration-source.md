@@ -38,8 +38,11 @@ composition scaffolding the later slices extend.
   fiscal, payments, scheduler, credentials, sync), each carrying its migration info + `tier` + `version`.
   Each descriptor is **owned by its package** (exported from it) where the package exists; the composition
   root assembles them into `ALL_MODULES`.
-- Converting the migration seam: `boot.ts:505` derives its set list from `ALL_MODULES`, replacing the
-  hand-kept `migrations.manifest.json` as the runtime source (§4).
+- Converting the migration seam: `boot.ts:505` derives its set list from `ALL_MODULES` (§4). This is
+  **boot-only** — `migrations.manifest.json` stays a live runtime source for its other consumers
+  (provisioning's `instance-apply`/`instance-state`/`status-command`, the dev scripts, the test harnesses,
+  and the bundle-layout scripts), so this slice adds a second encoding, not a replacement; the §4 pin
+  guards the two against drift.
 - Deriving a **per-module schema version** from the drizzle journal (§5).
 
 **Out of scope (later slices, named):**
@@ -110,8 +113,16 @@ descriptors.
    the provisioning wizard, `boot.ts:531` — unchanged here; enablement gating that would narrow it is
    SP-1b, and must preserve setup-migrates-all).
 
-Once `ALL_MODULES` is the source, `migrations.manifest.json` is either removed or kept only as the test
-oracle for pin (1); the plan picks one and the pin makes the choice safe.
+`migrations.manifest.json` is **kept** — a tree grep (done at build) found many non-test consumers of
+`manifestSets()` that this slice does not touch (provisioning's `instance-apply.ts:185` migrate path,
+`instance-state.ts`, `status-command.ts`; the `dev-setup`/`dev-onboard` scripts; the server and sync test
+`global-setup`s; and the `copy-migrations.mjs` bundle-layout scripts + the `package.json` exports map). So
+after this slice `boot` reads `ALL_MODULES` while everything else still reads `manifestSets()` — two
+encodings of the same nine sets, held equal by pin (1). **Forward-warning for SP-1b:** the pin compares the
+*full* `ALL_MODULES` to the *full* manifest, so it holds now; but once SP-1b filters `ALL_MODULES` by
+enablement, `boot` (filtered) and provisioning (unfiltered `manifestSets()`) diverge — so SP-1b must gate
+provisioning's migrate/seed path by the same enablement, in lockstep, per the architecture's provisioning
+gate. Recorded here by the SP-1a whole-branch review.
 
 ## 5. Per-module schema version
 
@@ -159,7 +170,9 @@ tested primitive rather than inventing it.
 
 ## 8. Interactions
 
-- **SP-1b** consumes `ALL_MODULES` + `tier` to filter by the reconciled enabled set.
+- **SP-1b** consumes `ALL_MODULES` + `tier` to filter by the reconciled enabled set — and **must gate
+  provisioning's migrate/seed path (still on unfiltered `manifestSets()`) by the same enablement**, or
+  filtered-boot and unfiltered-provisioning diverge (§4 forward-warning).
 - **SP-1c** replaces the explicit `ALL_MODULES` order with the derived dependency graph + version gates
   (`requires`).
 - **SP-2** consumes `expectedSchemaVersion`/`appliedSchemaVersion` for the skew gate, and adds the typed
