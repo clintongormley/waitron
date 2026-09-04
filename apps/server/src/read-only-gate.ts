@@ -25,8 +25,9 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * operational device/print groups on a fenced node too, so the write-behind-a-GET stays closed (404) for a
  * fenced node exactly as it is for a mirror. This gate is unchanged; only the surface behind it shrank. A future
  * slice that RE-MOUNTS those groups on a mirror (kitchen-sync, promotion) revives the write-behind-a-GET
- * concern — keep them gated by `if (!isMirror)`, or allow-list the write-GETs here. The dashboard read
- * surface this mirror serves stays fully covered.
+ * concern — keep them gated by `if (!fencedOrMirror)` (NOT the narrower `!isMirror`, which would re-expose
+ * the write-GET on a fenced node), or allow-list the write-GETs here. The dashboard read surface a mirror
+ * or fenced node serves stays fully covered.
  *
  * ALTITUDE (deliberate, deferred to promotion Slice 3): the landed promotion design
  * (docs/superpowers/specs/2026-08-29-promotion-runbook-design.md §3a "Mount-and-gate everything") sets the
