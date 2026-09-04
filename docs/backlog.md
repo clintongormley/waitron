@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 LANDED #204; B2 LANDED (B2.1 #206 + B2.2 #207, 2026-09-04); B3 next.**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (the editor UI, next); B4 after.**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -187,6 +187,25 @@ editor + rendering) is the sole remaining sub-project of this track.**
     the floor via `#onShowFloor` first (setting the flag), and no non-handheld floor-first profile
     exists yet; add a deletion-proof when the B3 editor lets the owner author one. The redundant "STILL
     hides" held-orders test in `card-grid.test.ts` (harmless) remains.
+  - **B3 owner-split into B3.1 (plumbing) + B3.2 (editor), 2026-09-04.** The mechanical plumbing (route +
+    client + reassign control) front-loads value and de-risks the hard editor UI, mirroring the B2 split.
+    B3.1 plan: [sp-b3-1-reassign-plumbing](superpowers/plans/2026-09-04-sp-b3-1-reassign-plumbing.md).
+  - **B3.1 LANDED #209 (2026-09-04):** an owner can **reassign** an enrolled device to a different layout
+    profile — or clear it back to the form-factor default — from the dashboard Devices screen, without
+    re-enrolling. `POST /management-api/devices/:id/assign-profile` (gated `device.manage`, in
+    `device-api.ts` beside the sibling device routes — owner call, departing from §8's `PUT`/`till.configure`;
+    same roles). A bad/foreign profile → `device.binding_invalid` via the composite FK
+    `devices_layout_profile_fk` translated by `bindingFkField` (atomic, tenant-isolated — no read-then-write
+    race; Copilot-hardened from an initial `getProfile` pre-check). `GET /management-api/devices` now returns
+    `layoutProfileId`; the dashboard grows `reassignDevice` + a per-active-row profile `<select>`. The five
+    profile-CRUD endpoints (list/get/create/update/delete) already existed server-side (verified) — untouched;
+    the editor that calls them is B3.2. No migration / no new grant / not fiscal. B3.1's fuller value lands
+    with B3.2 (authored profiles to choose from).
+  - **B3.2 (next):** the dashboard **grid editor** — a placeholder-tile canvas (drag/move/resize) + a card
+    palette from `CARD_CONTRACTS` + a property panel (per card/tab/profile) + client-side `validateProfile`
+    mirror, calling the existing profile-CRUD endpoints. Live card renders are a committed follow-on (v1 =
+    placeholder tiles at the same card-host seam). Gets its own brainstorm/spec-slice + plan. Parent design
+    §8. This is the SP-B **schedule risk** (the product-facing UI).
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
