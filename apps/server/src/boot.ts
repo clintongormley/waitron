@@ -551,14 +551,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the filter above.
   //
   // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
-  // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool: the drizzle
-  // journal tables (`__drizzle_migrations_*`) are owned by the migrator role, which therefore has
-  // SELECT on them; the least-privileged deployment role the pool authenticates as is granted no such
-  // SELECT, so the pool is the wrong connection for this read — the same reason the stamp probe above
-  // runs on the migrator connection rather than the pool. (The committed drift test uses the
-  // migrator/superuser URL throughout, so it does not itself exercise the least-privileged-pool
-  // role — the grant asymmetry is the design rationale, not an in-tree receipt.) They also run
-  // auto-commit — a plain per-statement
+  // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool. The migrator
+  // created and owns the drizzle journal tables (`__drizzle_migrations_*`), so it is the connection
+  // that reliably reads them; keep this probe on it rather than coupling the read to the app pool's
+  // role — the same reason the stamp probe above runs on the migrator connection, not the pool. They
+  // also run auto-commit — a plain per-statement
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.

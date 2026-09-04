@@ -657,6 +657,19 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect((await res.json()).error.code).toBe("setup.already_provisioned");
   });
 
+  it("maps a thrown module.provision_only_disabled to 409 (SP-1b fiscal gate)", async () => {
+    const app = new Hono();
+    const provision = vi.fn(async () => {
+      throw new AppError("module.provision_only_disabled", { module: "fiscal" });
+    });
+    const { deps } = makeDeps({ provision });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("module.provision_only_disabled");
+  });
+
   it("answers 503 setup.not_ready when NONE of the provision deps are wired", async () => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction" }, noopLog);
