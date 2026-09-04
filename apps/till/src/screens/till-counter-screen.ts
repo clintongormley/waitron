@@ -193,11 +193,12 @@ export class TillCounterScreen extends LitElement {
    * the retry / switch-tender / wait screen. */
   @property() cardOutcome?: CardOutcome;
   /**
-   * Whether this screen is rendered INSIDE the profile tab shell (SP-B2.1). When set, the screen
+   * Whether this screen is rendered INSIDE the canvas tab shell (SP-B2.1). When set, the screen
    * suppresses its own `.header` — the brand/operator/log-out/affordance chrome lives in the shell
    * (`till-tab-shell`), so a duplicate header would double it. The sale body (menu controls + the
-   * grid/region + the local allergen overlay) is unchanged; only the header relocates. Defaults false,
-   * so the legacy standalone counter screen (unprofiled boot) renders its own header exactly as before.
+   * card grid) is unchanged; only the header relocates. Defaults false, but since SP-B4 the app always
+   * mounts the counter screen embedded inside the shell (a canvas is always present — `till-app.ts`
+   * `#tabBody`), so the non-embedded own-header branch is now exercised only by this screen's own tests.
    */
   @property({ type: Boolean }) embedded = false;
 
