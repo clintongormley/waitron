@@ -120,6 +120,11 @@ export class TillTabShell extends LitElement {
   /** Fetch the offered languages for the header's language chooser — threaded straight through to
    * `till-language-chooser`'s own `loadLocales` (the app adapts `TillApi.getLocales`). */
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
+  /** SP-B2.2: when `true`, suppresses the ENTIRE operator `<header>` — tab bar and session chrome
+   * both — leaving only the body slot (and the drill-slot machinery). The kds kitchen-display shape
+   * (owner decision 2026-09-04): a board shows just its cards, no operator chrome. Default `false`
+   * keeps the B2.1 shell byte-identical. */
+  @property({ type: Boolean }) kiosk = false;
 
   /** The nodes slotted into `drill` — when non-empty the body is inert and the overlay shows. */
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
@@ -139,77 +144,86 @@ export class TillTabShell extends LitElement {
       : this.tabs[0]?.key;
     return html`
       <div class="shell">
-        <header class="head">
-          <span class="brand">${BRAND}</span>
-          <nav class="tabs" role="tablist">
-            ${this.tabs.map(
-              (tab) => html`
-                <button
-                  type="button"
-                  class="tab"
-                  role="tab"
-                  aria-selected=${tab.key === activeKey ? "true" : "false"}
-                  @click=${() => this.#emit("tab-select", { key: tab.key })}
-                >
-                  ${tab.title}
-                </button>
-              `,
-            )}
-          </nav>
-          <div class="session">
-            ${
-              this.affordances.includes("station")
-                ? html`<wt-button
-                    class="station"
-                    variant="secondary"
-                    @click=${() => this.#emit("show-station")}
-                    >${t("station.open")}</wt-button
-                  >`
-                : nothing
-            }
-            ${
-              this.affordances.includes("expo")
-                ? html`<wt-button
-                    class="expo"
-                    variant="secondary"
-                    @click=${() => this.#emit("show-expo")}
-                    >${t("expo.open")}</wt-button
-                  >`
-                : nothing
-            }
-            ${
-              this.affordances.includes("schedule")
-                ? html`<wt-button
-                    class="schedule"
-                    variant="secondary"
-                    @click=${() => this.#emit("show-schedule")}
-                    >${t("schedule.open")}</wt-button
-                  >`
-                : nothing
-            }
-            <wt-button
-              class="allergens"
-              variant="secondary"
-              @click=${() => this.#emit("open-allergens")}
-              >${t("allergens.open")}</wt-button
-            >
-            <span class="operator">${this.operatorName}</span>
-            ${
-              this.loadLocales !== undefined
-                ? html`<till-language-chooser
-                    .loadLocales=${this.loadLocales}
-                    @locale-selected=${(e: Event) => {
-                      e.stopPropagation();
-                      this.#emit("locale-selected", (e as CustomEvent).detail);
-                    }}
-                  ></till-language-chooser>`
-                : nothing
-            }
-            <wt-button class="logout" variant="secondary" @click=${() => this.#emit("logout")}
-              >${t("action.logout")}</wt-button
-            >
-          </div>
-        </header>
+        ${
+          this.kiosk
+            ? nothing
+            : html`
+                <header class="head">
+                  <span class="brand">${BRAND}</span>
+                  <nav class="tabs" role="tablist">
+                    ${this.tabs.map(
+                      (tab) => html`
+                        <button
+                          type="button"
+                          class="tab"
+                          role="tab"
+                          aria-selected=${tab.key === activeKey ? "true" : "false"}
+                          @click=${() => this.#emit("tab-select", { key: tab.key })}
+                        >
+                          ${tab.title}
+                        </button>
+                      `,
+                    )}
+                  </nav>
+                  <div class="session">
+                    ${
+                      this.affordances.includes("station")
+                        ? html`<wt-button
+                            class="station"
+                            variant="secondary"
+                            @click=${() => this.#emit("show-station")}
+                            >${t("station.open")}</wt-button
+                          >`
+                        : nothing
+                    }
+                    ${
+                      this.affordances.includes("expo")
+                        ? html`<wt-button
+                            class="expo"
+                            variant="secondary"
+                            @click=${() => this.#emit("show-expo")}
+                            >${t("expo.open")}</wt-button
+                          >`
+                        : nothing
+                    }
+                    ${
+                      this.affordances.includes("schedule")
+                        ? html`<wt-button
+                            class="schedule"
+                            variant="secondary"
+                            @click=${() => this.#emit("show-schedule")}
+                            >${t("schedule.open")}</wt-button
+                          >`
+                        : nothing
+                    }
+                    <wt-button
+                      class="allergens"
+                      variant="secondary"
+                      @click=${() => this.#emit("open-allergens")}
+                      >${t("allergens.open")}</wt-button
+                    >
+                    <span class="operator">${this.operatorName}</span>
+                    ${
+                      this.loadLocales !== undefined
+                        ? html`<till-language-chooser
+                            .loadLocales=${this.loadLocales}
+                            @locale-selected=${(e: Event) => {
+                              e.stopPropagation();
+                              this.#emit("locale-selected", (e as CustomEvent).detail);
+                            }}
+                          ></till-language-chooser>`
+                        : nothing
+                    }
+                    <wt-button
+                      class="logout"
+                      variant="secondary"
+                      @click=${() => this.#emit("logout")}
+                      >${t("action.logout")}</wt-button
+                    >
+                  </div>
+                </header>
+              `
+        }
         <div class="region">
           <main class="body" ?inert=${hasDrill}>
             <slot @slotchange=${() => this.requestUpdate()}></slot>

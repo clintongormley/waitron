@@ -305,6 +305,22 @@ describe("till-table-order-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  // --- Embedded chrome seam (SP-B2.2): a card host supplies the title + Back; the pending-round
+  // drawer handle is body FUNCTION and survives in the always-present actions bar (spec §7). ---
+
+  it("suppresses its own header + Back when embedded, keeping the drawer handle", async () => {
+    const { el } = await mount({ embedded: true });
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-open-drawer]")).not.toBeNull(); // body function stays
+  });
+
+  it("renders its header + Back when standalone (default)", async () => {
+    const { el } = await mount({});
+    expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
+  });
+
   it("handles an empty tab: no badge, empty-state copy, zero total", async () => {
     const { el } = await mount({ lines: [] });
     await openDrawer(el);

@@ -410,6 +410,43 @@ describe("till-station-screen", () => {
     await flush(el);
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
   });
+
+  // --- Embedded chrome seam (SP-B2.2): a card host supplies the title + Back; the view toggle is
+  // board FUNCTION and survives in the always-present .actions bar (mirrors the floor screen). ---
+
+  it("suppresses its own header + Back when embedded, keeping the view toggle", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      embedded: true,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull(); // body function stays
+  });
+
+  it("renders its header when standalone (default)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
+  });
+
+  it("suppresses the enrol header when embedded (device 401 → enrol view)", async () => {
+    // deviceMode + a rejecting getDeviceStation drives #loadDevice to the enrol view.
+    const api = stubApi({
+      getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      embedded: true,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-enrol-submit]")).not.toBeNull(); // enrol view shown
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull(); // its header suppressed
+  });
 });
 
 describe("till-station-screen device mode (device-identity-1 §5a)", () => {

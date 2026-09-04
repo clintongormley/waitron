@@ -150,4 +150,26 @@ describe("till-tab-shell", () => {
     );
     expect(el.shadowRoot!.querySelector<HTMLElement>(".drill")!.hasAttribute("hidden")).toBe(false);
   });
+
+  it("suppresses the whole operator header in kiosk mode, rendering only the body", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs: [{ key: "kitchen", title: "Kitchen", columns: 24, cards: [] }],
+      activeTabKey: "kitchen",
+      operatorName: "Ana",
+      affordances: [],
+      kiosk: true,
+    });
+    expect(el.shadowRoot!.querySelector(".tab")).toBeNull(); // no tab bar
+    expect(el.shadowRoot!.querySelector(".logout")).toBeNull(); // no session chrome
+    expect(el.shadowRoot!.querySelector("header")).toBeNull(); // header gone entirely
+    expect(el.shadowRoot!.querySelector("slot:not([name])")).not.toBeNull(); // body slot stays
+  });
+
+  it("renders the full header when not in kiosk mode (default)", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
+      activeTabKey: "counter",
+    });
+    expect(el.shadowRoot!.querySelector("header")).not.toBeNull();
+  });
 });

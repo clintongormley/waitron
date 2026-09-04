@@ -22,4 +22,13 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
     );
     await expectNoA11yViolations(host);
   });
+
+  it("kiosk mode (header-less body) has no violations", async () => {
+    const { host } = await mountWidget<TillTabShell>(
+      "till-tab-shell",
+      { tabs, activeTabKey: "counter", operatorName: "Ana", affordances, kiosk: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

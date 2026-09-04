@@ -79,6 +79,10 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* The board/rail view-toggle cluster: a SIBLING of the header (never inside it), so it survives
+         when the standalone header is dropped in an embedded card host (SP-B2.2) — the toggle is station
+         BODY function, not shell chrome. Back lives in the header instead. Mirrors the floor screen's
+         .actions extraction. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -153,6 +157,19 @@ export class TillStationScreen extends LitElement {
    * bound station (see {@link #loadDevice}).
    */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
+  /**
+   * Whether this screen is mounted INSIDE a card host (SP-B2.2) rather than as a standalone screen.
+   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the
+   * `showBack`-gated Back button) on BOTH the queue surface and the enrol view — the card host supplies
+   * that chrome — but KEEPS the board/rail `view-toggle`, which is station BODY function (the kitchen
+   * still flips lens from inside a card), rendered in the always-present `.actions` bar. Mirrors the
+   * floor screen's `embedded` seam (`till-floor-screen.ts`). Default `false` keeps the standalone screen
+   * fully functional — its own header + Back, and the same `view-toggle`. NOTE the standalone DOM is NOT
+   * byte-identical to before this seam: the `view-toggle` moved OUT of the header into that sibling
+   * `.actions` bar (so it can survive embedding), the same restructure the floor screen carries — every
+   * existing station test still passes because none asserted the toggle's container.
+   */
+  @property({ type: Boolean }) embedded = false;
 
   /** The venue's active stations (fetched once on connect). Operator path only. */
   @state() private stations: Station[] = [];
@@ -490,31 +507,35 @@ export class TillStationScreen extends LitElement {
         @fire-course=${(event: Event) => void this.#onFireCourse(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
       >
-        <header class="head">
-          <h1 class="title">${t("station.title")}</h1>
-          <div class="actions">
-            <wt-button
-              class="view-toggle"
-              data-view-toggle
-              variant="secondary"
-              @click=${() => this.#toggleView()}
-            >
-              ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
-            </wt-button>
-            ${
-              opts.showBack
-                ? html`<wt-button
-                    class="back"
-                    data-back
-                    variant="secondary"
-                    @click=${() => this.#back()}
-                  >
-                    ${t("station.back")}
-                  </wt-button>`
-                : nothing
-            }
-          </div>
-        </header>
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("station.title")}</h1>
+                ${
+                  opts.showBack
+                    ? html`<wt-button
+                        class="back"
+                        data-back
+                        variant="secondary"
+                        @click=${() => this.#back()}
+                      >
+                        ${t("station.back")}
+                      </wt-button>`
+                    : nothing
+                }
+              </header>`
+        }
+        <div class="actions">
+          <wt-button
+            class="view-toggle"
+            data-view-toggle
+            variant="secondary"
+            @click=${() => this.#toggleView()}
+          >
+            ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
+          </wt-button>
+        </div>
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
@@ -530,9 +551,13 @@ export class TillStationScreen extends LitElement {
   #renderEnrol(): TemplateResult {
     return html`
       <section class="screen enrol" aria-label=${t("device.enrol_title")}>
-        <header class="head">
-          <h1 class="title">${t("device.enrol_title")}</h1>
-        </header>
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("device.enrol_title")}</h1>
+              </header>`
+        }
         <p class="enrol-hint">${t("device.enrol_hint")}</p>
         ${
           this.enrolErrorCode
