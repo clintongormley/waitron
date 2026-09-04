@@ -45,6 +45,9 @@ import { mountSyncApi } from "./sync-api.js";
 import { mountSetup } from "./setup-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { writeModuleConfig, readModuleConfig } from "./module-config.js";
+import { parseModuleConfig, isEnabled } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
 import {
   adoptFromPrimary,
   type AdoptCredential,
@@ -86,6 +89,11 @@ const noopLog: Logger = () => {};
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 
+// A `toggleable`-tier module (default-on, disableable) — the one this suite disables on the primary to
+// prove its enabled set rides the bundle into the mirror's own modules.json (SP-1d). Tier-driven, so no
+// module name is hardcoded here (the same module-name-free approach the parser uses).
+const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
+
 // The two catalogues seeded on the primary and expected to arrive on the mirror. Catalogues ride the
 // ORDERED lane, FK only tenants, and are one of the 17 synced tables — the simplest applied row a
 // dashboard GET returns end-to-end (mirror-e2e.rls.test.ts's choice, reused).
@@ -123,6 +131,11 @@ const RING = loadKeyRing(KEY_ENV);
 
 let migrationsRoot: string;
 let primaryStateDir: string; // holds tls/ca.crt — the box CA the bundle carries as `boxCaPem`
+// The mirror's OWN on-box state dir for the adopted module set: `adoptDeps.persistModuleConfig` writes
+// `<dir>/modules.json` here from the bundle's `moduleOverrides`, and the assertion reads it straight back
+// with `readModuleConfig`. Kept SEPARATE from the reboot's per-test `mirrorStateDir` (below) so disabling
+// a module on the primary changes only what this file records, never the reboot's boot behaviour.
+let mirrorModuleStateDir: string;
 let designated: AdoptResult; // the five ids the primary was provisioned with; the mirror adopts them
 let adminPersonId: string; // the primary admin the operator authenticates for the bundle
 
@@ -241,11 +254,13 @@ function adoptDeps(overrides: Partial<AdoptDeps> = {}): AdoptDeps {
     persistTrading: async (args) => {
       persistedTrading.push(args);
     },
-    // No-op capture (this e2e does not exercise the module set): the reboot reads modules.json via
-    // `readModuleConfig`, which returns the all-enabled default when the file is absent — the same set
-    // the primary's empty `moduleOverrides` yields — so writing nothing here preserves this suite's
-    // behaviour.
-    persistModuleConfig: async () => {},
+    // The REAL production writer (boot.ts binds this to `writeModuleConfig(config.stateDir, …)`): adopt
+    // hands it the primary's enabled set (parsed from the bundle's `moduleOverrides`) and it lands in the
+    // mirror's OWN `<mirrorModuleStateDir>/modules.json`, which the assertion reads back to prove the set
+    // crossed intact.
+    persistModuleConfig: async (c) => {
+      await writeModuleConfig(mirrorModuleStateDir, c);
+    },
     databaseUrl: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
     migrationsDatabaseUrl: mirror.pg.uri,
     // The mirror's OWN sync pool (a `sync_applier` role) — adopt persists it into trading.env as
@@ -457,6 +472,9 @@ beforeAll(async () => {
   await mkdir(join(primaryStateDir, "tls"), { recursive: true });
   await writeFile(join(primaryStateDir, "tls", "ca.crt"), boxCaPem);
 
+  // The mirror's on-box state dir that adopt writes the adopted modules.json into (see its `let`).
+  mirrorModuleStateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-e2e-mirror-modules-"));
+
   const mgmtApp = new Hono();
   mountMirrorBundleApi(
     mgmtApp,
@@ -500,11 +518,21 @@ afterAll(async () => {
   }
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   if (primaryStateDir !== undefined) await rm(primaryStateDir, { recursive: true, force: true });
+  if (mirrorModuleStateDir !== undefined)
+    await rm(mirrorModuleStateDir, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
 });
 
 describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull + serve read-only", () => {
   it("a fresh mirror adopts a bundle from a booted primary, then pulls + serves read-only", async () => {
+    // SP-1d MODULE-SET INHERITANCE — the seed. Disable one `toggleable` module in the PRIMARY's on-box
+    // modules.json BEFORE the bundle is minted: `assembleMirrorBundle` reads `primaryStateDir` FRESH per
+    // request (mirror-bundle.ts:190), so this override rides the bundle's `moduleOverrides` into adopt.
+    await writeModuleConfig(
+      primaryStateDir,
+      parseModuleConfig({ modules: { [toggleable]: false } }, ALL_MODULES),
+    );
+
     // 1. DRIVE THE ADOPT: the mirror's setup surface fetches the primary's bundle over real HTTP and runs
     // the production `adoptFromPrimary`. The operator supplies only the primary's URL + an admin login.
     const setupApp = mountMirrorSetup(adoptDeps());
@@ -519,6 +547,17 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
       restarting: true,
     });
     expect(capturedBundle).toBeDefined();
+
+    // SP-1d MODULE-SET INHERITANCE — the outcome. adopt persisted the primary's enabled set into the
+    // mirror's OWN modules.json (via the real `writeModuleConfig` wired into `adoptDeps`). Read it back:
+    // the mirror inherited the primary's set exactly — the one seeded module is disabled, all others on.
+    // Keyed to the seeded `toggleable`, not a constant (the empty-primary control in Step 4 of the brief
+    // flips this to all-enabled), so this proves the primary's set crossed rather than a fixed default.
+    const mirrorConfig = await readModuleConfig(mirrorModuleStateDir);
+    expect(isEnabled(mirrorConfig, toggleable)).toBe(false);
+    for (const m of ALL_MODULES) {
+      if (m.name !== toggleable) expect(isEnabled(mirrorConfig, m.name)).toBe(true);
+    }
 
     // 2. ADOPT OUTCOMES ON THE MIRROR DB. The mode is flipped to 'mirror' (an OWNER write) — the whole
     // point of the deletion control below.
