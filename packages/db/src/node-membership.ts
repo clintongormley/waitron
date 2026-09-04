@@ -95,8 +95,21 @@ export async function persistNodeMembershipIfNewer(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<boolean> {
+  return db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, document));
+}
+
+/** The term-guarded singleton upsert on a caller-provided transaction — the atomic monotonic backstop
+ * (accept iff strictly newer) that a caller can commit in the SAME transaction as a related write
+ * (CLAUDE.md §3). Returns `true` iff a row actually changed; a `false` means a concurrent ≥ term is
+ * already held, and the caller decides whether to abort the transaction. R3b's mirror→primary promote
+ * commits it with the `deployment` flip so the org chart cannot regress under a gossip-adopt race
+ * (spec §8 "R3 sharp edge"); `persistNodeMembershipIfNewer` is this on its own transaction. */
+export async function persistNodeMembershipIfNewerTx(
+  tx: Transaction,
+  document: SignedMembershipDocument,
+): Promise<boolean> {
   const term = document.body.term;
-  const rows = await db
+  const rows = await tx
     .insert(nodeMembership)
     .values({ id: 1, term, document })
     .onConflictDoUpdate({

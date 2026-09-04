@@ -4,6 +4,7 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 import { createPgliteDb } from "./client.js";
 import {
   persistNodeMembershipIfNewer,
+  persistNodeMembershipIfNewerTx,
   readNodeMembership,
   writeNodeMembership,
   writeNodeMembershipTx,
@@ -120,5 +121,30 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
     expect((await readNodeMembership(pg.db))?.body.term).toBe(5);
     expect(await persistNodeMembershipIfNewer(pg.db, doc(7))).toBe(true);
     expect((await readNodeMembership(pg.db))?.body.term).toBe(7);
+  });
+
+  it("persistNodeMembershipIfNewerTx accepts a strictly-newer doc on a caller tx", async () => {
+    await writeNodeMembership(pg.db, doc(3));
+    const accepted = await pg.db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, doc(4)));
+    expect(accepted).toBe(true);
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(4);
+  });
+
+  it("persistNodeMembershipIfNewerTx rejects a non-newer doc (returns false, no write)", async () => {
+    await writeNodeMembership(pg.db, doc(5));
+    const accepted = await pg.db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, doc(5)));
+    expect(accepted).toBe(false);
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(5);
+  });
+
+  it("a false return lets the caller roll back the whole transaction", async () => {
+    await writeNodeMembership(pg.db, doc(7));
+    await expect(
+      pg.db.transaction(async (tx) => {
+        const accepted = await persistNodeMembershipIfNewerTx(tx, doc(6));
+        if (!accepted) throw new Error("superseded"); // caller's abort
+      }),
+    ).rejects.toThrow("superseded");
+    expect((await readNodeMembership(pg.db))?.body.term).toBe(7); // untouched
   });
 });
