@@ -455,5 +455,12 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       ),
     ).rejects.toMatchObject({ code: "module.config_unknown" });
     expect(tradingPersisted).toBe(false);
+    // The up-front validation ran BEFORE any DB side effect, so `adoptVenue` never inserted this
+    // bundle's (fresh) tenant — no half-adopted mirror for a set we reject (Copilot/review fail-fast
+    // fix). Move the `parseModuleOverrides` call back to its old late position and this row appears.
+    const orphanTenant = await mirror.admin.execute(
+      sql`select id from tenants where id = ${designated.tenantId}`,
+    );
+    expect(orphanTenant.rows).toHaveLength(0);
   });
 });
