@@ -538,7 +538,19 @@ vs gated on an unbuilt foundation or an external dependency:
   [cloud-mirror-hardening](superpowers/plans/2026-08-29-cloud-mirror-hardening-followups.md).
 - **Multi-tenant transport** — a whole-log reader role.
 - **Fiscal-lane / hash-chain sync (H2)** — the `registros`/hash-chain lane, deliberately excluded so
-  far; a separate owner-reviewed slice.
+  far; a separate owner-reviewed slice. Design in flight on `feat/h2-fiscal-record-sync` (enrol the six
+  fiscal tables — `registros_facturacion` insert-only + `registro_sif`/`cadenas`/`envios`/`envio_flujo`/
+  `acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber; transport-agnostic).
+- **Disposal guard: durability ≠ convergence (open, from the H2 design review 2026-09-04).** The failover
+  disposal guard (promotion-failover §5.1) retires a node "once its owned partition has fully replicated to
+  at least one surviving node (peer *or* cloud)." That counts a tail that reached **only the passive cloud
+  sink** as safe to dispose — durable, but **not converged**: the cloud is a sink not a relay, so a
+  surviving/promoted *local* primary never receives it. Candidate tightening: require **the node that
+  carries the partition forward** (current primary for a secondary/mirror; promoted successor for a
+  primary) to have drained the tail, not merely *some* survivor. Facet of the relay-vs-sink (§9 item 3) +
+  convergence-gap (item 4) questions; belongs with the disposal-guard / promote-action tooling. H2
+  unaffected — it only makes the fiscal `sync_log.seq` measurable. Dated note recorded at
+  promotion-failover §5.1.
 - **Kitchen-sync enrolment — LANDED #196.** Enrolled the KDS FK closure onto the ordered lane. The
   closure turned out to be **three** tables, not the two named here: `kitchen_stations`, `kitchen_courses`
   (forced in by the KDS-2 course FKs) and `ticket_items`. Hard gate closed — enrolled

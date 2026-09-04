@@ -213,6 +213,20 @@ converged through a LAN split as long as both reach the internet, which is robus
 partition the redundancy exists for; the cost is the cloud doing more than passively mirror. Left
 **open — §9**.
 
+> **Note (2026-09-04, from the H2 fiscal-sync design review).** The durability bar above — retire once the
+> partition has replicated to "at least one surviving node (peer *or* cloud)" — counts a tail that reached
+> **only the passive cloud sink** as safe to dispose. That is durable (not lost) but **not converged**:
+> because the cloud is a sink not a relay, a surviving or promoted *local* primary never receives that
+> tail, so disposing the box on the strength of a sink-only copy can strand records that are safe yet
+> permanently invisible to the node that keeps serving. The guard as written measures durability; what an
+> operator retiring a box actually wants is that the tail reached **the node that will carry the partition
+> forward** — the current primary for a secondary/mirror disposal, the promoted successor for a primary
+> disposal. Candidate tightening: gate disposal on *that* node's cursor having drained the tail, not merely
+> *some* survivor's. This is the disposal facet of the relay-vs-sink question (§9 item 3) and the
+> convergence gap (§9 item 4), recorded so the disposal-guard implementation does not silently adopt the
+> weaker "any survivor" bar. H2 (fiscal-record sync) is unaffected: it only makes the fiscal
+> `sync_log.seq` measurable by whichever cursor the guard chooses — see its design §7.
+
 **Residual, named honestly.** A node *physically destroyed* while isolated from **all** replication
 targets (peer *and* cloud) loses its tail; no policy on a returning box helps, because there is no
 returning box. Only **synchronous** replication closes it — block each sale until a peer acknowledges
@@ -505,6 +519,9 @@ whose worst case is a detectable double-bill, never a corrupted chain.
    continuation as the default; how a till learns a box is back.
 6. **Disposal-guard UX (§5.1):** the override flow, and when an operator may declare a subscriber dead
    and prune past its cursor (also sync §12 open item 4).
+   > **Added 2026-09-04 (§5.1 note):** and *which survivor counts* — whether the guard should require the
+   > tail to reach the node that carries the partition forward rather than any survivor, so a sink-only
+   > copy does not green-light disposal. Facet of items 3 and 4.
 7. **Residency for an active cloud SIF (§7.3; #33 §13; cloud-storage §8a):** the asesor/legal question
    gating cloud-primary and cloud-standalone topologies.
 
