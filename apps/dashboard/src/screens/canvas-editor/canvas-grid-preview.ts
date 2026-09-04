@@ -240,6 +240,7 @@ export class CanvasGridPreview extends LitElement {
       @pointerdown=${(event: PointerEvent) => this.#onTilePointerDown(event, index)}
       @pointermove=${(event: PointerEvent) => this.#onTilePointerMove(event)}
       @pointerup=${(event: PointerEvent) => this.#onTilePointerUp(event)}
+      @pointercancel=${(event: PointerEvent) => this.#onTilePointerCancel(event)}
       @click=${(event: MouseEvent) => this.#select(event, index)}
     >
       ${body}
@@ -252,6 +253,7 @@ export class CanvasGridPreview extends LitElement {
               @pointerdown=${(event: PointerEvent) => this.#onResizePointerDown(event, index)}
               @pointermove=${(event: PointerEvent) => this.#onResizePointerMove(event)}
               @pointerup=${(event: PointerEvent) => this.#onResizePointerUp(event)}
+              @pointercancel=${(event: PointerEvent) => this.#onResizePointerCancel(event)}
               @click=${(event: MouseEvent) => event.stopPropagation()}
             ></span>`
           : nothing
@@ -300,13 +302,10 @@ export class CanvasGridPreview extends LitElement {
   #onTilePointerUp(event: PointerEvent): void {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
-    releasePointer(event.currentTarget as HTMLElement, event.pointerId);
     const moved = this.draggingIndex !== null;
     const index = drag.index;
     const to = this.dropIndex;
-    this.#drag = null;
-    this.draggingIndex = null;
-    this.dropIndex = null;
+    this.#endTileDrag(event.currentTarget as HTMLElement, event.pointerId);
     if (!moved) return;
     this.#suppressClick = true;
     if (to !== null && to !== index) {
@@ -318,6 +317,24 @@ export class CanvasGridPreview extends LitElement {
         }),
       );
     }
+  }
+
+  /** A cancelled pointer stream (touch-cancel, an OS/browser gesture takeover) fires `pointercancel`
+   * instead of `pointerup`: abandon the drag with no `move-card` — a cancelled gesture is not a
+   * reorder — and no `#suppressClick`, since no synthetic click trails a cancel. */
+  #onTilePointerCancel(event: PointerEvent): void {
+    const drag = this.#drag;
+    if (drag === null || event.pointerId !== drag.pointerId) return;
+    this.#endTileDrag(event.currentTarget as HTMLElement, event.pointerId);
+  }
+
+  /** Release the captured pointer and drop all live drag state. Shared by the up and cancel paths;
+   * dispatch-free, so the caller owns any `move-card` emit. */
+  #endTileDrag(tile: HTMLElement, pointerId: number): void {
+    releasePointer(tile, pointerId);
+    this.#drag = null;
+    this.draggingIndex = null;
+    this.dropIndex = null;
   }
 
   /** Measure each non-dragged tile's centre and height once, in flow (DOM) order. Called at
@@ -426,7 +443,22 @@ export class CanvasGridPreview extends LitElement {
   #onResizePointerUp(event: PointerEvent): void {
     const resize = this.#resize;
     if (resize === null || event.pointerId !== resize.pointerId) return;
-    releasePointer(event.currentTarget as HTMLElement, event.pointerId);
+    this.#endResize(event.currentTarget as HTMLElement, event.pointerId);
+  }
+
+  /** A cancelled pointer stream fires `pointercancel` instead of `pointerup`: abandon the resize so a
+   * later stray `pointermove` on the handle cannot resume it. No dispatch — the card keeps whatever
+   * spans the last committed `resize-card` set. */
+  #onResizePointerCancel(event: PointerEvent): void {
+    const resize = this.#resize;
+    if (resize === null || event.pointerId !== resize.pointerId) return;
+    this.#endResize(event.currentTarget as HTMLElement, event.pointerId);
+  }
+
+  /** Release the captured pointer and drop the live resize state. Shared, dispatch-free cleanup for
+   * the up and cancel paths. */
+  #endResize(handle: HTMLElement, pointerId: number): void {
+    releasePointer(handle, pointerId);
     this.#resize = null;
   }
 }

@@ -79,7 +79,7 @@ describe("canvas-grid-preview", () => {
 // whole gesture (down → move → up) on it.
 function pointer(
   target: EventTarget,
-  type: "pointerdown" | "pointermove" | "pointerup",
+  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
   x: number,
   y: number,
   pointerId = 1,
@@ -269,6 +269,30 @@ describe("canvas-grid-preview drag-to-reorder", () => {
     expect(detail).toEqual({ from: 0, to: 1 });
   });
 
+  it("clears drag state and emits no move-card when the pointer stream is cancelled", async () => {
+    // A cancelled pointer stream (touch-cancel, an OS/browser gesture takeover) fires pointercancel
+    // instead of pointerup. The gesture must be abandoned: drag state cleared, capture released, and
+    // NO move-card emitted (a cancelled gesture is not a reorder). (Prove-by-deletion: without the
+    // pointercancel handler the dragged tile stays dimmed and the drop indicator stays visible.)
+    const el = await mountInteractive();
+    let moved = false;
+    el.addEventListener("move-card", () => (moved = true));
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2); // past threshold → dragging
+    await el.updateComplete;
+    expect(tileEl(el, 0).classList.contains("dragging")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".drop-before, .drop-after")).toBeTruthy();
+    pointer(t0, "pointercancel", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".dragging")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".drop-before, .drop-after")).toBeNull();
+    expect(moved).toBe(false);
+  });
+
   it("does not emit move-card from the inert thumbnail (drag is gated to interactive)", async () => {
     const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
       tab,
@@ -351,6 +375,22 @@ describe("canvas-grid-preview resize handle", () => {
     expect(count).toBe(1);
     pointer(handle, "pointermove", hx + 400, hy + 400); // rows change → emits again
     expect(count).toBe(2);
+  });
+
+  it("cancels the resize on pointercancel: a later pointermove on the handle emits no resize-card", async () => {
+    // A cancelled pointer stream fires pointercancel instead of pointerup. The resize must be
+    // abandoned (#resize cleared, capture released) so a later stray pointermove on the handle does
+    // not resume a resize the user cancelled. (Prove-by-deletion: without the pointercancel handler
+    // #resize survives and the trailing pointermove emits a resize-card.)
+    const el = await mountInteractive(0);
+    let count = 0;
+    el.addEventListener("resize-card", () => (count += 1));
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy); // starts the resize
+    pointer(handle, "pointercancel", hx, hy); // OS/browser takeover — resize abandoned
+    pointer(handle, "pointermove", hx + 400, hy); // a stray move must NOT resume the resize
+    expect(count).toBe(0);
   });
 
   it("resize-handle pointerdown starts a resize, not a drag (emits resize-card, never move-card)", async () => {
