@@ -44,9 +44,9 @@ export interface WaitronModule {
   readonly routes?: unknown; // incremental
 }
 
-/** The dependency edges a module declares: its `requires.core` (as a dep on "core") plus every
- * `requires.modules` entry. Each yields `[dependencyName, semverRange]`. A module with no `requires`
- * yields nothing (in-degree 0 — e.g. core). */
+/** The dependencies a module declares — its `requires.core` (a dep on "core") plus every
+ * `requires.modules` entry — each as `[dependencyName, semverRange]`. A module with no `requires`
+ * declares no dependencies, so it starts ready to emit, nothing to wait on (e.g. core). */
 function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
   if (m.requires?.core !== undefined) yield ["core", m.requires.core];
   for (const [dep, range] of Object.entries(m.requires?.modules ?? {})) yield [dep, range];
@@ -63,7 +63,7 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
  * and now also proves the sort reproduces the manifest).
  *
  * Throws (loud, before any caller migrates): `module.requires_invalid` (a malformed range — a
- * descriptor bug), `module.dependency_missing` (a required module absent from the set — tripable
+ * descriptor bug), `module.dependency_missing` (a required module absent from the set — trippable
  * today via modules.json, spec §4), `module.incompatible_version` (present but version out of range),
  * `module.dependency_cycle` (the graph does not drain).
  */
@@ -93,8 +93,9 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
     }
   }
 
-  // 2. Kahn topological sort. in-degree = number of edges OUT of a module (deps it waits on);
-  //    dependents[d] = modules that require d (edges to decrement when d is emitted).
+  // 2. Kahn topological sort. Edges point dependency → dependent, so a module's IN-DEGREE is the
+  //    number of dependencies it still waits on; `dependents[d]` lists the modules that require `d`
+  //    (the edges to decrement when `d` is emitted).
   const inDegree = new Map<string, number>(modules.map((m) => [m.name, 0]));
   const dependents = new Map<string, string[]>();
   for (const m of modules) {

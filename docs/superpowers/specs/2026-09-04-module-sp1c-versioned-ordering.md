@@ -14,7 +14,7 @@ incompatible or dependency-incomplete module set **loudly, before migrating anyt
 `WaitronModule` contract with a `requires` field it recorded but left **inert** ("Compatibility —
 recorded now, enforced in SP-1c", `module.ts:20`). SP-1b
 ([spec](2026-09-04-module-sp1b-enablement-and-reconcile.md)) added the on-box `modules.json` enablement
-filter (`enabledModules`), which is what makes SP-1c's dependency-presence check **tripable today** (§4).
+filter (`enabledModules`), which is what makes SP-1c's dependency-presence check **trippable today** (§4).
 
 **Decides:** that `requires` is populated for the first time (from the *verified* FK/function graph, not
 an invented one); that `orderedMigrationSets` becomes a single resolve-validate-and-order entry point
@@ -103,7 +103,7 @@ Populated shape (`modules.ts`):
 // core: no `requires` field at all
 ```
 
-## 4. The dependency-presence check is tripable TODAY
+## 4. The dependency-presence check is trippable TODAY
 
 This is the concrete safety SP-1c buys **now**, and it is worth stating plainly because it is the one
 part that is *not* "enforced-but-never-tripped". SP-1b's `modules.json` is a default-on sparse override
@@ -162,7 +162,7 @@ system; the codes name the concept, never a specific module — CLAUDE.md §3):
 
 - **`module.dependency_missing`** `{ module: string; requires: string }` — an enabled/migrating module
   declares a dependency (`core` or a `modules` entry) that is not in the set being migrated. The
-  tripable-today case (§4).
+  trippable-today case (§4).
 - **`module.dependency_cycle`** `{ modules: string[] }` — the dependency graph has a cycle; `modules`
   lists the members that could not be ordered. Unreachable with today's graph (a tree rooted at core),
   guarded against a future edit that introduces one.

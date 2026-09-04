@@ -945,7 +945,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // BEFORE `applyMigrations` — not fail mid-migration on a missing relation. `workforce` is
     // `tier: "toggleable"` and `requires` `identity` (modules.ts) via its `persons` FK; `identity` is
     // itself toggleable. Disabling `identity` while `workforce` stays enabled (default-on) is the
-    // tripable-today case: the enabled set contains `workforce` but not the `identity` it needs, so
+    // trippable-today case: the enabled set contains `workforce` but not the `identity` it needs, so
     // `orderedMigrationSets(enabledModules(ALL_MODULES, moduleConfig))` throws `module.dependency_missing`
     // at boot.ts's migration seam (boot.ts:543, the arg to `applyMigrations`) — the stamp probe has
     // already closed and the long-lived pool is not yet open, so this rejection leaks nothing.

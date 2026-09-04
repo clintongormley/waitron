@@ -237,7 +237,7 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
  * and now also proves the sort reproduces the manifest).
  *
  * Throws (loud, before any caller migrates): `module.requires_invalid` (a malformed range — a
- * descriptor bug), `module.dependency_missing` (a required module absent from the set — tripable
+ * descriptor bug), `module.dependency_missing` (a required module absent from the set — trippable
  * today via modules.json, spec §4), `module.incompatible_version` (present but version out of range),
  * `module.dependency_cycle` (the graph does not drain).
  */
@@ -406,7 +406,7 @@ git commit -s -m "feat(server): populate module requires from the verified cross
 
 **Interfaces:**
 - Consumes: the existing trading-mode boot harness in `boot.test.ts` (its `startServer`/config/shared-container setup) and `readModuleConfig` reading `<stateDir>/modules.json`; `orderedMigrationSets`'s `module.dependency_missing` throw (Tasks 1–2); the `requires` graph (Task 3).
-- Produces: proof that boot refuses `identity`-off + `workforce`-on before migrating — the tripable-today case (spec §4/§8).
+- Produces: proof that boot refuses `identity`-off + `workforce`-on before migrating — the trippable-today case (spec §4/§8).
 
 - [ ] **Step 1: Locate the existing trading-mode boot test.** Read `boot.test.ts` around the trading-boot test (the block near `boot.test.ts:560-660` that asserts the migration journals and the mounted routes). Note the exact helpers it uses to build a trading config and state dir (the `WAITRON_STATE_DIR` mkdtemp, the shared-container admin URL, how it calls `startServer`). The new test mirrors that setup.
 
@@ -486,7 +486,7 @@ Expected: PASS — all four new codes are thrown in `module.ts`.
 **Spec coverage:**
 - §2 populate `requires` → Task 3. ✓
 - §2/§5 resolve-validate-order rewrite → Task 2. ✓
-- §4 dependency-presence tripable today → Task 2 (unit) + Task 4 (boot). ✓
+- §4 dependency-presence trippable today → Task 2 (unit) + Task 4 (boot). ✓
 - §6 four error codes → Task 1. ✓
 - §7 pin `semver` → Task 2 Step 1. ✓
 - §8 unit tests (pin repro, missing, cycle, incompatible, invalid, each by deletion) → Task 2 Steps 2/6; real-PG boot refusal → Task 4. ✓
