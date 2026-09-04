@@ -241,6 +241,11 @@ function adoptDeps(overrides: Partial<AdoptDeps> = {}): AdoptDeps {
     persistTrading: async (args) => {
       persistedTrading.push(args);
     },
+    // No-op capture (this e2e does not exercise the module set): the reboot reads modules.json via
+    // `readModuleConfig`, which returns the all-enabled default when the file is absent — the same set
+    // the primary's empty `moduleOverrides` yields — so writing nothing here preserves this suite's
+    // behaviour.
+    persistModuleConfig: async () => {},
     databaseUrl: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
     migrationsDatabaseUrl: mirror.pg.uri,
     // The mirror's OWN sync pool (a `sync_applier` role) — adopt persists it into trading.env as

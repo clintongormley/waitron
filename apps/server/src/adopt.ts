@@ -1,6 +1,8 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import { adoptVenue } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
+import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
@@ -49,6 +51,9 @@ export interface AdoptDeps {
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
+  /** Persists `<stateDir>/modules.json` so the mirror's next boot migrates/wires the primary's
+   * enabled set (SP-1d). Injected — bound to `writeModuleConfig(config.stateDir, …)` in boot. */
+  persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
   databaseUrl: string;
   /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
@@ -132,6 +137,16 @@ export async function adoptFromPrimary(
     boxCaPem: bundle.boxCaPem,
     originNodeId: designated.nodeId,
   });
+  // SP-1d: bootstrap the mirror's own modules.json from the primary's set (carried on the bundle).
+  // Re-validate against THIS node's ALL_MODULES — fail-closed: an unknown/malformed override throws
+  // (module.config_*) and refuses adopt before persistTrading, rather than writing an unparseable
+  // file. In the monorepo build both nodes share ALL_MODULES so this cannot fire; it is the defense
+  // the bundle being external input demands (CLAUDE.md §3, validate rather than trust). Written
+  // unconditionally (even {}), so the mirror's set is explicitly the primary's and re-adopt is
+  // idempotent.
+  await deps.persistModuleConfig(
+    parseModuleConfig({ modules: bundle.moduleOverrides }, ALL_MODULES),
+  );
   await deps.persistTrading({
     tenantId: designated.tenantId,
     locationId: designated.locationId,

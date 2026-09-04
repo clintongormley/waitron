@@ -18,6 +18,7 @@ import {
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { isEnabled, type ModuleConfig } from "@waitron/module";
 import {
   applyVenue,
   planVenue,
@@ -25,6 +26,7 @@ import {
   type AdoptVenueRows,
 } from "@waitron/provisioning";
 import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
+import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -162,6 +164,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     };
 
     const persisted: PersistTradingArgs[] = [];
+    const persistedModuleConfigs: ModuleConfig[] = [];
     let fetchArgs: { primaryUrl: string; credential: AdoptCredential } | undefined;
     let capturedStandby: { nodeId: string; publicKey: string } | undefined;
     const credential: AdoptCredential = {
@@ -180,6 +183,9 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         },
         persistTrading: async (a) => {
           persisted.push(a);
+        },
+        persistModuleConfig: async (c) => {
+          persistedModuleConfigs.push(c);
         },
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
@@ -222,6 +228,11 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       syncDatabaseUrl: "postgres://sync@mirror/db",
     });
     expect(persisted[0]!.nodeId).not.toBe(designated.nodeId);
+
+    // The mirror inherited the primary's (empty) module set — an unconditional write even for `{}`, so
+    // the mirror's set is explicitly the primary's and a re-adopt is an idempotent overwrite (SP-1d).
+    expect(persistedModuleConfigs).toHaveLength(1);
+    expect(isEnabled(persistedModuleConfigs[0]!, ALL_MODULES[0]!.name)).toBe(true);
 
     // The parent rows landed on the mirror (adoptVenue ran).
     const t = await mirror.admin.execute(
@@ -270,6 +281,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
           return bundle;
         },
         persistTrading: async () => {},
+        persistModuleConfig: async () => {},
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
@@ -325,6 +337,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
           return bundle;
         },
         persistTrading: async () => {},
+        persistModuleConfig: async () => {},
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
@@ -368,5 +381,79 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       capturedStandby!.nodeId,
     );
     expect(endorsement).toEqual(reservedIdentity.endorsement);
+  });
+
+  it("bootstraps the mirror's module set from the bundle's overrides", async () => {
+    const { rows, designated } = await buildBundleParts();
+    const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
+    const bundle: MirrorBundle = {
+      rows,
+      designated,
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "x",
+      relayUrl: "https://relay.test/",
+      syncToken: "peer-token-modcfg",
+      reservedIdentity: nextReservedIdentity(),
+      moduleOverrides: { [toggleable]: false },
+    };
+    let persisted: ModuleConfig | undefined;
+    await adoptFromPrimary(
+      {
+        ownerDb: mirror.admin,
+        ring: RING,
+        fetchBundle: async () => bundle,
+        persistTrading: async () => {},
+        persistModuleConfig: async (c) => {
+          persisted = c;
+        },
+        databaseUrl: "postgres://app@mirror/db",
+        migrationsDatabaseUrl: "postgres://owner@mirror/db",
+        syncDatabaseUrl: "postgres://sync@mirror/db",
+      },
+      {
+        primaryUrl: "https://primary.test/",
+        credential: { personId: "99999999-9999-9999-9999-999999999999", password: "p" },
+      },
+    );
+    expect(persisted).toBeDefined();
+    expect(isEnabled(persisted!, toggleable)).toBe(false);
+  });
+
+  it("refuses adopt (fail-closed) when the bundle names an unknown module, before persistTrading", async () => {
+    const { rows, designated } = await buildBundleParts();
+    const bundle: MirrorBundle = {
+      rows,
+      designated,
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "x",
+      relayUrl: "https://relay.test/",
+      syncToken: "peer-token-bad",
+      reservedIdentity: nextReservedIdentity(),
+      moduleOverrides: { "no-such-module": false },
+    };
+    let tradingPersisted = false;
+    await expect(
+      adoptFromPrimary(
+        {
+          ownerDb: mirror.admin,
+          ring: RING,
+          fetchBundle: async () => bundle,
+          persistTrading: async () => {
+            tradingPersisted = true;
+          },
+          persistModuleConfig: async () => {},
+          databaseUrl: "postgres://app@mirror/db",
+          migrationsDatabaseUrl: "postgres://owner@mirror/db",
+          syncDatabaseUrl: "postgres://sync@mirror/db",
+        },
+        {
+          primaryUrl: "https://primary.test/",
+          credential: { personId: "99999999-9999-9999-9999-999999999999", password: "p" },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "module.config_unknown" });
+    expect(tradingPersisted).toBe(false);
   });
 });
