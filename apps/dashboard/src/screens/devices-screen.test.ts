@@ -729,6 +729,11 @@ describe("devices-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
+    // The rejected pick must NOT strand the control on "p2": `live()` reconciles the select back to the
+    // device's ACTUAL binding (p1) on the error re-render, so it never misleads the operator into thinking
+    // a failed reassign took. (A per-option `?selected` binding would leave the live .selected on p2.)
+    const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    expect(select.value).toBe("p1");
   });
 
   it("does not show a reassign control for an already-revoked device", async () => {
