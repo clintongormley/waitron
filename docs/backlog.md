@@ -685,8 +685,10 @@ vs gated on an unbuilt foundation or an external dependency:
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
   (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
-  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); R3 remains [fiscal-adjacent → owner
-  sign-off before land]; (7) **conflict
+  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 now splits** (2026-09-05) —
+  the **retire/evict (decommission) path is UNBLOCKED** (buildable on R2's `drained` guard, no restore),
+  while **wipe-and-restore (rejoin-as-secondary) stays GATED on a `pg_restore` consumer** [fiscal-adjacent
+  → owner sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
@@ -718,18 +720,29 @@ vs gated on an unbuilt foundation or an external dependency:
     **No migration** (serves/reads existing `sync_log`/`sync_cursor`/`node_membership`); the node stays
     **`sell-only`** — R2 mints no document. **Cloud-as-carrier is out of scope** (relay-vs-sink open
     item, parent §9).
-  - **R3 (wipe-and-restore, spec §6 step 4)** — **GATED on the backup regime** (`pg_restore` consumer
-    + `sync_log`-in-backup); unbuilt. Now also carries the **`evicted` producer + retire/dispose
-    action** — R2 leaves the node `sell-only` and mints no document; the `sell-only`→`evicted`
-    membership edit and the retire action land here. **Three R2-review facts for R3 to hold:**
-    (i) the retire action must gate on the disposal guard's `drained` boolean, NEVER on comparing
+  - **Retire/evict — the decommission path — UNBLOCKED, buildable now on R2's `drained` guard.** A box
+    leaving for good: drain (R2 ✓) → mint the `sell-only`→`evicted` membership edit (`nextStandings`
+    gains its `evicted` producer) → physical disposal. It needs **no restore**, so it does NOT wait on
+    the backup regime — only the disposal guard (landed) plus a membership-document edit. Split out of
+    R3 (2026-09-05) so the unblocked half is separately pickup-able. Two R2-review facts it must hold:
+    (i) gate the retire action on the disposal guard's `drained` boolean, **never** on comparing
     `carrierAppliedSeq >= ownTailSeq` — `ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the
-    cross-lane MIN, so they legitimately differ while `drained:true`; (ii) the guard measures the
-    enrolled `sync_log` tail only — the per-node fiscal chain (`registros_facturacion`) is deliberately
-    NOT in `sync_log` and does not replicate to the carrier, so `drained` is a statement about replicable
-    app data, not the fiscal chain; (iii) a fenced node whose held doc names NO carrier reports
-    `disposal.applicable:false` — the same value a healthy serving node reports — so R3's retire UX must
-    distinguish "fenced, undrainable (no carrier)" from "N/A (serving)".
+    cross-lane MIN, so they legitimately differ while `drained:true`; (ii) a fenced node whose held doc
+    names NO carrier reports `disposal.applicable:false` — the same value a healthy serving node reports
+    — so the retire UX must distinguish "fenced, undrainable (no carrier)" from "N/A (serving)".
+  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — GATED on a `pg_restore`
+    consumer.** Drain (R2 ✓) → discard the diverged DB → restore the current primary's baseline →
+    stream, returning as `serving-secondary`. The backup **producer** already exists — `pg-dump.ts` /
+    `backup-sweep.ts` take a whole-DB `pg_dump --format=custom` (restore-compatible, atomic
+    temp-then-rename), run with `row_security=off` so `sync_log`/`sync_cursor` are already captured (the
+    `sync_log`-in-backup half is largely satisfied). The **missing** piece is a `pg_restore` **consumer**:
+    nothing in the tree restores a baseline (`adopt.ts` streams a read-mirror; the recovery-bundle is
+    secret-files only), so R3 needs a `pg_restore` shell-out mirroring `pg-dump.ts` + a local-DB wipe +
+    re-enrol-as-streaming-secondary. Same gate as the promote-action cold-restore slice (Slice 4). Not
+    blocked on an external dependency — unwritten work the backlog parks under the backup regime. The
+    disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
+    (`registros_facturacion`) is deliberately NOT in `sync_log` and does not replicate to the carrier, so
+    `drained` is a statement about replicable app data, not the fiscal chain (unchanged by the restore).
   - **Slice 7 (conflict surface)** — ops conflict-log + primary-wins config; **not started**.
   - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
     its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
@@ -742,7 +755,8 @@ vs gated on an unbuilt foundation or an external dependency:
     the same mechanism R3b promotion uses — and is consistent with spec §8.4; the node is **fully fenced
     on reboot**.
   - **`nextStandings` still never emits `evicted`** — R1/R2 only react to `sell-only`; the eviction
-    producer lands with **R3** (R2 built the drain + guard + surface only).
+    producer lands with the **retire/evict path** (the unblocked half split out of R3; R2 built the
+    drain + guard + surface only).
   - **Carry-forward for the promotion-runbook / promote-action slice (fiscal, flagged at R1 land by a
     finish-branch reviewer):** R1 reconciles a fenced node to `(mode='primary', singleton_role='secondary')`
     — the SAME axis pair as a healthy "local secondary" — so `promoteLocalSecondaryToPrimary` (which today
