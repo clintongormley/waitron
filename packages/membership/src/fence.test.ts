@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFencedStanding, standingOf } from "./fence.js";
+import { isFencedStanding, servingPrimaryNodeId, standingOf } from "./fence.js";
 import type { MembershipNode, NodeStanding, SignedMembershipDocument } from "./types.js";
 
 const doc = (nodes: readonly MembershipNode[]): SignedMembershipDocument => ({
@@ -32,5 +32,18 @@ describe("isFencedStanding", () => {
     expect(isFencedStanding("serving-primary")).toBe(false);
     expect(isFencedStanding("serving-secondary")).toBe(false);
     expect(isFencedStanding(undefined)).toBe(false);
+  });
+});
+
+describe("servingPrimaryNodeId", () => {
+  it("returns the node holding serving-primary", () => {
+    expect(
+      servingPrimaryNodeId(doc([node("n1", "sell-only"), node("n2", "serving-primary")])),
+    ).toBe("n2");
+  });
+  it("returns undefined when no node serves as primary", () => {
+    expect(
+      servingPrimaryNodeId(doc([node("n1", "sell-only"), node("n2", "serving-secondary")])),
+    ).toBeUndefined();
   });
 });

@@ -684,8 +684,10 @@ vs gated on an unbuilt foundation or an external dependency:
   integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**,
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
-  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04),
-  R2/R3 remain [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
+  **R2 (drain-as-source + disposal guard) BUILT on `feat/membership-rejoin-r2-drain`
+  (2026-09-04), pending owner sign-off + land**; R3 remains [fiscal-adjacent → owner
+  sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
@@ -700,12 +702,36 @@ vs gated on an unbuilt foundation or an external dependency:
   app helpers `isFenced` / `shouldFenceRestart` (`apps/server`); pure `standingOf` /
   `isFencedStanding` in `@waitron/membership`. **No migration** (no schema change; `inmutabilidad` /
   FORCE-RLS / `english-only` unaffected — all standings are already English). **Carry-forwards:**
-  - **R2 (drain-as-source + disposal guard)** — enrol the returned node as a peer the primary pulls
-    with `originId=<returned>`; build the producer-side **disposal guard** (own `origin_id=self` tail
-    drained onto the node that carries the partition forward — spec §5.1 note settles "the carrier",
-    not "any survivor"); surface on box-status. **Buildable now.**
+  - **R2 (drain-as-source + disposal guard) BUILT on `feat/membership-rejoin-r2-drain`
+    (2026-09-04), pending owner sign-off + land.** A fenced (`sell-only`) node now serves an
+    **own-origin drain source** — `mountSyncApi` gained `ownOriginOnly`, which forces `originId=self`
+    on `/sync-api/log`, so the current primary (the **carrier**) drains `originId=<returned>` with the
+    existing pull loop (no carrier-side code; the two boxes are static mutual peers). The read-only
+    gate gained a single-route **`POST /sync-api/cursor` exemption** (the carrier's cursor report — the
+    disposal guard's only input; writes `sync_cursor`, no tenant_id/RLS), so a future mutating
+    `/sync-api/` route is not auto-exempted — it hits the fence and fails loud (403). A fenced node stays
+    fully fenced otherwise
+    (`isSingletonPrimary` false — submitter/reconciler/config-writer + retention off; write verbs still
+    403). Producer-side **disposal guard** `readDrainProgress` (`@waitron/sync`): own-origin high-water
+    `seq` per lane vs the carrier's reported `sync_cursor` (subscriber=carrier, origin=self, lane),
+    ANDed across lanes (lane-agnostic via new `SYNC_LANES`); `drained` iff the carrier caught up on
+    every own-carrying lane. Carrier = the `serving-primary` in the held doc (`servingPrimaryNodeId`,
+    `@waitron/membership`). Surfaced on **box-status `disposal`** (applicable only when fenced).
+    **No migration** (serves/reads existing `sync_log`/`sync_cursor`/`node_membership`); the node stays
+    **`sell-only`** — R2 mints no document. **Cloud-as-carrier is out of scope** (relay-vs-sink open
+    item, parent §9).
   - **R3 (wipe-and-restore, spec §6 step 4)** — **GATED on the backup regime** (`pg_restore` consumer
-    + `sync_log`-in-backup); unbuilt.
+    + `sync_log`-in-backup); unbuilt. Now also carries the **`evicted` producer + retire/dispose
+    action** — R2 leaves the node `sell-only` and mints no document; the `sell-only`→`evicted`
+    membership edit and the retire action land here. **Three R2-review facts for R3 to hold:**
+    (i) the retire action must gate on the disposal guard's `drained` boolean, NEVER on comparing
+    `carrierAppliedSeq >= ownTailSeq` — `ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the
+    cross-lane MIN, so they legitimately differ while `drained:true`; (ii) the guard measures the
+    enrolled `sync_log` tail only — the per-node fiscal chain (`registros_facturacion`) is deliberately
+    NOT in `sync_log` and does not replicate to the carrier, so `drained` is a statement about replicable
+    app data, not the fiscal chain; (iii) a fenced node whose held doc names NO carrier reports
+    `disposal.applicable:false` — the same value a healthy serving node reports — so R3's retire UX must
+    distinguish "fenced, undrainable (no carrier)" from "N/A (serving)".
   - **Slice 7 (conflict surface)** — ops conflict-log + primary-wins config; **not started**.
   - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
     its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
@@ -717,8 +743,8 @@ vs gated on an unbuilt foundation or an external dependency:
     the now-known-superseded chain before the reboot lands. This is inherent to restart-based fencing —
     the same mechanism R3b promotion uses — and is consistent with spec §8.4; the node is **fully fenced
     on reboot**.
-  - **`nextStandings` still never emits `evicted`** — R1 only reacts to `sell-only`; the eviction
-    producer lands with R2/R3.
+  - **`nextStandings` still never emits `evicted`** — R1/R2 only react to `sell-only`; the eviction
+    producer lands with **R3** (R2 built the drain + guard + surface only).
   - **Carry-forward for the promotion-runbook / promote-action slice (fiscal, flagged at R1 land by a
     finish-branch reviewer):** R1 reconciles a fenced node to `(mode='primary', singleton_role='secondary')`
     — the SAME axis pair as a healthy "local secondary" — so `promoteLocalSecondaryToPrimary` (which today
@@ -733,7 +759,7 @@ vs gated on an unbuilt foundation or an external dependency:
     standing (`isFenced`/`standingOf`), not just the deployment axes.** Same shape as the wide reviewer's note
     that a fenced node adopting an *un-fencing* doc persists it without re-promoting in place — R1 never
     produces such a doc (re-admission is wipe-and-restore), so the in-place transition is out of scope until
-    the R2/R3 eviction/re-admission producers exist.
+    the R3 eviction/re-admission producers exist.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
   membership }` (the held signed document or `null`); the pull worker threads that field out of the
   handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`

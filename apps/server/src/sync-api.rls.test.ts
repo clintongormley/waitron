@@ -313,6 +313,58 @@ describe("mountSyncApi peer auth + handshake", () => {
       await reader.close();
     }
   });
+
+  it("ownOriginOnly restricts /sync-api/log to this node's own origin, ignoring a foreign ?originId", async () => {
+    // Seed one own-origin (NODE_A) products row and one FOREIGN-origin products row into sync_log via
+    // the capture trigger — same seeding as the "/sync-api/log streams …" test above, but under two
+    // different app.node_id GUCs so the two rows carry different origin_id. NODE_A is deps.nodeId; the
+    // node happens to also hold a FOREIGN-origin row (a relayed row it must NOT re-serve when fenced).
+    const FOREIGN = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const tenantId = await seedTenant(postgres.admin);
+    const cat = await postgres.admin.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Deli') returning id`,
+    );
+    const catalogueId = cat.rows[0]!.id;
+    const app_ = await postgres.pg.connectAs("app_login", "app_pw");
+    try {
+      for (const origin of [NODE_A, FOREIGN]) {
+        await withTenant(
+          app_,
+          tenantId,
+          (tx) =>
+            tx.execute(
+              sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+                  values (${tenantId}, ${catalogueId}, '{"en":"Coffee"}'::jsonb, 'each', 1.50::numeric(12,2), 'general')`,
+            ),
+          { nodeId: origin },
+        );
+      }
+    } finally {
+      await app_.close();
+    }
+
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const peer = await enrolPeer(postgres.admin, { subscriberId: "drainPeer", name: "drain" });
+      const app = new Hono();
+      mountSyncApi(
+        app,
+        { db: reader, tenantId, nodeId: NODE_A, environment: "production", ownOriginOnly: true },
+        log,
+      );
+      const auth = { Authorization: `Bearer ${peer.token}` };
+      // Even explicitly asking for the FOREIGN origin, an own-origin-only source serves only NODE_A rows.
+      const res = await app.request(`/sync-api/log?originId=${FOREIGN}&after=0&limit=100`, {
+        headers: auth,
+      });
+      expect(res.status).toBe(200);
+      const rows = decodeBatch(await res.text());
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.originId === NODE_A)).toBe(true);
+    } finally {
+      await reader.close();
+    }
+  });
 });
 
 describe("POST /sync-api/cursor — subscribers report their cursor to the source (spec §3.1)", () => {

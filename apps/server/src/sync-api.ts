@@ -81,6 +81,11 @@ export interface SyncApiDeps {
   tenantId: string; // the deli tenant the source reads under
   nodeId: string; // this node's origin id (config.till.nodeId), for /hello
   environment: string; // config.environment, for /hello + the peer handshake
+  /** When true, `/sync-api/log` serves ONLY this node's own origin (`deps.nodeId`), ignoring a
+   * peer-supplied `?originId=`. The membership-rejoin R2 DRAIN source: a fenced (sell-only) node serves
+   * its own tail so the carrier can drain it, and must NOT relay any other origin (design §6 step 3).
+   * Absent/false = the full primary source (every origin). */
+  ownOriginOnly?: boolean;
 }
 
 /** Bearer guard: resolve the caller to its enrolled peer, or 401. A missing/blank Bearer fails closed
@@ -121,7 +126,9 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
   app.get("/sync-api/log", (c) =>
     run(c, log, async () => {
       await requirePeer(deps.db, c);
-      const originId = c.req.query("originId");
+      // A drain source (ownOriginOnly) forces our own origin, ignoring any peer-supplied ?originId — a
+      // fenced node serves only its own tail (R2). The full primary source honours the query.
+      const originId = deps.ownOriginOnly === true ? deps.nodeId : c.req.query("originId");
       const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));
       const tables = tablesForLane(laneParam(c.req.query("lane")));

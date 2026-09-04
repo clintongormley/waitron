@@ -9,6 +9,7 @@ const base: BoxStatusReaders = {
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   replicationLag: undefined,
+  disposal: undefined,
   backup: undefined,
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
@@ -24,6 +25,7 @@ describe("collectBoxStatus", () => {
       cert: { available: true, notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 },
       chain: { height: 7, lastAt: "2026-08-29T10:00:00.000Z" },
       replication: { configured: false },
+      disposal: { applicable: false },
       backup: { configured: false },
       duties: { "fiscal.drain": { stale: false } },
     });
@@ -93,6 +95,49 @@ describe("collectBoxStatus", () => {
   it("reports backup N-A when no backup reader is configured", async () => {
     const status = await collectBoxStatus(base);
     expect(status.backup).toEqual({ configured: false });
+  });
+
+  it("reports disposal N-A when no disposal reader is configured (a serving, unfenced node)", async () => {
+    const status = await collectBoxStatus(base);
+    expect(status.disposal).toEqual({ applicable: false });
+  });
+
+  it("surfaces the carrier + drain verdict when a disposal reader is present (bigint → string)", async () => {
+    const status = await collectBoxStatus({
+      ...base,
+      disposal: async () => ({
+        carrierNodeId: "carrier",
+        drained: false,
+        ownTailSeq: 100n,
+        carrierAppliedSeq: 40n,
+      }),
+    });
+    expect(status.disposal).toEqual({
+      applicable: true,
+      carrierNodeId: "carrier",
+      drained: false,
+      ownTailSeq: "100",
+      carrierAppliedSeq: "40",
+    });
+  });
+
+  it("passes a null seq through as null (not the string 'null')", async () => {
+    const status = await collectBoxStatus({
+      ...base,
+      disposal: async () => ({
+        carrierNodeId: "carrier",
+        drained: true,
+        ownTailSeq: null,
+        carrierAppliedSeq: null,
+      }),
+    });
+    expect(status.disposal).toEqual({
+      applicable: true,
+      carrierNodeId: "carrier",
+      drained: true,
+      ownTailSeq: null,
+      carrierAppliedSeq: null,
+    });
   });
 
   it("propagates a backup reader fault (fail-loud, no configured:false fallback)", async () => {

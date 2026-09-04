@@ -11,8 +11,14 @@ export { SYNC_MIGRATIONS } from "./migrations.js";
 // The enrolment registry — the audit surface for "what crosses the wire" (the twenty-two enrolled
 // tables — 17 commercial+dining + 2 identity-config + 3 kitchen KDS — their apply mode, conflict key,
 // watermark and capture ops).
-export { ENROLLED, tablesForLane } from "./registry.js";
+export { ENROLLED, SYNC_LANES, tablesForLane } from "./registry.js";
 export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js";
+
+// The producer-side disposal guard — a returned/fenced node proves LOCALLY that its own-origin
+// sync_log tail has fully drained onto the carrier (per-lane own high-water vs the carrier's reported
+// sync_cursor), the read box-status surfaces before a node is safely disposable (rejoin §6 step 3).
+export { readDrainProgress } from "./disposal.js";
+export type { DrainProgress, DrainProgressArgs } from "./disposal.js";
 
 // The static per-table apply SQL, built once from the registry + live schema (never from row data).
 export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";

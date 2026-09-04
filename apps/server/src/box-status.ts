@@ -9,7 +9,7 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import type { SubscriberLag } from "@waitron/sync";
+import type { DrainProgress, SubscriberLag } from "@waitron/sync";
 import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
@@ -35,9 +35,22 @@ export type BoxStatus = {
   singletonRole: SingletonRole;
   replication:
     { configured: false } | { configured: true; worstLagSeq: string; subscribers: number };
+  disposal:
+    | { applicable: false }
+    | {
+        applicable: true;
+        carrierNodeId: string;
+        drained: boolean;
+        ownTailSeq: string | null;
+        carrierAppliedSeq: string | null;
+      };
   backup: BackupStatus;
   duties: Record<string, unknown>;
 };
+
+/** The carrier a fenced node drains onto, plus its drain progress (membership rejoin R2). Only present
+ * when the node is fenced and a carrier is known; a serving node reports `disposal.applicable:false`. */
+export type DisposalStatus = { carrierNodeId: string } & DrainProgress;
 
 export type BoxStatusReaders = {
   mode: () => Promise<DeploymentMode>;
@@ -47,6 +60,7 @@ export type BoxStatusReaders = {
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
+  disposal: (() => Promise<DisposalStatus>) | undefined;
   backup: (() => Promise<BackupStatus>) | undefined;
   duties: () => Record<string, unknown>;
 };
@@ -84,6 +98,21 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     };
   }
 
+  // A fenced node draining onto a carrier surfaces the drain verdict so the box is never junked blind;
+  // an absent reader means the node is serving (unfenced / no carrier), reported `applicable:false`.
+  // bigint → string on the wire (never `Number()`), matching the `replication` precedent.
+  let disposal: BoxStatus["disposal"] = { applicable: false };
+  if (readers.disposal !== undefined) {
+    const d = await readers.disposal();
+    disposal = {
+      applicable: true,
+      carrierNodeId: d.carrierNodeId,
+      drained: d.drained,
+      ownTailSeq: d.ownTailSeq?.toString() ?? null,
+      carrierAppliedSeq: d.carrierAppliedSeq?.toString() ?? null,
+    };
+  }
+
   // Backup mirrors replication's fail-loud posture, NOT cert's swallow: an absent reader means backup
   // is off (`configured: false`), but a reader that FAULTS (a filesystem error reading the dump dir) is
   // a real problem worth surfacing — never a silent fallback to "off".
@@ -100,6 +129,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     chain,
     singletonRole,
     replication,
+    disposal,
     backup,
     duties: readers.duties(),
   };
@@ -113,6 +143,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readReplicationLag: (() => Promise<SubscriberLag[]>) | undefined;
+  readDisposal: (() => Promise<DisposalStatus>) | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
@@ -163,6 +194,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         chain: async () => chain,
         replicationLag: deps.readReplicationLag,
+        disposal: deps.readDisposal,
         backup: deps.readBackup,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,

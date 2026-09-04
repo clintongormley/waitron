@@ -113,8 +113,14 @@ import { isFenced, shouldFenceRestart } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
-import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
-import type { TrustSet } from "@waitron/membership";
+import {
+  lagFor,
+  readDrainProgress,
+  runRetentionSweep,
+  runSyncPull,
+  type SyncLane,
+} from "@waitron/sync";
+import { servingPrimaryNodeId, type TrustSet } from "@waitron/membership";
 import { adoptMembership as adoptMembershipDocument } from "./membership-adopt.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
@@ -922,7 +928,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // A mirror gates by mode (per-request, so a live promotion lifts it, design §10); a fenced
       // returned ex-primary (membership rejoin R1) gates on the boot-captured `fenced` — it leaves the
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
-      readOnlyGate(() => holders.mode.current === "mirror" || fenced),
+      readOnlyGate(
+        () => holders.mode.current === "mirror" || fenced,
+        // Let exactly the carrier's cursor report through the fence: POST /sync-api/cursor is the
+        // disposal guard's only input (it writes `sync_cursor` — no tenant_id, no RLS). The exemption
+        // names that ONE route, not the `/sync-api/` prefix, so a future mutating route added under the
+        // prefix is NOT auto-exempted — it hits the fence and fails loud (403), the safe default. The GET
+        // source routes (`/sync-api/hello`, `/sync-api/log`) need no exemption: they pass as SAFE_METHODS.
+        // A mirror mounts no /sync-api, so this is a no-op there.
+        (c) => c.req.method === "POST" && c.req.path === "/sync-api/cursor",
+      ),
     );
   }
   if (isMirror) {
@@ -1262,7 +1277,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // The authoritative replication SOURCE — only the SINGLETON primary serves it (a mirror is a
     // subscriber that pulls + applies and never sources, C2a design §8; a sell-only local secondary must
     // not duplicate the primary's source either). So `mountSyncApi` gates on `isSingletonPrimary`. The
-    // pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
+    // one exception is a FENCED node (membership rejoin R2): the `else if (fenced)` branch below serves a
+    // narrow OWN-ORIGIN-ONLY drain source (`ownOriginOnly` forces originId=self, no worker mounted), which
+    // is NOT a duplicate of this authoritative/all-origin source and re-enables no singleton duty —
+    // `isSingletonPrimary` stays false.
+    // The pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
     // pulls through the tunnel HTTP client, a secondary pulls too), so it stays outside this gate.
     if (isSingletonPrimary) {
       mountSyncApi(
@@ -1272,6 +1291,25 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           tenantId: till.tenantId,
           nodeId: till.nodeId,
           environment: config.environment,
+        },
+        log,
+      );
+    } else if (fenced) {
+      // Membership rejoin R2 (design §6 step 3): a fenced (sell-only) node serves its OWN-ORIGIN tail so
+      // the carrier can drain it, then wipe-and-restore in R3. `ownOriginOnly` forces originId=self, so a
+      // fenced node can never relay another origin or act as a general source — the narrow reversal of
+      // "a sell-only secondary must not source" above. It stays fully fenced otherwise: isSingletonPrimary
+      // is false (submitter/reconciler/config-writer + retention stay off), and the read-only gate still
+      // blocks tenant/fiscal writes (its single `POST /sync-api/cursor` exemption lets only the peer
+      // cursor report through).
+      mountSyncApi(
+        app,
+        {
+          db: syncDb,
+          tenantId: till.tenantId,
+          nodeId: till.nodeId,
+          environment: config.environment,
+          ownOriginOnly: true,
         },
         log,
       );
@@ -1495,6 +1533,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
   // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.
   const lagPool = syncDb;
+  // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
+  // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
+  // `localSyncDb` comment above states).
+  //
+  // Carrier-keying coupling the disposal guard relies on: `readDrainProgress` looks the carrier's cursor
+  // up by `sync_cursor.subscriber_id = carrierNodeId`, where `carrierNodeId` is a membership NODE id
+  // (`servingPrimaryNodeId` of the held doc). But the stored `subscriber_id` is whatever the carrier's
+  // token was enrolled under in THIS node's `sync_peers`. The lookup matches ONLY because the carrier's
+  // pull loop reports its cursor with `subscriberId = till.nodeId` (`runSyncPull`, boot.ts:~1369) — i.e.
+  // the house convention `subscriberId === nodeId`. Were the carrier enrolled under a different (e.g.
+  // friendly-name) subscriber id, the cursor lookup returns null → `laneCarrier = 0` → the box reads
+  // `drained:false` INDEFINITELY. That is FAIL-SAFE (never a false `drained:true`, so R2 never green-lights
+  // a junking of a node that hasn't drained), but R3's retire action — which consumes `drained` — must
+  // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
+  const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   mountBoxStatusApi(
     app,
     {
@@ -1515,6 +1568,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
       // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
+      // The producer-side disposal guard (membership rejoin R2, design §5.1): present only on a FENCED
+      // node whose held document names a carrier (the serving-primary). Reads own-origin tail vs the
+      // carrier's reported cursor on the SAME sync_tailer pool under withTenant the lag reader uses.
+      // Absent (undefined) on a serving node → box-status reports disposal.applicable:false.
+      readDisposal:
+        lagPool !== undefined && fenced && carrierNodeId !== undefined
+          ? async () => ({
+              carrierNodeId,
+              ...(await withTenant(lagPool, till.tenantId, (tx) =>
+                readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+              )),
+            })
+          : undefined,
       readBackup:
         backupWorker !== undefined
           ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())

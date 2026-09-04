@@ -26,3 +26,15 @@ export function standingOf(
 export function isFencedStanding(standing: NodeStanding | undefined): boolean {
   return standing === "sell-only" || standing === "evicted";
 }
+
+/**
+ * The nodeId of the node holding `serving-primary` in a document — the current primary, i.e. the
+ * CARRIER a returned/fenced node drains its tail onto (parent design §5.1's "the node that will carry
+ * the partition forward", 2026-09-04 note). `undefined` when no node serves as primary (an incomplete
+ * or all-fenced chart). At most one node holds serving-primary (the singleton), so the first match is
+ * it. A pure lookup over `document.body.nodes` — no verification: the held document was verified when
+ * adopted (membership-adopt.ts) or self-signed at promotion.
+ */
+export function servingPrimaryNodeId(document: SignedMembershipDocument): string | undefined {
+  return document.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
+}

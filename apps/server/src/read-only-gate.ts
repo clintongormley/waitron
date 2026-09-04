@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { AppError } from "@waitron/shared";
 import "./errors.js"; // makes `node.read_only` reachable (the code is constructed below)
 
@@ -52,9 +52,21 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * Returns the error-boundary response shape directly (`{ error: { code, params } }`) rather than
  * throwing: a Hono middleware is not inside a route's `createErrorBoundary` wrapper; the code is built
  * through `AppError` so `tsc` checks it and `import "./errors.js"` keeps it reachable.
+ *
+ * `isExempt` (optional) lets a specific request surface through the fence even on a write verb. The
+ * peer-sync source (membership rejoin R2) is the one write surface a read-only node legitimately
+ * serves: the carrier POSTs `/sync-api/cursor` to report how far it has drained a fenced node's tail —
+ * the disposal guard's only input. That surface is peer-Bearer-authenticated machine-to-machine sync
+ * writing only `sync_cursor` (whole-DB operational state, no tenant_id, no RLS), never a client
+ * tenant/fiscal write, which is what this fence exists to stop. Boot passes the predicate; absent, the
+ * gate is unchanged (safe verbs pass, write verbs 403 when read-only).
  */
-export function readOnlyGate(isReadOnly: () => boolean): MiddlewareHandler {
+export function readOnlyGate(
+  isReadOnly: () => boolean,
+  isExempt?: (c: Context) => boolean,
+): MiddlewareHandler {
   return async (c, next) => {
+    if (isExempt?.(c) === true) return next();
     if (isReadOnly() && !SAFE_METHODS.has(c.req.method)) {
       const err = new AppError("node.read_only", {});
       return c.json({ error: { code: err.code, params: err.params } }, 403);

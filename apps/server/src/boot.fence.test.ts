@@ -19,11 +19,13 @@ import {
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { hashPin } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import {
   generateNodeKeyPair,
   signDocumentBody,
   type MembershipDocumentBody,
+  type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { enrolPeer } from "@waitron/sync";
@@ -31,6 +33,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { mountSyncApi } from "./sync-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { roleUrl } from "./testing/postgres.js";
 
 // Membership rejoin R1 (design §6) boot integration: a returned ex-primary whose held membership
@@ -103,6 +106,20 @@ const PEER_SOURCE_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SIGNER_NODE_ID = "77777777-7777-4777-8777-777777777777";
 const SIGNER_KP = generateNodeKeyPair();
 
+// The CARRIER (the current serving-primary) that a fenced node drains its own-origin tail onto
+// (membership rejoin R2). Named `serving-primary` in the held document Case E boots with, so
+// `servingPrimaryNodeId(heldMembership)` resolves it, and enrolled as a `sync_peers` subscriber under
+// THIS node so its Bearer authenticates against the fenced node's drain source. The disposal reader
+// keys its `sync_cursor` lookup on this id (`subscriber_id`), so the enrolled subscriberId IS this id.
+const CARRIER_NODE_ID = "88888888-8888-4888-8888-888888888888";
+
+// A `manager`-role person in the till tenant (role `manager` holds `till.configure`, the permission
+// `GET /api/box/status` authorizes). Seeded once by `seedTillIdentity`; each case that reads box-status
+// mints a fresh `management_sessions` row for it (`managerCookie`) rather than logging in over HTTP —
+// login is a POST, which the fenced node's read-only gate would 403 (Case A proves that), so a session
+// is seeded owner-side directly, the shape a promote/adopt path persists an already-authenticated one.
+const MANAGER_ID = "99999999-9999-4999-8999-999999999999";
+
 /** A membership document (design §3/§5) signed by the trusted SIGNER key, naming THIS node with
  * `standing` at `term`. Advertised by the live peer on /hello; the booted primary re-runs the accept
  * fence against it (membership-adopt.ts) and persists it iff strictly newer. `term: 6` supersedes the
@@ -157,6 +174,14 @@ async function seedTillIdentity(admin: Database): Promise<void> {
     values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Fence node')
     on conflict do nothing`);
+  // A manager the box-status cases resolve a seeded session against (role `manager` holds
+  // `till.configure`). `pin_hash` is NOT NULL so a value is supplied; `password_hash` stays null — no
+  // case logs in by password (the fenced node's gate would 403 the POST anyway).
+  await admin.execute(sql`
+    insert into persons (id, tenant_id, display_name, pin_hash, role)
+    values (${MANAGER_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Fence Manager', ${hashPin("1234")},
+            'manager')
+    on conflict do nothing`);
   await establishNodeIdentity(
     { ownerDb: admin, ring: RING },
     TILL_ENV.WAITRON_TILL_TENANT_ID,
@@ -169,15 +194,41 @@ async function seedTillIdentity(admin: Database): Promise<void> {
  * write it directly through the plain-upsert setter, exactly as an owner/promote path would persist an
  * already-verified document. */
 function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDocument {
+  return membershipDoc([{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }]);
+}
+
+/** A held document (design §3/§5) marking THIS node `sell-only` (the fence) AND the CARRIER
+ * `serving-primary`, so boot fences this node AND `servingPrimaryNodeId(heldMembership)` resolves the
+ * carrier the disposal reader drains onto (membership rejoin R2). Written directly through the
+ * plain-upsert setter, as an owner/promote path persists an already-verified document. */
+function fencedWithCarrierDoc(): SignedMembershipDocument {
+  return membershipDoc([
+    { nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing: "sell-only" },
+    { nodeId: CARRIER_NODE_ID, contactUrl: "", standing: "serving-primary" },
+  ]);
+}
+
+/** The shared term-5 self-signed envelope both `selfDoc` and `fencedWithCarrierDoc` build — they
+ * differ only in `nodes`. Signature is the placeholder the plain-upsert setter accepts (the fence read
+ * is UNVERIFIED). */
+function membershipDoc(nodes: readonly MembershipNode[]): SignedMembershipDocument {
   return {
-    body: {
-      term: 5,
-      nodes: [{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }],
-    },
+    body: { term: 5, nodes },
     signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
     signature: "self-placeholder-sig",
     endorsements: [],
   };
+}
+
+/** Mint a fresh management session for the seeded manager and return the cookie pair the box-status
+ * route reads (`requireManagementSession` → the session id). Seeded owner-side (RLS bypassed) so no
+ * HTTP login POST is needed — the fenced node's read-only gate would 403 that POST. */
+async function managerCookie(): Promise<string> {
+  const res = await suite.admin.execute<{ id: string }>(sql`
+    insert into management_sessions (tenant_id, person_id)
+    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${MANAGER_ID})
+    returning id`);
+  return `${MANAGEMENT_COOKIE}=${res.rows[0]!.id}`;
 }
 
 beforeAll(async () => {
@@ -305,16 +356,22 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      // The authoritative sync SOURCE is NOT mounted: mountSyncApi gates on isSingletonPrimary, now
-      // false, so the singleton workers are suppressed by the reconciled axis. 404, not 401.
+      // The sync SOURCE that IS mounted on a fenced node is the OWN-ORIGIN DRAIN source (membership
+      // rejoin R2): the `else if (fenced)` branch mounts `mountSyncApi(..., ownOriginOnly: true)`, so a
+      // tokenless request reaches the peer-auth screen (401 sync.node_unauthorized), NOT a 404. This
+      // REVERSES the R1 posture (a fenced node mounted no source at all, 404) — a fenced node now serves
+      // its own tail so a carrier can drain it. The drain source mounts whether or not a carrier is
+      // named (this self-doc names none); the carrier gates only the disposal READER (Case E). The
+      // isSingletonPrimary gate still suppresses the FULL authoritative source and the singleton workers.
       const source = await fetch(`${base}/sync-api/log`);
-      expect(source.status).toBe(404);
+      expect(source.status).toBe(401);
 
-      // The operational PRINT surface is NOT mounted either: a fenced node is `mode='primary'`, so the
-      // verb-based read-only gate alone would let `GET /print-api/agent/jobs` (a write behind a GET —
+      // The operational PRINT surface, by contrast, is NOT mounted: a fenced node is `mode='primary'`, so
+      // the verb-based read-only gate alone would let `GET /print-api/agent/jobs` (a write behind a GET —
       // `claimPrintJobs`) through. The `!fenced` half of boot.ts's `!isMirror && !fenced` mount guard
       // un-mounts the device/print groups, so the route is absent: 404 (route not mounted), NOT the 401
-      // a mounted-but-unauthenticated agent GET would return. Same 404-not-401 tell as the sync source.
+      // a mounted-but-unauthenticated agent GET would return — the 404-not-401 tell the sync source USED
+      // to share before R2 mounted the drain source above.
       const printJobs = await fetch(`${base}/print-api/agent/jobs`);
       expect(printJobs.status).toBe(404);
     } finally {
@@ -352,6 +409,93 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       // proving Case A's 404 is the fence's doing, not a missing route.
       const source = await fetch(`${base}/sync-api/log`);
       expect(source.status).toBe(401);
+
+      // The disposal control (membership rejoin R2): an UNFENCED serving node wires NO readDisposal
+      // (`lagPool !== undefined && fenced` is false), so box-status reports `disposal.applicable:false`.
+      // This is the negative control for Case E's `applicable:true`.
+      const status = await fetch(`${base}/api/box/status`, {
+        headers: { cookie: await managerCookie() },
+      });
+      expect(status.status).toBe(200);
+      expect((await status.json()).disposal).toEqual({ applicable: false });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+});
+
+describe("boot fence drain (real Postgres): a fenced node serves its own-origin tail and surfaces disposal", () => {
+  it("Case E: a fenced node mounts the own-origin drain source, exempts the cursor report, and reports disposal", async () => {
+    // 1. A fresh primary whose held document marks THIS node sell-only (the fence) AND a SECOND node
+    //    serving-primary (the carrier) — so boot fences AND servingPrimaryNodeId resolves the carrier.
+    await setSingletonRole(suite.admin, "primary");
+    await writeNodeMembership(suite.admin, fencedWithCarrierDoc());
+
+    // 2. Enrol the carrier as a sync_peers subscriber under THIS node (subscriberId = the carrier's node
+    //    id, the id the disposal reader keys the cursor on), so its Bearer authenticates against the
+    //    fenced node's drain source and its cursor report records under `subscriber_id = CARRIER_NODE_ID`.
+    const carrierToken = (
+      await enrolPeer(suite.admin, { subscriberId: CARRIER_NODE_ID, name: "fence-carrier" })
+    ).token;
+    const carrierAuth = { Authorization: `Bearer ${carrierToken}` };
+
+    // 3. Seed an own-origin sync_log row on the ordered lane (table `catalogues`) as the superuser (RLS
+    //    bypassed). `seq` is GENERATED ALWAYS AS IDENTITY and monotonic, so this row is the origin's
+    //    high-water on that lane regardless of any rows a prior case left — a deterministic ownTailSeq.
+    const logRes = await suite.admin.execute<{ seq: string }>(sql`
+      insert into sync_log (origin_id, table_name, op, tenant_id, row_image)
+      values (${TILL_ENV.WAITRON_TILL_NODE_ID}::uuid, 'catalogues', 'insert',
+              ${TILL_ENV.WAITRON_TILL_TENANT_ID}::uuid, '{}'::jsonb)
+      returning seq::text as seq`);
+    const ownSeq = logRes.rows[0]!.seq;
+
+    const port = await freePort();
+    const base = `http://127.0.0.1:${port}`;
+    const server = await bootFenceServer(port);
+    try {
+      await poll(async () => server.health.lastPassAt ?? undefined);
+
+      // Fenced: singleton axis demoted to secondary, exactly as Case A.
+      expect(await readDeploymentAxes(suite.admin)).toEqual({
+        mode: "primary",
+        singletonRole: "secondary",
+      });
+
+      // 4. The own-origin DRAIN SOURCE is mounted on a fenced node (which R1 alone did NOT do — Case A
+      //    asserts a fenced node 404s the source). The carrier's Bearer authenticates: /hello 200, and
+      //    /log?originId=<self> 200 (ownOriginOnly forces self regardless of the query).
+      const hello = await fetch(`${base}/sync-api/hello`, { headers: carrierAuth });
+      expect(hello.status).toBe(200);
+      const logGet = await fetch(
+        `${base}/sync-api/log?originId=${TILL_ENV.WAITRON_TILL_NODE_ID}&after=0`,
+        { headers: carrierAuth },
+      );
+      expect(logGet.status).toBe(200);
+
+      // 5. POST /sync-api/cursor with the carrier's Bearer → 200, NOT the gate's 403: the read-only-gate's
+      //    single-route `POST /sync-api/cursor` exemption lets the carrier report how far it has drained
+      //    through the fence. The report records sync_cursor(subscriber=CARRIER, origin=self, ordered) =
+      //    ownSeq — the carrier has fully drained this node's tail.
+      const cursor = await fetch(`${base}/sync-api/cursor`, {
+        method: "POST",
+        headers: { ...carrierAuth, "content-type": "application/json" },
+        body: JSON.stringify({ lane: "ordered", lastAppliedSeq: ownSeq }),
+      });
+      expect(cursor.status).toBe(200);
+
+      // 6. box-status surfaces the disposal verdict: applicable (fenced + a carrier named), the carrier,
+      //    and drained=true because the carrier's reported cursor reached the own tail's high-water.
+      const status = await fetch(`${base}/api/box/status`, {
+        headers: { cookie: await managerCookie() },
+      });
+      expect(status.status).toBe(200);
+      expect((await status.json()).disposal).toEqual({
+        applicable: true,
+        carrierNodeId: CARRIER_NODE_ID,
+        drained: true,
+        ownTailSeq: ownSeq,
+        carrierAppliedSeq: ownSeq,
+      });
     } finally {
       await server.close();
     }
