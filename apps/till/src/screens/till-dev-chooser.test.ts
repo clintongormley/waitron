@@ -22,7 +22,7 @@ function stubApi(overrides: Partial<Record<DevVerbs, unknown>> = {}): TillApi {
 }
 
 function emptyList(): DevDeviceList {
-  return { devices: [], tills: [], stations: [], profiles: [] };
+  return { devices: [], tills: [], stations: [], canvases: [] };
 }
 
 /** Lets a pending API promise settle and the element re-render. */
@@ -56,33 +56,33 @@ describe("till-dev-chooser", () => {
     expect(customElements.get("till-dev-chooser")).toBe(TillDevChooser);
   });
 
-  it("lists devices from getDevDevices, resolving each device's till and profile names", async () => {
+  it("lists devices from getDevDevices, resolving each device's till and canvas names", async () => {
     const list: DevDeviceList = {
       devices: [
-        // A till-bound device (its till name renders; it has no profile).
+        // A till-bound device (its till name renders; it has no canvas).
         {
           id: "d1",
           kind: "handheld",
           label: "Phone",
           tillId: "t1",
-          layoutProfileId: null,
+          canvasId: null,
           stationId: null,
           active: true,
         },
-        // A profile-bound device with no till (the profile name renders; the till is absent).
+        // A canvas-bound device with no till (the canvas name renders; the till is absent).
         {
           id: "d2",
           kind: "kds_station",
           label: "Pass screen",
           tillId: null,
-          layoutProfileId: "p1",
+          canvasId: "p1",
           stationId: "s1",
           active: true,
         },
       ],
       tills: [{ id: "t1", name: "Caja 1", locationId: "l1" }],
       stations: [{ id: "s1", name: "Pass", displayOrder: 1, isDefault: true, active: true }],
-      profiles: [{ id: "p1", name: "Big screen" }],
+      canvases: [{ id: "p1", name: "Big screen" }],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list) }),
@@ -92,7 +92,7 @@ describe("till-dev-chooser", () => {
     expect(text).toContain("Phone");
     expect(text).toContain("Caja 1"); // the till name of the till-bound device
     expect(text).toContain("Pass screen");
-    expect(text).toContain("Big screen"); // the profile name of the profile-bound device
+    expect(text).toContain("Big screen"); // the canvas name of the canvas-bound device
   });
 
   it("shows an empty-devices hint when no device is enrolled yet", async () => {
@@ -113,14 +113,14 @@ describe("till-dev-chooser", () => {
           kind: "handheld",
           label: "Phone",
           tillId: null,
-          layoutProfileId: null,
+          canvasId: null,
           stationId: null,
           active: true,
         },
       ],
       tills: [],
       stations: [],
-      profiles: [],
+      canvases: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list) }),
@@ -144,7 +144,7 @@ describe("till-dev-chooser", () => {
       devices: [],
       tills: [{ id: "t1", name: "Caja 1", locationId: "l1" }],
       stations: [],
-      profiles: [],
+      canvases: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
@@ -175,7 +175,7 @@ describe("till-dev-chooser", () => {
       devices: [],
       tills: [],
       stations: [{ id: "s1", name: "Pass", displayOrder: 1, isDefault: true, active: true }],
-      profiles: [{ id: "p1", name: "Big screen" }],
+      canvases: [{ id: "p1", name: "Big screen" }],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
@@ -186,7 +186,7 @@ describe("till-dev-chooser", () => {
     await el.updateComplete;
     typeInput(el, "[data-mint-label]", "Pass");
     pickSelect(el, "[data-mint-station]", "s1");
-    pickSelect(el, "[data-mint-profile]", "p1");
+    pickSelect(el, "[data-mint-canvas]", "p1");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-mint-submit]")!.click();
     await flush(el);
@@ -194,7 +194,7 @@ describe("till-dev-chooser", () => {
       kind: "kds_station",
       label: "Pass",
       stationId: "s1",
-      layoutProfileId: "p1",
+      canvasId: "p1",
     });
     expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("kds3");
     expect(navigate).toHaveBeenCalledWith("/");
