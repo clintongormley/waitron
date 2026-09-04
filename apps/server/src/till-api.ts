@@ -14,7 +14,7 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout, getReceipt, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
+import { getReceipt, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
@@ -614,18 +614,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/till", (c) =>
     run(c, log, async () => {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
-      // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. An ordinary
-      // till carries no device cookie → `null` → no canvas (the payload is byte-for-byte unchanged); an
-      // ENROLLED device always resolves a canvas — its assigned `canvasId` if set and resolvable,
-      // else the built-in default for its form factor (SP-B1, generalising SP-A.2 §16.3).
-      // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
+      // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. EVERY request
+      // resolves a canvas: a cookieless request (no device) gets the `till` form-factor default, and an
+      // ENROLLED device gets its assigned `canvasId` if set and resolvable, else the built-in default for
+      // its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3). The counter therefore always has a
+      // canvas to render from.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
-      // ONE transaction reads the issuer identity, the authored layout (`getLayout`, still `till_layouts`)
-      // and the authored receipt trim (`getReceipt`, now its own `tenant_receipts` row — SP-B4): all run
-      // inside the same `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a
-      // second connection. Neither `getLayout` nor `getReceipt` authorizes — this boot read is deliberately
-      // unauthenticated (the browser fetches it before login), and neither carries secrets, only the widget
-      // arrangement + receipt trim, same as `venueName`/`orderFlow` already here.
+      // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`, its own
+      // `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside the same
+      // `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a second
+      // connection. `getReceipt` does not authorize — this boot read is deliberately unauthenticated (the
+      // browser fetches it before login), and it carries no secrets, only the receipt trim + canvas, same
+      // as `venueName`/`orderFlow` already here.
       const boot = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
@@ -657,40 +657,39 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           name: course.name,
           displayOrder: course.displayOrder,
         }));
-        // Authored layout + receipt, or the built-in defaults when the tenant has never opened the
-        // editor. `getLayout` returns DEFAULT_LAYOUT on absence (its `receipt` half is now unused here);
-        // `getReceipt` reads the trim from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no
-        // backfill in either case.
-        const { definition } = await getLayout(tx, deps.cfg.tenantId);
+        // The authored receipt trim, or the built-in default when the tenant has never opened the editor:
+        // `getReceipt` reads it from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no backfill.
         const receipt = await getReceipt(tx, deps.cfg.tenantId);
-        // SP-B1: an enrolled device always resolves a CanvasDef — its explicitly assigned canvas if the
-        // id resolves, else the built-in/default canvas for its form factor. A request with NO device
-        // (cookieless) stays `undefined` so the payload is byte-for-byte unchanged (see the no-cookie test).
-        let canvas: CanvasDef | undefined;
+        // SP-B4: EVERY request resolves a CanvasDef (never undefined), so the counter always has a canvas
+        // to render. Cookieless (no device) → the `till` form-factor default (`getCanvasForFormFactor`
+        // falls back to DEFAULT_CANVASES.till when the tenant has authored none). An enrolled device →
+        // its explicitly assigned canvas if the id resolves, else the built-in/default canvas for its
+        // form factor.
+        let canvas: CanvasDef;
         if (device != null) {
+          let assigned: CanvasDef | undefined;
           if (device.canvasId != null) {
-            canvas = (await getCanvas(tx, deps.cfg.tenantId, device.canvasId))?.definition;
+            assigned = (await getCanvas(tx, deps.cfg.tenantId, device.canvasId))?.definition;
           }
-          // The `?.definition` (getCanvas's return is optional) then `??=` is belt-and-braces: a
+          // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
           // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
           // is intentionally untested. The composite FK `devices(tenant_id, canvas_id) →
           // canvases(tenant_id, id)` is ON DELETE RESTRICT
           // (packages/db/drizzle/0095_parched_meteorite.sql:16), enforced even on PGlite: a device can
           // neither be enrolled with a non-existent canvas id (FK violation at insert) nor keep a
-          // reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??=` still
+          // reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??` still
           // yields a valid form-factor default should that invariant ever be relaxed.
-          canvas ??= await getCanvasForFormFactor(
-            tx,
-            deps.cfg.tenantId,
-            deviceFormFactor(device.kind),
-          );
+          canvas =
+            assigned ??
+            (await getCanvasForFormFactor(tx, deps.cfg.tenantId, deviceFormFactor(device.kind)));
+        } else {
+          canvas = await getCanvasForFormFactor(tx, deps.cfg.tenantId, "till");
         }
         return {
           issuer: row,
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
           courses,
-          layout: definition,
           receipt,
           canvas,
         };
@@ -742,17 +741,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
         cardProvider: deps.cfg.cardProvider,
         tipsEnabled: deps.cfg.tipsEnabled,
-        // The authored (or default) till layout + receipt trim (Task 8). The till app renders
-        // `layout` verbatim in place of the hardcoded `LAYOUT_A` and threads `receipt` to its ticket
-        // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
-        layout: boot.layout,
+        // The authored (or default) receipt trim (Task 8) — the till app threads it to its ticket view.
+        // Rides this same unauthenticated boot fetch, so the till makes no second request.
         receipt: boot.receipt,
-        // The calling device's resolved layout CANVAS (SP-B1), a bare `CanvasDef`. Present for ANY
-        // enrolled device — its assigned canvas if the `canvasId` resolves, else the built-in
-        // default for its form factor — and ABSENT (never `null`) for a cookieless request, so a request
-        // with no device cookie is byte-for-byte unchanged.
-        // ADDITIVE — the counter still renders from `layout`/`receipt` above until SP-B.
-        ...(boot.canvas !== undefined ? { canvas: boot.canvas } : {}),
+        // The calling device's resolved layout CANVAS (SP-B4), a bare `CanvasDef`, ALWAYS present so the
+        // counter always has a canvas to render. For an enrolled device it is the assigned canvas if the
+        // `canvasId` resolves, else the built-in default for its form factor; for a cookieless request it
+        // is the `till` form-factor default. There is no longer a `layout` field — the canvas replaces it.
+        canvas: boot.canvas,
       });
     }),
   );
