@@ -1111,9 +1111,10 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** Editor mode (Task B6): tab bar, interactive canvas, palette and — when a card is selected — its
-   * property panel; Guardar (inert, B7) and Cancelar. The editor root keeps the B5 `editor-placeholder`
-   * seam so the `data-editing-id`/`data-form-factor` hooks the later tasks read still resolve. */
+  /** Editor mode: tab bar, interactive canvas, palette and the property panel for the current
+   * selection (card / tab-settings / canvas-settings). Guardar validates the draft and persists it via
+   * `#save` (create or update on `editingId`); Cancelar discards. The editor root keeps the B5
+   * `editor-placeholder` seam so the `data-editing-id`/`data-form-factor` hooks still resolve. */
   #renderEditor(): TemplateResult {
     const draft = this.draft;
     const activeTab = draft?.tabs[this.activeTabIndex] ?? null;

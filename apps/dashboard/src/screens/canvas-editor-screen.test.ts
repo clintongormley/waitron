@@ -703,6 +703,30 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(definition.tabs[0].cards[5].visibleWhen).toEqual(["empty"]);
   });
 
+  it("removes a capability when its switch is toggled off in canvas settings", async () => {
+    // Open a canvas that ALREADY has capabilities, so the switch starts checked and the toggle
+    // exercises the `set.delete(flag)` (removal) branch — not just the add branch.
+    const withCaps = {
+      ...validTillDefinition,
+      capabilities: ["integrated-card-payment", "open-cash-drawer"],
+    };
+    const { el, api } = await openValidEditor({
+      getCanvas: vi
+        .fn()
+        .mockResolvedValue({ id: "c1", name: "Counter till", definition: withCaps }),
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
+    await el.updateComplete;
+    toggle(el, "cap-integrated-card-payment", false);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await flush(el);
+    const definition = (api.updateCanvas as ReturnType<typeof vi.fn>).mock.calls[0][2];
+    expect(definition.capabilities).not.toContain("integrated-card-payment");
+    // The other capability is untouched (deletion removes only the toggled flag).
+    expect(definition.capabilities).toContain("open-cash-drawer");
+  });
+
   it("clamps a tab's column count to 1..24 and ignores a non-numeric entry", async () => {
     const { el, api } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=tab-settings]")!.click();
