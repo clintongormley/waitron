@@ -13,7 +13,7 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
  * legend, both optional. It CANNOT touch the immutable art. 7.1 core (issuer/NIF, número/serie/fecha,
  * goods, tipo/base, total, QR + legend); it only authors the two trim strings that render around it.
  *
- * On connect it loads `api.getLayout()` and reads its `receipt` half into the two fields. `headerSubtitle`
+ * On connect it loads `api.getReceipt()` and reads its `receipt` into the two fields. `headerSubtitle`
  * is a `wt-input`; `footerMessage` is a native token-styled `<textarea>` — `wt-input` exposes no multiline
  * affordance (`packages/ui/src/components/wt-input.ts` renders a single `<input>`), so a multiline field
  * falls back to a native `<textarea>` styled with the shared tokens, exactly as the login/create-person
@@ -27,7 +27,7 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
  * surrounding whitespace before it is sent. `putReceipt` is a full-replace idempotent PUT (design §7), so
  * there is no single-flight guard: a double-fire re-sends the same config, not a second distinct write.
  *
- * ERROR HANDLING mirrors `layout-screen.ts`/`catalogue-screen.ts`/`staff-screen.ts`: `#load` and `#save`
+ * ERROR HANDLING mirrors `catalogue-screen.ts`/`staff-screen.ts`: `#load` and `#save`
  * are each fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` — the raw thrown
  * `{ code }`, falling back to `server.internal` — rendered in a `role="alert"` banner, never an unhandled
  * promise rejection. The raw code stays in state; `codeMessage` (`../i18n/codes.js`) maps it to localised
@@ -102,7 +102,7 @@ export class ReceiptScreen extends LitElement {
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const { receipt } = await this.api.getLayout();
+      const { receipt } = await this.api.getReceipt();
       this.headerSubtitle = receipt.headerSubtitle ?? "";
       this.footerMessage = receipt.footerMessage ?? "";
     } catch (error) {

@@ -264,7 +264,8 @@ export class ProductForm extends LitElement {
   // unrelated re-render, exactly as `allergens` is kept separate from `seedAllergens` above.
   @state() private selectedGroupIds: string[] = [];
   // The attach picker's current choice; reconciled against the still-available groups in
-  // `#availableGroups`/`#effectiveGroupChoice` (the `layout-screen.ts` add-picker pattern).
+  // `#availableGroups`/`#effectiveGroupChoice` (the add-picker pattern: the picker only offers
+  // not-yet-attached groups, and its choice snaps to a still-available one).
   @state() private addGroupChoice = "";
 
   /**
@@ -449,9 +450,8 @@ export class ProductForm extends LitElement {
   }
 
   // ── Option-group attach section (Task 12) ─────────────────────────────────────────────────────
-  // Pick + ORDER which reusable option groups apply, mirroring `layout-screen.ts`'s widget-row
-  // add/move/remove shape: an ordered list of picked rows (↑/↓/Remove) plus a picker offering only the
-  // groups not yet picked. Unlike the layout screen this state lives on the FORM (not a screen), because
+  // Pick + ORDER which reusable option groups apply: an ordered list of picked rows (↑/↓/Remove) plus a
+  // picker offering only the groups not yet picked. This state lives on the FORM (not a screen), because
   // the picked set is part of the SAME create/update body the confirm button sends — there is no
   // separate "save the attach set" route to call immediately, the way `set-product-station` is.
 
@@ -461,8 +461,7 @@ export class ProductForm extends LitElement {
   }
 
   /** The picker's effective selection: the current `addGroupChoice` if still available, else the first
-   * available group (so a never-touched picker still adds a sensible group) — mirrors
-   * `layout-screen.ts`'s `#effectiveChoice`. */
+   * available group (so a never-touched picker still adds a sensible group). */
   #effectiveGroupChoice(available: OptionGroup[]): string {
     if (this.addGroupChoice !== "" && available.some((g) => g.id === this.addGroupChoice)) {
       return this.addGroupChoice;
@@ -485,8 +484,7 @@ export class ProductForm extends LitElement {
   }
 
   /** Swap row `index` with its neighbour `delta` away (−1 up, +1 down). A move off either end is a
-   * no-op — those buttons render disabled, this is the belt-and-braces guard (`layout-screen.ts`'s
-   * `#move`). */
+   * no-op — those buttons render disabled, this is the belt-and-braces guard. */
   #moveGroup(index: number, delta: number): void {
     const target = index + delta;
     if (target < 0 || target >= this.selectedGroupIds.length) return;
@@ -589,7 +587,7 @@ export class ProductForm extends LitElement {
   }
 
   /** One row of the attach section's ordered pick list: the group's name, ↑/↓ (disabled at the ends,
-   * the `layout-screen.ts` belt-and-braces guard) and Remove. Falls back to the bare id if `optionGroups`
+   * the belt-and-braces guard) and Remove. Falls back to the bare id if `optionGroups`
    * has not (yet) loaded the name for a seeded id — the read-back can resolve before the group list does. */
   #renderOptionGroupRow(id: string, index: number, total: number) {
     const group = this.optionGroups.find((g) => g.id === id);

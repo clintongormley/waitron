@@ -65,8 +65,8 @@ function primaryName(name: Record<string, string>, primaryLocale: string, id: st
  * ITEMS ARE PER EXPANDED GROUP. `expandedGroupId` + `items` are both screen-owned: clicking a row's
  * "Items" button emits `toggle-option-group-items { groupId }`, and the screen decides whether that
  * opens or closes the panel (toggling `expandedGroupId`) and, on open, loads that group's items. Only
- * ONE group's items are ever shown at a time — the same one-active-editor shape `layout-screen.ts` uses
- * for its per-row config expansion.
+ * ONE group's items are ever shown at a time — the one-active-editor shape (only one row's detail
+ * panel is expanded at a time).
  *
  * FIELD EDITS ON AN EXISTING ROW ARE IMMEDIATE, one PATCH per field — the `category-manager.ts`
  * per-row `<select>` pattern (no local buffering, no separate confirm), because every group/item field
@@ -159,7 +159,7 @@ export class OptionGroupManager extends LitElement {
   /** The EXPANDED group's items only (active AND inactive), from `listOptionGroupItems`. Screen-owned. */
   @property({ attribute: false }) items: OptionGroupItem[] = [];
 
-  /** Which group's items panel is open, or null. Screen-owned (the `layout-screen.ts` one-expanded-row
+  /** Which group's items panel is open, or null. Screen-owned (the one-expanded-row
    * pattern) — this widget only asks to toggle it via `toggle-option-group-items`. */
   @property({ attribute: false }) expandedGroupId: string | null = null;
 

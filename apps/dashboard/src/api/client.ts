@@ -422,27 +422,12 @@ export interface IngredientPatch {
  * `Ingredient`; aliased (not re-declared) so the two shapes cannot drift. */
 export type RecipeLine = Ingredient;
 
-// ── Till layout & receipt (configurable-till) types ──────────────────────────────────────────────
-// LOCAL copies of `@waitron/layouts`' JSON shapes (the `/management-api/layout` + `/management-api/receipt`
-// routes wrapping the layouts service), deliberately NOT imported from `@waitron/layouts`/`@waitron/db` —
-// a runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as the
-// staff/catalogue shapes above and `apps/till/src/layout.ts` do — the till keeps its own local copy the
-// same way). If the server shapes change these follow, and a mismatch surfaces as a runtime shape error a
-// view test catches, not a compile break.
-
-/** One of the six counter widgets the layout editor can place (mirrors layouts' `WidgetType`). */
-export type WidgetType =
-  "product-grid" | "basket" | "total" | "tender-pay" | "held-orders" | "prep-queue";
-
-/** One placed widget: which widget, which region it sits in, and its per-widget `config` bag. */
-export interface WidgetInstance {
-  type: WidgetType;
-  region: "main" | "aside";
-  config: Record<string, unknown>;
-}
-
-/** A whole layout: the ordered widget instances the till renders, in order, into their regions. */
-export type LayoutDef = WidgetInstance[];
+// ── Receipt-trim (configurable-till) types ────────────────────────────────────────────────────────
+// A LOCAL copy of `@waitron/layouts`' receipt JSON shape (the `/management-api/receipt` route wrapping
+// the layouts service), deliberately NOT imported from `@waitron/layouts`/`@waitron/db` — a runtime
+// import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as the
+// staff/catalogue shapes above do). If the server shape changes this follows, and a mismatch surfaces
+// as a runtime shape error a view test catches, not a compile break.
 
 /**
  * The authorable, NON-FISCAL receipt trim (design §7/§8) — a `headerSubtitle` under the venue name and a
@@ -1525,27 +1510,14 @@ export class DashboardApi {
     });
   }
 
-  // ── Till layout & receipt configuration ──────────────────────────────────────────────────────
+  // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────
 
   /**
-   * `GET /management-api/layout` — the authored till layout + receipt trim, or the server's defaults
-   * when this tenant has never authored one (`getLayout` falls back to `DEFAULT_LAYOUT`/`DEFAULT_RECEIPT`
-   * server-side), so this never 404s.
+   * `GET /management-api/receipt` — the authored receipt trim, or the server's `DEFAULT_RECEIPT` (`{}`)
+   * when this tenant has never authored one (the route falls back server-side), so this never 404s.
    */
-  getLayout(): Promise<{ definition: LayoutDef; receipt: ReceiptConfig }> {
-    return this.#request<{ definition: LayoutDef; receipt: ReceiptConfig }>(
-      "/management-api/layout",
-      "GET",
-    );
-  }
-
-  /**
-   * `PUT /management-api/layout` — replace the WHOLE layout definition (full-replace, idempotent, the
-   * editor's "author the whole layout" semantics). Answers an empty 204; a definition the server rejects
-   * throws `layout.invalid`.
-   */
-  putLayout(definition: LayoutDef): Promise<void> {
-    return this.#request<void>("/management-api/layout", "PUT", { definition });
+  getReceipt(): Promise<{ receipt: ReceiptConfig }> {
+    return this.#request<{ receipt: ReceiptConfig }>("/management-api/receipt", "GET");
   }
 
   /**

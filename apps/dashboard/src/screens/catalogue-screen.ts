@@ -138,7 +138,7 @@ export class CatalogueScreen extends LitElement {
   @state() private optionGroups: OptionGroup[] = [];
   /** The EXPANDED group's items only — loaded on demand when the manager's Items button is toggled. */
   @state() private optionGroupItems: OptionGroupItem[] = [];
-  /** Which group's items panel the manager has open, or null (the `layout-screen.ts` one-expanded-row
+  /** Which group's items panel the manager has open, or null (the one-expanded-row
    * pattern — only one group's items are ever loaded/shown at a time). */
   @state() private expandedGroupId: string | null = null;
   /** A raw `{ code }` for the manager's group create/edit inline error slot, or null (e.g.
