@@ -26,10 +26,6 @@ import type { Logger } from "./logger.js";
  * backup when scheduled backup is off (no reader wired). `chain` is passed through untouched; the "no
  * records" signal is `chain.height === 0`, never `chain.lastAt`.
  */
-/** The carrier a fenced node drains onto, plus its drain progress (membership rejoin R2). Only present
- * when the node is fenced and a carrier is known; a serving node reports `disposal.applicable:false`. */
-export type DisposalStatus = { carrierNodeId: string } & DrainProgress;
-
 export type BoxStatus = {
   mode: DeploymentMode;
   environment: DeploymentEnvironment;
@@ -51,6 +47,10 @@ export type BoxStatus = {
   backup: BackupStatus;
   duties: Record<string, unknown>;
 };
+
+/** The carrier a fenced node drains onto, plus its drain progress (membership rejoin R2). Only present
+ * when the node is fenced and a carrier is known; a serving node reports `disposal.applicable:false`. */
+export type DisposalStatus = { carrierNodeId: string } & DrainProgress;
 
 export type BoxStatusReaders = {
   mode: () => Promise<DeploymentMode>;

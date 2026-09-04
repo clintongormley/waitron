@@ -707,8 +707,10 @@ vs gated on an unbuilt foundation or an external dependency:
     **own-origin drain source** — `mountSyncApi` gained `ownOriginOnly`, which forces `originId=self`
     on `/sync-api/log`, so the current primary (the **carrier**) drains `originId=<returned>` with the
     existing pull loop (no carrier-side code; the two boxes are static mutual peers). The read-only
-    gate gained a **`/sync-api/` exemption** so the carrier's `POST /sync-api/cursor` reaches the fenced
-    node (the disposal guard's only input); a fenced node stays fully fenced otherwise
+    gate gained a single-route **`POST /sync-api/cursor` exemption** (the carrier's cursor report — the
+    disposal guard's only input; writes `sync_cursor`, no tenant_id/RLS), so a future mutating
+    `/sync-api/` route is not auto-exempted — it hits the fence and fails loud (403). A fenced node stays
+    fully fenced otherwise
     (`isSingletonPrimary` false — submitter/reconciler/config-writer + retention off; write verbs still
     403). Producer-side **disposal guard** `readDrainProgress` (`@waitron/sync`): own-origin high-water
     `seq` per lane vs the carrier's reported `sync_cursor` (subscriber=carrier, origin=self, lane),
@@ -721,7 +723,15 @@ vs gated on an unbuilt foundation or an external dependency:
   - **R3 (wipe-and-restore, spec §6 step 4)** — **GATED on the backup regime** (`pg_restore` consumer
     + `sync_log`-in-backup); unbuilt. Now also carries the **`evicted` producer + retire/dispose
     action** — R2 leaves the node `sell-only` and mints no document; the `sell-only`→`evicted`
-    membership edit and the retire action land here.
+    membership edit and the retire action land here. **Three R2-review facts for R3 to hold:**
+    (i) the retire action must gate on the disposal guard's `drained` boolean, NEVER on comparing
+    `carrierAppliedSeq >= ownTailSeq` — `ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the
+    cross-lane MIN, so they legitimately differ while `drained:true`; (ii) the guard measures the
+    enrolled `sync_log` tail only — the per-node fiscal chain (`registros_facturacion`) is deliberately
+    NOT in `sync_log` and does not replicate to the carrier, so `drained` is a statement about replicable
+    app data, not the fiscal chain; (iii) a fenced node whose held doc names NO carrier reports
+    `disposal.applicable:false` — the same value a healthy serving node reports — so R3's retire UX must
+    distinguish "fenced, undrainable (no carrier)" from "N/A (serving)".
   - **Slice 7 (conflict surface)** — ops conflict-log + primary-wins config; **not started**.
   - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
     its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one

@@ -1535,6 +1535,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
   // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
   // `localSyncDb` comment above states).
+  //
+  // Carrier-keying coupling the disposal guard relies on: `readDrainProgress` looks the carrier's cursor
+  // up by `sync_cursor.subscriber_id = carrierNodeId`, where `carrierNodeId` is a membership NODE id
+  // (`servingPrimaryNodeId` of the held doc). But the stored `subscriber_id` is whatever the carrier's
+  // token was enrolled under in THIS node's `sync_peers`. The lookup matches ONLY because the carrier's
+  // pull loop reports its cursor with `subscriberId = till.nodeId` (`runSyncPull`, boot.ts:~1369) — i.e.
+  // the house convention `subscriberId === nodeId`. Were the carrier enrolled under a different (e.g.
+  // friendly-name) subscriber id, the cursor lookup returns null → `laneCarrier = 0` → the box reads
+  // `drained:false` INDEFINITELY. That is FAIL-SAFE (never a false `drained:true`, so R2 never green-lights
+  // a junking of a node that hasn't drained), but R3's retire action — which consumes `drained` — must
+  // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   mountBoxStatusApi(
     app,
