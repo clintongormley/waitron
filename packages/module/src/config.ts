@@ -61,6 +61,15 @@ export function enabledModules(
 }
 
 /**
+ * Serialize a ModuleConfig back to the sparse override object (the modules.json inner map). The
+ * inverse of parseModuleConfig: parseModuleConfig({ modules: serializeModuleConfig(c) }, M) yields
+ * the same enabled set as c for every module in M. Generic — no module name, no vocabulary.
+ */
+export function serializeModuleConfig(config: ModuleConfig): Record<string, boolean> {
+  return Object.fromEntries(config.overrides);
+}
+
+/**
  * The `provision-only` modules that are disabled. Generic — it names no module, it iterates the
  * `tier`, so this stays free of the token "fiscal". The composition root refuses venue provisioning
  * when this is non-empty (spec §4): a provision-only module mints unrecoverable state at provision.
