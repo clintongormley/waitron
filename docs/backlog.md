@@ -685,8 +685,7 @@ vs gated on an unbuilt foundation or an external dependency:
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
   (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
-  **R2 (drain-as-source + disposal guard) BUILT on `feat/membership-rejoin-r2-drain`
-  (2026-09-04), pending owner sign-off + land**; R3 remains [fiscal-adjacent → owner
+  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); R3 remains [fiscal-adjacent → owner
   sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
@@ -702,8 +701,7 @@ vs gated on an unbuilt foundation or an external dependency:
   app helpers `isFenced` / `shouldFenceRestart` (`apps/server`); pure `standingOf` /
   `isFencedStanding` in `@waitron/membership`. **No migration** (no schema change; `inmutabilidad` /
   FORCE-RLS / `english-only` unaffected — all standings are already English). **Carry-forwards:**
-  - **R2 (drain-as-source + disposal guard) BUILT on `feat/membership-rejoin-r2-drain`
-    (2026-09-04), pending owner sign-off + land.** A fenced (`sell-only`) node now serves an
+  - **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05). A fenced (`sell-only`) node now serves an
     **own-origin drain source** — `mountSyncApi` gained `ownOriginOnly`, which forces `originId=self`
     on `/sync-api/log`, so the current primary (the **carrier**) drains `originId=<returned>` with the
     existing pull loop (no carrier-side code; the two boxes are static mutual peers). The read-only
