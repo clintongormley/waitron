@@ -16,8 +16,10 @@ declare module "@waitron/shared" {
     /** modules.json names a module that is not in the module list — a typo we refuse rather than
      * silently ignore. `module` is the offending key. */
     "module.config_unknown": { module: string };
-    /** modules.json set `core: false`; `core` is mandatory and can never be disabled. */
-    "module.core_not_disableable": Record<string, never>;
+    /** modules.json tried to disable a `mandatory`-tier module (core today); a mandatory module can
+     * never be disabled. `module` is the one that was refused — named from the descriptor's `tier`,
+     * so this generic code hardcodes no module. */
+    "module.mandatory_not_disableable": { module: string };
     /** Venue provisioning was attempted while a `provision-only` module (fiscal today) is disabled.
      * `module` is the disabled provision-only module. Refused before any chain is minted (spec §4). */
     "module.provision_only_disabled": { module: string };

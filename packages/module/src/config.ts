@@ -4,42 +4,43 @@ import "./errors.js";
 
 /**
  * The desired module set, parsed from the on-box modules.json. A SPARSE OVERRIDE map: a module is
- * enabled unless it appears here with `false` (default-on, spec §2). `core` never appears false
- * (the parser refuses it). Absent file → an empty map → everything enabled.
+ * enabled unless it appears here with `false` (default-on, spec §2). A `mandatory`-tier module (core)
+ * never appears false (the parser refuses it). Absent file → an empty map → everything enabled.
  */
 export interface ModuleConfig {
   readonly overrides: ReadonlyMap<string, boolean>;
 }
 
-const CORE = "core";
-
 /**
- * Parse and validate raw modules.json content. `known` is the set of valid module names (the
- * composition root passes ALL_MODULES' names) so this pure parser needs no import of the module list.
- * Validates rather than trusts — the file is operator-editable (CLAUDE.md §3).
+ * Parse and validate raw modules.json content. `modules` is the known module set (the composition
+ * root passes ALL_MODULES); the parser reads each descriptor's `name` (to reject an unknown key) and
+ * `tier` (to refuse disabling a `mandatory` module) — the same tier-driven, module-name-free approach
+ * `disabledProvisionOnly` uses, so this generic package never hardcodes a module name. Validates
+ * rather than trusts — the file is operator-editable (CLAUDE.md §3).
  */
-export function parseModuleConfig(raw: unknown, known: readonly string[]): ModuleConfig {
+export function parseModuleConfig(raw: unknown, modules: readonly WaitronModule[]): ModuleConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new AppError("module.config_invalid", { reason: "not an object" });
   }
-  const modules = (raw as Record<string, unknown>).modules;
-  if (modules === undefined) return { overrides: new Map() };
-  if (modules === null || typeof modules !== "object" || Array.isArray(modules)) {
+  const entries = (raw as Record<string, unknown>).modules;
+  if (entries === undefined) return { overrides: new Map() };
+  if (entries === null || typeof entries !== "object" || Array.isArray(entries)) {
     throw new AppError("module.config_invalid", { reason: "`modules` is not an object" });
   }
-  const knownSet = new Set(known);
+  const byName = new Map(modules.map((m) => [m.name, m]));
   const overrides = new Map<string, boolean>();
-  for (const [name, value] of Object.entries(modules as Record<string, unknown>)) {
+  for (const [name, value] of Object.entries(entries as Record<string, unknown>)) {
     if (typeof value !== "boolean") {
       throw new AppError("module.config_invalid", {
         reason: `\`modules.${name}\` is not a boolean`,
       });
     }
-    if (!knownSet.has(name)) {
+    const module = byName.get(name);
+    if (module === undefined) {
       throw new AppError("module.config_unknown", { module: name });
     }
-    if (name === CORE && value === false) {
-      throw new AppError("module.core_not_disableable", {});
+    if (module.tier === "mandatory" && value === false) {
+      throw new AppError("module.mandatory_not_disableable", { module: name });
     }
     overrides.set(name, value);
   }

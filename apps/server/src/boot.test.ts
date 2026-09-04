@@ -922,21 +922,10 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MAX_TICK_MS: "200",
           WAITRON_SKIP_RETRY_MS: "100",
         });
-        // The reconcile line is logged synchronously in the shared prefix, BEFORE the mode branch and
-        // the listener — so by the time `startServer` resolves it is already captured. Parse it out of
-        // the JSON stdout lines.
-        let found: LogLine | undefined;
-        for (const line of lines) {
-          try {
-            const parsed = JSON.parse(line) as LogLine;
-            if (parsed.event === "module.reconcile") found = parsed;
-          } catch {
-            continue;
-          }
-        }
-        if (found === undefined) {
-          throw new Error(`expected a "module.reconcile" line, saw:\n${lines.join("\n")}`);
-        }
+        // The reconcile line is logged in the shared prefix, before the listener — so it is already
+        // captured by the time `startServer` resolves. Reuse the file's `waitForEvent` helper rather
+        // than re-implementing the find-a-JSON-log-line-by-event loop.
+        const found = await waitForEvent(lines, "module.reconcile");
         return [s, found] as const;
       });
       server = started;

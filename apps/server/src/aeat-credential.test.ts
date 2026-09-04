@@ -20,10 +20,7 @@ import { sealAeatCredential, type AeatCert } from "./aeat-credential.js";
 
 // All modules enabled — the seal fixture provisions a real venue, so its provision must not be
 // refused by the SP-1b fiscal gate (that gate is exercised in provision.test.ts).
-const ALL_ENABLED = parseModuleConfig(
-  {},
-  ALL_MODULES.map((m) => m.name),
-);
+const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
 // Real Postgres, not PGlite: `tenant_credentials` is FORCE-RLS, so `putCredential` must run under
 // `withTenant`, and the seal FKs to a `tenants` row `provisionVenue` mints under the OWNER

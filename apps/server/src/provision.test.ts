@@ -16,11 +16,8 @@ import { parseModuleConfig } from "@waitron/module";
 import { provisionVenue } from "./provision.js";
 import { ALL_MODULES } from "./modules.js";
 
-/** Every known module name — the second argument `parseModuleConfig` validates the config against. */
-const KNOWN = ALL_MODULES.map((m) => m.name);
-
 /** All modules enabled (an absent/empty modules.json) — the default the happy-path deps pass. */
-const ALL_ENABLED = parseModuleConfig({}, KNOWN);
+const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
 // Real Postgres, not PGlite: provisionVenue stamps `deployment` and runs `applyVenue` under RLS as
 // the OWNER connection, which PGlite (every connection a superuser) cannot faithfully represent
@@ -158,7 +155,7 @@ describe("provisionVenue", () => {
     // validated, stamped or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access:
     // if the guard short-circuits first, the DB is never touched, so a `module.provision_only_disabled`
     // throw (rather than "ownerDb must not be touched") is the proof.
-    const moduleConfig = parseModuleConfig({ modules: { fiscal: false } }, KNOWN);
+    const moduleConfig = parseModuleConfig({ modules: { fiscal: false } }, ALL_MODULES);
     const ownerDb = new Proxy(
       {},
       {

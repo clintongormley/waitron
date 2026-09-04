@@ -528,14 +528,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // for nothing, and it means the pool is never asked to double as the migrator's connection: the
   // two connection strings can differ, and `applyMigrations` now opens its own connection from
   // whichever string it is given rather than migrating over a pool built from a different one.
-  // SP-1b: setup mode migrates the FULL schema (the wizard needs it — SP-1a §4 "setup-migrates-all");
-  // trading mode migrates only the modules the on-box modules.json enables (default: all). The enabled
-  // set is read from `<stateDir>/modules.json` BEFORE migrations, exactly when the decision is needed
-  // (spec §1.3). `enabledModules` never drops `core` (mandatory; `parseModuleConfig` refuses `core: false`).
-  const moduleConfig =
-    config.till === undefined ? undefined : await readModuleConfig(config.stateDir);
+  // SP-1b: the on-box `modules.json` desired set, read BEFORE migrations — exactly when the decision
+  // is needed (spec §1.3). Read UNCONDITIONALLY (both modes need it: trading for the migration filter
+  // + drift log, setup for the provisioning gate below), so a malformed file fails fast, once, before
+  // any migration or pool. Setup mode still migrates the FULL schema (the wizard needs it — SP-1a §4
+  // "setup-migrates-all"); trading mode migrates only the enabled set (default: all). `enabledModules`
+  // never drops `core` — it is `mandatory`, and `parseModuleConfig` refuses disabling a mandatory module.
+  const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
-    moduleConfig === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
+    config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
   await applyMigrations(
     config.migrationsDatabaseUrl,
     migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
@@ -558,15 +559,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.
-  if (moduleConfig !== undefined) {
+  if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
       const migrated = new Set<string>();
       for (const m of ALL_MODULES) {
         if ((await appliedSchemaVersion(driftProbe, m.migrations)) > 0) migrated.add(m.name);
       }
+      // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
+      // (the branch above), so reuse it rather than recompute the same filter.
       const r = reconcile(
-        enabledModules(ALL_MODULES, moduleConfig).map((m) => m.name),
+        setsToMigrate.map((m) => m.name),
         migrated,
       );
       if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
@@ -670,11 +673,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `mountSetup` or `startListening` — never leaks it.
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
       try {
-        // The desired module set for the provisioning gate (spec §4). Setup mode migrated the full
-        // schema regardless, but provisioning must refuse a disabled provision-only module — so read the
-        // same on-box modules.json the trading boot reads. Absent file = all enabled. (The shared-prefix
-        // `moduleConfig` above is `undefined` in setup mode, so it cannot be reused here.)
-        const setupModuleConfig = await readModuleConfig(config.stateDir);
         // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
         // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
         // and `adopt` (C2b) persist `trading.env` through the SAME writer.
@@ -694,7 +692,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
-            provision: (req) => provisionVenue({ ownerDb, moduleConfig: setupModuleConfig }, req),
+            provision: (req) => provisionVenue({ ownerDb, moduleConfig }, req),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
