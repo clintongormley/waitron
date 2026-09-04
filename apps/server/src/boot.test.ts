@@ -2408,7 +2408,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
           kind: "till",
           stationId: null,
           tillId: boundTillId,
-          layoutProfileId: null,
+          canvasId: null,
           label: "SP-C dev override device",
         });
       });

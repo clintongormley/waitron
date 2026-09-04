@@ -5,15 +5,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { DEFAULT_PROFILES } from "@waitron/layouts";
-import type { ProfileDef, ThemeOverride } from "@waitron/layouts";
+import { DEFAULT_CANVASES } from "@waitron/layouts";
+import type { CanvasDef, ThemeOverride } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 
-// Real Postgres, not PGlite: these routes wrap the layout-profile CRUD + tenant-theme config, and each
+// Real Postgres, not PGlite: these routes wrap the layout-canvas CRUD + tenant-theme config, and each
 // verb both AUTHORIZES (`authorizeManager` reads persons + management_sessions under the app role's
-// RLS) and reads/writes `layout_profiles` / `tenant_themes` under FORCE ROW LEVEL SECURITY — both
+// RLS) and reads/writes `canvases` / `tenant_themes` under FORCE ROW LEVEL SECURITY — both
 // false passes on PGlite's superuser connection (CLAUDE.md §4). The same real-Postgres justification
 // as `management-api.rls.test.ts`, whose harness (`applyVenue`/`planVenue` + password `login`) this
 // file reuses.
@@ -35,16 +35,16 @@ function nextNif(): string {
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A profile name unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the
- *  profile set accumulates per tenant and `(tenant, name)` is unique, so a fixed name could collide. */
+/** A canvas name unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the
+ *  canvas set accumulates per tenant and `(tenant, name)` is unique, so a fixed name could collide. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/** A valid phone profile with a distinguishing title, so a stored row is never mistaken for a default
- *  and two round-trips can be told apart. Mirrors `profile-store.rls.test.ts`'s helper. */
-function phoneProfile(title: string): ProfileDef {
-  const base = DEFAULT_PROFILES["phone-portrait"];
+/** A valid phone canvas with a distinguishing title, so a stored row is never mistaken for a default
+ *  and two round-trips can be told apart. Mirrors `canvas-store.rls.test.ts`'s helper. */
+function phoneCanvas(title: string): CanvasDef {
+  const base = DEFAULT_CANVASES["phone-portrait"];
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
@@ -103,7 +103,7 @@ function mountApp(tenantId: string): Hono {
     app,
     {
       db: suite.admin,
-      // nodeId sentinel: the profile/theme management routes never read cfg.nodeId, but
+      // nodeId sentinel: the canvas/theme management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
       // sibling management tests (management-api.rls.test.ts, …-status/-passkey).
       cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
@@ -129,7 +129,7 @@ async function login(app: Hono, email: string): Promise<string> {
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
-describe("Management API — layout-profile CRUD (Task 11)", () => {
+describe("Management API — layout-canvas CRUD (Task 11)", () => {
   let tenantId: string;
   let managerCookie: string;
 
@@ -141,10 +141,10 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
   it("round-trips create → list → get → update → delete", async () => {
     const app = mountApp(tenantId);
     const name = uniqueName("Front counter");
-    const definition = phoneProfile("Floor A");
+    const definition = phoneCanvas("Floor A");
 
     // CREATE → 201 { id }
-    const created = await app.request("/management-api/profiles", {
+    const created = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ name, definition }),
@@ -153,121 +153,121 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     const { id } = (await created.json()) as { id: string };
     expect(typeof id).toBe("string");
 
-    // GET by id → the stored profile
-    const got = await app.request(`/management-api/profiles/${id}`, {
+    // GET by id → the stored canvas
+    const got = await app.request(`/management-api/canvases/${id}`, {
       headers: { cookie: managerCookie },
     });
     expect(got.status).toBe(200);
     expect(await got.json()).toEqual({ id, name, definition });
 
     // LIST includes it
-    const listed = await app.request("/management-api/profiles", {
+    const listed = await app.request("/management-api/canvases", {
       headers: { cookie: managerCookie },
     });
     expect(listed.status).toBe(200);
-    const { profiles } = (await listed.json()) as {
-      profiles: { id: string; name: string; definition: ProfileDef }[];
+    const { canvases } = (await listed.json()) as {
+      canvases: { id: string; name: string; definition: CanvasDef }[];
     };
-    expect(profiles.some((p) => p.id === id && p.name === name)).toBe(true);
+    expect(canvases.some((p) => p.id === id && p.name === name)).toBe(true);
 
     // UPDATE → 204, then GET reads back the new name + definition
     const renamed = uniqueName("Renamed");
-    const nextDef = phoneProfile("Floor B");
-    const updated = await app.request(`/management-api/profiles/${id}`, {
+    const nextDef = phoneCanvas("Floor B");
+    const updated = await app.request(`/management-api/canvases/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ name: renamed, definition: nextDef }),
     });
     expect(updated.status).toBe(204);
     expect(await updated.text()).toBe("");
-    const afterUpdate = await app.request(`/management-api/profiles/${id}`, {
+    const afterUpdate = await app.request(`/management-api/canvases/${id}`, {
       headers: { cookie: managerCookie },
     });
     expect(await afterUpdate.json()).toEqual({ id, name: renamed, definition: nextDef });
 
-    // DELETE → 204, then GET → 404 profile.not_found
-    const removed = await app.request(`/management-api/profiles/${id}`, {
+    // DELETE → 204, then GET → 404 canvas.not_found
+    const removed = await app.request(`/management-api/canvases/${id}`, {
       method: "DELETE",
       headers: { cookie: managerCookie },
     });
     expect(removed.status).toBe(204);
     expect(await removed.text()).toBe("");
-    const afterDelete = await app.request(`/management-api/profiles/${id}`, {
+    const afterDelete = await app.request(`/management-api/canvases/${id}`, {
       headers: { cookie: managerCookie },
     });
     expect(afterDelete.status).toBe(404);
     expect((await afterDelete.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.not_found" },
+      error: { code: "canvas.not_found" },
     });
   });
 
-  it("GET by an unknown (well-formed) id → 404 profile.not_found", async () => {
+  it("GET by an unknown (well-formed) id → 404 canvas.not_found", async () => {
     const app = mountApp(tenantId);
-    const res = await app.request(`/management-api/profiles/${randomUUID()}`, {
+    const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       headers: { cookie: managerCookie },
     });
     expect(res.status).toBe(404);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.not_found" },
+      error: { code: "canvas.not_found" },
     });
   });
 
-  it("PUT to an unknown (well-formed) id → 404 profile.not_found (no silent no-op)", async () => {
+  it("PUT to an unknown (well-formed) id → 404 canvas.not_found (no silent no-op)", async () => {
     const app = mountApp(tenantId);
-    const res = await app.request(`/management-api/profiles/${randomUUID()}`, {
+    const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Ghost"), definition: phoneProfile("None") }),
+      body: JSON.stringify({ name: uniqueName("Ghost"), definition: phoneCanvas("None") }),
     });
     expect(res.status).toBe(404);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.not_found" },
+      error: { code: "canvas.not_found" },
     });
   });
 
-  it("DELETE an unknown (well-formed) id → 404 profile.not_found (no silent no-op)", async () => {
+  it("DELETE an unknown (well-formed) id → 404 canvas.not_found (no silent no-op)", async () => {
     const app = mountApp(tenantId);
-    const res = await app.request(`/management-api/profiles/${randomUUID()}`, {
+    const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       method: "DELETE",
       headers: { cookie: managerCookie },
     });
     expect(res.status).toBe(404);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.not_found" },
+      error: { code: "canvas.not_found" },
     });
   });
 
-  it("GET by a MALFORMED id → 404 profile.not_found (the requireProfileId screen)", async () => {
+  it("GET by a MALFORMED id → 404 canvas.not_found (the requireCanvasId screen)", async () => {
     const app = mountApp(tenantId);
-    const res = await app.request("/management-api/profiles/not-a-uuid", {
+    const res = await app.request("/management-api/canvases/not-a-uuid", {
       headers: { cookie: managerCookie },
     });
     expect(res.status).toBe(404);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.not_found" },
+      error: { code: "canvas.not_found" },
     });
   });
 
-  it("POST with an invalid definition → 400 profile.invalid", async () => {
+  it("POST with an invalid definition → 400 canvas.invalid", async () => {
     const app = mountApp(tenantId);
-    // `{}` has no formFactor — validateProfile refuses it (profile.invalid) after authorize.
-    const res = await app.request("/management-api/profiles", {
+    // `{}` has no formFactor — validateCanvas refuses it (canvas.invalid) after authorize.
+    const res = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ name: uniqueName("Bad"), definition: {} }),
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.invalid" },
+      error: { code: "canvas.invalid" },
     });
   });
 
   it("POST with a body missing name / definition → 400 management.request_invalid naming the field", async () => {
     const app = mountApp(tenantId);
-    const noName = await app.request("/management-api/profiles", {
+    const noName = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ definition: phoneProfile("x") }),
+      body: JSON.stringify({ definition: phoneCanvas("x") }),
     });
     expect(noName.status).toBe(400);
     expect(
@@ -276,7 +276,7 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
       error: { code: "management.request_invalid", params: { field: "name" } },
     });
 
-    const noDef = await app.request("/management-api/profiles", {
+    const noDef = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ name: uniqueName("NoDef") }),
@@ -289,7 +289,7 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     });
 
     // A bare JSON array (not an object) → the body-shape screen.
-    const arrayBody = await app.request("/management-api/profiles", {
+    const arrayBody = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify([1, 2, 3]),
@@ -302,16 +302,16 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
 
   it("PUT with a malformed body → 400 management.request_invalid naming the field", async () => {
     const app = mountApp(tenantId);
-    // A real profile to target, so the body screen — not a not-found — is what fires.
-    const created = await app.request("/management-api/profiles", {
+    // A real canvas to target, so the body screen — not a not-found — is what fires.
+    const created = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Editable"), definition: phoneProfile("E") }),
+      body: JSON.stringify({ name: uniqueName("Editable"), definition: phoneCanvas("E") }),
     });
     const { id } = (await created.json()) as { id: string };
 
     // A bare JSON array (not an object) → the body-shape screen.
-    const arrayBody = await app.request(`/management-api/profiles/${id}`, {
+    const arrayBody = await app.request(`/management-api/canvases/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify([1, 2, 3]),
@@ -322,10 +322,10 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "body" } } });
 
     // Missing name.
-    const noName = await app.request(`/management-api/profiles/${id}`, {
+    const noName = await app.request(`/management-api/canvases/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ definition: phoneProfile("E2") }),
+      body: JSON.stringify({ definition: phoneCanvas("E2") }),
     });
     expect(noName.status).toBe(400);
     expect(
@@ -333,7 +333,7 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "name" } } });
 
     // Missing definition.
-    const noDef = await app.request(`/management-api/profiles/${id}`, {
+    const noDef = await app.request(`/management-api/canvases/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ name: uniqueName("E3") }),
@@ -346,53 +346,53 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     });
   });
 
-  it("POST a duplicate name → 409 profile.name_taken", async () => {
+  it("POST a duplicate name → 409 canvas.name_taken", async () => {
     const app = mountApp(tenantId);
     const name = uniqueName("Twin");
-    const first = await app.request("/management-api/profiles", {
+    const first = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, definition: phoneProfile("First") }),
+      body: JSON.stringify({ name, definition: phoneCanvas("First") }),
     });
     expect(first.status).toBe(201);
 
-    const second = await app.request("/management-api/profiles", {
+    const second = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, definition: phoneProfile("Second") }),
+      body: JSON.stringify({ name, definition: phoneCanvas("Second") }),
     });
     expect(second.status).toBe(409);
     expect((await second.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "profile.name_taken" },
+      error: { code: "canvas.name_taken" },
     });
   });
 
-  it("refuses every profile route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
+  it("refuses every canvas route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
     const app = mountApp(tenantId);
     const staffCookie = await login(app, STAFF_EMAIL);
-    // Seed a profile as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
+    // Seed a canvas as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
     // regardless — the gate runs before any read/write).
-    const created = await app.request("/management-api/profiles", {
+    const created = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Target"), definition: phoneProfile("T") }),
+      body: JSON.stringify({ name: uniqueName("Target"), definition: phoneCanvas("T") }),
     });
     const { id } = (await created.json()) as { id: string };
 
     const cases = [
-      app.request("/management-api/profiles", { headers: { cookie: staffCookie } }),
-      app.request(`/management-api/profiles/${id}`, { headers: { cookie: staffCookie } }),
-      app.request("/management-api/profiles", {
+      app.request("/management-api/canvases", { headers: { cookie: staffCookie } }),
+      app.request(`/management-api/canvases/${id}`, { headers: { cookie: staffCookie } }),
+      app.request("/management-api/canvases", {
         method: "POST",
         headers: { ...JSON_HEADERS, cookie: staffCookie },
-        body: JSON.stringify({ name: uniqueName("Nope"), definition: phoneProfile("N") }),
+        body: JSON.stringify({ name: uniqueName("Nope"), definition: phoneCanvas("N") }),
       }),
-      app.request(`/management-api/profiles/${id}`, {
+      app.request(`/management-api/canvases/${id}`, {
         method: "PUT",
         headers: { ...JSON_HEADERS, cookie: staffCookie },
-        body: JSON.stringify({ name: uniqueName("Nope"), definition: phoneProfile("N") }),
+        body: JSON.stringify({ name: uniqueName("Nope"), definition: phoneCanvas("N") }),
       }),
-      app.request(`/management-api/profiles/${id}`, {
+      app.request(`/management-api/canvases/${id}`, {
         method: "DELETE",
         headers: { cookie: staffCookie },
       }),
@@ -405,9 +405,9 @@ describe("Management API — layout-profile CRUD (Task 11)", () => {
     }
   });
 
-  it("refuses the profile routes unauthenticated with 401", async () => {
+  it("refuses the canvas routes unauthenticated with 401", async () => {
     const app = mountApp(tenantId);
-    const res = await app.request("/management-api/profiles");
+    const res = await app.request("/management-api/canvases");
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },

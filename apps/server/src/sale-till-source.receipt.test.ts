@@ -192,7 +192,7 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
       kind: "till",
       stationId: null,
       tillId: boundTillId,
-      layoutProfileId: null,
+      canvasId: null,
       label: "Counter till",
     });
   });
@@ -213,7 +213,7 @@ async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<
       kind: "till",
       stationId: null,
       tillId: boundTillId,
-      layoutProfileId: null,
+      canvasId: null,
       label: "Dev-override till",
     });
   });
@@ -321,7 +321,7 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
     // touched `node_id`, `series` or the hash chain.
     //
     // Failing case (§16.4): if the device path sourced a DIFFERENT till_id than the one it is bound to,
-    // the resolution assertion fails; if a device / profile / hardware code path perturbed `node_id` or
+    // the resolution assertion fails; if a device / canvas / hardware code path perturbed `node_id` or
     // forked the series, the two records would NOT share one continuous chain and `node_id` would not
     // equal `cfg.nodeId`.
     const { cfg, locationId, product, operatorId } = await setupVenue();
