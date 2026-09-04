@@ -21,8 +21,10 @@ import {
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
 import { drain } from "@waitron/fiscal-verifactu";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets } from "@waitron/module";
 import { AppError } from "@waitron/shared";
+import { ALL_MODULES } from "./modules.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -504,7 +506,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // whichever string it is given rather than migrating over a pool built from a different one.
   await applyMigrations(
     config.migrationsDatabaseUrl,
-    migrationOptionsFor(manifestSets(), config.migrationsRoot),
+    migrationOptionsFor(orderedMigrationSets(ALL_MODULES), config.migrationsRoot),
   );
   const db = await createPostgresDb(config.databaseUrl);
 

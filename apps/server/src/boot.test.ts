@@ -11,12 +11,14 @@ import { Agent } from "undici";
 import {
   asAppUser,
   captureError,
+  createPostgresDb,
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
   withTenant,
 } from "@waitron/db";
+import { databaseUrl as uriForDatabase } from "@waitron/db/testing/postgres.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   cloneTemplate,
@@ -32,7 +34,13 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // `@waitron/payments/test/seed.js` from `packages/payments-stripe`'s suites): no `exports` map
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  appliedSchemaVersion,
+  expectedSchemaVersion,
+  manifestSets,
+  migrationOptionsFor,
+} from "@waitron/migrations";
+import { orderedMigrationSets } from "@waitron/module";
 import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import {
@@ -41,6 +49,7 @@ import {
   startServer,
   type StartedServer,
 } from "./boot.js";
+import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
@@ -623,6 +632,21 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(existsSync(join(logDir, "waitron.log"))).toBe(true);
       const logText = await readFile(join(logDir, "waitron.log"), "utf8");
       expect(logText).toContain('"event":"server.listening"');
+
+      // TRADING MODE ran the shared migration seam (boot.ts's one `applyMigrations`, before the
+      // mode branch): every module's `__drizzle_migrations_<name>` journal is populated to the
+      // version its shipped folder declares. This is the SAME seam SP-1a inverted to derive its set
+      // list from `ALL_MODULES` — asserted here over `orderedMigrationSets(ALL_MODULES)` (the new
+      // source) so a conversion that dropped or reordered a set surfaces as a mismatch. It is a
+      // consistency check, not the from-empty probe: this clone was pre-migrated by the shared
+      // container, so the distinguishing "boot is the sole migrator" proof lives in the setup-mode
+      // fresh-database test below; both modes reach the identical seam line, so proving it once from
+      // empty and confirming trading mode leaves the same nine journals consistent covers both.
+      for (const set of orderedMigrationSets(ALL_MODULES)) {
+        const expected = expectedSchemaVersion(set, migrationsRoot);
+        expect(expected).toBeGreaterThan(0);
+        expect(await appliedSchemaVersion(suite.admin, set)).toBe(expected);
+      }
     } finally {
       await server.close();
       await rm(logDir, { recursive: true, force: true });
@@ -729,6 +753,67 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
     } finally {
       await afterClose.close();
+    }
+  }, 60_000);
+
+  it("setup mode migrates all nine module sets from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
+    // The from-empty probe SP-1a's inversion needs (spec §6, §4 pin 2): boot, and only boot, must
+    // migrate every module set the composition list carries. The other boot tests clone the
+    // pre-migrated `manifest` template, so their journals are populated whether or not boot's seam
+    // ran — a measurement where both answers look alike (CLAUDE.md §1). This test boots against a
+    // PRISTINE database (`template0`, no app objects), so each `__drizzle_migrations_<name>` table
+    // exists and is populated ONLY because boot's `applyMigrations` created it.
+    //
+    // Setup mode (all five WAITRON_TILL_*_ID omitted) reaches the SAME single seam trading mode does
+    // — `boot.ts`'s one `applyMigrations` runs in the shared prefix, before the mode branch — and it
+    // needs no seeded venue (no `readOrderFlow`), so it is the mode that can boot a fresh database.
+    // The deployment probe that runs BEFORE migrations reads `null` on an unstamped/unmigrated DB
+    // (`assertDeploymentMatches`) and passes. Every migration that creates a cluster-global role
+    // guards it with `IF NOT EXISTS`, so a full-manifest migrate in this already-populated cluster is
+    // idempotent — the shared container migrates its own `manifest` template the same way.
+    //
+    // Regression visibility: were the converted seam to derive fewer sets (a broken import, an empty
+    // list), the missing set's journal would be absent and `appliedSchemaVersion` would read 0
+    // against a non-zero `expectedSchemaVersion` — this test goes RED. Run against the pre-change
+    // boot (seam still on `manifestSets()`) it is GREEN, because the pin makes the two lists equal.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-state-"));
+    // A pristine database in the shared cluster. `template0` carries no app objects, so nothing but
+    // boot's migration run can populate the journals below; the superuser URL doubles as the app
+    // pool's and the migrator's (this test proves migrations run, not RLS as the deployment role).
+    const freshName = `${nextCloneName()}_empty`;
+    await suite.admin.execute(sql.raw(`create database ${freshName} template template0`));
+    const freshUri = uriForDatabase(suite.pg.uri, freshName);
+    let server: StartedServer | undefined;
+    let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
+    try {
+      server = await startServer({
+        DATABASE_URL: freshUri,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "preproduction",
+      });
+
+      probe = await createPostgresDb(freshUri);
+      // Every one of the nine module sets `ALL_MODULES` derives — the new source boot.ts reads — is
+      // migrated to its shipped-folder head. `expected > 0` is the control: a set with an empty
+      // journal would make `0 === 0` pass without boot having migrated anything (CLAUDE.md §1).
+      const sets = orderedMigrationSets(ALL_MODULES);
+      expect(sets).toHaveLength(9);
+      for (const set of sets) {
+        const expected = expectedSchemaVersion(set, migrationsRoot);
+        expect(expected).toBeGreaterThan(0);
+        expect(await appliedSchemaVersion(probe, set)).toBe(expected);
+      }
+    } finally {
+      if (probe !== undefined) await probe.close();
+      if (server !== undefined) await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+      // Drop the throwaway database on the admin connection; `with (force)` closes any lingering
+      // backend (the app pool and probe are closed above, but the boot's own migrator connection is
+      // opened and closed inside `applyMigrations`, so this is belt-and-braces).
+      await suite.admin.execute(sql.raw(`drop database if exists ${freshName} with (force)`));
     }
   }, 60_000);
 
