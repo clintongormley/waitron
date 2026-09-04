@@ -164,7 +164,10 @@ export class TillStationScreen extends LitElement {
    * that chrome — but KEEPS the board/rail `view-toggle`, which is station BODY function (the kitchen
    * still flips lens from inside a card), rendered in the always-present `.actions` bar. Mirrors the
    * floor screen's `embedded` seam (`till-floor-screen.ts`). Default `false` keeps the standalone screen
-   * (its own header + Back) exactly as before, so every existing station test stays green.
+   * fully functional — its own header + Back, and the same `view-toggle`. NOTE the standalone DOM is NOT
+   * byte-identical to before this seam: the `view-toggle` moved OUT of the header into that sibling
+   * `.actions` bar (so it can survive embedding), the same restructure the floor screen carries — every
+   * existing station test still passes because none asserted the toggle's container.
    */
   @property({ type: Boolean }) embedded = false;
 

@@ -372,8 +372,11 @@ export class TillTableOrderScreen extends LitElement {
    * button) — the card host supplies that chrome — but KEEPS the pending-round `.drawer-handle` (with
    * its pending `.badge`), which is table BODY function (the waiter still opens the tab drawer from
    * inside a card, spec §7), rendered in the always-present `.head-actions` bar. Mirrors the floor and
-   * station screens' `embedded` seam. Default `false` keeps the standalone screen (its own header +
-   * Back) exactly as before, so every existing table-order test stays green.
+   * station screens' `embedded` seam. Default `false` keeps the standalone screen fully functional —
+   * its own header + Back, drawer handle, and pending badge. NOTE the standalone DOM is NOT byte-identical
+   * to before this seam: `.head-actions` (drawer handle + Back) moved OUT of the `<header>` to a sibling
+   * so the drawer handle survives embedding, the same restructure floor/station carry — every existing
+   * table-order test still passes because none asserted those controls' container.
    */
   @property({ type: Boolean }) embedded = false;
   /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
