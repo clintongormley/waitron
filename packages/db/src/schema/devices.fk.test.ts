@@ -8,23 +8,23 @@ import { useTemplateDb } from "../testing/lifecycle.js";
 // the engine regardless of RLS, but the sibling suite (devices.rls.test.ts) already runs on real PG,
 // so this stays on the same target for a single template. The composite FKs are hand-written in the
 // --custom migration (a bare uuid column carries no FK), the `devices.station_id` idiom. These tests
-// pin that a device's till/layout-profile/receipt-printer binding cannot point at ANOTHER tenant's
+// pin that a device's till/canvas/receipt-printer binding cannot point at ANOTHER tenant's
 // row, and that a NULL binding is unconstrained (MATCH SIMPLE skips the check on any NULL column).
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-// One till / layout_profile / printer per tenant — the composite-FK targets. Seeded as the superuser
+// One till / canvas / printer per tenant — the composite-FK targets. Seeded as the superuser
 // admin (bypasses RLS; the FK still applies).
 const TILL_A = "11111111-0000-4000-8000-0000000000a1";
 const TILL_B = "22222222-0000-4000-8000-0000000000b1";
-const PROFILE_A = "11111111-0000-4000-8000-0000000000a2";
-const PROFILE_B = "22222222-0000-4000-8000-0000000000b2";
+const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
+const CANVAS_B = "22222222-0000-4000-8000-0000000000b2";
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PRINTER_B = "22222222-0000-4000-8000-0000000000b3";
 const TOKEN_HASH = "scrypt$00$00";
 
-describe("devices + device_pairing_codes composite FKs (till / layout_profile / receipt_printer)", () => {
+describe("devices + device_pairing_codes composite FKs (till / canvas / receipt_printer)", () => {
   const suite = useTemplateDb({ template: "core" });
   let admin: Database;
 
@@ -46,9 +46,9 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
         (${TILL_B}, ${TENANT_B}, ${LOCATION_B}, 'Till B')
       on conflict (id) do nothing`);
     await admin.execute(sql`
-      insert into layout_profiles (id, tenant_id, name, definition) values
-        (${PROFILE_A}, ${TENANT_A}, 'Profile A', '{}'::jsonb),
-        (${PROFILE_B}, ${TENANT_B}, 'Profile B', '{}'::jsonb)
+      insert into canvases (id, tenant_id, name, definition) values
+        (${CANVAS_A}, ${TENANT_A}, 'Canvas A', '{}'::jsonb),
+        (${CANVAS_B}, ${TENANT_B}, 'Canvas B', '{}'::jsonb)
       on conflict (id) do nothing`);
     // cloud_poll printers: the transport CHECK (printers_transport_fields_ck) needs poll_id for that
     // transport and nothing else, so this is the seed that avoids an agent FK.
@@ -62,7 +62,7 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
   // ---- devices ------------------------------------------------------------------------------
 
   it("devices: rejects a till_id naming a DIFFERENT tenant's till (composite FK)", async () => {
-    // Only till_id is cross-tenant; layout_profile_id / receipt_printer_id are NULL, so the ONLY
+    // Only till_id is cross-tenant; canvas_id / receipt_printer_id are NULL, so the ONLY
     // violated constraint is devices_till_fk.
     const e = await captureError(() =>
       admin.execute(
@@ -73,11 +73,11 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
   });
 
-  it("devices: rejects a layout_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {
+  it("devices: rejects a canvas_id naming a DIFFERENT tenant's canvas (composite FK)", async () => {
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, layout_profile_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Cross-tenant profile', ${TOKEN_HASH}, ${PROFILE_B})`,
+        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, canvas_id)
+            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Cross-tenant canvas', ${TOKEN_HASH}, ${CANVAS_B})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503");
@@ -96,10 +96,10 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
   it("devices: accepts same-tenant bindings; NULL bindings are unconstrained (MATCH SIMPLE)", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash,
-                               till_id, layout_profile_id, receipt_printer_id,
+                               till_id, canvas_id, receipt_printer_id,
                                has_cash_drawer, card_provider, card_reader_id)
           values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Bound till', ${TOKEN_HASH},
-                  ${TILL_A}, ${PROFILE_A}, ${PRINTER_A}, true, 'sumup', 'reader-1') returning id`,
+                  ${TILL_A}, ${CANVAS_A}, ${PRINTER_A}, true, 'sumup', 'reader-1') returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
@@ -133,11 +133,11 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
     expect(pgErrorCode(e)).toBe("23503");
   });
 
-  it("device_pairing_codes: rejects a layout_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {
+  it("device_pairing_codes: rejects a canvas_id naming a DIFFERENT tenant's canvas (composite FK)", async () => {
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, layout_profile_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-profile', 'till', ${null}, 'Cross-tenant profile', ${PROFILE_B})`,
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, canvas_id)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-canvas', 'till', ${null}, 'Cross-tenant canvas', ${CANVAS_B})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503");
@@ -156,10 +156,10 @@ describe("devices + device_pairing_codes composite FKs (till / layout_profile / 
   it("device_pairing_codes: accepts same-tenant bindings; NULL bindings are unconstrained", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label,
-                                            till_id, layout_profile_id, receipt_printer_id,
+                                            till_id, canvas_id, receipt_printer_id,
                                             has_cash_drawer, card_provider, card_reader_id)
           values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-ok', 'till', ${null}, 'Bound till code',
-                  ${TILL_A}, ${PROFILE_A}, ${PRINTER_A}, true, 'sumup', 'reader-9') returning id`,
+                  ${TILL_A}, ${CANVAS_A}, ${PRINTER_A}, true, 'sumup', 'reader-9') returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 

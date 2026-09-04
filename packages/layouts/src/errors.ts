@@ -2,7 +2,7 @@
 // declaring a fresh ambient one — the idiom packages/identity, packages/catalogue use.
 import "@waitron/shared";
 import type { WidgetType } from "./types.js";
-import type { CardType } from "./profile.js";
+import type { CardType } from "./canvas.js";
 
 // @waitron/layouts's contribution to the shared error registry, by declaration merging — the
 // DOMAIN-CONCEPT, lowercase, dot-namespaced convention, never the package name (CLAUDE.md §3). Grep
@@ -16,6 +16,10 @@ import type { CardType } from "./profile.js";
 //   grep -rn 'profile\.not_found\|profile\.name_taken' packages/*/src/errors.ts apps/server/src/errors.ts
 // matched only `profile.invalid`'s own declaration below, so `profile.not_found` and
 // `profile.name_taken` collide with no existing sibling either.
+// 2026-09-04 SP-B3.2 Phase A: profile.* renamed to canvas.* (pre-prod, no shipped consumers). The
+// grep receipts above are historical — they record the collision check done when the profile.* family
+// was minted under its original name; the active codes below are now canvas.invalid / canvas.not_found
+// / canvas.name_taken.
 //
 // PARAM RULE (CLAUDE.md §1, the house's dominant defect class): every param NAMES the problem and
 // NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `widget` only
@@ -25,7 +29,7 @@ import type { CardType } from "./profile.js";
 // numeric index locating a tab, never the author-supplied tab key or title; `card` only ever carries
 // a valid CardType enum value, the same guard as `widget`; `token` only ever names an allowlisted
 // `--wt-*` token, never an arbitrary/unknown one. A config VALUE never enters these params.
-// `profile.not_found` and `profile.name_taken` carry NO params BY DESIGN: a not-found leaf must not
+// `canvas.not_found` and `canvas.name_taken` carry NO params BY DESIGN: a not-found leaf must not
 // echo the caller-supplied id (unlike the `station.not_found`-style siblings that do), and a taken
 // name must never echo the offending author value (§1) — the fact of the collision is the whole
 // message, so the management API maps them to 404 / 409 on the code alone.
@@ -65,7 +69,7 @@ declare module "@waitron/shared" {
       field?: "headerSubtitle" | "footerMessage";
       maxLength?: number;
     };
-    // A ProfileDef failed validateProfile. `reason` says which rule:
+    // A CanvasDef failed validateCanvas. `reason` says which rule:
     //   not_object       — input (or a tab/card) was not a plain object;
     //   bad_capabilities — `capabilities` was not an array of known capability flags;
     //   bad_form_factor  — `formFactor` was not a FormFactor;
@@ -77,10 +81,10 @@ declare module "@waitron/shared" {
     //   bad_span         — a card's colSpan/rowSpan was out of range for its tab;
     //   bad_config       — a card's config had a key outside its contract or a value it rejected;
     //   bad_visible_when — a card's visibleWhen was not a subset of the card's declared states;
-    //   missing_required — a sale-critical card was absent from a selling profile.
+    //   missing_required — a sale-critical card was absent from a selling canvas.
     // `tabIndex` (numeric, never the author-supplied key) locates the tab; `card` names the card only
     // when it is a valid CardType; `configKey` names the offending config key.
-    "profile.invalid": {
+    "canvas.invalid": {
       reason:
         | "not_object"
         | "bad_capabilities"
@@ -98,14 +102,14 @@ declare module "@waitron/shared" {
       card?: CardType;
       configKey?: string;
     };
-    // A GET-by-id on the management profile surface named no profile the tenant owns (an absent id, or
+    // A GET-by-id on the management canvas surface named no canvas the tenant owns (an absent id, or
     // another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) — the
     // management API answers 404 on the code alone.
-    "profile.not_found": Record<string, never>;
-    // A profile create/update collided on the per-tenant `layout_profiles_tenant_name_key` unique — a
-    // duplicate name. `profile-store.ts` translates the driver's 23505 into this so a duplicate returns
+    "canvas.not_found": Record<string, never>;
+    // A canvas create/update collided on the per-tenant `canvases_tenant_name_key` unique — a
+    // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
-    "profile.name_taken": Record<string, never>;
+    "canvas.name_taken": Record<string, never>;
     // A ThemeOverride failed validateThemeOverride. `reason`:
     //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;

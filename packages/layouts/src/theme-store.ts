@@ -2,7 +2,7 @@ import { tenantThemes } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { eq, sql } from "drizzle-orm";
-import type { ThemeOverride } from "./profile.js";
+import type { ThemeOverride } from "./canvas.js";
 import { validateThemeOverride } from "./theme.js";
 
 /**

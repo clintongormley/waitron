@@ -78,10 +78,10 @@ export const devices = pgTable(
     // (tenant_id, till_id) → tills(tenant_id, id) composite FK is hand-written in the --custom migration
     // (a bare column carries no FK), the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
     tillId: uuid("till_id"),
-    // The assigned layout PROFILE (SP-A.2 §16.3) — which reusable layout this device renders. Bare
-    // uuid, NULLABLE: the tenant-consistent (tenant_id, layout_profile_id) → layout_profiles(tenant_id,
+    // The assigned layout CANVAS (SP-A.2 §16.3) — which reusable layout this device renders. Bare
+    // uuid, NULLABLE: the tenant-consistent (tenant_id, canvas_id) → canvases(tenant_id,
     // id) composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
-    layoutProfileId: uuid("layout_profile_id"),
+    canvasId: uuid("canvas_id"),
     // Static hardware binding (SP-A.2 §16.3) — the per-device receipt printer (and its cash-drawer kick).
     // Bare uuid, NULLABLE: the tenant-consistent (tenant_id, receipt_printer_id) → printers(tenant_id, id)
     // composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
@@ -162,11 +162,11 @@ export const devicePairingCodes = pgTable(
     // The bindings to stamp on the enrolled device, mirroring `devices` (SP-A.2 §16). Each is a bare
     // uuid/text with a hand-written composite FK (or none), the `station_id` idiom; a NULL is skipped by
     // MATCH SIMPLE. `till_id` — the tills row a sale-capable device rings against (§16.4); NULL for a
-    // kds_station. `layout_profile_id` — the assigned profile (§16.3). The hardware trio
+    // kds_station. `canvas_id` — the assigned canvas (§16.3). The hardware trio
     // (receipt_printer_id / has_cash_drawer / card_provider / card_reader_id) — the static hardware
     // binding (§16.3); credentials stay in the vault, never here.
     tillId: uuid("till_id"),
-    layoutProfileId: uuid("layout_profile_id"),
+    canvasId: uuid("canvas_id"),
     receiptPrinterId: uuid("receipt_printer_id"),
     hasCashDrawer: boolean("has_cash_drawer").notNull().default(false),
     cardProvider: text("card_provider").notNull().default("none"),

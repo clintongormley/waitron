@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { ThemeOverride } from "./profile.js";
+import type { ThemeOverride } from "./canvas.js";
 
 /**
  * The `--wt-*` tokens a theme override may set (design §9). An ALLOWLIST, fail-closed: a theme can only

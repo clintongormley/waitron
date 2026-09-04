@@ -1,11 +1,11 @@
-// packages/layouts/src/profile.ts
+// packages/layouts/src/canvas.ts
 /**
- * Canonical types for the layout-PROFILE model (design §4): a profile is a dashboard for one form
+ * Canonical types for the layout-CANVAS model (design §4): a canvas is a dashboard for one form
  * factor — 1+ tabs, each tab a grid, every screen a card. The dashboard + till keep bundle-decoupled
  * local copies of these shapes, as with the older WidgetInstance model in ./types.ts.
  */
 
-/** The device form factors a profile can target (design §4.1 — form factor is the sizing guardrail). */
+/** The device form factors a canvas can target (design §4.1 — form factor is the sizing guardrail). */
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
@@ -32,7 +32,7 @@ export const CARD_TYPES = [
 export type CardType = (typeof CARD_TYPES)[number];
 
 /**
- * Server-enforced device-capability flags a profile may carry (design §5, layer 2) — generalising the
+ * Server-enforced device-capability flags a canvas may carry (design §5, layer 2) — generalising the
  * hardcoded assertNotHandheld firewall. Declarative here; ENFORCEMENT lands in SP-A.2 (device slice).
  */
 export const CAPABILITY_FLAGS = [
@@ -68,8 +68,8 @@ export interface ThemeOverride {
   tokens: Record<string, string>;
 }
 
-/** A whole layout profile (design §4.1): a form factor, its tabs, capability flags, optional theme. */
-export interface ProfileDef {
+/** A whole layout canvas (design §4.1): a form factor, its tabs, capability flags, optional theme. */
+export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
   capabilities: CapabilityFlag[];

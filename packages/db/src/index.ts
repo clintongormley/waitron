@@ -51,7 +51,7 @@ export {
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
 export { tillLayouts } from "./schema/layouts.js";
-export { layoutProfiles } from "./schema/layout-profiles.js";
+export { canvases } from "./schema/canvases.js";
 export { tenantThemes } from "./schema/tenant-themes.js";
 export { tableServiceStatuses } from "./schema/table-service-statuses.js";
 export { bookingStatus, bookings } from "./schema/bookings.js";

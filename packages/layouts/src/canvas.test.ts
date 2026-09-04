@@ -1,6 +1,6 @@
-// packages/layouts/src/profile.test.ts
+// packages/layouts/src/canvas.test.ts
 import { describe, expect, it } from "vitest";
-import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS } from "./profile.js";
+import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS } from "./canvas.js";
 
 const noDupes = (t: readonly string[]) => new Set(t).size === t.length;
 

@@ -1,5 +1,5 @@
 import type { Permission } from "@waitron/identity";
-import type { CapabilityFlag, CardType } from "./profile.js";
+import type { CapabilityFlag, CardType } from "./canvas.js";
 import type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 
 /** The widest grid a tab may declare (design §4.1). A tab's `columns` is validated into 1..this. */
@@ -15,7 +15,7 @@ function intInRange(min: number, max: number): ConfigValidator {
  * PERMISSION its sensitive action needs (drives the in-card locked state — §5), the device CAPABILITY
  * it requires to be available at all (drives structural absence — §6 axis 1), the runtime visibility
  * STATES an author may gate rendering on (§6 axis 3), its default grid span, and whether it is
- * sale-critical (§13 — a selling profile must place it).
+ * sale-critical (§13 — a selling canvas must place it).
  */
 export interface CardContract {
   configSchema: WidgetConfigSchema;
