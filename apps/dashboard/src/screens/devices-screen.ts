@@ -547,7 +547,6 @@ export class DevicesScreen extends LitElement {
           ${
             device.active
               ? html`<select
-                  class="reassign"
                   data-test="reassign-${device.id}"
                   aria-label=${`${t("devices.reassign")} ${device.label}`}
                   @change=${(e: Event) =>
