@@ -95,6 +95,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
+    reassignDevice: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -668,6 +669,75 @@ describe("devices-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.not_found");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.not_found", "es-ES"));
+  });
+
+  // Each ACTIVE row carries its own layout-profile <select> (reassign-<id>): a "" default option
+  // (form-factor default) plus one per tenant profile, PRESELECTED to the device's current
+  // layoutProfileId. d1's fixture is bound to p1, so its select opens on p1.
+  it("renders a per-row reassign select preselected to the device's current profile", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const options = Array.from(select.querySelectorAll("option"));
+    // The default (form-factor) option plus one per profile.
+    expect(options.map((o) => o.value)).toEqual(["", "p1", "p2"]);
+    expect(options[0]!.textContent?.trim()).toBe(t("devices.profile_none", "es-ES"));
+    // Preselected to d1's current binding (p1), not the first option.
+    expect(select.value).toBe("p1");
+  });
+
+  // Picking a profile reassigns the device to it and reloads the list (mirrors revoke's reload). Proven
+  // by deletion: drop the reassignDevice call and the API is never hit.
+  it("reassigns a device to the picked profile, then reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickSelect(el, "reassign-d1", "p2");
+    await flush(el);
+
+    expect(api.reassignDevice).toHaveBeenCalledWith("d1", "p2");
+    expect(api.listDevices).toHaveBeenCalledTimes(2); // reloaded
+  });
+
+  // Picking the "" default clears the assignment — reassignDevice is called with null (form-factor
+  // default), not the empty string.
+  it("clears a device's profile when Default is picked", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickSelect(el, "reassign-d1", "");
+    await flush(el);
+
+    expect(api.reassignDevice).toHaveBeenCalledWith("d1", null);
+  });
+
+  it("shows an error and does not throw when a reassign is rejected", async () => {
+    const api = stubApi({
+      reassignDevice: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    pickSelect(el, "reassign-d1", "p2");
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
+  });
+
+  it("does not show a reassign control for an already-revoked device", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=reassign-d1]")).toBeTruthy(); // active device
+    expect(q(el, "[data-test=reassign-d2]")).toBeNull(); // already revoked
   });
 
   it("registers as a custom element", () => {

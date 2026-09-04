@@ -439,6 +439,21 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** Reassign device `id`'s layout profile to `layoutProfileId` (null = the form-factor default), then
+   * reload the device list (the station set is unchanged) so the row reflects the new binding. A rejection
+   * becomes the `errorKey` banner (the `#revoke` idiom); the caller void-invokes this off the select's
+   * `change`, so a rejection surfaces as the banner rather than an unhandled rejection. Unlike revoke this
+   * is a single-click action — reassigning a layout is reversible (pick another), so no confirm gate. */
+  async #onReassign(id: string, layoutProfileId: string | null): Promise<void> {
+    this.errorKey = null;
+    try {
+      await this.api.reassignDevice(id, layoutProfileId);
+      await this.#reloadDevices();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
   /** Resolve a device's `stationId` to the loaded station's display name; a null id (a future non-station
    * kind) or a station no longer in the active list (retired) both fall back to the neutral placeholder. */
   #stationName(stationId: string | null): string {
@@ -529,6 +544,32 @@ export class DevicesScreen extends LitElement {
               >
             </span>
           </div>
+          ${
+            device.active
+              ? html`<select
+                  class="reassign"
+                  data-test="reassign-${device.id}"
+                  aria-label=${`${t("devices.reassign")} ${device.label}`}
+                  @change=${(e: Event) =>
+                    void this.#onReassign(
+                      device.id,
+                      (e.target as HTMLSelectElement).value === ""
+                        ? null
+                        : (e.target as HTMLSelectElement).value,
+                    )}
+                >
+                  <option value="" ?selected=${device.layoutProfileId === null}>
+                    ${t("devices.profile_none")}
+                  </option>
+                  ${this.profiles.map(
+                    (p) =>
+                      html`<option value=${p.id} ?selected=${p.id === device.layoutProfileId}>
+                        ${p.name}
+                      </option>`,
+                  )}
+                </select>`
+              : nothing
+          }
           ${
             device.active
               ? html`<wt-button
