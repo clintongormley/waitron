@@ -101,6 +101,7 @@ import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
 import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { loadBackupConfig } from "./backup-config.js";
 import { assertBackupCanReadFiscal } from "./backup-probe.js";
@@ -935,13 +936,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
       readOnlyGate(
         () => holders.mode.current === "mirror" || fenced,
-        // Let exactly the carrier's cursor report through the fence: POST /sync-api/cursor is the
-        // disposal guard's only input (it writes `sync_cursor` — no tenant_id, no RLS). The exemption
-        // names that ONE route, not the `/sync-api/` prefix, so a future mutating route added under the
-        // prefix is NOT auto-exempted — it hits the fence and fails loud (403), the safe default. The GET
-        // source routes (`/sync-api/hello`, `/sync-api/log`) need no exemption: they pass as SAFE_METHODS.
-        // A mirror mounts no /sync-api, so this is a no-op there.
-        (c) => c.req.method === "POST" && c.req.path === "/sync-api/cursor",
+        // Let exactly two write surfaces through the fence, each named as ONE route (never a prefix), so
+        // a future mutating route added nearby is NOT auto-exempted — it hits the fence and fails loud
+        // (403), the safe default.
+        //   1. POST /sync-api/cursor — the carrier's cursor report, the disposal guard's only input (it
+        //      writes `sync_cursor`: no tenant_id, no RLS). The GET source routes (`/sync-api/hello`,
+        //      `/sync-api/log`) need no exemption — they pass as SAFE_METHODS. A mirror mounts no
+        //      /sync-api, so this clause is a no-op there.
+        //   2. POST /api/box/retire — a FENCED node's self-eviction (retire/evict R3), gated on `fenced`
+        //      so a MIRROR does not expose it. Like the cursor report it writes only whole-DB
+        //      `node_membership` (no tenant_id, no RLS — a self-eviction membership edit), never a client
+        //      tenant/fiscal write, so it is a write a read-only fenced node legitimately serves. This is
+        //      the ONE `/api/box/*` write let through; the rest stay behind the fence.
+        (c) =>
+          (c.req.method === "POST" && c.req.path === "/sync-api/cursor") ||
+          (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire"),
       ),
     );
   }
@@ -1597,6 +1606,33 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The live singleton role (primary/secondary), read per-request from the same holder the
       // duty loop reads — box-status now shows BOTH deployment axes (mode + singleton_role, #158).
       readSingletonRole: () => holders.singletonRole.current,
+    },
+    log,
+  );
+
+  // The self-eviction endpoint (retire/evict R3): a fully-drained fenced node retires itself. Mounted
+  // UNCONDITIONALLY (a real management endpoint) — `retireSelf`'s ordered guards make it safe on any
+  // node: a serving node refuses `node.retire_not_fenced`, and a fenced node with no carrier refuses
+  // `node.retire_no_carrier`. `readRetireDrain` is defined ONLY when fenced with a carrier — the same
+  // `lagPool !== undefined && fenced && carrierNodeId !== undefined` condition box-status's `readDisposal`
+  // uses, returning the plain `DrainProgress` retire consumes (no `carrierNodeId` wrapper); absent, a
+  // fenced node reads as `no_carrier`. `readDrainProgress` is the imported @waitron/sync function
+  // box-status's disposal surface already uses; `readRetireDrain` is the local closure.
+  const readRetireDrain =
+    lagPool !== undefined && fenced && carrierNodeId !== undefined
+      ? () =>
+          withTenant(lagPool, till.tenantId, (tx) =>
+            readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+          )
+      : undefined;
+  mountBoxRetireApi(
+    app,
+    {
+      appDb: db,
+      ring,
+      tenantId: till.tenantId,
+      nodeId: till.nodeId,
+      readDrainProgress: readRetireDrain,
     },
     log,
   );

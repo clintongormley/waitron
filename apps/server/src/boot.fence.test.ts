@@ -496,6 +496,25 @@ describe("boot fence drain (real Postgres): a fenced node serves its own-origin 
         ownTailSeq: ownSeq,
         carrierAppliedSeq: ownSeq,
       });
+
+      // 7. The read-only-gate exemption (retire/evict R3): POST /api/box/retire is the ONE management
+      //    write a fenced node serves. The read-only gate IS mounted (this node is fenced, as Case A's
+      //    403 on POST /management-api/catalogues proves), yet this POST is NOT rejected with
+      //    node.read_only — the single-route `fenced && POST /api/box/retire` exemption lets it reach the
+      //    handler, which authorizes the seeded manager and self-evicts the fully-drained node. Proven
+      //    end-to-end (not `.not.toBe(403)`): the 200 body evicts this node and bumps the held term 5→6,
+      //    which a gate-rejection or a route-not-mounted could never produce.
+      const retire = await fetch(`${base}/api/box/retire`, {
+        method: "POST",
+        headers: { cookie: await managerCookie() },
+      });
+      expect(retire.status).toBe(200);
+      expect(await retire.json()).toEqual({ evicted: true, term: 6 }); // held term 5 → minted 6
+      // The eviction persisted to disk: self now reads `evicted` in the held chart.
+      const evicted = await readNodeMembership(suite.admin);
+      expect(
+        evicted!.body.nodes.find((n) => n.nodeId === TILL_ENV.WAITRON_TILL_NODE_ID)?.standing,
+      ).toBe("evicted");
     } finally {
       await server.close();
     }
