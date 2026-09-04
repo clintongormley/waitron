@@ -346,7 +346,24 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   boilerplate — declined here (changes the SP-1a owner-reviewed contract shape; `core` is deliberately the
   special mandatory root), a candidate if the contract is revisited later. Spec/plan:
   [sp-1c](superpowers/specs/2026-09-04-module-sp1c-versioned-ordering.md).
-- **SP-1d — cross-node config replication** (adopt bootstrap + flow-down; coordinates with the R-series adopt).
+- **SP-1d — cross-node config replication.** Adopt-bootstrap half **built (#220):** a mirror
+  inherits the primary's
+  enabled-module set at adopt — the primary's `modules.json` overrides ride the existing
+  mirror-bundle handshake (`MirrorBundle.moduleOverrides`, minted fresh at assemble time), and
+  `adoptFromPrimary` re-validates them against the mirror's own `ALL_MODULES` (fail-closed) and
+  writes the mirror's own `modules.json` before it first enters trading mode. New:
+  `serializeModuleConfig` (`@waitron/module`), `writeModuleConfig` (`apps/server`). No schema
+  change, no new error code, no DB row — SP-1b's on-box-file decision preserved; the bundle
+  carries a snapshot, not a live channel. Honest scope: on a fresh mirror this does **not** prevent
+  a migration wedge (setup already migrates every table); it makes the mirror's enabled **set**
+  equal the primary's, for honest reconcile drift today and SP-2's per-enabled-module pull
+  tomorrow. **Ongoing flow-down deferred**, with two receipts: (a) no config channel exists to
+  carry a later primary-side change — sync replicates tenant rows, `modules.json` is an on-box
+  file, and `deployment`/`mirror_config` are non-tenant singletons that can't ride the RLS lane;
+  (b) nothing is disableable today (eight effectively-core modules, fiscal always-on), so there is
+  no live case to prove flow-down against yet. Folds into **SP-2**'s scope, built alongside the
+  first genuinely-toggleable module. Spec:
+  [sp-1d](superpowers/specs/2026-09-04-module-sp1d-adopt-bootstrap-design.md).
 - **SP-2 — full sync inversion + schema-version gate** (sync consumes module-declared enrolments, imports no
   domain schema; every package declares its own; the node-skew gate). Descriptor package-ownership begins here.
 - **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
@@ -354,9 +371,11 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-With SP-1a + SP-1b + SP-1c landed, **SP-1d / SP-2 remain** and are parallel-safe with the B3.2
-layout-editor session; **SP-2 is the one that unblocks SP-3** (H2's fiscal-record lane rides SP-2's sync
-inversion) and also picks up SP-1c's deferred graph-honesty guard. SP-4 waits for B3.2.
+With SP-1a + SP-1b + SP-1c landed and SP-1d's adopt-bootstrap half built (#220), **SP-2 remains**
+— it is parallel-safe with the B3.2
+layout-editor session, is the one that unblocks SP-3 (H2's fiscal-record lane rides SP-2's sync
+inversion), and now picks up both SP-1c's deferred graph-honesty guard and SP-1d's deferred
+ongoing flow-down. SP-4 waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 

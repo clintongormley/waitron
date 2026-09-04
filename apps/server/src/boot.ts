@@ -27,7 +27,7 @@ import { appliedSchemaVersion, applyMigrations, migrationOptionsFor } from "@wai
 import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { readModuleConfig } from "./module-config.js";
+import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -724,6 +724,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   ring,
                   fetchBundle: fetchMirrorBundle,
                   persistTrading,
+                  // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
+                  // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
+                  persistModuleConfig: async (c) => {
+                    await writeModuleConfig(config.stateDir, c);
+                  },
                   databaseUrl: config.databaseUrl,
                   migrationsDatabaseUrl: config.migrationsDatabaseUrl,
                   syncDatabaseUrl: config.syncDatabaseUrl,

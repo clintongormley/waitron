@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { disabledProvisionOnly, enabledModules, isEnabled, parseModuleConfig } from "./index.js";
+import {
+  disabledProvisionOnly,
+  enabledModules,
+  isEnabled,
+  parseModuleConfig,
+  parseModuleOverrides,
+  serializeModuleConfig,
+} from "./index.js";
 import type { WaitronModule } from "./module.js";
 
 const mod = (name: string, tier: WaitronModule["tier"]): WaitronModule => ({
@@ -79,6 +86,59 @@ describe("parseModuleConfig", () => {
   it("accepts core: true", () => {
     const c = parseModuleConfig({ modules: { core: true } }, MODULES);
     expect(isEnabled(c, "core")).toBe(true);
+  });
+});
+
+describe("serializeModuleConfig", () => {
+  it("is the true inverse of parseModuleOverrides: same enabled set for every module", () => {
+    // A config where the two directions visibly DIFFER: payments disabled, fiscal left default.
+    const parsed = parseModuleConfig({ modules: { payments: false } }, MODULES);
+    const serialized = serializeModuleConfig(parsed);
+    expect(serialized).toEqual({ payments: false });
+
+    // The bare serialized map round-trips through parseModuleOverrides WITHOUT a fabricated envelope.
+    const reparsed = parseModuleOverrides(serialized, MODULES);
+    for (const m of MODULES) {
+      expect(isEnabled(reparsed, m.name)).toBe(isEnabled(parsed, m.name));
+    }
+    expect(isEnabled(reparsed, "payments")).toBe(false);
+    expect(isEnabled(reparsed, "fiscal")).toBe(true);
+  });
+
+  it("serializes an empty config to {}", () => {
+    expect(serializeModuleConfig(parseModuleConfig({}, MODULES))).toEqual({});
+  });
+});
+
+describe("parseModuleOverrides (the bare-map entry point — adopt's path)", () => {
+  it("validates a bare override map with no file envelope", () => {
+    const config = parseModuleOverrides({ payments: false }, MODULES);
+    expect(isEnabled(config, "payments")).toBe(false);
+    expect(isEnabled(config, "fiscal")).toBe(true);
+  });
+
+  it("treats undefined (absent overrides) as everything enabled", () => {
+    const config = parseModuleOverrides(undefined, MODULES);
+    for (const m of MODULES) expect(isEnabled(config, m.name)).toBe(true);
+  });
+
+  it("rejects an unknown module name (the adopt fail-closed guard)", () => {
+    expect(thrownCode(() => parseModuleOverrides({ "no-such-module": false }, MODULES))).toBe(
+      "module.config_unknown",
+    );
+  });
+
+  it("rejects a non-object and a non-boolean value", () => {
+    expect(thrownCode(() => parseModuleOverrides([], MODULES))).toBe("module.config_invalid");
+    expect(thrownCode(() => parseModuleOverrides({ payments: "no" }, MODULES))).toBe(
+      "module.config_invalid",
+    );
+  });
+
+  it("refuses disabling a mandatory module", () => {
+    expect(thrownCode(() => parseModuleOverrides({ core: false }, MODULES))).toBe(
+      "module.mandatory_not_disableable",
+    );
   });
 });
 

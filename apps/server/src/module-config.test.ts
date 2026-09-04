@@ -1,10 +1,16 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { isEnabled } from "@waitron/module";
-import { readModuleConfig } from "./module-config.js";
+import { isEnabled, parseModuleConfig } from "@waitron/module";
+import { readModuleConfig, writeModuleConfig } from "./module-config.js";
+import { ALL_MODULES } from "./modules.js";
+
+// A real toggleable module name from ALL_MODULES to disable in the fixture (not a production
+// recommendation — a test fixture). Pick the first toggleable descriptor.
+const TOGGLEABLE = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
 
 let dir: string;
 beforeEach(() => {
@@ -41,5 +47,34 @@ describe("readModuleConfig", () => {
     // Not an AppError: a non-ENOENT read failure is rethrown unclassified (EISDIR here).
     expect(isAppError(err)).toBe(false);
     expect((err as NodeJS.ErrnoException).code).toBe("EISDIR");
+  });
+});
+
+describe("writeModuleConfig ↔ readModuleConfig", () => {
+  it("writes a config that reads back to the same enabled set", async () => {
+    const config = parseModuleConfig({ modules: { [TOGGLEABLE]: false } }, ALL_MODULES);
+
+    const path = await writeModuleConfig(dir, config);
+    expect(path).toBe(join(dir, "modules.json"));
+
+    const roundTripped = await readModuleConfig(dir);
+    expect(isEnabled(roundTripped, TOGGLEABLE)).toBe(false);
+    // Every other module stays enabled.
+    for (const m of ALL_MODULES) {
+      if (m.name !== TOGGLEABLE) expect(isEnabled(roundTripped, m.name)).toBe(true);
+    }
+  });
+
+  it("writes an empty config that reads back as all-enabled, at mode 0600", async () => {
+    await writeModuleConfig(dir, parseModuleConfig({}, ALL_MODULES));
+
+    const raw = JSON.parse(await readFile(join(dir, "modules.json"), "utf8"));
+    expect(raw).toEqual({ modules: {} });
+
+    const roundTripped = await readModuleConfig(dir);
+    for (const m of ALL_MODULES) expect(isEnabled(roundTripped, m.name)).toBe(true);
+
+    const mode = (await stat(join(dir, "modules.json"))).mode & 0o777;
+    expect(mode).toBe(0o600);
   });
 });

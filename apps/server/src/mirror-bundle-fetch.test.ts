@@ -43,6 +43,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
       signature: "SIG",
     },
   },
+  moduleOverrides: {},
 };
 
 // The admin login the primary authenticates — the structured `AdoptCredential` the fetcher serialises

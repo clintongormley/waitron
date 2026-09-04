@@ -1,6 +1,8 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import { adoptVenue } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
+import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
@@ -49,6 +51,12 @@ export interface AdoptDeps {
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
+  /** Persists `<stateDir>/modules.json` so the mirror's next boot sees the primary's enabled set
+   * (SP-1d) — drives reconcile-drift logging now, SP-2's per-module pull filter later. It does NOT
+   * change what the mirror migrates: a fresh mirror already migrated every table in setup mode, so
+   * the trading-boot filter is a no-op over an already-complete schema. Injected — bound to
+   * `writeModuleConfig(config.stateDir, …)` in boot. */
+  persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
   databaseUrl: string;
   /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
@@ -67,7 +75,9 @@ export interface AdoptDeps {
  * ids (never `registerSif` — `adoptVenue` guarantees that, so no second fiscal chain is forked,
  * CLAUDE.md §5), stamps the environment + `mirror` mode, establishes the standby's DORMANT identity from
  * the reserved bundle (design §6 R2), seals the sync token in the mirror's OWN vault, writes the
- * DB-stored connection config, and persists `trading.env` for the restart.
+ * DB-stored connection config, persists the primary's enabled-module set to the mirror's own
+ * `modules.json` (SP-1d, so the mirror's next boot sees the same set), and persists `trading.env` for
+ * the restart.
  *
  * The order is load-bearing: `stampDeployment` runs BEFORE `setDeploymentMode`, which throws
  * `deployment.not_stamped` on an unstamped database (the `mode` UPDATE needs the singleton row). The
@@ -94,6 +104,18 @@ export async function adoptFromPrimary(
     publicKey: standby.publicKey,
   });
   const { designated, rows } = bundle;
+
+  // SP-1d: validate the primary's enabled-module set FIRST — fail fast, before any side effect. It is
+  // a bare override map (bundle wire value, not a file envelope), so `parseModuleOverrides` takes it
+  // directly (no fabricated `{ modules: … }` wrapper). Re-validated against THIS node's ALL_MODULES:
+  // an unknown/malformed override from a skewed or hostile primary throws `module.config_*` here,
+  // BEFORE stampDeployment/adoptVenue/token-seal mutate the mirror — never leaving a half-adopted DB
+  // for a set we would have rejected. A well-behaved primary on the same monorepo build shares this
+  // node's ALL_MODULES, so a valid bundle never trips this; it fires only for a skewed or hostile
+  // primary — which is exactly why the mirror re-validates external input rather than trusting it
+  // (CLAUDE.md §3). The validated config is persisted below (unconditionally, even {}), so the
+  // mirror's set is explicitly the primary's and re-adopt is idempotent.
+  const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
 
   await stampDeployment(deps.ownerDb, bundle.environment);
   await adoptVenue(rows, designated, { db: deps.ownerDb });
@@ -132,6 +154,10 @@ export async function adoptFromPrimary(
     boxCaPem: bundle.boxCaPem,
     originNodeId: designated.nodeId,
   });
+  // SP-1d: persist the module set validated up-front (above) into the mirror's own modules.json, so its
+  // next boot sees the primary's enabled set. Ordered before `persistTrading` for the same fail-closed
+  // reason the whole sequence honours — but the throwing check already ran before any DB write.
+  await deps.persistModuleConfig(moduleConfig);
   await deps.persistTrading({
     tenantId: designated.tenantId,
     locationId: designated.locationId,

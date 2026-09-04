@@ -9,12 +9,13 @@ import { writeFile, rename, rm } from "node:fs/promises";
  * `writeFile` always CREATES the temp file and its `mode` is actually applied. This is load-bearing
  * for secrets: `writeFile` only sets `mode` when it CREATES the file, so truncating-and-reusing a
  * stale tmp (`flag: "w"` on an existing file) would keep that file's OLD, possibly-broader
- * permissions and `rename` would carry them onto the target — and both callers write secrets (TLS
- * keys, `secrets.env`, `trading.env`), so a reused stale tmp could land a secret world-readable.
+ * permissions and `rename` would carry them onto the target — and the SECRET callers write TLS keys,
+ * `secrets.env` and `trading.env`, so a reused stale tmp could land a secret world-readable.
  * Removing it first closes that window; `rename` then preserves the freshly-created `mode` on the
- * target. `mode` is REQUIRED: both callers pass `0o600`, so there is no default-permissions path to
- * keep. This gives atomic VISIBILITY only; it does not fsync, so it makes no durability claim across
- * a power loss — only that the visible file is whole.
+ * target. `mode` is REQUIRED: every caller passes `0o600` — the secret writers rely on it, and
+ * `modules.json` (module names, not a secret) matches it for a consistent state-dir — so there is no
+ * default-permissions path to keep. This gives atomic VISIBILITY only; it does not fsync, so it makes
+ * no durability claim across a power loss — only that the visible file is whole.
  */
 export async function writeFileAtomic(path: string, data: string, mode: number): Promise<void> {
   const tmp = `${path}.tmp`;

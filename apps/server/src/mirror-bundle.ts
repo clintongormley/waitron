@@ -31,7 +31,9 @@ import {
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
+import { serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
+import { readModuleConfig } from "./module-config.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 
 /**
@@ -69,6 +71,12 @@ export interface MirrorBundle {
   relayUrl: string;
   syncToken: string;
   reservedIdentity: ReservedIdentity;
+  /**
+   * The primary's enabled-module set as a sparse override map (SP-1b's modules.json inner map), read
+   * fresh at mint time. `{}` when nothing is disabled (default-on). The mirror re-validates it against
+   * its own ALL_MODULES and writes its own modules.json from it (SP-1d adopt bootstrap).
+   */
+  moduleOverrides: Record<string, boolean>;
 }
 
 /**
@@ -168,8 +176,20 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     primaryPrivateKey,
   );
 
-  const boxCaPem = await readFile(caCertPath(deps.stateDir), "utf8");
+  // The two READS have no data dependency, so run them together: the box CA, and — SP-1d — a snapshot
+  // of the primary's enabled-module set so the mirror inherits it at adopt. `moduleOverrides` is read
+  // FRESH here, not from boot: the operator may have edited modules.json since the primary booted, so
+  // the mint reflects the current desired set, and a malformed primary file surfaces its
+  // module.config_* code here (fail loud) — do not ship an unparseable set.
+  const [boxCaPem, moduleOverrides] = await Promise.all([
+    readFile(caCertPath(deps.stateDir), "utf8"),
+    readModuleConfig(deps.stateDir).then(serializeModuleConfig),
+  ]);
 
+  // `enrolPeer` INSERTs a `sync_peers` row (not idempotent, not auto-reaped), so it runs AFTER the
+  // reads have succeeded — never concurrently with them. Were it folded into the Promise.all above, a
+  // rejected read (a missing CA, or the fail-loud malformed-modules.json path) would abandon an
+  // already-committed peer row on every retry.
   const { token } = await enrolPeer(deps.retentionDb, {
     subscriberId: deps.standby.nodeId,
     name: "cloud mirror",
@@ -184,5 +204,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     relayUrl: deps.relayUrl,
     syncToken: token,
     reservedIdentity: { ...reserved, endorsement },
+    moduleOverrides,
   };
 }
