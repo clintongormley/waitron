@@ -4,17 +4,19 @@ export default defineConfig({
   test: {
     globals: true,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // globalSetup boots ONE shared Postgres container and migrates the `core_identity` template the
-    // one real-PG suite (store.rls.test.ts) clones (~26ms) instead of that file booting and migrating
-    // its own (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a
-    // Docker-absent run now fails the whole package (that file's header explains the broadening).
+    // globalSetup boots ONE shared Postgres container and migrates the `core_identity` template each
+    // real-PG suite (canvas-store.rls.test.ts, theme-store.rls.test.ts, receipt-store.rls.test.ts)
+    // clones (~26ms each) instead of each file booting and migrating its own (~1.5s). See
+    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
+    // whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // This package has NO PGlite suites — store.rls.test.ts is the only DB-backed file, and it now
-    // clones the shared container's migrated `core_identity` template in a ~26ms beforeAll (the
-    // container boot / image pull moved to globalSetup, which vitest does NOT bound by hookTimeout).
-    // So hookTimeout is just a harmless ceiling far above that clone, not a budget for any WASM boot;
-    // errors.test.ts and validate.test.ts are hermetic unit tests. testTimeout covers the several DB
-    // round-trips a single `it` makes, well under 30s.
+    // This package has NO PGlite suites — its DB-backed files (canvas-store.rls.test.ts,
+    // theme-store.rls.test.ts, receipt-store.rls.test.ts) each clone the shared container's migrated
+    // `core_identity` template in a ~26ms beforeAll (the container boot / image pull moved to
+    // globalSetup, which vitest does NOT bound by hookTimeout). So hookTimeout is just a harmless
+    // ceiling far above that clone, not a budget for any WASM boot; errors.test.ts and validate.test.ts
+    // are hermetic unit tests. testTimeout covers the several DB round-trips a single `it` makes, well
+    // under 30s.
     testTimeout: 30_000,
     hookTimeout: 60_000,
     // NO poolOptions: this package stays MULTI-FORK, deliberately. It is not held to `singleFork` for
@@ -24,8 +26,8 @@ export default defineConfig({
     // the DB comes from, not how coverage merges across forks, so it neither introduces nor worsens the
     // artifact (an isolated `test:coverage` here proves nothing about the concurrent case, per
     // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxForks` connection
-    // cap either: only ONE real-PG file runs here, and it opens a single admin connection to its clone,
-    // far under the shared cluster's ~100-connection budget.
+    // cap either: the few real-PG files here each open a small number of connections to their own
+    // cloned template, far under the shared cluster's ~100-connection budget.
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

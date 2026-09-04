@@ -36,11 +36,12 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * @waitron/layouts suite (its hermetic unit files, errors/validate, included) with it, not only the
  * real-PG suite — a real broadening of what needs Docker, the same one db and apps/server accepted.
  * What makes it acceptable is not an assumption that every machine has Docker, but that this package's
- * reason to be in the real-PG tier at all needs Docker regardless: `store.rls.test.ts` proves the
- * store honours the tenant-isolation policy under the app role (a cross-tenant read returns defaults,
- * never the other tenant's layout) and runs the whole authorize→upsert path as a genuine RLS subject —
- * both of which a PGlite superuser, bypassing FORCE ROW LEVEL SECURITY and the policy, would turn into
- * a false pass. CLAUDE.md §4 documents that this repo's real-Postgres test tier needs a local Docker
+ * reason to be in the real-PG tier at all needs Docker regardless: the store suites
+ * (`canvas-store.rls.test.ts`, `theme-store.rls.test.ts`, `receipt-store.rls.test.ts`) prove the
+ * stores honour the tenant-isolation policy under the app role (a cross-tenant read returns defaults,
+ * never the other tenant's canvas/theme/receipt) and run the whole authorize→upsert path as genuine
+ * RLS subjects — both of which a PGlite superuser, bypassing FORCE ROW LEVEL SECURITY and the policy,
+ * would turn into a false pass. CLAUDE.md §4 documents that this repo's real-Postgres test tier needs a local Docker
  * daemon (plus `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon
  * error into that guidance when Docker is absent.
  */
@@ -49,8 +50,8 @@ export default async function ({ provide }: GlobalSetupContext) {
     dockerRequired:
       "@waitron/layouts's real-Postgres suite requires a running Docker daemon. It cannot be " +
       "skipped: PGlite runs every connection as a superuser, which bypasses FORCE ROW LEVEL " +
-      "SECURITY and the tenant-isolation policy this suite proves the store honours under the app " +
-      "role (see store.rls.test.ts).",
+      "SECURITY and the tenant-isolation policy these suites prove the stores honour under the app " +
+      "role (see canvas-store.rls.test.ts / theme-store.rls.test.ts / receipt-store.rls.test.ts).",
     templates: {
       core_identity: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
     },
