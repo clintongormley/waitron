@@ -270,6 +270,9 @@ describe("bindingFkField", () => {
     expect(bindingFkField(fk("device_pairing_codes_till_fk"))).toBe("tillId");
     expect(bindingFkField(fk("device_pairing_codes_receipt_printer_fk"))).toBe("receiptPrinterId");
     expect(bindingFkField(fk("device_pairing_codes_layout_profile_fk"))).toBe("layoutProfileId");
+    // The twin FK on the `devices` table itself — tripped when an enrolled device is REASSIGNED to a
+    // layout profile that names no row of this tenant (SP-B3.1's assign-profile route).
+    expect(bindingFkField(fk("devices_layout_profile_fk"))).toBe("layoutProfileId");
   });
 
   it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {

@@ -931,10 +931,10 @@ describe("Device API over real Postgres", () => {
     });
 
     it("assign-profile rejects a nonexistent profile id → 400 device.binding_invalid, device untouched", async () => {
-      // The getProfile pre-check refuses a well-formed id that names no profile of THIS tenant — the SAME
-      // code+field the enrol path's composite FK raises — BEFORE the UPDATE, so the device is untouched.
-      // Deleting that pre-check makes this an opaque FK 500 (or, if the FK let it through, a silent set):
-      // the proof-by-deletion for the guard.
+      // The composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` refuses a well-formed
+      // id that names no profile of THIS tenant, translated by `bindingFkField` to the SAME code+field the
+      // enrol path raises. The FK aborts the UPDATE atomically, so the device stays untouched (asserted
+      // below). Proof: `device.test.ts` pins the constraint-name → field mapping this route relies on.
       const venue = await setupVenue();
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
@@ -953,9 +953,11 @@ describe("Device API over real Postgres", () => {
     });
 
     it("assign-profile rejects a CROSS-TENANT profile id → 400 device.binding_invalid (RLS hides it, never a leak)", async () => {
-      // The load-bearing isolation proof: a REAL profile owned by ANOTHER tenant is invisible to this
-      // tenant's RLS-scoped `getProfile`, so it reads back undefined and takes the SAME binding_invalid
-      // path an unknown id does — never a success, never a cross-tenant binding, never a leak of B's row.
+      // The load-bearing isolation proof: a REAL profile owned by ANOTHER tenant can never bind, because
+      // the composite FK looks for `(tenantA, foreignId)` in layout_profiles and misses (B's row is
+      // `(tenantB, foreignId)`) — so it takes the SAME binding_invalid path an unknown id does, never a
+      // success, never a cross-tenant binding, never a leak of B's row. The FK's tenant_id column is the
+      // structural isolation here, independent of RLS.
       const venueA = await setupVenue();
       const venueB = await setupVenue();
       const app = mountApp(venueA.cfg);

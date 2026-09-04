@@ -37,6 +37,16 @@
 
 ## Task 1: Server — reassign route + expose `layoutProfileId` on the device list
 
+> **Correction (2026-09-04, as shipped — superseding the `getProfile` pre-check below):** the route does
+> NOT pre-check with `getProfile`. Copilot flagged that a read-then-write pre-check leaves a
+> delete-between-check-and-update race that surfaces a raw FK 500. The shipped route instead lets the
+> composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` be the guard — it is
+> tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses) AND atomic with the
+> UPDATE (no window) — and translates a 23503 on it via the enrol path's `bindingFkField` helper
+> (extended to map that constraint) to `device.binding_invalid { field: "layoutProfileId" }`. So there is
+> no `getProfile` import, and isolation is proven through the FK, not a pre-check. The `device.test.ts`
+> `bindingFkField` unit test pins the new constraint→field mapping.
+
 **Files:**
 - Modify: `apps/server/src/device-api.ts` (list select `:383-391`; new route after `:420`; import `getProfile`)
 - Test: the device-api real-PG RLS suite (grep `describeEachTarget`/`useRealPostgres` + `/management-api/devices` in `apps/server/src/*.test.ts`)

@@ -1,7 +1,7 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes THIS file throws directly —
 // `device.forbidden_station` and `device.not_found` (the route-owned faults), `device.binding_invalid`
-// (the assign-profile route's own `getProfile` pre-check, the SAME code the enrol path's composite-FK
-// translation raises), `management.request_invalid` (the body/id screens) and `ticket.invalid_transition`
+// (the assign-profile route's composite-FK translation for a bad `layoutProfileId`, the SAME code the
+// enrol path raises), `management.request_invalid` (the body/id screens) and `ticket.invalid_transition`
 // (the malformed-item-id screen). The device
 // pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
 // `station.not_found` reach here through the value imports of the verbs/guard that throw them
@@ -17,12 +17,12 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { getProfile, listProfiles } from "@waitron/layouts";
+import { listProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
-import { enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
+import { bindingFkField, enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import {
@@ -442,26 +442,29 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // field — the shared `requireNullableBodyUuid` screen.
       const body = await readJsonBody<{ layoutProfileId?: unknown }>(c);
       const layoutProfileId = requireNullableBodyUuid(body.layoutProfileId, "layoutProfileId");
-      const updated = await gated(sessionId, async (tx) => {
-        // A non-null target must be one of THIS tenant's own profiles. `getProfile` is RLS-scoped
-        // (`withTenant` + `asAppUser`), so a well-formed id that is unknown OR belongs to another tenant
-        // reads back `undefined` and is refused as `device.binding_invalid` naming the field — the SAME
-        // code+shape the enrol path's composite-FK translation raises for a bad `layoutProfileId`
-        // binding (errors.ts), NOT `profile.not_found` (the profile-CRUD concept, wrong here). This is
-        // what keeps a cross-tenant id from ever binding (RLS hides it) and turns an FK 500 into a 400.
-        if (layoutProfileId !== null) {
-          const profile = await getProfile(tx, deps.cfg.tenantId, layoutProfileId);
-          if (profile === undefined) {
-            throw new AppError("device.binding_invalid", { field: "layoutProfileId" });
-          }
+      // A non-null target must be one of THIS tenant's own profiles. Rather than a read-then-write
+      // pre-check (which leaves a delete-between-check-and-update race that would surface a raw FK 500),
+      // let the composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` be the guard: it
+      // is tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never binds,
+      // never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
+      // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper
+      // (NOT `profile.not_found`, the profile-CRUD concept — wrong here). Any other error rethrows raw.
+      let updated: { id: string }[];
+      try {
+        updated = await gated(sessionId, (tx) =>
+          tx
+            .update(devices)
+            .set({ layoutProfileId })
+            .where(eq(devices.id, id))
+            .returning({ id: devices.id }),
+        );
+      } catch (error) {
+        if (bindingFkField(error) === "layoutProfileId") {
+          throw new AppError("device.binding_invalid", { field: "layoutProfileId" });
         }
-        // 0 rows updated (unknown or RLS-hidden device id) → `device.not_found`, the revoke idiom.
-        return tx
-          .update(devices)
-          .set({ layoutProfileId })
-          .where(eq(devices.id, id))
-          .returning({ id: devices.id });
-      });
+        throw error;
+      }
+      // 0 rows updated (unknown or RLS-hidden device id) → `device.not_found`, the revoke idiom.
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
     }),
