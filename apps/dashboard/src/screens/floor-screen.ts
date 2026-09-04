@@ -56,7 +56,7 @@ interface EditableTable {
  * `service-status-screen` idiom): FP-1's routes are per-item POST/PATCH/DELETE, not a single bulk PUT,
  * so create, save-row, assign-zone and deactivate each hit one endpoint then call `#load` to resync.
  * A row's save reads its CURRENT values from state at click time (like `service-status-screen`'s
- * `#save`), never a stale render closure, so an edit made just before the click is the one that persists.
+ * `#saveRow`), never a stale render closure, so an edit made just before the click is the one that persists.
  *
  * The zone <select> can only ASSIGN a zone, never clear one: the table PATCH route takes a `zoneId`
  * string and has no null form (clearing is a deferred backlog follow-up). So the blank "— sin zona —"

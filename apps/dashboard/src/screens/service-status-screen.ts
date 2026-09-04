@@ -156,7 +156,7 @@ export class ServiceStatusScreen extends LitElement {
   /**
    * Persist the CURRENT values of the row `id` holds, then reload. Reads the row from state at click
    * time (not a captured render closure), so an edit made immediately before the click is what
-   * persists — the reads-current-values `#save` discipline. A vanished row is a no-op. A rejection becomes
+   * persists — the reads-current-values `#saveRow` discipline. A vanished row is a no-op. A rejection becomes
    * the `errorKey` banner; never an unhandled rejection (called via `void`).
    */
   async #saveRow(id: string): Promise<void> {
