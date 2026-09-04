@@ -17,6 +17,7 @@
     "@simplewebauthn/server": "^13.0.0",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "otplib": "^13.4.1"
   },
