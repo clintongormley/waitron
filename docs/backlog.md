@@ -320,6 +320,10 @@ for the projected remainder.
   the rest is post-polish. See *Open threads → Printing*.
 - **Cloud trial on-ramp** — gated on Waitron-cloud infra that does not exist yet. See *Open threads →
   Onboarding*.
+- **Guided onboarding wizard (four setup modes)** — a non-technical first-run chooser (demo /
+  pre-production / production-from-pre-production / add-a-node) + per-mode wizards, wrapping the existing
+  dev/demo/provisioning/adopt paths, plus Square/CSV migration as a step. See *Open threads →
+  Onboarding*.
 - **Recipes → stock → procurement (depth)** — recipe-authoring built; plate costing / stock depletion /
   suppliers/POs is product depth. See *Open threads → Recipes*.
 - **Distribution / deployment / failover remainder** (Track 2) — appliance image, on-device agent,
@@ -714,6 +718,43 @@ Onboarding free-tier slices 1–4 are complete (#137–#166); spec
 [appliance-onboarding](superpowers/specs/2026-08-26-appliance-onboarding-design.md). Slice 2b is
 venue-only (R1) — the full `instance` role-split is deferred to the appliance image (*Debt →
 Provisioning/build*).
+
+**Guided onboarding wizard — four setup modes (NEW — owner-added 2026-09-04).** Onboarding today is a
+developer path (`pnpm dev:setup`, env vars, the provisioning CLIs); the owner wants a **simple first-run
+chooser** so a non-technical installer is never overwhelmed and never "runs away". On installing a new
+node, present a small menu of **four intents**, then a dedicated wizard that guides each one to
+completion:
+
+1. **Set up a demo** — load the demo seed, enable **dev mode** for devices, **no real POS payments**,
+   **nothing filed** to AEAT. Maps to `WAITRON_ENV=dev` (fiscally = preproduction, `config.devMode` on
+   — SP-C #201) + the `dev:setup` seed (~44-product menu, floor plan, staff, back-dated sales). Mostly
+   built already; the wizard is the friendly wrapper over it.
+2. **Set up a new pre-production system** — empty DB, **test cards** for POS, fiscal records **submitted
+   to AEAT's pre-production** endpoint. Maps to `WAITRON_ENV=preproduction` (the default) + the
+   `venue`/`instance` provisioning path (onboarding slices 1–4, #137–#166).
+3. **Set up a new production system, copying from an existing pre-production system** — a real venue goes
+   live reusing the configuration it already tuned in pre-production. **Fiscal caution (§5): one database
+   per environment — a pre-production DB is _never promoted_.** Its `invoice_series` / hash-chain must
+   **not** carry over (pre-prod sales would leave a permanent hole in the production series, which is
+   exactly what Veri\*Factu detects, and a chain cannot be migrated). So this wizard copies
+   **configuration only** — catalogue/menus, floor plan, staff, devices, layout profiles, hardware
+   bindings, printer/payment config — into a **fresh production DB with a brand-new fiscal chain +
+   series**. Needs a defined config **export/import** surface (what copies vs. what is minted fresh);
+   H2-adjacent, so specced with the owner, never landed unattended.
+4. **Add a node to an existing system** — a second box joins an already-running venue. Maps to the
+   **membership adopt** arc (cloud-mirror adopt / reserved-standby identity R2 #208 → R3, the membership
+   slices under *Sync*) plus the reroute/failover work (Track 2). Largely a wizard over infra already
+   being built.
+
+Plus **data migration from common systems (e.g. Square)** to lower the switching cost for an owner
+leaving another POS — this is the existing *Square (and generic CSV) menu import* item
+(*Priorities → Tier C*; a one-off import is NOT the cheap seed path, spike 2026-08-29), which the wizard
+would surface as an optional step inside modes 2/3.
+
+**Scope to brainstorm when picked up:** the first-run chooser UI (`apps/setup`), the four wizard flows,
+the config export/import surface for mode 3 (and its fresh-chain guarantee), how each mode sets
+`WAITRON_ENV` / `devMode` / provisioning, and where the Square/CSV importer slots in. Modes 1–2 are
+mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
 
 **Cold-restore follow-up (from 4b-iii):** `register-till`/`registerSif` do NOT freshen the invoice
 **series**, but AEAT dedup keys on `(NIF, series, date, número)` (not the installation number), so the
