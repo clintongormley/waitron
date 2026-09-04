@@ -15,8 +15,14 @@ import { nodeMembership } from "./schema/node-membership.js";
  * Uses `to_regclass` rather than catching an undefined-table error, exactly as `readMirrorConfig`/
  * `readDeploymentMode` do: a failed statement aborts the enclosing transaction in PostgreSQL, so
  * probing by failure would poison a transaction the caller may still need.
+ *
+ * Accepts a `Database` OR a `Transaction` (the explicit union `client.ts` blesses for a reader that
+ * must work on whatever handle it is given): R3b's promote reads the held term through its OWN owner
+ * transaction for the supersede diagnostic, so the read must be able to run on that `tx`.
  */
-export async function readNodeMembership(db: Database): Promise<SignedMembershipDocument | null> {
+export async function readNodeMembership(
+  db: Database | Transaction,
+): Promise<SignedMembershipDocument | null> {
   const present = await db.execute<{ exists: boolean }>(
     sql`select to_regclass('public.node_membership') is not null as exists`,
   );
@@ -95,8 +101,21 @@ export async function persistNodeMembershipIfNewer(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<boolean> {
+  return db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, document));
+}
+
+/** The term-guarded singleton upsert on a caller-provided transaction — the atomic monotonic backstop
+ * (accept iff strictly newer) that a caller can commit in the SAME transaction as a related write
+ * (CLAUDE.md §3). Returns `true` iff a row actually changed; a `false` means a concurrent ≥ term is
+ * already held, and the caller decides whether to abort the transaction. R3b's mirror→primary promote
+ * commits it with the `deployment` flip so the org chart cannot regress under a gossip-adopt race
+ * (spec §8 "R3 sharp edge"); `persistNodeMembershipIfNewer` is this on its own transaction. */
+export async function persistNodeMembershipIfNewerTx(
+  tx: Transaction,
+  document: SignedMembershipDocument,
+): Promise<boolean> {
   const term = document.body.term;
-  const rows = await db
+  const rows = await tx
     .insert(nodeMembership)
     .values({ id: 1, term, document })
     .onConflictDoUpdate({

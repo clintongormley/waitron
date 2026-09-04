@@ -78,6 +78,7 @@ export {
   readDeploymentMode,
   readSingletonRole,
   setDeploymentMode,
+  setDeploymentModeTx,
   setSingletonRole,
   setSingletonRoleTx,
   stampDeployment,
@@ -88,6 +89,7 @@ export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 export type { MirrorConnection } from "./mirror-config.js";
 export {
   persistNodeMembershipIfNewer,
+  persistNodeMembershipIfNewerTx,
   readNodeMembership,
   writeNodeMembership,
   writeNodeMembershipTx,
@@ -97,6 +99,7 @@ export {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   readNodeEndorsement,
+  readStandardSeriesId,
   type ReservedNodeInput,
   type ReservedSeriesInput,
 } from "./reserved-identity.js";

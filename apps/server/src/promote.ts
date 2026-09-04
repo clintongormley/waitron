@@ -1,12 +1,17 @@
 import "./errors.js"; // register promotion.* on the shared registry (reachability convention)
 import { AppError } from "@waitron/shared";
 import {
+  persistNodeMembershipIfNewerTx,
+  readNodeEndorsement,
   readNodeMembership,
+  readStandardSeriesId,
+  setDeploymentModeTx,
   setSingletonRoleTx,
   writeNodeMembershipTx,
   type Database,
+  type Transaction,
 } from "@waitron/db";
-import { nextStandings } from "@waitron/membership";
+import { nextStandings, type SignedMembershipDocument } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
@@ -132,4 +137,137 @@ export async function promoteLocalSecondaryToPrimary(
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
   return { alreadyPrimary: false };
+}
+
+export interface MirrorPromotionResult extends PromotionResult {
+  /** The cloud's OWN reserved standard series id the promote persisted into trading.env, so the promoted
+   * primary numbers under its disjoint series, not the primary's (spec §4.3). Returned so the caller can
+   * assert on it / decide whether to restart. */
+  readonly seriesId: string;
+}
+
+export interface MirrorPromoteDeps extends PromoteDeps {
+  /**
+   * Persist the corrected `trading.env` (its `seriesId` = the cloud's OWN reserved standard series) so the
+   * NEXT boot comes up primary numbering under the right series. Injected (the boot supplies
+   * `writeTradingEnv`) so this DB-centric module stays out of the filesystem/process transition.
+   *
+   * Called BEFORE the point-of-no-return (owner decision, 2026-09-04): a corrected `seriesId` is INERT on a
+   * still-read-only mirror (the read-only gate rejects every non-GET, so `config.till.seriesId` is never
+   * used to allocate), so persisting it early is SAFE even if the promote later aborts — the file it leaves
+   * is durable but never consulted while the box stays a mirror. It closes the PROCESS-crash window a
+   * persist-AFTER-PONR leaves: the env write is issued (atomic rename, `fs-atomic.ts`) before the PONR
+   * commits, so a process crash between them reboots the box either still a mirror or `mode=primary` on the
+   * CORRECT series — never `mode=primary` on the primary's series with no mirror-promote path left to
+   * self-heal it. It does NOT close the narrower POWER-LOSS window: `writeFileAtomic` does not fsync
+   * (`fs-atomic.ts` — atomic visibility, no durability across power loss), while the PONR is a durable
+   * Postgres commit, so a power cut can leave the rename unflushed behind a durable commit. That residual is
+   * benign in R3b (nothing sells against a promoted cloud until the deferred till-reroute slice) and is the
+   * carry-in for closing it (fsync the env write, or resolve the series at boot). Ordering the persist
+   * before the flip is a correctness invariant, so it lives here rather than in the caller.
+   */
+  readonly persistTradingEnv: (seriesId: string) => Promise<void>;
+}
+
+/**
+ * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be proven
+ * as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE owner transaction, in an order
+ * that respects `deployment_role_valid_ck`: flip `mode → primary` FIRST (leaving `singleton_role`, so
+ * the transient pair is the valid `(primary, secondary)`, never the forbidden `(mirror, primary)`), then
+ * `singleton_role → primary`, then the TERM-GUARDED document write. A `false` from the guard means a
+ * concurrent gossip-adopt already landed a >= term, so writing would REGRESS the org chart — the whole
+ * transaction is aborted (`promotion.membership_superseded`) and the mode/singleton flip does not commit
+ * against a superseded chart.
+ *
+ * The diagnostic held-term read runs `readNodeMembership` on `tx`, NOT a separate app handle: under
+ * READ COMMITTED the row holds the raced-in committed term either way (our no-op upsert already saw it).
+ * Reading it on the app handle instead was measured to hang the suite to the vitest timeout, because on
+ * PGlite the app handle and this owner transaction share ONE backend connection, so the app read blocks
+ * behind this still-open transaction; on `tx` it does not, and the value read is identical on real
+ * Postgres. (`readNodeMembership` accepts a `Database | Transaction` for exactly this — the value is only
+ * for the error message; the throw is what rolls the transaction back regardless.)
+ */
+export async function commitMirrorPromotionTx(
+  tx: Transaction,
+  document: SignedMembershipDocument,
+): Promise<void> {
+  await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid transient pair
+  await setSingletonRoleTx(tx, "primary"); // (primary, primary)
+  const accepted = await persistNodeMembershipIfNewerTx(tx, document);
+  if (!accepted) {
+    const current = await readNodeMembership(tx);
+    throw new AppError("promotion.membership_superseded", {
+      heldTerm: current?.body.term ?? -1,
+      mintedTerm: document.body.term,
+    });
+  }
+}
+
+/**
+ * Mirror → primary (parent SIF spec §5b; R3 design §4). A read-only mirror becomes the venue's primary
+ * on the identity it already holds (R3a gave it its own nodeId; R2 reserved its SIF + disjoint series +
+ * sealed key + the primary's endorsement). No identity ceremony, no SIF re-mint: `currentSif` returns
+ * the reserved SIF once the box reboots `mode=primary`.
+ *
+ * ABORT-BEFORE-PONR (parent spec §7): the fence check, the held/endorsement/series reads, the in-memory
+ * mint AND the `trading.env` correction (`persistTradingEnv`, inert on a still-read-only mirror) all run
+ * BEFORE the one owner transaction, so any failure there leaves the mirror exactly as it was. The PONR is
+ * ONE owner transaction (`commitMirrorPromotionTx`) — `mode → primary`, `singleton_role → primary`, then
+ * the TERM-GUARDED document write; if that write is refused (a concurrent gossip-adopt landed a >= term),
+ * the whole transaction aborts with `promotion.membership_superseded` and the flip does not commit against
+ * a superseded chart (spec §8 "R3 sharp edge"). Idempotent: an already-primary node returns
+ * `{ alreadyPrimary: true }` before any mint or persist. Because the env write is issued before the flip,
+ * a PROCESS crash between them can never leave the box primary on the primary's series (only still-mirror,
+ * or primary on the correct series); the narrower power-loss window is a documented residual, benign until
+ * till-reroute (see `MirrorPromoteDeps.persistTradingEnv`). The caller only restarts on
+ * `{ alreadyPrimary: false }` — the mirror is not selling, so a restart costs nothing (contrast the LIVE
+ * local-secondary promote).
+ */
+export async function promoteMirrorToPrimary(
+  deps: MirrorPromoteDeps,
+  attestation: FenceAttestation,
+): Promise<MirrorPromotionResult> {
+  assertFenced(attestation); // before PONR: abortable, zero lasting effect
+
+  await refreshDeploymentHolders(deps.appDb, deps.holders);
+  // Read the corrected series id up front — it is also the value an already-primary re-run returns.
+  const seriesId = await readStandardSeriesId(deps.appDb, deps.tenantId, deps.nodeId);
+
+  if (deps.holders.mode.current === "primary") {
+    // Already promoted — idempotent no-op. trading.env was already corrected before this box's own PONR,
+    // so there is nothing to re-persist here.
+    return { alreadyPrimary: true, seriesId };
+  }
+
+  // Build the endorsed document BEFORE the PONR: read the held org chart, flip standings (this node →
+  // serving-primary, outgoing primary → sell-only), read the primary's endorsement of this node's key,
+  // and sign with this node's OWN key. R3b attaches the endorsement so a peer trusting only the primary
+  // transitively trusts this document (parent wire-protocol §4) — the first production doc signed by a
+  // non-setup key.
+  const held = await readNodeMembership(deps.appDb);
+  const endorsement = await readNodeEndorsement(deps.appDb, deps.tenantId, deps.nodeId);
+  const document = await mintNextMembershipDocument(
+    { db: deps.appDb, ring: deps.ring },
+    {
+      tenantId: deps.tenantId,
+      heldDocument: held,
+      nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
+      signerNodeId: deps.nodeId,
+      endorsements: endorsement === null ? [] : [endorsement],
+    },
+  );
+
+  // Persist the corrected trading.env BEFORE the point-of-no-return (owner decision, 2026-09-04). A
+  // corrected series is inert on a still-read-only mirror, so this is safe even if the promote aborts, and
+  // issuing the env write before the flip closes the PROCESS-crash window a persist-after-PONR would leave
+  // (the power-loss window is a documented residual — writeFileAtomic does not fsync). See
+  // `MirrorPromoteDeps.persistTradingEnv`.
+  await deps.persistTradingEnv(seriesId);
+
+  // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3).
+  await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document));
+
+  await refreshDeploymentHolders(deps.appDb, deps.holders);
+  deps.log("info", "promotion.completed", { target: "mirror" });
+  return { alreadyPrimary: false, seriesId };
 }

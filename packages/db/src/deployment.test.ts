@@ -8,6 +8,7 @@ import {
   readDeploymentMode,
   readSingletonRole,
   setDeploymentMode,
+  setDeploymentModeTx,
   setSingletonRole,
   setSingletonRoleTx,
   stampDeployment,
@@ -189,6 +190,25 @@ describeEachTarget("the deployment stamp", (target) => {
       await setSingletonRoleTx(tx, "secondary");
     });
     expect(await readSingletonRole(db)).toBe("secondary");
+  });
+
+  it("setDeploymentModeTx flips mode on a caller tx and co-sets singleton_role for mirror", async () => {
+    await stampDeployment(db, "preproduction");
+    await db.transaction((tx) => setDeploymentModeTx(tx, "mirror"));
+    expect(await readDeploymentMode(db)).toBe("mirror");
+    expect(await readSingletonRole(db)).toBe("secondary");
+  });
+
+  it("setDeploymentModeTx to primary leaves singleton_role untouched", async () => {
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary");
+    await setDeploymentMode(db, "mirror"); // (mirror, secondary)
+    await db.transaction(async (tx) => {
+      await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid, no CHECK violation
+      await setSingletonRoleTx(tx, "primary"); // (primary, primary)
+    });
+    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readSingletonRole(db)).toBe("primary");
   });
 
   it("readDeploymentAxes returns both axes in one read", async () => {

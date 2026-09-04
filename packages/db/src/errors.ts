@@ -37,6 +37,15 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     "series.not_found": { seriesId: string };
     /**
+     * A node has no `purpose='standard'` invoice series. Reached by R3b's mirror→primary promote when
+     * correcting `config.till.seriesId` to the cloud's OWN reserved standard series (the code the primary
+     * derived at adopt, `<primaryCode>-<numeroInstalacion>`). A promoted cloud always has one (R2
+     * established it), so this is a corruption/misuse refusal, structured so it reaches a screen
+     * translatable rather than a raw empty-result crash — the shape `sif.not_registered` follows.
+     * `series.*` names the domain concept; never renamed once shipped.
+     */
+    "series.no_standard_for_node": { tenantId: string; nodeId: string };
+    /**
      * A database already belongs to a different environment. Never overwritten: the rows written
      * under the first stamp cannot be moved to the second — an invoice series that filed to
      * pre-production has a numbering hole in production that nothing can fill.

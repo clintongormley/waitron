@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
-import { tenantId as brandTenantId } from "@waitron/shared";
+import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
+import "./errors.js";
 import { nodes } from "./schema/nodes.js";
 import { invoiceSeries } from "./schema/series.js";
 import { withTenant } from "./tenancy.js";
@@ -71,5 +72,44 @@ export function readNodeEndorsement(
       .where(eq(nodes.id, nodeId))
       .limit(1);
     return row?.endorsement ?? null;
+  });
+}
+
+/**
+ * The id of a node's standard-purpose invoice series, read under `withTenant` (invoice_series is
+ * FORCE-RLS; rides app_user's SELECT, like `readNodeEndorsement`). R3b's mirror→primary promote reads
+ * the cloud's OWN reserved standard series here and points `config.till.seriesId` at it, so the promoted
+ * cloud numbers under its disjoint `<primaryCode>-<numeroInstalacion>` series, never the primary's.
+ * Throws `series.no_standard_for_node` rather than returning null — every caller needs one.
+ *
+ * Caps the read at TWO rows (`limit(2)` — 0 / 1 / >1 is all it needs to distinguish, so no full scan in
+ * the corrupt case) and fails LOUD on a second row rather than picking one silently: nothing enforces one
+ * standard series per node — the natural key is `(tenant_id, node_id, code)`, NOT `(…, purpose)`
+ * (`schema/series.ts`) — so two standard series would make the promoted cloud's `NumSerieFactura`
+ * non-deterministic, a fiscal hazard. Unreachable today (R2's `insertReservedSeriesTx` mints exactly one
+ * standard series per node), so this is a can't-happen data-integrity invariant, the same shape and
+ * `v8 ignore` as `writeReservedSif`'s "insert returned no row" guard.
+ */
+export function readStandardSeriesId(
+  db: Database,
+  tenantId: string,
+  nodeId: string,
+): Promise<string> {
+  return withTenant(db, brandTenantId(tenantId), async (tx) => {
+    const rows = await tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(and(eq(invoiceSeries.nodeId, nodeId), eq(invoiceSeries.purpose, "standard")))
+      .limit(2);
+    const [row, extra] = rows;
+    if (row === undefined) {
+      throw new AppError("series.no_standard_for_node", { tenantId, nodeId });
+    }
+    /* v8 ignore start */
+    if (extra !== undefined) {
+      throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
+    }
+    /* v8 ignore stop */
+    return row.id;
   });
 }

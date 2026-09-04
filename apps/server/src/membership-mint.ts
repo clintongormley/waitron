@@ -1,5 +1,6 @@
 import {
   buildNextMembershipDocument,
+  type Endorsement,
   type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
@@ -15,6 +16,11 @@ import { readNodeIdentityKey } from "./node-identity.js";
  * promote writes inside its atomic owner transaction — so this helper never touches the point-of-no-return
  * (§7); it only reads a key and signs in memory, which is exactly the work that must happen BEFORE that
  * transaction so a signing failure aborts with no effect.
+ *
+ * `endorsements` forwards straight through to `buildNextMembershipDocument`, which defaults it to `[]`
+ * when omitted. R1 (seed + local promote) signs with a directly-trusted key and passes none; R3b's cloud
+ * promotion mints the first document signed by a non-setup key and attaches the primary's endorsement of
+ * that key here.
  */
 export async function mintNextMembershipDocument(
   deps: { db: Database; ring: KeyRing },
@@ -23,6 +29,7 @@ export async function mintNextMembershipDocument(
     heldDocument: SignedMembershipDocument | null;
     nodes: readonly MembershipNode[];
     signerNodeId: string;
+    endorsements?: readonly Endorsement[];
   },
 ): Promise<SignedMembershipDocument> {
   const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring, args.tenantId);
@@ -31,5 +38,6 @@ export async function mintNextMembershipDocument(
     nodes: args.nodes,
     signerNodeId: args.signerNodeId,
     signerPrivateKey,
+    endorsements: args.endorsements,
   });
 }

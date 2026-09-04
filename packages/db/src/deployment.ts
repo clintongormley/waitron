@@ -96,6 +96,16 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * singleton row (stamp the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB,
  * which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
+  await db.transaction((tx) => setDeploymentModeTx(tx, mode));
+}
+
+/** Sets this database's role on a caller-provided transaction (see `setDeploymentMode` for the full
+ * contract — mirror co-sets `singleton_role='secondary'` in the same update, primary leaves it
+ * untouched, fail-loud on a 0-row update). Exists so a caller can commit this flip in the SAME
+ * transaction as a related write (CLAUDE.md §3) — R3b's mirror→primary promote commits it with the
+ * membership-document write (`persistNodeMembershipIfNewerTx`) so both land or neither does (spec §8
+ * "R3 sharp edge"). `setDeploymentMode` is this on its own transaction. */
+export async function setDeploymentModeTx(tx: Transaction, mode: DeploymentMode): Promise<void> {
   // A read-only mirror holds no singleton duties, so flipping mode to 'mirror' co-sets
   // singleton_role='secondary' in the SAME update — the (mirror, primary) pair deployment_role_valid_ck
   // forbids is never even transiently written. Flipping mode to 'primary' leaves singleton_role
@@ -103,10 +113,10 @@ export async function setDeploymentMode(db: Database, mode: DeploymentMode): Pro
   // which one is the promote action's call, not this setter's.
   const result =
     mode === "mirror"
-      ? await db.execute<{ id: number }>(
+      ? await tx.execute<{ id: number }>(
           sql`update deployment set mode = ${mode}, singleton_role = 'secondary' where id = 1 returning id`,
         )
-      : await db.execute<{ id: number }>(
+      : await tx.execute<{ id: number }>(
           sql`update deployment set mode = ${mode} where id = 1 returning id`,
         );
   // Fail loud on a 0-row update: the singleton must already exist (stamp first). A silent no-op here

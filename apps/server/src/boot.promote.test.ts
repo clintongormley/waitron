@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -12,13 +12,18 @@ import {
   captureError,
   readDeploymentMode,
   readSingletonRole,
+  readStandardSeriesId,
+  setDeploymentMode,
   setSingletonRole,
   stampDeployment,
   withTenant,
+  writeMirrorConfig,
+  writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 // The same test-only entry point `packages/fiscal-verifactu`'s own drain suites use to seed a due
 // `envios` row (boot.test.ts's drain e2e reuses it identically) — no `exports` map restricts either
 // package, so the deep import resolves the way a same-package one would.
@@ -26,6 +31,9 @@ import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealMirrorToken } from "./mirror-token.js";
+import { parseEnvFile } from "./env-file.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 
@@ -261,6 +269,11 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
       // Phase A — a secondary. A pass has run (the loop is live), but the singleton-gated fiscal pass
       // is EMPTY for a non-singleton, so the seeded row is untouched.
       await waitForPass(server.health);
+
+      // Mode-gated exposure (R3b): a NON-mirror trading box surfaces the local-secondary promote and
+      // NOT the mirror promote — the discriminated dispatch in makeStartedServer picks exactly one.
+      expect(server.promoteLocalSecondaryToPrimary).toBeDefined();
+      expect(server.promoteMirrorToPrimary).toBeUndefined();
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
@@ -338,6 +351,175 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
     } finally {
       await server.close();
       await cleanupFiscalWork(seeded);
+    }
+  }, 60_000);
+});
+
+// R3b — the in-process MIRROR→PRIMARY promote wired into boot (spec §4). A booted mirror exposes
+// `promoteMirrorToPrimary` (and NOT the local-secondary method); calling it runs the point-of-no-return
+// owner transaction (mode+singleton → primary, term-guarded endorsed document), rewrites `trading.env`
+// with the cloud's OWN reserved standard series id, and schedules a restart into mode=primary. Real
+// Postgres for the owner-role writes + the reserved-SIF reads (CLAUDE.md §4); a SEPARATE clone so the
+// mirror stamp + the (primary,primary) flip never leak into the local-secondary suite above.
+const mirrorSuite = useTemplateDb({ template: "manifest" });
+
+// The mirror's OWN venue ids, distinct from TILL_ENV so the two clones' seeds never collide. The NODE id
+// is the generated standby's own id (filled in at seed time), and WAITRON_TILL_SERIES_ID boots as the
+// primary's INERT designated series — the value the promote must OVERWRITE with the cloud's own reserved
+// standard series.
+const MIRROR_TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // inert, must be overwritten
+const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"; // the primary this mirror pulls
+const MIRROR_NUMERO_INSTALACION = 7;
+
+/** Seed a fresh clone as a read-only mirror holding its OWN dormant identity (R2/R3a): tenant + location,
+ * a reserved standby identity (own node + sealed key + endorsement + reserved SIF + reserved standard
+ * series), a held term-3 membership chart, the DB-stored mirror connection config + sealed sync token the
+ * mirror boot reads, and deployment stamped production then mode='mirror'. Returns the cloud's own nodeId
+ * + the reserved standard series id the promote corrects trading.env to. */
+async function seedMirrorIdentity(
+  admin: Database,
+): Promise<{ nodeId: string; standardSeriesId: string }> {
+  await admin.execute(sql`
+    insert into tenants (id, country, tax_id, legal_name)
+    values (${MIRROR_TENANT_ID}, 'ES', '90222222H', 'Promote Cloud SL')
+    on conflict do nothing`);
+  await admin.execute(sql`
+    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+    values (${MIRROR_LOCATION_ID}, ${MIRROR_TENANT_ID}, 'Barra', array['en']::text[], 'Hospitality')
+    on conflict do nothing`);
+  const t = await admin.execute<{ tax_id: string }>(
+    sql`select tax_id from tenants where id = ${MIRROR_TENANT_ID}`,
+  );
+  const nif = t.rows[0]!.tax_id;
+
+  const standby = generateStandbyIdentity();
+  // The primary's endorsement of the cloud's own key, stored on the standby's `nodes` row. A placeholder
+  // signature is fine here — the promote signer only READS it and attaches it to the minted document; the
+  // transitive-trust VERIFICATION of a real endorsement is the adopt e2e's assertion.
+  const endorsement: Endorsement = {
+    nodeId: standby.nodeId,
+    publicKey: standby.publicKey,
+    endorsedBy: MIRROR_ORIGIN_NODE_ID,
+    signature: "endorsement-sig",
+  };
+  await establishReservedStandbyIdentity(
+    { ownerDb: admin, ring: PROMOTE_RING },
+    {
+      tenantId: MIRROR_TENANT_ID,
+      locationId: MIRROR_LOCATION_ID,
+      standby,
+      nodeName: "cloud",
+      filingModule: "verifactu",
+      taxModule: "iva",
+      reserved: {
+        nif,
+        idSistemaInformatico: "W1",
+        numeroInstalacion: MIRROR_NUMERO_INSTALACION,
+        series: [{ code: "FA-7", purpose: "standard" }],
+        endorsement,
+      },
+    },
+  );
+
+  // A held term-3 chart: the outgoing primary serving, this node secondary — the promote bumps it to 4.
+  const held: SignedMembershipDocument = {
+    body: {
+      term: 3,
+      nodes: [
+        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+        { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
+      ],
+    },
+    signerNodeId: MIRROR_ORIGIN_NODE_ID,
+    signature: "held-placeholder-sig",
+    endorsements: [],
+  };
+  await writeNodeMembership(admin, held);
+
+  // The mirror's DB-stored connection config + sealed sync token the mirror boot requires (owner writes).
+  // The relay is a dead loopback port — the pull/tunnel workers dial it and back off in the background,
+  // which never blocks boot and is aborted on close().
+  await writeMirrorConfig(admin, {
+    relayUrl: "https://127.0.0.1:1/",
+    boxHostname: "box.test",
+    boxCaPem: "unused-ca-pem",
+    originNodeId: MIRROR_ORIGIN_NODE_ID,
+  });
+  await sealMirrorToken(admin, PROMOTE_RING, MIRROR_TENANT_ID, "mirror-sync-token");
+
+  // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
+  await stampDeployment(admin, "production");
+  await setDeploymentMode(admin, "mirror");
+  const standardSeriesId = await readStandardSeriesId(admin, MIRROR_TENANT_ID, standby.nodeId);
+  return { nodeId: standby.nodeId, standardSeriesId };
+}
+
+describe("promote (real Postgres): mirror → primary, in-process, restart-into-primary", () => {
+  it("exposes promoteMirrorToPrimary (not the local method), promotes, and rewrites trading.env to the cloud's own series", async () => {
+    const seed = await seedMirrorIdentity(mirrorSuite.admin);
+    const port = await freePort();
+    // A per-test state dir so the corrected `trading.env` lands somewhere isolated we can read back.
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
+
+    const server = await startServer({
+      ...KEY_ENV,
+      ...TICK_ENV,
+      // Override the local-secondary TILL_ENV that KEY_ENV carries with the mirror's own ids; the NODE id
+      // is the cloud's OWN reserved id (R3a) and the series is the primary's INERT designated series.
+      WAITRON_TILL_TENANT_ID: MIRROR_TENANT_ID,
+      WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
+      WAITRON_TILL_NODE_ID: seed.nodeId,
+      WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
+      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "app_login", "app_pw"),
+      WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      // A mirror boots with its own sync pool (loadMirrorSyncConfig reads this) — a sync_applier role.
+      WAITRON_SYNC_DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "sync_applier", "ap"),
+      WAITRON_STATE_DIR: stateDir,
+    }).catch(async (err: unknown) => {
+      // On a boot failure `server` is never assigned, so the finally below never runs — clean up the
+      // temp state dir here rather than leaking it.
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+
+    // SAFETY (CLAUDE.md §4): the promote schedules `setTimeout(() => process.kill(pid, "SIGTERM"), 0)`.
+    // Spy on process.kill so the restart NEVER fires a real SIGTERM at the vitest process; assert it was
+    // scheduled instead. Installed before the promote so the next-tick timer hits the spy, restored below.
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      // Mode-gated exposure (R3b): a MIRROR surfaces the mirror promote and NOT the local-secondary one.
+      expect(server.promoteMirrorToPrimary).toBeDefined();
+      expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
+
+      const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true });
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: seed.standardSeriesId });
+
+      // The point-of-no-return committed: deployment flipped to (primary, primary).
+      expect(await readDeploymentMode(mirrorSuite.admin)).toBe("primary");
+      expect(await readSingletonRole(mirrorSuite.admin)).toBe("primary");
+
+      // The next-tick restart timer has fired into the spy — never a real SIGTERM.
+      await delay(50);
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+
+      // trading.env was rewritten: WAITRON_TILL_SERIES_ID is the cloud's OWN reserved standard series
+      // (result.seriesId), NOT the inert designated series it booted with; every other id re-emitted.
+      const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
+      expect(persisted.WAITRON_TILL_SERIES_ID).toBe(seed.standardSeriesId);
+      expect(persisted.WAITRON_TILL_SERIES_ID).not.toBe(MIRROR_DESIGNATED_SERIES_ID);
+      expect(persisted.WAITRON_TILL_NODE_ID).toBe(seed.nodeId);
+      expect(persisted.WAITRON_TILL_TENANT_ID).toBe(MIRROR_TENANT_ID);
+      expect(persisted.WAITRON_ENV).toBe("production");
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
 });
