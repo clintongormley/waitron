@@ -567,7 +567,7 @@ export class DevicesScreen extends LitElement {
                     )}
                 >
                   <option value="">${t("devices.canvas_none")}</option>
-                  ${this.canvases.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+                  ${this.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
                 </select>`
               : nothing
           }
@@ -679,7 +679,7 @@ export class DevicesScreen extends LitElement {
               @change=${(e: Event) => this.#onCanvasChange(e)}
             >
               <option value="">${t("devices.canvas_none")}</option>
-              ${this.canvases.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+              ${this.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
             </select>
           </label>
           ${this.kind === "till" ? this.#renderTillHardware() : nothing}

@@ -497,7 +497,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
             // The option-sources for minting a new device (Task 5's `POST /api/dev/devices`): the tenant's
-            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its canvass.
+            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its canvases.
             const tillRows = await tx
               .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
               .from(tills);
@@ -507,7 +507,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               devices: deviceRows,
               tills: tillRows,
               stations,
-              canvases: canvases.map((p) => ({ id: p.id, name: p.name })),
+              canvases: canvases.map((canvas) => ({ id: canvas.id, name: canvas.name })),
             };
           }),
         ),
