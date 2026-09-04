@@ -18,7 +18,6 @@ import {
   stampDeployment,
   withTenant,
 } from "@waitron/db";
-import { databaseUrl as uriForDatabase } from "@waitron/db/testing/postgres.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   cloneTemplate,
@@ -781,21 +780,22 @@ describe("startServer, against a real container as the deployment role", () => {
     // A pristine database in the shared cluster. `template0` carries no app objects, so nothing but
     // boot's migration run can populate the journals below; the superuser URL doubles as the app
     // pool's and the migrator's (this test proves migrations run, not RLS as the deployment role).
-    const freshName = `${nextCloneName()}_empty`;
-    await suite.admin.execute(sql.raw(`create database ${freshName} template template0`));
-    const freshUri = uriForDatabase(suite.pg.uri, freshName);
+    // `cloneTemplate` validates the identifiers it interpolates into the CREATE/DROP DATABASE
+    // utility statements (CLAUDE.md §3) and its `stop()` drops the clone WITH (FORCE) on a fresh
+    // admin connection.
+    const pg = await cloneTemplate(suite.pg.uri, "template0", nextCloneName());
     let server: StartedServer | undefined;
     let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
     try {
       server = await startServer({
-        DATABASE_URL: freshUri,
+        DATABASE_URL: pg.uri,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
         WAITRON_ENV: "preproduction",
       });
 
-      probe = await createPostgresDb(freshUri);
+      probe = await pg.connect();
       // Every one of the nine module sets `ALL_MODULES` derives — the new source boot.ts reads — is
       // migrated to its shipped-folder head. `expected > 0` is the control: a set with an empty
       // journal would make `0 === 0` pass without boot having migrated anything (CLAUDE.md §1).
@@ -810,10 +810,11 @@ describe("startServer, against a real container as the deployment role", () => {
       if (probe !== undefined) await probe.close();
       if (server !== undefined) await server.close();
       await rm(stateDir, { recursive: true, force: true });
-      // Drop the throwaway database on the admin connection; `with (force)` closes any lingering
-      // backend (the app pool and probe are closed above, but the boot's own migrator connection is
-      // opened and closed inside `applyMigrations`, so this is belt-and-braces).
-      await suite.admin.execute(sql.raw(`drop database if exists ${freshName} with (force)`));
+      // Drop the throwaway clone; `cloneTemplate`'s `stop()` runs `drop database … with (force)` on a
+      // fresh admin connection, closing any lingering backend (the app pool and probe are closed
+      // above, but the boot's own migrator connection is opened and closed inside `applyMigrations`,
+      // so this is belt-and-braces).
+      await pg.stop();
     }
   }, 60_000);
 
