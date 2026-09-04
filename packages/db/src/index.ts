@@ -66,6 +66,7 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
+export { CORE_ENROLMENT } from "./enrolment.js";
 export { drawerOpens } from "./schema/drawer-opens.js";
 export type { DrawerOpenReason } from "./schema/drawer-opens.js";
 export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";
