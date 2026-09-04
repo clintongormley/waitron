@@ -1,11 +1,14 @@
 import type { MigrationSet } from "@waitron/migrations";
 
 /**
- * A module descriptor: a plain object a domain package exports and the composition root collects.
+ * A module descriptor: a plain object the composition root collects into a list, deriving each surface
+ * (migrations here; routes/workers/cards/… in later slices) by mapping over it. There is no global
+ * registry and no `register()` side effect.
  *
- * There is no global registry and no `register()` side effect — the composition root assembles the
- * descriptors into a list and derives each surface (migrations here; routes/workers/cards/… in later
- * slices) by mapping over that list.
+ * Where the descriptors LIVE in SP-1a: centralized in the composition root (`apps/server/src/modules.ts`),
+ * not exported by each domain package — the SP-1a descriptors carry only generic fields (no domain
+ * knowledge), so centralizing them is harmless. A module exporting its OWN descriptor begins in SP-2, when
+ * a descriptor first carries domain content (its sync enrolment) and swappability requires it (spec §2/§8).
  */
 export interface WaitronModule {
   /** Stable id; equals the migration-set name (`migrations.name`). NOT the drizzle table suffix —
