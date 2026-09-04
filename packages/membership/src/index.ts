@@ -29,7 +29,7 @@ export { buildNextMembershipDocument } from "./build.js";
 
 export { nextStandings } from "./standings.js";
 
-export { standingOf, isFencedStanding } from "./fence.js";
+export { standingOf, isFencedStanding, servingPrimaryNodeId } from "./fence.js";
 
 export { acceptMembershipDocument } from "./accept.js";
 
