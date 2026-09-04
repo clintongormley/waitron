@@ -45,9 +45,14 @@ describe("validateCanvasDraft", () => {
     d.tabs.push({ ...d.tabs[0]!, cards: [] });
     expect(validateCanvasDraft(d)).toBe("canvas_editor.err_duplicate_tab");
   });
-  it("flags a blank / over-long title", () => {
+  it("flags a blank title", () => {
     const d = tillDraft();
     d.tabs[0]!.title = "";
+    expect(validateCanvasDraft(d)).toBe("canvas_editor.err_bad_tab");
+  });
+  it("flags an over-long title", () => {
+    const d = tillDraft();
+    d.tabs[0]!.title = "x".repeat(61);
     expect(validateCanvasDraft(d)).toBe("canvas_editor.err_bad_tab");
   });
   it("flags columns out of 1..24", () => {
@@ -55,9 +60,14 @@ describe("validateCanvasDraft", () => {
     d.tabs[0]!.columns = 25;
     expect(validateCanvasDraft(d)).toBe("canvas_editor.err_bad_columns");
   });
-  it("flags a colSpan over the tab columns and a rowSpan below 1", () => {
+  it("flags a colSpan over the tab columns", () => {
     const d = tillDraft();
     d.tabs[0]!.cards[0]!.colSpan = 99;
+    expect(validateCanvasDraft(d)).toBe("canvas_editor.err_bad_span");
+  });
+  it("flags a rowSpan below 1", () => {
+    const d = tillDraft();
+    d.tabs[0]!.cards[0]!.rowSpan = 0;
     expect(validateCanvasDraft(d)).toBe("canvas_editor.err_bad_span");
   });
   it("flags a visibleWhen not a subset of the card's states", () => {
