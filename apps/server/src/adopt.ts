@@ -110,9 +110,10 @@ export async function adoptFromPrimary(
   // directly (no fabricated `{ modules: … }` wrapper). Re-validated against THIS node's ALL_MODULES:
   // an unknown/malformed override from a skewed or hostile primary throws `module.config_*` here,
   // BEFORE stampDeployment/adoptVenue/token-seal mutate the mirror — never leaving a half-adopted DB
-  // for a set we would have rejected. In the monorepo build both nodes share ALL_MODULES so this
-  // cannot fire; it is the defense the bundle being external input demands (CLAUDE.md §3, validate
-  // rather than trust). The validated config is persisted below (unconditionally, even {}), so the
+  // for a set we would have rejected. A well-behaved primary on the same monorepo build shares this
+  // node's ALL_MODULES, so a valid bundle never trips this; it fires only for a skewed or hostile
+  // primary — which is exactly why the mirror re-validates external input rather than trusting it
+  // (CLAUDE.md §3). The validated config is persisted below (unconditionally, even {}), so the
   // mirror's set is explicitly the primary's and re-adopt is idempotent.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
 
