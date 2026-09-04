@@ -467,7 +467,7 @@ export class SetupApp extends LitElement {
    *   only two are reachable from an adopt today: `deployment.already_stamped` (the adopt path stamps
    *   the environment — `adoptFromPrimary` → `stampDeployment`, `apps/server/src/adopt.ts`) and
    *   `setup.already_provisioning` (the shared concurrent-setup guard). `setup.already_provisioned` is
-   *   thrown ONLY by `provisionVenue` (`apps/server/src/provision.ts:86`), which the adopt path never
+   *   thrown ONLY by `provisionVenue` (`apps/server/src/provision.ts:90`), which the adopt path never
    *   calls (`adoptFromPrimary` → `adoptVenue`, which never throws it — grepped 2026-08-29); its case
    *   below is DEFENSIVE parity with `#mapProvisionError`, not a live adopt outcome, and is kept so a
    *   future adopt throw of it maps sensibly rather than falling through to the generic banner.

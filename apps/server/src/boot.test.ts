@@ -1446,8 +1446,8 @@ describe("startServer, against a real container as the deployment role", () => {
     //
     // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
     // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
-    // mode-derived value (live → production, provision.ts:90) — NOT `config.environment`, which
-    // `boot.ts` (line 695) never threads into `provisionVenue`. So this isolates the SEAL without
+    // mode-derived value (live → production, provision.ts:94) — NOT `config.environment`, which
+    // `boot.ts` (line 697) never threads into `provisionVenue`. So this isolates the SEAL without
     // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
     // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
     const port = await freePort();
