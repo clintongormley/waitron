@@ -1521,6 +1521,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
       // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
+      // The disposal drain reader (membership rejoin R2) is wired only for a fenced node draining onto a
+      // known carrier; at boot no carrier is established, so it stays absent and box-status reports
+      // `disposal.applicable:false`.
+      readDisposal: undefined,
       readBackup:
         backupWorker !== undefined
           ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())

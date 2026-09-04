@@ -5,29 +5,21 @@ import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import { lagFor } from "@waitron/sync";
+import type { DrainProgress } from "@waitron/sync";
 import { createHealthState } from "./health.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
 
 // Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager` (persons +
 // management_sessions under the app role's RLS) and reads the tenant's `cadenas` chain row — both
-// false passes on PGlite's superuser connection (CLAUDE.md §4). This suite ALSO seeds `sync_log` +
-// `sync_cursor` and drives the real `lagFor` reader, which is the wiring Task 6 adds to boot.ts. The
-// OWNER connection (`suite.admin`) reads both tables here — sync_log carries FORCE RLS + a
-// tenant-isolation policy, but the owner bypasses RLS, which is sufficient to prove the summary; the
-// role split (`sync_tailer` per-tenant SELECT vs `sync_retention`'s whole-log policy) is exercised in
-// packages/sync's own `retention.gate.test.ts`, not here.
+// false passes on PGlite's superuser connection (CLAUDE.md §4). Mirrors `box-status.replication.test.ts`;
+// the disposal reader here is a stub (its own drain read is proven in packages/sync's disposal.rls.test.ts),
+// so the point exercised is the collapse in `collectBoxStatus` driven through the real GET route.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
 // (per-tenant unique — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
-
-// One producing origin, and two subscribers: s1 has applied 3 of the origin's 10 captured rows
-// (lag 7), s2 is caught up (lag 0). `lagFor` returns worst-first, so the summary's `worstLagSeq` is
-// s1's 7 and `subscribers` is 2.
-const ORIGIN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -44,7 +36,7 @@ function nextNif(): string {
  * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) WITH a dashboard
  * password so it can log in. Provisioning creates only the ADMIN, so the manager is seeded directly;
  * `pin_hash` is NOT NULL, so a value is supplied even though it logs in by password. Mirrors the
- * sibling `box-status.route.test.ts` scaffolding.
+ * sibling `box-status.replication.test.ts` scaffolding.
  */
 async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
   const venue = await applyVenue(
@@ -89,32 +81,16 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
 }
 
 /**
- * Seed a replication state the summary can read: `sync_log` at `max(seq)=10` for ORIGIN, and two
- * `sync_cursor` rows — s1 at 3 (lag 7), s2 at 10 (lag 0). Inserted as the OWNER superuser (RLS
- * bypassed; pure setup). `overriding system value` forces the `seq` identity so `max(seq)` is exactly
- * 10 regardless of the shared container's identity-sequence state (the seeding shape
- * `retention.gate.test.ts` uses). `sync_cursor` has no tenant_id and no RLS (0000_sync_outbox.sql), so
- * a bare insert is enough.
+ * A Hono app carrying the management API (for its login route) plus the box-status route under test.
+ * `readDisposal` is threaded from the caller so each case can wire a stub reader or leave it absent.
+ * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other.
  */
-async function seedReplication(tenantId: string): Promise<void> {
-  await suite.admin.execute(
-    sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
-        overriding system value
-        values (10, ${ORIGIN}::uuid, 'products', 'insert', ${tenantId}::uuid, '{}'::jsonb)`,
-  );
-  await suite.admin.execute(
-    sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq, alive, lane) values
-          ('s1', ${ORIGIN}::uuid, 3, true, 'ordered'),
-          ('s2', ${ORIGIN}::uuid, 10, true, 'ordered')`,
-  );
-}
-
-/**
- * A Hono app carrying the management API (for its login route) plus the box-status route under test,
- * wired with a REAL `readReplicationLag` over `suite.admin` — the seam Task 6 fills in boot.ts. Both
- * surfaces share the owner db + tenant, so a cookie minted on one resolves on the other.
- */
-function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
+function buildApp(
+  tenantId: string,
+  nodeId: string,
+  now: Date,
+  readDisposal: (() => Promise<{ carrierNodeId: string } & DrainProgress>) | undefined,
+): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -136,9 +112,9 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       health: createHealthState(now),
       now: () => now,
       tlsCertPath: undefined,
-      readReplicationLag: () => lagFor(suite.admin),
-      readDisposal: undefined,
+      readReplicationLag: undefined,
       readBackup: undefined,
+      readDisposal,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },
@@ -158,22 +134,42 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-describe("GET /api/box/status replication summary (real postgres)", () => {
-  let app: Hono;
-  let managerCookie: string;
+describe("GET /api/box/status disposal state (real postgres)", () => {
+  let tenantId: string;
+  let nodeId: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
-    await seedReplication(tenantId);
-    app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"));
-    managerCookie = await login(app, MANAGER_EMAIL);
+    const t = await setupTenant();
+    tenantId = t.tenantId;
+    nodeId = t.nodeId;
   });
 
-  it("summarises replication worst-first when sync is configured", async () => {
-    const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
+  it("surfaces the carrier + drain verdict when a readDisposal is wired (bigint → string)", async () => {
+    const app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"), async () => ({
+      carrierNodeId: "carrier",
+      drained: false,
+      ownTailSeq: 100n,
+      carrierAppliedSeq: 40n,
+    }));
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/api/box/status", { headers: { cookie } });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.singletonRole).toBe("primary");
-    expect(body.replication).toEqual({ configured: true, worstLagSeq: "7", subscribers: 2 });
+    expect(body.disposal).toEqual({
+      applicable: true,
+      carrierNodeId: "carrier",
+      drained: false,
+      ownTailSeq: "100",
+      carrierAppliedSeq: "40",
+    });
+  });
+
+  it("reports applicable:false when no readDisposal is wired (a serving, unfenced node)", async () => {
+    const app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"), undefined);
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/api/box/status", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.disposal).toEqual({ applicable: false });
   });
 });
