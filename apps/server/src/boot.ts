@@ -845,11 +845,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // secondary) pair is valid (deployment_role_valid_ck); the read-only gate below, not the mode,
     // enforces the fence. This stops the submitter/reconciler/config-writer via their existing
     // isSingletonPrimary gates with no worker-gating code change.
-    const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+    // Close the app `db` pool on ANY throw before rethrowing, matching the loadKeyRing / mirror-guard
+    // close-on-throw discipline in this region: startServer never returns on the throw path, so nothing
+    // else would call `db.close()`. The inner try/finally closes the short-lived owner pool regardless.
     try {
-      await setSingletonRole(ownerDb, "secondary");
-    } finally {
-      await ownerDb.close();
+      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      try {
+        await setSingletonRole(ownerDb, "secondary");
+      } finally {
+        await ownerDb.close();
+      }
+    } catch (error) {
+      await db.close();
+      throw error;
     }
     axes = await readDeploymentAxes(db);
   }
