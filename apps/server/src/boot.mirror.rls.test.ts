@@ -285,6 +285,20 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).toBe(404);
 
+      // Till/KDS reads, unlike device/print above, ARE mounted on a mirror (`mountTillApi` is not
+      // wrapped in boot.ts's `!isMirror` mount guard) and are node-scoped by `cfg.nodeId` — which on a
+      // mirror is the mirror's OWN reserved id (R3a), not the primary's, whose id replicated
+      // `working_orders` rows still carry. That mismatch would return an empty list rather than erroring,
+      // so the guard against it is upstream: a till session needs `POST /api/session` (login), which the
+      // read-only gate already 403s above, so `requireSession` 401s here BEFORE the node-scoped filter in
+      // `listHeldOrders` ever runs (till-api.ts's comment on this route cluster spells out the same
+      // reasoning). This pins that today's safety is session-shaped, not routing-shaped — if a later
+      // slice (till-side reroute, R3b+) makes a till session reachable on a mirror, this assertion's
+      // premise breaks and the reads must be rerouted to the displayed-data node first.
+      const heldOrders = await fetch(`${base}/api/working-orders`);
+      expect(heldOrders.status).toBe(401);
+      expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
+
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
       // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
