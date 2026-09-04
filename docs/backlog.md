@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED on `feat/sp-b3-2-grid-editor`, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 after.**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 after.**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -201,13 +201,13 @@ editor + rendering) is the sole remaining sub-project of this track.**
     profile-CRUD endpoints (list/get/create/update/delete) already existed server-side (verified) — untouched;
     the editor that calls them is B3.2. No migration / no new grant / not fiscal. B3.1's fuller value lands
     with B3.2 (authored profiles to choose from).
-  - **B3.2 (LANDED on branch `feat/sp-b3-2-grid-editor`, 2026-09-04):** the dashboard **canvas editor**, split into its
+  - **B3.2 (LANDED #213, 2026-09-04):** the dashboard **canvas editor**, split into its
     own Phase A + Phase B (owner call 2026-09-04, distinct from the B3.1/B3.2 split above). Design:
     [sp-b3-2-canvas-editor-design](superpowers/specs/2026-09-04-sp-b3-2-canvas-editor-design.md); plans:
     [sp-b3-2a-profile-to-canvas-rename](superpowers/plans/2026-09-04-sp-b3-2a-profile-to-canvas-rename.md),
     [sp-b3-2b-canvas-editor](superpowers/plans/2026-09-04-sp-b3-2b-canvas-editor.md). Parent design §8 (now
     carries a dated pointer to the rename).
-    - **Phase A — `profile` → `canvas` rename, LANDED on the branch (behaviour-preserving).** Today's
+    - **Phase A — `profile` → `canvas` rename, LANDED #213 (behaviour-preserving).** Today's
       "layout profile" is renamed **canvas**, reserving "profile" for a future, bigger device profile
       (capabilities are staying on the canvas record **transitionally** — see the deferral below). Renamed:
       table `layout_profiles`→`canvases` (RENAME migration, not drop/recreate — an FK-target constraint
@@ -219,7 +219,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
       not in the original task inventory, caught in review); the dashboard client type
       `LayoutProfile`→`Canvas`. No behaviour change, no new grant, no new table. Whole-workspace
       `pnpm test` green after the final task (30 packages / 10038 tests).
-    - **Phase B — the canvas editor UI, LANDED on the branch.** The management dashboard's
+    - **Phase B — the canvas editor UI, LANDED #213.** The management dashboard's
       `dashboard-canvas-editor-screen` (nav `nav.canvases`): a **list mode** (create-from-default-per-form-factor,
       duplicate, delete, with a per-row `<canvas-grid-preview>` thumbnail of the first tab) and an
       **editor mode** (tab bar with add-tab/tab-settings, the placeholder-tile canvas, a card palette from
