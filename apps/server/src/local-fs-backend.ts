@@ -1,0 +1,60 @@
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { BackupDestination, StorageBackend, StoredObject } from "./storage-backend.js";
+
+/**
+ * v1 storage backend: a local directory. `put` writes to `<target>.partial` then `rename`s onto the
+ * final key, the same temp-then-rename idiom as `dumpAtomic` (`pg-dump.ts`) — so a fan-out write that
+ * dies mid-write never leaves a half-written key visible under its real name.
+ */
+export class LocalFsBackend implements StorageBackend {
+  constructor(
+    readonly id: string,
+    private readonly dir: string,
+  ) {}
+
+  async put(key: string, bytes: Uint8Array): Promise<void> {
+    await mkdir(this.dir, { recursive: true });
+    const target = join(this.dir, key);
+    const partial = `${target}.partial`;
+    try {
+      await writeFile(partial, bytes, { mode: 0o600 });
+      await rename(partial, target);
+    } catch (err) {
+      await rm(partial, { force: true });
+      throw err;
+    }
+  }
+
+  async get(key: string): Promise<Buffer> {
+    return readFile(join(this.dir, key));
+  }
+
+  async list(prefix: string): Promise<StoredObject[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+    const out: StoredObject[] = [];
+    for (const name of names) {
+      if (!name.startsWith(prefix) || name.endsWith(".partial")) continue;
+      const info = await stat(join(this.dir, name));
+      if (info.isFile()) out.push({ key: name, size: info.size, mtimeMs: info.mtimeMs });
+    }
+    return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(join(this.dir, key), { force: true });
+  }
+}
+
+export function buildBackend(dest: BackupDestination): StorageBackend {
+  switch (dest.kind) {
+    case "local-fs":
+      return new LocalFsBackend(dest.id, dest.dir);
+  }
+}
