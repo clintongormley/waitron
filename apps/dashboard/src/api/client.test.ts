@@ -1904,6 +1904,69 @@ describe("DashboardApi — devices (device-identity-1)", () => {
   });
 });
 
+describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
+  // Uses the file's `jsonResponse`/`emptyResponse` stubs rather than `new Response(...)`: a real
+  // `new Response("", { status: 204 })` throws "Response with null body status cannot have body" in
+  // this browser-mode (chromium) suite, and the brief's Step 1 directs us to the existing harness.
+  it("getCanvas GETs the canvas by id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "c1",
+        name: "Till",
+        definition: { formFactor: "till", tabs: [], capabilities: [] },
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+    const c = await api.getCanvas("c1");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/canvases/c1",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(c.id).toBe("c1");
+  });
+  it("createCanvas POSTs name+definition and returns the id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "c9" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const def = { formFactor: "till", tabs: [], capabilities: [] };
+    const r = await api.createCanvas("New", def);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/canvases",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "New", definition: def }),
+      }),
+    );
+    expect(r.id).toBe("c9");
+  });
+  it("updateCanvas PUTs and resolves void on 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [], capabilities: [] }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/canvases/c1",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+  it("deleteCanvas DELETEs and resolves void on 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deleteCanvas("c1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/canvases/c1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+  it("rejects with the server code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "canvas.name_taken" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createCanvas("Dup", {})).rejects.toEqual({ code: "canvas.name_taken" });
+  });
+});
+
 describe("DashboardApi — printing (agents + printers + jobs)", () => {
   // The nine verbs the Impresoras screen drives (the print-api.ts management routes, printer.manage-
   // gated). Agents: list, mint a one-time code (201), revoke (204). Printers: list, create (201),

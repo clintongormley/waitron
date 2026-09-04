@@ -1854,6 +1854,23 @@ export class DashboardApi {
     );
   }
 
+  /** `GET /management-api/canvases/:id` — one canvas (definition is opaque `unknown`; parsed at the editor edge). */
+  getCanvas(id: string): Promise<Canvas> {
+    return this.#request<Canvas>(`/management-api/canvases/${id}`, "GET");
+  }
+  /** `POST /management-api/canvases` — create; returns the new id at 201. `definition` is a validated ProfileDef the server re-validates. */
+  createCanvas(name: string, definition: unknown): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/canvases", "POST", { name, definition });
+  }
+  /** `PUT /management-api/canvases/:id` — full replace; 204. */
+  updateCanvas(id: string, name: string, definition: unknown): Promise<void> {
+    return this.#request<void>(`/management-api/canvases/${id}`, "PUT", { name, definition });
+  }
+  /** `DELETE /management-api/canvases/:id` — 204; a since-deleted id rejects `canvas.not_found`. */
+  deleteCanvas(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/canvases/${id}`, "DELETE");
+  }
+
   /** `POST /management-api/devices/:id/revoke` — revoke a device (flip `active = false`, instant): the
    * device's cookie stops validating at once. Answers an empty 204; an unknown id rejects
    * `{ code: "device.not_found" }`. Never a hard delete — a device is a durable identity. */
