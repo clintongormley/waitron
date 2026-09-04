@@ -76,26 +76,43 @@ the decision precedes any row.
 - A module is enabled **unless** it appears with value `false`. Absent key = enabled. Absent file =
   every module enabled (today's behaviour).
 - `core` is `mandatory` and cannot be disabled: writing `"core": false` is a **loud config error**
-  (`server.*` — a fact about this process's config), never a silent override.
-- An unknown module name (not in `ALL_MODULES`) is a **loud config error** — a typo that silently
-  disabled nothing is the failure mode we refuse.
-- `fiscal` is `provision-only`: it may be disabled here **only before it has chained a record**
-  (§4). Disabling a fiscal module that has already minted a SIF is refused — the records are immutable
-  and legally retained (CLAUDE.md §5).
+  (`module.core_not_disableable`), never a silent override.
+- An unknown module name (not in the module list) is a **loud config error**
+  (`module.config_unknown`) — a typo that silently disabled nothing is the failure mode we refuse.
+- A malformed file (not an object, `modules` not an object, a value that is not a boolean) is a
+  **loud config error** (`module.config_invalid`).
+
+**Error codes are `module.*`, not `server.*`.** The parser is pure and lives in the generic
+`@waitron/module` package, which **cannot** import `apps/server`'s `server.*` registry (a package
+never imports an app). The domain concept is the module system, so `module.*` is the correct prefix
+by the house convention (name the concept, not the throwing package —
+`packages/shared/src/errors.ts`). SP-1b adds a new `packages/module/src/errors.ts` declaring
+`module.config_invalid` / `module.config_unknown` / `module.core_not_disableable`, re-imported from
+the package barrel (the root reachability guard, `scripts/errors-reachable.test.ts`, requires it).
+`@waitron/module` gains a `@waitron/shared` dependency for `AppError`.
+
+**`fiscal` (`provision-only`) is not special-cased in the parser.** The parser lets `fiscal` be
+disabled like any toggleable module — it has no DB and cannot know whether a chain exists. The
+provision-only *consequence* is enforced downstream: **fresh** venue provisioning with `fiscal`
+disabled is refused (§4). Refusing to disable an **already-chained** fiscal is **out of scope for
+SP-1b and inert here anyway** — with no per-module fiscal wiring yet (SP-2/SP-4), disabling a chained
+fiscal only makes the boot filter skip fiscal's *already-applied* migrations (a no-op), so it turns
+nothing off and mints nothing. The real "cannot disable a chained fiscal" guard lands in **SP-3**,
+where fiscal's wiring can actually be switched off; SP-1b must not claim to enforce it.
 
 **Why sparse-override and not the architecture's "naming the enabled modules" (allowlist).** An
-allowlist makes a **newly-shipped** module (added to `ALL_MODULES` in a release, not named in an
+allowlist makes a **newly-shipped** module (added to the module list in a release, not named in an
 operator's existing file) default to **disabled** — the dangerous direction, silently dropping a
 module's migrations on upgrade. Default-on is the safe direction, and it matches the owner's answer
 (all modules enabled; the eight non-fiscal modules are effectively core and should not casually turn
 off). Recorded as a deliberate deviation from architecture §6's wording, with this reason.
 
-**Parsing is pure and validated** — a `parseModuleConfig(raw: unknown): ModuleConfig` in
-`@waitron/module` that rejects a non-object, an unknown name, and `core: false`, throwing the typed
-`server.*` config error (the composition root owns the file, so the code lives where the file is read;
-the pure parser lives in `@waitron/module` so it is unit-testable without a filesystem). "The caller
-only passes safe values" is not a defence — the file is operator-editable (CLAUDE.md §3), so the
-parser validates rather than trusts.
+**Parsing is pure and validated** — a `parseModuleConfig(raw: unknown, known: readonly string[]):
+ModuleConfig` in `@waitron/module` that rejects a non-object, a non-boolean value, an unknown name,
+and `core: false`, throwing the typed `module.*` codes above. `known` is the set of valid module
+names (the composition root passes `ALL_MODULES`' names) so the parser needs no import of the module
+list. "The caller only passes safe values" is not a defence — the file is operator-editable
+(CLAUDE.md §3), so the parser validates rather than trusts.
 
 ## 3. Reconcile (derived actual state)
 
@@ -155,25 +172,53 @@ is all-enabled, setup-all and trading-filtered agree by default; they diverge on
 explicitly disabled, and then only in that the disabled module's tables were already created in setup
 and are simply left un-wired (the same end state as soft-disable — data/tables kept, §5).
 
-**Provisioning seed gate (the safety-critical part).** `applyVenue`'s `registerSif` (and any future
-per-module seed, e.g. the kitchen default station, `venue-apply.ts:116`) runs **only if that module is
-enabled**. `registerSif` mints an unrecoverable chain, so a box that does not run fiscal must never
-call it. The `applyVenue` planner/executor gains the enabled set as an input and skips the fiscal seed
-when fiscal is disabled. In the Spain exemplar fiscal is always enabled, so this is behaviour-preserving;
-the gate is what makes a non-fiscal box correct.
+**Provisioning seed gate — refuse, do not half-build (the safety-critical part).** `registerSif` mints
+an unrecoverable chain (architecture §1.2), so a box that does not run fiscal must never call it. But
+`applyVenue` **mandates** a SIF — it throws `applyVenue: register-sif never ran` if the plan omits one
+(`packages/provisioning/src/venue-apply.ts:184`), and the whole trading path assumes a per-node SIF
+(`sales.fiscal_backend`, `recordSale`, the chain). A *working* fiscal-less venue — planning without
+`register-sif`, `VenueResult.sif` optional, the sale/chain path tolerating no fiscal — is a large
+change to the fiscal core and is exactly **SP-3** ("fiscal as a module + gated provisioning;
+swappable"). So SP-1b does **not** build it. Instead:
 
-**Provisioning instance migrate — lockstep with boot.** `instance-apply.ts:183-186` migrates on
-unfiltered `manifestSets()`. SP-1b makes it consult the **same** enabled set (threaded in as an
-input — the CLI resolves it from the same `modules.json`, defaulting to all when absent), so a
-disabled module's tables are never created by the provisioner either. This closes the SP-1a
-forward-warning: filtered-boot and provisioning no longer diverge. **`manifestSets()` stays** the
-runtime source for the *other* consumers SP-1a enumerated (`instance-state`, `status-command`, dev
-scripts, harnesses, bundle-layout) — SP-1b filters the **migrate input**, it does not remove the
-manifest.
+- The venue-provisioning entry (`provisionVenue`, `apps/server/src/provision.ts:79`, the composition
+  root — it holds `ALL_MODULES` with their `tier`s and can compute the enabled set) refuses
+  provisioning loudly with `module.provision_only_disabled` (param `{ module }`) **if any
+  `provision-only` module is disabled**, before `planVenue`/`applyVenue` run. The guard is **generic
+  — it names no module**: it iterates the `provision-only` tier (only `fiscal` today) and refuses on
+  the first disabled one, so `@waitron/module` stays free of the token "fiscal". This guarantees the
+  safety invariant (never mint a chain when fiscal is disabled) as a *refusal*, not a silent skip and
+  not a half-built fiscal-less path.
+- In the Spain exemplar `fiscal` is always enabled (default-on, no UI disables it), so the guard never
+  fires in practice and provisioning is **behaviour-preserving**. It is the safety net + the seam SP-3
+  builds the real fiscal-less path onto. `registerSif` itself is untouched.
+- The existing per-node fiscal-module slot (`resolveFiscalModules` → `nodes.filing_module`/`tax_module`,
+  `sales.fiscal_backend`, `packages/provisioning/src/fiscal-modules.ts`) is the SP-3 seam and is **not
+  touched here** — SP-1b gates *whether fiscal runs at all*, not *which fiscal package fills the slot*.
+
+**Provisioning instance migrate — the divergence is benign; not filtered here.** `instance-apply.ts:183-186`
+migrates on unfiltered `manifestSets()`, and the provisioning CLI's source of truth **is** the manifest
+(`@waitron/migrations`), not `apps/server`'s `ALL_MODULES` (a package cannot import an app). SP-1a's
+forward-warning feared filtered-boot vs unfiltered-provisioning diverging; the resolution here is that
+the divergence is **benign by construction**, not that it must be eliminated:
+
+- Over-migrating a *toggleable* module creates its (empty) tables and writes its drizzle rows. At the
+  next trading boot, reconcile derives that module as **migrated**; if the file disables it, it lands
+  in `softDisabled` — tables kept, un-wired — which is *exactly* soft-disable's end state (§5). No
+  corruption, no wedge.
+- The one harmful seed, `registerSif`, is gated at the venue entry above — table creation alone mints
+  no chain (the immutable tables are simply empty).
+
+So SP-1b leaves the provisioning CLI's migrate on `manifestSets()` and **defers** unifying it onto the
+module-declared source to **SP-3**, where fiscal-as-a-module owns its provisioning and the CLI's source
+inversion belongs. This is a deliberate, receipted narrowing of the forward-warning (the migrate half
+is benign; only the seed half is safety-critical, and that half is gated). `manifestSets()` stays the
+runtime source for every consumer SP-1a enumerated.
 
 **The SP-1a pin still holds.** `orderedMigrationSets(ALL_MODULES)` deep-equals `manifestSets()`
 compares the **full** list to the **full** manifest, and SP-1b never mutates `ALL_MODULES` — it filters
-a *copy* at the call site. So the pin is untouched; SP-1b adds its own tests over the *filtered* list.
+a *copy* at the boot call site. So the pin is untouched; SP-1b adds its own tests over the *filtered*
+list.
 
 ## 5. Soft-disable in SP-1b (bounded)
 
@@ -182,21 +227,25 @@ provisioning) and skip it at boot, but leave its tables and data intact." In SP-
 route/sync/card registries **do not exist yet** (SP-2/SP-4), so there is nothing to un-wire there.
 SP-1b's soft-disable is therefore exactly:
 
-- **skip its migrations** at boot (the filter), and
-- **skip its provisioning seed** (the gate),
+- **skip its migrations** at boot (the trading-mode filter), and
+- for a disabled `provision-only` module, **refuse venue provisioning** (§4) rather than seed it —
+  in SP-1b that is the entirety of the "seed gate", because no working fiscal-less venue path exists
+  yet (SP-3),
 
-while **leaving its tables and rows intact** — a disabled module's `__drizzle_migrations_<name>` and
-data tables are never dropped. Re-enabling (removing the `false` from the file) puts it back in
-`toMigrate`/`steady` on the next boot with no data loss. **Purge** (the only thing that drops tables)
-is explicitly **out of scope** — it is the guarded, separate action of architecture §6, never applied
-to `core` or a chained fiscal module, and no runtime disables a production module in SP-1b anyway.
+while **leaving any existing tables and rows intact** — a disabled module's
+`__drizzle_migrations_<name>` and data tables are never dropped. Re-enabling (removing the `false`
+from the file) puts it back in `toMigrate`/`steady` on the next boot with no data loss. **Purge** (the
+only thing that drops tables) is explicitly **out of scope** — it is the guarded, separate action of
+architecture §6, never applied to `core` or a chained fiscal module, and no runtime disables a
+production module in SP-1b anyway.
 
 ## 6. Testing
 
-- **`parseModuleConfig` (pure, `@waitron/module`)** — default-on for absent keys; absent file → all
-  enabled; `core: false` throws; unknown name throws; a well-formed disable of a toggleable module
-  yields the expected set. Proven by deletion for each validation branch (remove the check → the
-  rejection test fails → restore).
+- **`parseModuleConfig` (pure, `@waitron/module`)** — default-on for absent keys; absent/empty input →
+  all enabled; a non-object, a non-object `modules`, and a non-boolean value each throw
+  `module.config_invalid`; `core: false` throws `module.core_not_disableable`; an unknown name throws
+  `module.config_unknown`; a well-formed disable of a toggleable module yields the expected set. Proven
+  by deletion for each validation branch (remove the check → the rejection test fails → restore).
 - **`reconcile` (pure)** — the three classes (`toMigrate`/`steady`/`softDisabled`) over hand-built
   `enabled`/`migrated` sets, including a state where the two visibly disagree (CLAUDE.md §1: a
   measurement where both answers look alike measures nothing) — e.g. one module migrated-but-disabled
@@ -204,24 +253,33 @@ to `core` or a chained fiscal module, and no runtime disables a production modul
 - **`appliedSchemaVersion` on a missing table returns 0** — SP-1a already covers this
   (`schema-version.test.ts`); SP-1b does not re-test the primitive, only relies on it. The reconcile
   test below is where SP-1b exercises the unmigrated → `toMigrate` path end to end.
-- **Boot filter, real Postgres, both modes:** with no `modules.json`, every `__drizzle_migrations_<name>`
-  table is present + populated after a trading boot (behaviour-preserving, extends the SP-1a boot test);
-  with a `modules.json` disabling one **toggleable** module (a fixture, not a production
-  recommendation), that module's migration table is **absent** after a trading boot while the rest are
-  present — the filter demonstrably skips a set. Setup mode migrates all regardless of the file.
-- **Provisioning seed gate:** `applyVenue` with fiscal enabled calls `registerSif` (unchanged);
-  `applyVenue` with fiscal disabled does **not** — proven by deletion of the gate (removing it makes
-  the fiscal-disabled case mint a chain, failing the assertion).
-- **Provisioning instance migrate lockstep:** the instance migrate over a fixture disabling one set
-  omits that set's tables, matching the boot filter.
+- **Boot migration filter, real Postgres:** driving the boot migration step (not a full trading boot —
+  a disabled statically-wired module would break the app, which SP-1b does not claim to support) with
+  no `modules.json` migrates every set (every `__drizzle_migrations_<name>` present + populated,
+  behaviour-preserving, extends the SP-1a boot/migration test); with a `modules.json` disabling one
+  **toggleable** module (a fixture, not a production recommendation), that module's migration table is
+  **absent** and the rest present — the filter demonstrably skips a set. Setup mode's migrate list is
+  unfiltered regardless of the file (a unit assertion over the list the setup branch builds).
+- **Provisioning fiscal-gate refusal:** `provisionVenue` with `fiscal` disabled throws
+  `module.provision_only_disabled` **before** `planVenue`/`applyVenue` run (no chain minted); with
+  `fiscal` enabled (the default) it proceeds unchanged. Proven by deletion of the guard (remove it →
+  the fiscal-disabled case reaches `applyVenue` and either mints a chain or throws
+  `register-sif never ran`, failing the "refused early, nothing minted" assertion). The generic guard
+  is exercised via the `provision-only` tier, not a hardcoded `"fiscal"`.
 - **english-only** — `@waitron/module` stays a scanned generic package holding only generic logic
-  (config parsing, set arithmetic) — **no domain vocabulary**; the Spanish `registros_facturacion`/
-  `registerSif` names stay in the exempt `fiscal-verifactu` + the exempt `apps/server` composition
-  root. Run `pnpm vitest run scripts/english-only.test.ts` green — a claim to verify, not assert.
-- **Guards run whole-package, not filtered** (CLAUDE.md §2/§4): after touching `venue-apply.ts` /
-  `instance-apply.ts`, run `pnpm --filter @waitron/provisioning test:coverage` unfiltered, and
-  `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` — no schema table is added here, but the
-  gate touches the fiscal seed path.
+  (config parsing, set arithmetic) — **no domain vocabulary**, and no module-name literal (`fiscal`,
+  `verifactu`, …); the Spanish `registros_facturacion`/`registerSif` names stay in the exempt
+  `fiscal-verifactu` + the exempt `apps/server` composition root. Run
+  `pnpm vitest run scripts/english-only.test.ts` green — a claim to verify, not assert.
+- **errors-reachable** — the new `packages/module/src/errors.ts` must be reachable from
+  `packages/module/src/index.ts`; the root guard `scripts/errors-reachable.test.ts` discovers
+  `@waitron/module` (it ships both `index.ts` and `errors.ts`) automatically. Run
+  `pnpm vitest run scripts/errors-reachable.test.ts` green.
+- **Guards run whole-package, not filtered** (CLAUDE.md §2/§4): after touching `provision.ts`, run
+  `pnpm --filter @waitron/server test:coverage` and `pnpm --filter @waitron/module test:coverage`
+  unfiltered. No schema table is added here, so the fiscal `inmutabilidad` suite is unaffected, but the
+  guard sits on the fiscal seed path — run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad`
+  to confirm nothing about the chain moved.
 
 ## 7. Invariants preserved (receipts)
 
@@ -229,11 +287,13 @@ to `core` or a chained fiscal module, and no runtime disables a production modul
   sets in the same order in both modes (§4), and `registerSif` runs exactly as today (§4 gate is a
   no-op when fiscal is enabled, the default).
 - **Setup still migrates the full schema** for the wizard (`boot.ts:532`; the filter is trading-only).
-- **Fiscal chain untouched** — SP-1b gates *whether* `registerSif` runs; it changes nothing about the
-  chain it mints, the immutability guards, or the double-provision latch (`apps/server/src/provision.ts`).
-  A fiscal module that has chained a record cannot be disabled (§2).
-- **No schema change, no new privilege, no `deployment` column** — SP-1b adds a config file reader, a
-  pure reconcile, and two call-site filters; it writes no migration and touches no grant (decision 3).
+- **Fiscal chain untouched** — SP-1b gates *whether venue provisioning proceeds* when fiscal is
+  disabled (a refusal before `applyVenue`); it changes nothing about the chain `registerSif` mints, the
+  immutability guards, or the double-provision latch (`apps/server/src/provision.ts`). `registerSif`
+  and `applyVenue`'s mandatory-SIF contract (`venue-apply.ts:184`) are unchanged.
+- **No schema change, no new privilege, no `deployment` column** — SP-1b adds a config-file reader, a
+  pure parser + reconcile, one boot-time migration filter, and one provisioning refusal guard; it
+  writes no migration and touches no grant (decision 3).
 - **English-only preserved, not exempted-around** — no new whole-package exemption; the generic
   `@waitron/module` stays English (architecture §9).
 - **The SP-1a inversion pin is untouched** — `ALL_MODULES` is filtered by a copy at the call site,
@@ -242,8 +302,9 @@ to `core` or a chained fiscal module, and no runtime disables a production modul
 ## 8. Interactions
 
 - **SP-1a** — consumes `ALL_MODULES` + `tier` (recorded there, acted on here) and
-  `appliedSchemaVersion` (the derived-actual primitive). Closes SP-1a §4's forward-warning by gating
-  provisioning in lockstep with boot.
+  `appliedSchemaVersion` (the derived-actual primitive). Addresses SP-1a §4's forward-warning by the
+  receipted split in §4: the safety-critical **seed** is gated (fiscal-disabled provisioning refused),
+  while the **migrate** divergence is shown benign and its source-unification deferred to SP-3.
 - **SP-1c** — replaces the explicit `ALL_MODULES` order with the derived dependency graph + version
   gates; SP-1b's filter operates on whatever ordered list SP-1c later produces (it filters, it does not
   order).
@@ -253,8 +314,11 @@ to `core` or a chained fiscal module, and no runtime disables a production modul
 - **SP-2** — the schema-version handshake reads `appliedSchemaVersion` (unchanged; SP-1b relies on its
   existing missing-table → 0 behaviour, `schema-version.ts:59-61`) and pulls only the subscriber's
   **enabled** modules — the set SP-1b computes.
-- **SP-3** — fiscal-as-a-module: its gated provisioning seed is the `registerSif` gate SP-1b builds;
-  SP-3 moves fiscal's descriptor into its package and adds its sync enrolment/vocabulary on top.
+- **SP-3** — fiscal-as-a-module builds the **working fiscal-less venue path** SP-1b only *refuses*
+  (planning without `register-sif`, `VenueResult.sif` optional, the sale/chain path tolerating no
+  fiscal), unifies the provisioning CLI's migrate onto the module-declared source, moves fiscal's
+  descriptor into its package, and adds its sync enrolment/vocabulary + the per-node fiscal-module slot
+  (`resolveFiscalModules`) on top. SP-1b's refusal guard is the seam it replaces.
 - **Tier steer (owner, 2026-09-04)** — the eight non-fiscal modules are effectively core and should
   not casually be disablable; fiscal is the one genuine provision-only slot. SP-1b honors the recorded
   tiers mechanically (default-all makes it moot in practice) and does **not** re-tier those eight —
