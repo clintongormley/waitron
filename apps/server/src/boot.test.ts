@@ -940,6 +940,50 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("refuses a trading boot whose enabled set drops a dependency (identity off, workforce on) BEFORE migrating (SP-1c)", async () => {
+    // SP-1c (spec §4/§8): boot must REFUSE an enabled set that is not dependency-complete, and do so
+    // BEFORE `applyMigrations` — not fail mid-migration on a missing relation. `workforce` is
+    // `tier: "toggleable"` and `requires` `identity` (modules.ts) via its `persons` FK; `identity` is
+    // itself toggleable. Disabling `identity` while `workforce` stays enabled (default-on) is the
+    // tripable-today case: the enabled set contains `workforce` but not the `identity` it needs, so
+    // `orderedMigrationSets(enabledModules(ALL_MODULES, moduleConfig))` throws `module.dependency_missing`
+    // at boot.ts's migration seam (boot.ts:543, the arg to `applyMigrations`) — the stamp probe has
+    // already closed and the long-lived pool is not yet open, so this rejection leaks nothing.
+    //
+    // The shared suite DB (`databaseUrl`, already migrated + seeded) is enough: the refusal fires before
+    // the migration run and before `readOrderFlow`, so no pristine clone is needed (the negative control
+    // — that the default all-enabled set migrates all nine sets — is the trading migration-journal test
+    // at the top of this describe, which stays green). `...KEY_ENV` (carrying `TILL_ENV`) keeps this in
+    // TRADING mode; a bare config would branch to setup mode, which migrates the FULL set and never
+    // filters (boot.ts:540), so the refusal could not fire.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
+    try {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { identity: false } }),
+      );
+      // `module` (not `module.name`), `requires` name the offending edge (packages/module/src/module.ts's
+      // throw) — asserting them proves the refusal is the dropped-dependency one, not some other AppError
+      // on the boot path.
+      await expect(
+        startServer({
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        }),
+      ).rejects.toMatchObject({
+        code: "module.dependency_missing",
+        params: { module: "workforce", requires: "identity" },
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
     // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
     // → `mountSpa`: a real `startServer` boot in setup mode (all five WAITRON_TILL_*_ID omitted) with
