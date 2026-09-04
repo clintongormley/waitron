@@ -36,8 +36,8 @@ import {
 } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { promoteLocalSecondaryToPrimary } from "./promote.js";
-import type { FenceAttestation, PromotionResult } from "./promote.js";
+import { promoteLocalSecondaryToPrimary, promoteMirrorToPrimary } from "./promote.js";
+import type { FenceAttestation, MirrorPromotionResult, PromotionResult } from "./promote.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
@@ -126,6 +126,16 @@ export interface StartedServer {
    * 2). Requires a fence attestation or it refuses (`promotion.fence_not_attested`).
    */
   promoteLocalSecondaryToPrimary?: (attestation: FenceAttestation) => Promise<PromotionResult>;
+  /**
+   * Promote a read-only MIRROR to the venue's primary in-process (R3 design §4; parent SIF spec §5b) —
+   * on the identity the mirror already holds (R3a). Runs the point-of-no-return owner transaction (mode →
+   * primary, singleton_role → primary, term-guarded endorsed document), then rewrites `trading.env` with
+   * the cloud's OWN reserved standard series id and RESTARTS the box into `mode=primary` (a mirror is not
+   * selling, so a brief restart costs nothing). Present only in MIRROR mode; a non-mirror trading box omits
+   * it and exposes `promoteLocalSecondaryToPrimary` instead. IN-PROCESS ONLY: no network endpoint yet (spec
+   * §8). Requires a fence attestation or it refuses (`promotion.fence_not_attested`).
+   */
+  promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
   close(): Promise<void>;
 }
@@ -356,7 +366,9 @@ function makeStartedServer(
   log: Logger,
   teardown: BootTeardown,
   mdns: MdnsResponder,
-  promote?: (attestation: FenceAttestation) => Promise<PromotionResult>,
+  promote?:
+    | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
+    | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
 ): StartedServer {
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
   // teardown (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than
@@ -369,7 +381,11 @@ function makeStartedServer(
   let closed = false;
   return {
     health,
-    ...(promote === undefined ? {} : { promoteLocalSecondaryToPrimary: promote }),
+    ...(promote === undefined
+      ? {}
+      : promote.kind === "mirror"
+        ? { promoteMirrorToPrimary: promote.run }
+        : { promoteLocalSecondaryToPrimary: promote.run }),
     close: async () => {
       if (closed) return;
       closed = true;
@@ -1650,31 +1666,87 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       },
     },
     mdns,
-    async (attestation) => {
-      // Owner-role write: open a short-lived owner pool from the migrations URL (the same open/close
-      // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box keeps
-      // only the app pool. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset this URL defaults to the app URL,
-      // so the write hits `app_user` (no UPDATE on `deployment`) and throws 42501 — fails CLOSED, never a
-      // silent no-op. See the plan's
-      // "Known limitations" #2: the REAL runtime admin connection is deferred with instance provisioning
-      // (boot.ts:529); this URL is the superuser in dev/CI where the promote is exercised.
-      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
-      try {
-        return await promoteLocalSecondaryToPrimary(
-          {
-            appDb: db,
-            ownerDb,
-            holders,
-            log,
-            ring,
-            tenantId: till.tenantId,
-            nodeId: till.nodeId,
+    // Which in-process promote this box exposes is decided ONCE at boot by the deployment mode (captured
+    // in `isMirror`), so a mirror surfaces `promoteMirrorToPrimary` and a local secondary
+    // `promoteLocalSecondaryToPrimary` — never both. Both closures open the short-lived owner pool the
+    // same way (see the `local-secondary` note below); only the mirror path corrects `trading.env` and
+    // restarts, because only a mirror changes its selling series + `deployment.mode` on promotion.
+    isMirror
+      ? {
+          kind: "mirror" as const,
+          run: async (attestation: FenceAttestation) => {
+            const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+            try {
+              const result = await promoteMirrorToPrimary(
+                {
+                  appDb: db,
+                  ownerDb,
+                  holders,
+                  log,
+                  ring,
+                  tenantId: till.tenantId,
+                  nodeId: till.nodeId,
+                },
+                attestation,
+              );
+              if (!result.alreadyPrimary) {
+                // Correct `trading.env`: the promoted primary numbers under its OWN reserved standard
+                // series (`result.seriesId`), not the primary's inert `till.seriesId` that adopt wrote
+                // (spec §4.3). Every OTHER value is re-emitted unchanged from the running config —
+                // `syncDatabaseUrl` included (harmless on a primary that no longer pulls, and it keeps the
+                // mirror-sync pool available should the promote abort before the restart below fires).
+                const next: TradingConfig = {
+                  tenantId: till.tenantId,
+                  tillId: till.tillId,
+                  nodeId: till.nodeId,
+                  seriesId: result.seriesId,
+                  locationId: till.locationId,
+                  databaseUrl: config.databaseUrl,
+                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                  syncDatabaseUrl: config.syncDatabaseUrl,
+                  environment: config.environment,
+                };
+                await writeTradingEnv(config.stateDir, next);
+                // Restart into `mode=primary` — the same persist-then-restart transition provision/adopt
+                // use. Fire on the NEXT tick so the in-process caller's result is returned first (the
+                // supervisor loop that reboots the box is out of process; `requestRestart` is only wired in
+                // the setup branch, so the inline `process.kill` form is used here).
+                setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+              }
+              return result;
+            } finally {
+              await ownerDb.close();
+            }
           },
-          attestation,
-        );
-      } finally {
-        await ownerDb.close();
-      }
-    },
+        }
+      : {
+          kind: "local-secondary" as const,
+          run: async (attestation: FenceAttestation) => {
+            // Owner-role write: open a short-lived owner pool from the migrations URL (the same open/close
+            // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box
+            // keeps only the app pool. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset this URL defaults to
+            // the app URL, so the write hits `app_user` (no UPDATE on `deployment`) and throws 42501 —
+            // fails CLOSED, never a silent no-op. See the plan's "Known limitations" #2: the REAL runtime
+            // admin connection is deferred with instance provisioning (boot.ts:529); this URL is the
+            // superuser in dev/CI where the promote is exercised.
+            const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+            try {
+              return await promoteLocalSecondaryToPrimary(
+                {
+                  appDb: db,
+                  ownerDb,
+                  holders,
+                  log,
+                  ring,
+                  tenantId: till.tenantId,
+                  nodeId: till.nodeId,
+                },
+                attestation,
+              );
+            } finally {
+              await ownerDb.close();
+            }
+          },
+        },
   );
 }

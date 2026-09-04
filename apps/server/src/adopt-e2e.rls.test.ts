@@ -10,16 +10,23 @@ import { setTimeout as delay } from "node:timers/promises";
 import { getRequestListener } from "@hono/node-server";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
   readDeploymentMode,
+  readMembershipTrustSet,
   readMirrorConfig,
   readNodeEndorsement,
+  readNodeMembership,
+  readSingletonRole,
+  readStandardSeriesId,
   stampDeployment,
   withTenant,
   type Database,
 } from "@waitron/db";
+import { currentSif } from "@waitron/fiscal-verifactu";
+import { verifyMembershipDocument } from "@waitron/membership";
+import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { createCatalogue } from "@waitron/catalogue";
@@ -47,6 +54,8 @@ import {
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { parseEnvFile } from "./env-file.js";
+import { readFileSync } from "node:fs";
 
 // C2b — the HEADLINE end-to-end (Task 11): a fresh mirror in SETUP mode adopts a bundle fetched from a
 // booted primary, then REBOOTS into mirror mode and pulls + serves the primary's catalogues read-only
@@ -184,7 +193,7 @@ async function rowExists(admin: Database, table: string, id: string): Promise<bo
  * the mirror's OWN id — the value adopt persisted into trading.env (membership promotion R3a) — passed
  * in as `ownNodeId`. The vault key is the same RING adopt sealed under. This is mirror-e2e.rls.test.ts's
  * `bootMirror`, its identity now sourced from the completed adopt. */
-function bootMirror(port: number, ownNodeId: string): Promise<StartedServer> {
+function bootMirror(port: number, ownNodeId: string, stateDir: string): Promise<StartedServer> {
   return startServer({
     ...KEY_ENV,
     WAITRON_TILL_TENANT_ID: designated.tenantId,
@@ -197,6 +206,9 @@ function bootMirror(port: number, ownNodeId: string): Promise<StartedServer> {
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_SYNC_DATABASE_URL: roleUrl(mirror.pg.uri, "sync_applier", "ap"),
+    // An isolated state dir so the promotion leg's corrected `trading.env` (+ the box logs) land in a
+    // temp dir we can read back, never in the worktree (CLAUDE.md §4).
+    WAITRON_STATE_DIR: stateDir,
   });
 }
 
@@ -593,8 +605,10 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     // 3. REBOOT INTO MIRROR MODE. boot reads mode='mirror' + `mirror_config` + the vault token, composes
     // tunnelHttpClient + runSyncPull, and drains the primary through the tunnel.
     const port = await freePort();
-    // Boot under the mirror's OWN node id (what adopt persisted), NOT designated.nodeId (R3a).
-    const server = await bootMirror(port, standbyNodeId);
+    // Boot under the mirror's OWN node id (what adopt persisted), NOT designated.nodeId (R3a). The state
+    // dir catches the promotion leg's corrected `trading.env` below (torn down in the finally).
+    const mirrorStateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-e2e-mirror-state-"));
+    const server = await bootMirror(port, standbyNodeId, mirrorStateDir);
     const base = `http://127.0.0.1:${port}`;
     try {
       // THE PULL THROUGH THE TUNNEL + APPLY: the booted mirror's own runSyncPull drains the primary and
@@ -678,8 +692,93 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
       });
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
+      // 4. THE PROMOTION LEG (R3b): the operator promotes the read-only mirror to the venue's primary,
+      // in-process, on the identity it already holds (R3a). We drive the REAL `server.promoteMirrorToPrimary`
+      // wired at boot. SCOPE (spec §4): we do NOT reboot the box into mode=primary — the supervisor loop is
+      // out of process — so the restart the promote schedules is captured by a `process.kill` spy (never a
+      // real SIGTERM at the vitest process, CLAUDE.md §4), and the promoted state is proven on the DB + the
+      // corrected `trading.env`, which is exactly what an out-of-process reboot would read back.
+      const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+      try {
+        // The term the promote bumps FROM — whatever the mirror holds now (null if none was ever written,
+        // in which case the mint starts at term 0). Read before the promote so the bump is asserted exactly.
+        const heldBefore = await readNodeMembership(mirror.admin);
+        const expectedTerm = (heldBefore?.body.term ?? -1) + 1;
+
+        const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true });
+        expect(result.alreadyPrimary).toBe(false);
+
+        // The point-of-no-return committed: deployment flipped to (primary, primary).
+        expect(await readDeploymentMode(mirror.admin)).toBe("primary");
+        expect(await readSingletonRole(mirror.admin)).toBe("primary");
+
+        // THE TRANSITIVE-TRUST ASSERTION (the load-bearing fiscal-adjacent one). The held membership doc is
+        // term-bumped, signed by the cloud's OWN nodeId, and carries the primary's endorsement of the cloud's
+        // key — so it VERIFIES against a trust set holding ONLY the primary's key: trust flows through the
+        // endorsement (wire-protocol §4), never requiring the cloud's key to be directly trusted.
+        const held = await readNodeMembership(mirror.admin);
+        expect(held).not.toBeNull();
+        expect(held!.body.term).toBe(expectedTerm); // bumped from whatever was held (or 0 from none)
+        expect(held!.signerNodeId).toBe(standbyNodeId);
+        expect(held!.endorsements).toHaveLength(1);
+        expect(held!.endorsements[0]!.endorsedBy).toBe(designated.nodeId);
+        const primaryTrust = await readMembershipTrustSet(primary.admin, designated.tenantId);
+        const primaryPublicKey = primaryTrust[designated.nodeId]!;
+        const verdict = verifyMembershipDocument(held!, { [designated.nodeId]: primaryPublicKey });
+        expect(verdict.valid).toBe(true);
+
+        // THE RESERVED SIF BECOMES THE LIVE SELLING SIF, NO RE-MINT. `currentSif` (needs a `withTenant` tx)
+        // resolves the reserved row keyed to the cloud's OWN nodeId — its numeroInstalacion is the reserved
+        // number, and its chain head is both-null (a fresh chain, never a resume of the primary's).
+        const reservedNumero = (
+          await mirror.admin.execute<{ n: number }>(
+            sql`select numero_instalacion as n from registro_sif
+                where node_id = ${standbyNodeId} and revocado_en is null`,
+          )
+        ).rows[0]!.n;
+        const sif = await withTenant(mirror.admin, designated.tenantId, (tx) =>
+          currentSif(tx, brandTenantId(designated.tenantId), brandNodeId(standbyNodeId)),
+        );
+        expect(sif.numeroInstalacion).toBe(reservedNumero);
+        const chainHead = (
+          await mirror.admin.execute<{ h: string | null; r: string | null }>(
+            sql`select ultima_huella as h, ultimo_registro_id as r from cadenas where node_id = ${standbyNodeId}`,
+          )
+        ).rows[0]!;
+        expect(chainHead.h).toBeNull();
+        expect(chainHead.r).toBeNull();
+
+        // THE CORRECTED SERIES: the promoted primary numbers under its OWN reserved standard series
+        // (`<primaryCode>-<numeroInstalacion>`), NOT the inert `designated.seriesId` the mirror booted with.
+        expect(result.seriesId).not.toBe(designated.seriesId);
+        const ownStandardSeriesId = await readStandardSeriesId(
+          mirror.admin,
+          designated.tenantId,
+          standbyNodeId,
+        );
+        expect(result.seriesId).toBe(ownStandardSeriesId);
+        const seriesCode = (
+          await mirror.admin.execute<{ code: string }>(
+            sql`select code from invoice_series where id = ${result.seriesId}`,
+          )
+        ).rows[0]!.code;
+        expect(seriesCode.endsWith(`-${reservedNumero}`)).toBe(true);
+
+        // THE PERSISTED trading.env (what an out-of-process reboot reads) carries the corrected series + the
+        // cloud's own node id, and the restart was scheduled as a next-tick SIGTERM (spied, never fired).
+        await delay(50);
+        expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+        const persisted = parseEnvFile(readFileSync(join(mirrorStateDir, "trading.env"), "utf8"));
+        expect(persisted.WAITRON_TILL_SERIES_ID).toBe(result.seriesId);
+        expect(persisted.WAITRON_TILL_NODE_ID).toBe(standbyNodeId);
+        expect(persisted.WAITRON_ENV).toBe("preproduction");
+      } finally {
+        killSpy.mockRestore();
+      }
     } finally {
       await server.close();
+      await rm(mirrorStateDir, { recursive: true, force: true });
     }
     // The listener is genuinely gone after close().
     await expect(fetch(`${base}/management-api/catalogues`)).rejects.toThrow();
