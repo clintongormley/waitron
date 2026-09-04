@@ -163,7 +163,12 @@ export class TillDeviceEnrolScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const copy = ENROL_COPY[this.kind];
+    // `kind` is typed and every in-tree caller sets it through a `.kind` property binding, so it is
+    // always a valid `DeviceEnrolKind` here. Fall back to the `till` copy anyway if an out-of-contract
+    // value ever reaches it (a raw `kind="…"` attribute, say): `kind` selects COSMETIC copy only —
+    // never routing, which lives in the app's `#boot` probe — so degrading to a default label is
+    // harmless, and rendering the wrong three words beats throwing on `undefined.title`.
+    const copy = ENROL_COPY[this.kind] ?? ENROL_COPY.till;
     return html`
       <section class="screen">
         <h1 class="title">${t(copy.title)}</h1>

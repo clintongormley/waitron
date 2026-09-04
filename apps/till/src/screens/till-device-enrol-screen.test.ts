@@ -40,6 +40,23 @@ it("registers as a custom element", () => {
   expect(customElements.get("till-device-enrol-screen")).toBe(TillDeviceEnrolScreen);
 });
 
+it("falls back to the default copy (no crash) on an out-of-contract kind", async () => {
+  // `kind` is typed `DeviceEnrolKind` and every in-tree caller sets it through a `.kind` property
+  // binding, but a raw `kind="…"` attribute or a direct assignment could smuggle an unexpected string
+  // in at runtime. render() must degrade to the default (`till`) copy rather than throw on
+  // `ENROL_COPY[undefined].title`. Force the out-of-contract value with a cast.
+  const { el } = await mountWidget<TillDeviceEnrolScreen>("till-device-enrol-screen", {
+    api: stubApi(),
+    kind: "bogus" as DeviceEnrolKind,
+  });
+  expect(el.shadowRoot!.querySelector(".title")?.textContent).toContain(
+    t("device.till_enrol_title"),
+  );
+  expect(el.shadowRoot!.querySelector("[data-enrol]")?.textContent).toContain(
+    t("device.till_enrol_submit"),
+  );
+});
+
 /**
  * Every enrol kind derives its own title/hint/submit copy from the same `kind` prop, but shares the
  * code field, error banner, submit gating, live-read, disconnect guard and the single `enrolled` event.
