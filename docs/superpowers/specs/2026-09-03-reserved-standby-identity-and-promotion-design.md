@@ -176,6 +176,13 @@ R3.
 
 ### R3 — Cloud/mirror promotion *(depends on R1 + R2; overlaps promote-action Slice 3)*
 
+> **Refined 2026-09-04** by
+> [membership-promotion-r3-cloud-promotion](2026-09-04-membership-promotion-r3-cloud-promotion-design.md):
+> on the owner's call, the sync-axis split moves **from promotion to JOIN** (R3a) — the cloud runs as
+> its own node from adopt and never uses the primary's id — so promotion (R3b) becomes a mode/role flip
+> with no identity switch. That doc supersedes the "switch at promotion" boundary in the paragraph
+> below; the rest (endorsed term-guarded document, primary-only workers) stands.
+
 Activation. Promotion switches the runtime node id to the cloud's own, **splits the sync axes**
 (subscriber = the cloud's own stable id; origin = the primary it was mirroring — the invariant
 "subscriber id == pulled origin id == the one adopted node",
