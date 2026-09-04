@@ -120,6 +120,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../../packages/module
       '@waitron/payments':
         specifier: workspace:*
         version: link:../../packages/payments
