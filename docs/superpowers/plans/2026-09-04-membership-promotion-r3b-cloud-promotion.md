@@ -547,6 +547,8 @@ git commit -s -m "feat(server): promoteMirrorToPrimary — mirror→primary with
 
 ### Task 5: wire the mirror promote into boot + the headline e2e (`apps/server`)
 
+> **UPDATE 2026-09-04 (owner decision, landed after this plan was written):** the `trading.env` persist moved to **BEFORE the point-of-no-return**, INSIDE `promoteMirrorToPrimary` via an injected `persistTradingEnv` callback (`MirrorPromoteDeps`) — NOT after the promote in the boot closure as the paragraphs below describe. A corrected series is inert on a still-read-only mirror, so persisting it pre-PONR is safe if the promote aborts and closes the process-crash window (the persist-after-PONR ordering below would leave). The boot closure now supplies the concrete `writeTradingEnv` and only schedules the restart. The "spec-faithful ordering / crash-window residual" framing in this plan's Self-review §3 is superseded by this; a narrower power-loss residual remains (writeFileAtomic does not fsync). Read the code (`promote.ts` `MirrorPromoteDeps.persistTradingEnv`) as the source of truth; the wiring description below records the original plan.
+
 Expose `promoteMirrorToPrimary` as an in-process `StartedServer` method in mirror mode only (following the existing in-process promote trigger — there is no HTTP promote surface yet, spec §8), and wire the closure to promote → persist the corrected `trading.env` → restart.
 
 **Files:**

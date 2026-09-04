@@ -1712,8 +1712,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   // series, not the primary's inert `till.seriesId` that adopt wrote (spec §4.3). Every
                   // OTHER value is re-emitted unchanged from the running config — `syncDatabaseUrl`
                   // included (harmless on a primary that no longer pulls). The promote calls this BEFORE
-                  // its point-of-no-return (inert on a still-read-only mirror), so a crash can never leave
-                  // the box primary on the primary's series.
+                  // its point-of-no-return (inert on a still-read-only mirror), so a PROCESS crash can
+                  // never leave the box primary on the primary's series (power-loss residual documented on
+                  // `MirrorPromoteDeps.persistTradingEnv`).
                   persistTradingEnv: async (seriesId) => {
                     const next: TradingConfig = {
                       tenantId: till.tenantId,
