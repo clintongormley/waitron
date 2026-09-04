@@ -7,6 +7,8 @@ import {
   createPostgresDb,
   readDeploymentAxes,
   readMembershipTrustSet,
+  readNodeMembership,
+  setSingletonRole,
   readMirrorConfig,
   withTenant,
   type Database,
@@ -107,6 +109,7 @@ import { readBackupStatus } from "./backup-status.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
+import { isFenced, shouldFenceRestart } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
@@ -826,9 +829,55 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Both axes from ONE read (a single MVCC snapshot), so the initial holder pair is never torn — the
   // same single-snapshot guarantee `refreshDeploymentHolders` relies on: two separate reads under READ
   // COMMITTED could straddle a concurrent promotion and yield an impossible `(mirror, primary)` pair.
-  const axes = await readDeploymentAxes(db);
+  // Membership rejoin R1 (design §6): a returned ex-primary that holds a superseding document marking
+  // it sell-only/evicted must come up FENCED, not as the primary its saved axes still claim. The held
+  // document is authority above the persisted axes (wire-protocol §8), and the reconciliation is
+  // DEMOTE-ONLY — it can never self-promote. Read UNVERIFIED: the row was verified when adopted
+  // (membership-adopt.ts) or self-signed at promotion, so reading our own authoritative state back
+  // needs no re-verify, exactly as the deployment axes are trusted.
+  // Two independent plain reads on the same pool (neither feeds the other's input) — run concurrently.
+  const [heldMembership, initialAxes] = await Promise.all([
+    readNodeMembership(db),
+    readDeploymentAxes(db),
+  ]);
+  const fenced = isFenced(heldMembership, config.till.nodeId);
+  let axes = initialAxes;
+  if (fenced && axes.singletonRole === "primary") {
+    // Demote the singleton axis on the OWNER pool (app_user holds no UPDATE on deployment) — the same
+    // dev-correct migrationsDatabaseUrl owner-write R3b promote uses (withOwnerDb). Idempotent: a
+    // second fenced boot already reads 'secondary' and skips. mode stays 'primary' — the (primary,
+    // secondary) pair is valid (deployment_role_valid_ck); the read-only gate below, not the mode,
+    // enforces the fence. This stops the submitter/reconciler/config-writer via their existing
+    // isSingletonPrimary gates with no worker-gating code change.
+    // Close the app `db` pool on ANY throw before rethrowing, matching the loadKeyRing / mirror-guard
+    // close-on-throw discipline in this region: startServer never returns on the throw path, so nothing
+    // else would call `db.close()`. The inner try/finally closes the short-lived owner pool regardless.
+    try {
+      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      try {
+        await setSingletonRole(ownerDb, "secondary");
+      } finally {
+        await ownerDb.close();
+      }
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+    // Re-read rather than synthesize `{ ...axes, singletonRole: "secondary" }`: the demote wrote only
+    // singleton_role, but re-reading takes BOTH axes from one fresh MVCC snapshot of the current row, so
+    // `mode` cannot be stale if another owner action flipped `deployment.mode` in the window since the
+    // initial read (the torn-pair / concurrent-promotion risk readDeploymentAxes's own contract describes).
+    // One extra query on the rare fenced path, bought for that freshness (Copilot #214 re-review).
+    axes = await readDeploymentAxes(db);
+  }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
+  // The boot-time read-only posture, shared by the two mount decisions below (mount the read-only gate;
+  // do NOT mount the operational device/print surface) so they cannot drift out of De Morgan sync. A
+  // mirror OR a fenced returned ex-primary is read-only. NOTE this is the boot-captured decision — the
+  // gate's own per-request predicate re-reads `mode` live (so a promotion lifts it without a restart),
+  // and is deliberately kept separate below.
+  const fencedOrMirror = isMirror || fenced;
   // The four primary-only SINGLETON duties below (sync SOURCE, retention sweep, scheduled backup, outbound
   // tunnel client) gate on THIS, not on `isMirror`: they must run on the ONE `singleton_role='primary'`
   // node, never on every non-mirror node (promotion runbook design §2/§3c — the same axis `singletonPass`
@@ -867,11 +916,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
   // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
   // it, matching the loadKeyRing / mirror-config db-cleanup discipline in this branch.
-  if (isMirror) {
+  if (fencedOrMirror) {
     app.use(
       "*",
-      readOnlyGate(() => holders.mode.current),
+      // A mirror gates by mode (per-request, so a live promotion lifts it, design §10); a fenced
+      // returned ex-primary (membership rejoin R1) gates on the boot-captured `fenced` — it leaves the
+      // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
+      readOnlyGate(() => holders.mode.current === "mirror" || fenced),
     );
+  }
+  if (isMirror) {
     try {
       await ensureMirrorViewer(db, config.till.tenantId);
     } catch (error) {
@@ -1018,7 +1072,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The operational agent/device groups — NOT mounted under mirror mode. Unlike the dashboard read
+  // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.
+  // Unlike the dashboard read
   // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes
   // all sit behind non-GET verbs the read-only gate refuses, the PRINT group exposes a WRITE BEHIND A
   // GET: `GET /print-api/agent/jobs` runs `claimPrintJobs`, a locking UPDATE (packages/printing/src/
@@ -1031,6 +1086,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // those tables anyway, so it loses nothing by their absence; a primary mounts both. This guard skips
   // route REGISTRATION only — every shared boot value (`till`, `secureCookies`) is built above and read
   // by the sibling mounts, so nothing downstream depends on these mounts having run.
+  // FENCED (membership rejoin R1): a returned/superseded node comes up `mode='primary'` (so `isMirror`
+  // is FALSE) but must be FULLY read-only. Because the read-only gate is verb-based it would let the
+  // print write-behind-a-GET through, so a fenced node un-mounts this surface for the SAME reason a
+  // mirror does — hence `!isMirror && !fenced`. The `fenced` local is the boot-captured decision (a
+  // fenced node leaves the fence only by a fresh boot), the same value the read-only gate above reads.
   // ALTITUDE (deliberate, deferred): the landed promotion design (promotion-runbook-design.md §3a
   // "Mount-and-gate everything") makes REQUEST-time gating the eventual form so live mirror→primary
   // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
@@ -1038,7 +1098,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // to the §3a form belongs with promotion Slice 3, which already converts the analogous
   // `singleton_role`-gated workers (sync source / retention / backup / tunnel, §3c — re-gated in #168) to
   // runtime-startable. See read-only-gate.ts's header.
-  if (!isMirror) {
+  if (!fencedOrMirror) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
     // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
     // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
@@ -1252,7 +1312,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // Now reachable: with a real trust set the node accepts a trusted, strictly-newer document. Covered
       // by boot.test.ts's "boot reads a REAL trust set …" case (it drives this very callback), and the
       // accept fence + persist it delegates to are proven end-to-end in membership-gossip.e2e.test.ts.
-      if (outcome.accepted) log("info", "membership.adopted", { term: outcome.document.body.term });
+      if (outcome.accepted) {
+        log("info", "membership.adopted", { term: outcome.document.body.term });
+        // Membership rejoin R1 (design §6 step 2): if this document fences THIS node while it is
+        // running unfenced (was serving-primary this boot), restart into the fenced posture — the boot
+        // path (reconcile axes + mount the read-only gate) applies on reboot. Same next-tick SIGTERM
+        // R3b promotion uses (boot.ts): fire on the NEXT tick so the pull loop's tick returns first;
+        // the supervisor reboots the box. `requestRestart` is only wired in the setup branch, so the
+        // inline process.kill form is used here, as the mirror promote does.
+        if (shouldFenceRestart(fenced, outcome.document, till.nodeId)) {
+          log("info", "membership.fenced_restart", { term: outcome.document.body.term });
+          setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+        }
+      }
     };
     const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
       runSyncPull({
