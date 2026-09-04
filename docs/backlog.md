@@ -278,9 +278,24 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   begins in SP-2** (first domain content). Copilot caught two real ones no other layer did (a false
   `name`==table-suffix claim; `drizzle-orm` had to become a production dep). Spec:
   [sp-1a](superpowers/specs/2026-09-04-module-sp1a-contract-and-migration-source.md).
-- **SP-1b — enablement + reconcile (NEXT candidate):** config file, deployment-stamp reconcile, migration
-  filter, provisioning gate, soft-disable. **Must gate provisioning's migrate/seed by the same enablement**,
-  else filtered-boot and unfiltered-provisioning diverge (SP-1a whole-branch-review forward-warning).
+- **SP-1b — enablement + reconcile — LANDED #215 (2026-09-04).** On-box `modules.json` (sparse override
+  map, **default-on**: a module is enabled unless explicitly `false`) → boot filters the **trading-mode**
+  migration list by the enabled set (setup still migrates all) + a drift log; `provisionVenue` **refuses**
+  venue provisioning when a `provision-only` module (fiscal) is disabled — step 0, before any DB write.
+  Key deviations from the architecture, both deliberate: actual state is **derived** from
+  `appliedSchemaVersion` (**no `deployment` column** — nothing to keep consistent), and the fiscal gate is
+  a **loud refusal**, not a working fiscal-less venue — `applyVenue` mandates a SIF (`venue-apply.ts`), so
+  that path is SP-3. The SP-1a migrate/seed forward-warning is addressed by gating the seed (refusal) and
+  showing the migrate-path divergence benign (over-migration lands as soft-disable), source-unification
+  deferred to SP-3. Error code `module.mandatory_not_disableable` is tier-driven (names no module).
+  Behaviour-preserving by default. Copilot approved; both its comments (409 status mapping; drop an
+  unreceipted privilege claim) applied. **Deferred follow-ups:** (a) only the `provision-only` tier is
+  guarded — a **toggleable** module that is actually load-bearing (identity/sync/payments, still
+  statically wired) fails boot loudly if disabled, until the SP-2/SP-4 wiring inversion + core-extraction;
+  (b) the trading filter also runs in **mirror** mode, so **SP-1d** must keep a mirror's enabled set
+  consistent with its primary's; (c) **each module will own its own testing** — add `testing` to the
+  module contract at **SP-2** (owner steer 2026-09-04). Spec/plan:
+  [sp-1b](superpowers/specs/2026-09-04-module-sp1b-enablement-and-reconcile.md).
 - **SP-1c — versioned migration ordering** (compatibility check + dependency graph/version gates replacing
   the linear manifest).
 - **SP-1d — cross-node config replication** (adopt bootstrap + flow-down; coordinates with the R-series adopt).
@@ -291,7 +306,9 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-SP-1b/1c/1d and SP-2 are parallel-safe with the B3.2 layout-editor session; SP-4 waits for it.
+With SP-1a + SP-1b landed, **SP-1c / SP-1d / SP-2 remain** and are parallel-safe with the B3.2
+layout-editor session; **SP-2 is the one that unblocks SP-3** (H2's fiscal-record lane rides SP-2's sync
+inversion). SP-4 waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 
