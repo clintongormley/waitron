@@ -783,9 +783,14 @@ describe("till-app", () => {
     const { el } = await mountApp();
     await flush(el);
     // The lock screen emits `setup-device`; the app enters device mode (deviceMode=true, off the lock
-    // screen). NOTE (SP-B4): a fresh display's cookieless boot resolves the `till` form-factor canvas, so
-    // the shell now renders that canvas rather than the legacy station-screen-then-enrol flow — reaching
-    // the KDS enrol view from here is a device-enrolment concern left to a later slice, not the sale path.
+    // screen). NOTE — a REGRESSION introduced within SP-B4 (not pre-existing): Task 3 made a fresh
+    // display's cookieless boot resolve the `till` form-factor canvas, so once this task removed the legacy
+    // `#renderScreen`, the shell now renders that canvas's counter tab rather than the old
+    // station-screen-then-enrol flow — so the KDS enrol view is no longer reachable from this affordance.
+    // Not the sale path, and not a blank screen (a functional counter tab renders). The fresh-display KDS
+    // enrol flow needs rework (an enrol overlay like the till/handheld setup paths, or reconcile with
+    // SP-A.2 pairing-code enrolment + B2.2's kiosk shell) — tracked as an SP-B4 deferred follow-on in
+    // docs/backlog.md. This test asserts the current (deferred) behaviour only.
     emit(lock(el)!, "setup-device");
     await flush(el);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);

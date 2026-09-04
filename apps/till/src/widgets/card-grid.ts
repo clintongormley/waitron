@@ -183,9 +183,9 @@ export class TillCardGrid extends LitElement {
   }
 
   /**
-   * Map one card to its element. The switch is EXHAUSTIVE over {@link CardType}, so adding a card type
-   * without a case here is a compile error rather than a silently-dropped card. The per-card bindings
-   * are verbatim the counter screen's `#widget()` (`till-counter-screen.ts:267-307`).
+   * Map one card to its element — called for each card in the active tab's {@link TabDef.cards} list. The
+   * switch is EXHAUSTIVE over {@link CardType}, so adding a card type without a case here is a compile
+   * error rather than a silently-dropped card.
    */
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
