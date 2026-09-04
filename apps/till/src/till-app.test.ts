@@ -394,12 +394,27 @@ const station = (el: TillApp) =>
       "till-station-screen",
     ) as TillStationScreen | null) ??
     null) as TillStationScreen | null;
-/** The handheld enrol screen (handheld-tableside Task 8), present only while `handheldEnrolling` is set;
- * queried by tag (its class is not imported here — the app only needs to know it is mounted). */
-const handheldEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-handheld-enrol-screen");
-/** The till enrol screen (SP-A.2 device unification), present only while `tillEnrolling` is set; queried
- * by tag (its class is not imported here — the app only needs to know it is mounted). */
-const tillEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-enrol-screen");
+/** The ONE device enrol screen (SP-A.2 / handheld-tableside Task 8 / SP-B4), present only while
+ * `enrolling` is set; queried by tag (its class is not imported here — the app only needs to know it is
+ * mounted). Its `.kind` selects which device kind it pairs. The `handheldEnrol`/`tillEnrol`/`kdsEnrol`
+ * helpers all resolve to this same tag; they read `.kind` when a test needs to assert WHICH kind. */
+const deviceEnrol = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement & { kind?: string }>("till-device-enrol-screen");
+/** The device enrol screen when opened as a HANDHELD pairing (`.kind === "handheld"`), else null. */
+const handheldEnrol = (el: TillApp) => {
+  const s = deviceEnrol(el);
+  return s?.kind === "handheld" ? s : null;
+};
+/** The device enrol screen when opened as a TILL pairing (`.kind === "till"`), else null. */
+const tillEnrol = (el: TillApp) => {
+  const s = deviceEnrol(el);
+  return s?.kind === "till" ? s : null;
+};
+/** The device enrol screen when opened as a KDS pairing (`.kind === "kds"`), else null. */
+const kdsEnrol = (el: TillApp) => {
+  const s = deviceEnrol(el);
+  return s?.kind === "kds" ? s : null;
+};
 /** The table-order screen — a TILL opens it as a `drill` (app shadow); a handheld/tablet whose canvas
  * authors an `order` tab mounts it as that tab's card (inside the active tab's card grid). Look in both. */
 const tableOrder = (el: TillApp) =>
@@ -728,31 +743,31 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  // A RE-BOOT resets the device-mode state before re-probing (`#boot` runs more than once — notably
-  // `#onHandheldEnrolled` re-runs it after a fresh phone enrols). Device state left by a PRIOR boot (or a
-  // prior `#onSetupDevice`) must not survive into a later one: the probe RESETS `handheldMode`/`deviceMode`
-  // and the `screen` baseline before re-establishing the correct mode, so every boot starts clean.
+  // A RE-BOOT resets the device-mode state before re-probing (`#boot` runs more than once — notably the
+  // enrol handlers re-run it after a fresh device enrols). Device state left by a PRIOR boot must not
+  // survive into a later one: the probe RESETS `handheldMode`/`deviceMode` and the `screen` baseline
+  // before re-establishing the correct mode, so every boot starts clean.
   it("a re-boot resolving handheld after a prior device-mode state ends on lock in handheld mode (not station)", async () => {
-    // First boot 401s → normal lock; `setup-device` then leaves deviceMode=true / screen=station; the
-    // re-boot's identity probe resolves `handheld`.
+    // First boot resolves `kds_station` → deviceMode=true, kiosk shell (a REAL prior device-mode state);
+    // the re-boot's identity probe then resolves `handheld`.
     const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvasDef }),
       getDeviceIdentity: vi
         .fn()
-        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValueOnce({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" })
         .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
-    // Leave a stale device-mode state behind: setup-device flips deviceMode on (its `screen = "station"`
-    // no longer renders a distinct legacy screen — the shell owns rendering now, SP-B4).
-    emit(lock(el)!, "setup-device");
-    await flush(el);
+    // The prior boot left deviceMode on (a kds display, in the kiosk shell — not on the lock screen).
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
-    // Re-boot (the enrol path) with the identity now `handheld`. Emit `handheld-enrolled` (it bubbles to
-    // the app's handler, which re-runs `#boot`) from the shell present in the interim device-mode state.
-    emit(shell(el)!, "handheld-enrolled");
+    expect(lock(el)).toBeNull();
+    // Re-boot with the identity now `handheld`. Emit `enrolled` (it bubbles to the app's handler,
+    // which re-runs `#boot`) from the shell present in the interim device-mode state.
+    emit(shell(el)!, "enrolled");
     await flush(el);
     // The re-boot reset the stale device state before re-probing: a handheld waits on the lock screen,
-    // never the station the prior setup-device left it on, and deviceMode is cleared.
+    // never the station the prior kds boot left it on, and deviceMode is cleared.
     expect(lock(el)).not.toBeNull();
     expect(station(el)).toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
@@ -769,8 +784,8 @@ describe("till-app", () => {
     });
     await flush(el);
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
-    // Re-boot with no device — `#onHandheldEnrolled`'s path, but the cookie no longer resolves.
-    emit(lock(el)!, "handheld-enrolled");
+    // Re-boot with no device — `#onEnrolled`'s path, but the cookie no longer resolves.
+    emit(lock(el)!, "enrolled");
     await flush(el);
     // The stale handheld mode did not survive: back to a normal operator lock, both device modes false.
     expect(lock(el)).not.toBeNull();
@@ -779,22 +794,61 @@ describe("till-app", () => {
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
   });
 
-  it("the lock screen's set-up affordance routes a fresh display into device mode", async () => {
+  // KDS enrol (SP-B4 fresh-display enrol overlay): the lock screen's "set up as kitchen display"
+  // affordance opens a STANDALONE enrol overlay — symmetric with the till/handheld setup paths — rather
+  // than flipping `deviceMode`/navigating to the station screen. (SP-B4 made a cookieless boot resolve the
+  // `till` form-factor canvas, so the old `#onSetupDevice` — which set `deviceMode`+`screen="station"` and
+  // relied on the station screen's own 401→enrol sub-view — rendered the counter tab instead once a canvas
+  // was always present, orphaning the KDS enrol view. Approach (a) makes KDS match the other two kinds.)
+  it("the set-up-device affordance opens the KDS enrol view (lock screen gone)", async () => {
     const { el } = await mountApp();
     await flush(el);
-    // The lock screen emits `setup-device`; the app enters device mode (deviceMode=true, off the lock
-    // screen). NOTE — a REGRESSION introduced within SP-B4 (not pre-existing): Task 3 made a fresh
-    // display's cookieless boot resolve the `till` form-factor canvas, so once this task removed the legacy
-    // `#renderScreen`, the shell now renders that canvas's counter tab rather than the old
-    // station-screen-then-enrol flow — so the KDS enrol view is no longer reachable from this affordance.
-    // Not the sale path, and not a blank screen (a functional counter tab renders). The fresh-display KDS
-    // enrol flow needs rework (an enrol overlay like the till/handheld setup paths, or reconcile with
-    // SP-A.2 pairing-code enrolment + B2.2's kiosk shell) — tracked as an SP-B4 deferred follow-on in
-    // docs/backlog.md. This test asserts the current (deferred) behaviour only.
+    // The lock screen emits `setup-device`; the app overlays the KDS enrol screen so a fresh display can
+    // pair itself, and the lock screen it replaces is no longer rendered. It does NOT flip `deviceMode`
+    // nor navigate to the station screen — the enrol screen is an overlay on the boot state, and a
+    // successful enrol re-boots into the kiosk shell (see the redeem test below).
     emit(lock(el)!, "setup-device");
     await flush(el);
+    expect(kdsEnrol(el)).not.toBeNull();
+    expect(lock(el)).toBeNull();
+    // The overlay is NOT the old device-mode station path: deviceMode stays false until a redeemed enrol
+    // re-boots the now-`kds_station` cookie.
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
+    expect(station(el)).toBeNull();
+  });
+
+  it("a redeemed KDS enrol re-boots into the kiosk shell (enrolled, straight past the lock screen)", async () => {
+    const { el } = await mountApp({
+      // The FIRST boot (at mount) is a normal 401 — not-a-device. AFTER enrol the cookie is set, so the
+      // re-boot's SECOND identity probe resolves `kds_station`, and the boot PREFETCHES the bound station's
+      // queue (`getDeviceStation`). `getTill` resolves the KDS canvas the server hands a kds display, so
+      // `#shellActive()` sees it and the shell runs in kiosk mode.
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvasDef }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+    });
+    await flush(el);
+    emit(lock(el)!, "setup-device");
+    await flush(el);
+    expect(kdsEnrol(el)).not.toBeNull();
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `enrolled` (kind kds).
+    emit(kdsEnrol(el)!, "enrolled", { kind: "kds" });
+    await flush(el);
+    // The re-boot read the fresh cookie as `kds_station`: the enrol view is gone, the app skipped the lock
+    // screen and booted the KDS kiosk shell (deviceMode on), mounting the kds-board card through the grid.
+    expect(kdsEnrol(el)).toBeNull();
+    expect(lock(el)).toBeNull();
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
-    expect(lock(el)).toBeNull(); // left the lock screen (the shell is active)
+    const s = shell(el) as unknown as (HTMLElement & { kiosk?: boolean }) | null;
+    expect(s).not.toBeNull();
+    expect(s!.kiosk).toBe(true);
+    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+    // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
+    expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
   });
 
   // §C2 containment/identity. An enrolled handheld returns to the lock screen on every logout/cold boot
@@ -819,11 +873,11 @@ describe("till-app", () => {
   });
 
   // §C2 defense-in-depth. Even if a `setup-device` event still reached the app while a handheld is
-  // active (a leaked/bubbled affordance), `#onSetupDevice` must NOT flip the phone's identity to a KDS
-  // station nor navigate it to `station` — it is routed through the face-set gate and guarded on
-  // handheld mode. Prove-by-deletion: drop that guard and this test goes red (deviceMode flips, screen
-  // becomes `station`).
-  it("ignores a setup-device event while a handheld is active (no identity flip, no escape to station)", async () => {
+  // active (a leaked/bubbled affordance), `#onSetupDevice` must NOT open the KDS enrol overlay — which
+  // would let a waiter re-pair the in-service phone as a `kds_station`. It is guarded on handheld mode.
+  // Prove-by-deletion: drop that `if (this.handheldMode) return` guard and this test goes red (the KDS
+  // enrol overlay opens and the lock screen it replaces disappears).
+  it("ignores a setup-device event while a handheld is active (no KDS enrol overlay)", async () => {
     const { el } = await mountApp({
       getDeviceIdentity: vi
         .fn()
@@ -834,8 +888,9 @@ describe("till-app", () => {
     // Fire the escape event directly (bypassing the now-hidden affordance) — the gate must swallow it.
     emit(lock(el)!, "setup-device");
     await flush(el);
-    // Still the phone shell: on the lock screen, never the station, and identity is unchanged.
+    // Still the phone shell: on the lock screen, no KDS enrol overlay opened, and identity is unchanged.
     expect(lock(el)).not.toBeNull();
+    expect(kdsEnrol(el)).toBeNull();
     expect(station(el)).toBeNull();
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
   });
@@ -867,8 +922,8 @@ describe("till-app", () => {
     emit(lock(el)!, "setup-handheld");
     await flush(el);
     expect(handheldEnrol(el)).not.toBeNull();
-    // The enrol screen redeemed a code (the device cookie is now set) and announced `handheld-enrolled`.
-    emit(handheldEnrol(el)!, "handheld-enrolled");
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `enrolled` (kind handheld).
+    emit(handheldEnrol(el)!, "enrolled", { kind: "handheld" });
     await flush(el);
     // The re-boot read the fresh cookie as `handheld`: the enrol view is gone, the app is back on the lock
     // screen (the phone shell — a handheld waits for the PIN login), and handheld mode is on.
@@ -933,7 +988,7 @@ describe("till-app", () => {
     expect(lock(el)).toBeNull();
   });
 
-  it("a redeemed till enrol re-boots into the enrolled-till shell (till-enrolled, back on the lock screen)", async () => {
+  it("a redeemed till enrol re-boots into the enrolled-till shell (enrolled, back on the lock screen)", async () => {
     const { el } = await mountApp({
       // The FIRST boot (at mount) is a normal 401 — not-a-device. AFTER enrol the cookie is set, so the
       // re-boot's SECOND identity probe resolves `till`.
@@ -946,8 +1001,8 @@ describe("till-app", () => {
     emit(lock(el)!, "setup-till");
     await flush(el);
     expect(tillEnrol(el)).not.toBeNull();
-    // The enrol screen redeemed a code (the device cookie is now set) and announced `till-enrolled`.
-    emit(tillEnrol(el)!, "till-enrolled");
+    // The enrol screen redeemed a code (the device cookie is now set) and announced `enrolled` (kind till).
+    emit(tillEnrol(el)!, "enrolled", { kind: "till" });
     await flush(el);
     // The re-boot read the fresh cookie as `till`: the enrol view is gone, the app is back on the lock
     // screen (a till waits for the PIN login), and it is marked device-enrolled.

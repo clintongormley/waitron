@@ -7,7 +7,7 @@ import type { DevDeviceList, DevMintResult, TillApi } from "../api/client.js";
 /**
  * A fake `TillApi` exposing only the three dev-route verbs the chooser calls. Each defaults to a benign
  * value a test overrides with its own `vi.fn()`. Cast through `unknown` because the screen touches only
- * these three verbs, never the rest of the class surface (the `till-enrol-screen.test.ts` pattern).
+ * these three verbs, never the rest of the class surface (the `till-device-enrol-screen.test.ts` pattern).
  */
 type DevVerbs = "getDevDevices" | "mintDevDevice" | "resetDevice";
 function stubApi(overrides: Partial<Record<DevVerbs, unknown>> = {}): TillApi {
