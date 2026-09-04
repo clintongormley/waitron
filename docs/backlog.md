@@ -260,6 +260,39 @@ reason/reason-code is captured):
 booking, availability / double-booking prevention, reminders (SMS/email), a customer/CRM entity,
 recurring bookings, a calendar grid, deposits.
 
+**Wages / labour cost (SP16, NEW — owner-added 2026-09-04):** a **wage-computation engine** that turns
+the hours a person actually worked (the built *registro de jornada*, #47) and the hours they are
+scheduled to work (built D2 scheduling) into money owed, and shows the owner **accrued-so-far vs
+still-pending** for a pay period. This is a *build* item and is **distinct from the deferred D3 payroll
+*export*** (integrate-not-build — that hands the finished figures to the gestoría's package). The engine
+is what produces those figures; the export is what ships them out.
+
+The core is a **per-person pay-rule set**, because two staff on the same floor are paid on different
+models. Worked examples the owner gave: waiter X is contracted for 35 h/week at €10/h base, €12/h on
+weekends or nights, +30% on public holidays, and €10/h while on sick leave — a purely **hourly** model
+with condition modifiers. Waiter Y is a **fixed monthly salary** for the contracted 35 h/week, with
+extra hours beyond that paid per-hour. So the rule model must express, per person: a base
+(hourly-rate *or* fixed-salary-for-N-contracted-hours), plus rate overrides keyed to **conditions of the
+hour worked** — weekend, night, public holiday (flat rate *or* a percentage uplift), and non-worked
+paid states such as **sick leave** (*baja*). Computing a shift's pay means classifying each of its hours
+(which day, which hours count as night, is it a holiday) and applying the matching rule. "Actual vs
+pending" then falls out: sum the rules over recorded jornada rows for earned-to-date, over the schedule
+for the projected remainder.
+
+- **Dependencies / gates.** Sits on top of registro de jornada (#47) and D2 scheduling (both built), so
+  the hours data already exists. But the *rates and multipliers themselves are governed by the
+  applicable provincial convenio colectivo* (minimum hourly rates, the legal night-hours window, holiday
+  and overtime uplifts), which is a **laboral-advisor / gestoría** dependency already flagged under *The
+  advisor gap* (the convenio figures + the gestoría's payroll import layout are the two open laboral
+  items). The engine should hold rates as **editable data**, not hardcode convenio numbers, so the owner
+  or gestoría sets them. A public-holidays calendar (national + autonomía + local) is also needed to
+  classify holiday hours — its own small data source.
+- **Not fiscal.** Wages touch no invoice, huella, or chain — this is an accounting/HR concern (the same
+  track as the tip-as-income note under *The advisor gap*), so it carries none of the H2 constraints.
+- **Scope to brainstorm when picked up:** the rule data model (per-person contract + condition
+  overrides), the hour-classification logic (night window, weekend, holiday calendar), sick-leave and
+  other paid-non-worked states, the accrued-vs-pending period view, and where it feeds D3.
+
 **Tier C — valuable, defer (behind-the-scenes or post-polish):**
 
 - **Square (and generic CSV) menu import** — full dashboard flow (auth, map catalogue, re-import): a
@@ -292,7 +325,8 @@ recurring bookings, a calendar grid, deposits.
 - **Distribution / deployment / failover remainder** (Track 2) — appliance image, on-device agent,
   reroute, SIF promotion/fencing + till-side failover. See *Open threads → SIF topology*.
 
-**Later / smaller:** SumUp card provider (gated, *Debt*) · D3 payroll export (integrate-not-build) ·
+**Later / smaller:** SumUp card provider (gated, *Debt*) · wage-computation engine (build,
+convenio-gated — *Wages / labour cost* above) · D3 payroll export (integrate-not-build) ·
 accounting export (SP17) · opening hours & channel sync (SP19) · tip payroll (SP13) · online ordering
 (SP15) · owner-added table-service extensions (per-seat ordering; multiple tabs per table — reopen
 settled TS/KDS decisions, so specced-with-owner, never landed unattended) · **KDS ops polish** (routing
@@ -330,7 +364,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 13 | Tips | attribution stored (`tenders.tip_amount`) — but UI collection ONLY on the integrated-card idle screen | tip-collection UI for cash / manual card / handheld (none today, *Debt*); payroll export (integrate-not-build) |
 | 14 | Bookings | Bookings-1 (#180, #182) — staff-entered reservations + seat-opens-a-tab + floor badge + dashboard day-list | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits (Future) |
 | 15 | Online ordering | — | not started (Later phase) |
-| 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | D3 payroll export (integrate-not-build) |
+| 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (per-person pay rules, accrued-vs-pending — build, convenio-gated; *Priorities → Wages / labour cost*); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
 | 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190), order-line customisation (kitchen-only line note + meat doneness) | **counter/walk-up kitchen fire (#193 follow-up) — NEXT**; menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
