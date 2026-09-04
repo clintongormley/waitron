@@ -21,7 +21,9 @@ export class LocalFsBackend implements StorageBackend {
       await writeFile(partial, bytes, { mode: 0o600 });
       await rename(partial, target);
     } catch (err) {
-      await rm(partial, { force: true });
+      // Best-effort cleanup: a failure here (e.g. EACCES on a read-only mount) must never replace
+      // the real write/rename error below — the same posture `dumpAtomic` takes (`pg-dump.ts`).
+      await rm(partial, { force: true }).catch(() => {});
       throw err;
     }
   }
@@ -41,7 +43,15 @@ export class LocalFsBackend implements StorageBackend {
     const out: StoredObject[] = [];
     for (const name of names) {
       if (!name.startsWith(prefix) || name.endsWith(".partial")) continue;
-      const info = await stat(join(this.dir, name));
+      let info;
+      try {
+        info = await stat(join(this.dir, name));
+      } catch (err) {
+        // A concurrent prune/delete can remove this entry between `readdir` and `stat` — skip a
+        // vanished file rather than failing the whole listing over it.
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw err;
+      }
       if (info.isFile()) out.push({ key: name, size: info.size, mtimeMs: info.mtimeMs });
     }
     return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
