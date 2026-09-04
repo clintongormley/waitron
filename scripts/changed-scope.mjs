@@ -237,6 +237,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/verifactu",
   "@waitron/bench-pglite",
   "@waitron/diagnostics",
+  "@waitron/sync-enrolment",
 ];
 
 /**

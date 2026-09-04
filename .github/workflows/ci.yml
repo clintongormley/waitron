@@ -1117,6 +1117,7 @@ jobs:
           set -- "$@" --filter "!@waitron/verifactu"
           set -- "$@" --filter "!@waitron/bench-pglite"
           set -- "$@" --filter "!@waitron/diagnostics"
+          set -- "$@" --filter "!@waitron/sync-enrolment"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
