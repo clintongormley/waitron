@@ -1,7 +1,6 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module rather than
 // declaring a fresh ambient one — the idiom packages/identity, packages/catalogue use.
 import "@waitron/shared";
-import type { WidgetType } from "./types.js";
 import type { CardType } from "./canvas.js";
 
 // @waitron/layouts's contribution to the shared error registry, by declaration merging — the
@@ -9,6 +8,9 @@ import type { CardType } from "./canvas.js";
 // receipt for minting these two fresh families: on 2026-08-11
 //   grep -rn '"layout\.\|"receipt\.\|"till\.' packages/**/src/errors.ts apps/server/src/errors.ts
 // printed no match, so `layout.invalid` and `receipt.invalid` collide with no existing sibling.
+// (2026-09-04 SP-B4: the `layout.invalid` code was removed with the old widget model — its only
+// thrower, the widget-layout validator, was deleted; `receipt.invalid` remains, rehomed onto
+// `tenant_receipts`.)
 // Likewise for the profile/theme families (SP-A.1): on 2026-09-02
 //   grep -rn '"profile\.\|"theme\.' packages/**/src/errors.ts apps/server/src/errors.ts
 // printed no match, so `profile.invalid` and `theme.invalid` collide with no existing sibling.
@@ -22,41 +24,18 @@ import type { CardType } from "./canvas.js";
 // / canvas.name_taken.
 //
 // PARAM RULE (CLAUDE.md §1, the house's dominant defect class): every param NAMES the problem and
-// NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `widget` only
-// ever carries a valid WidgetType enum value (so an *unknown* widget's arbitrary `type` string can
-// never reach it — it stays `undefined` in that case); `configKey` / `field` carry a key/field NAME,
-// never its value; `maxLength` is the policy cap, never the length that breached it. `tabIndex` is a
-// numeric index locating a tab, never the author-supplied tab key or title; `card` only ever carries
-// a valid CardType enum value, the same guard as `widget`; `token` only ever names an allowlisted
-// `--wt-*` token, never an arbitrary/unknown one. A config VALUE never enters these params.
+// NEVER echoes the offending user value. `reason` is a fixed enum of what went wrong; `configKey` /
+// `field` carry a key/field NAME, never its value; `maxLength` is the policy cap, never the length
+// that breached it. `tabIndex` is a numeric index locating a tab, never the author-supplied tab key
+// or title; `card` only ever carries a valid CardType enum value (so an *unknown* card's arbitrary
+// `type` string can never reach it — it stays `undefined` in that case); `token` only ever names an
+// allowlisted `--wt-*` token, never an arbitrary/unknown one. A config VALUE never enters these params.
 // `canvas.not_found` and `canvas.name_taken` carry NO params BY DESIGN: a not-found leaf must not
 // echo the caller-supplied id (unlike the `station.not_found`-style siblings that do), and a taken
 // name must never echo the offending author value (§1) — the fact of the collision is the whole
 // message, so the management API maps them to 404 / 409 on the code alone.
 declare module "@waitron/shared" {
   interface ErrorParams {
-    // A LayoutDef failed validateLayout. `reason` says which rule:
-    //   not_array        — the input was not an array;
-    //   unknown_widget   — an item was not an object, or its `type` was not one of the six
-    //                      WidgetTypes (the offending `type` is NOT echoed — `widget` stays absent);
-    //   bad_region       — an item's `region` was not "main" | "aside";
-    //   bad_config       — an item's `config` was not an object, carried a key outside that widget's
-    //                      WIDGET_CONFIG schema, or a value its validator rejected (design D8);
-    //   duplicate        — two items shared a `type` (design D5);
-    //   missing_required — a sale-critical widget was absent (design D4).
-    // `widget` names the widget the problem concerns when it is a valid WidgetType; `configKey`
-    // names the offending config key for a bad_config.
-    "layout.invalid": {
-      reason:
-        | "not_array"
-        | "unknown_widget"
-        | "bad_region"
-        | "bad_config"
-        | "duplicate"
-        | "missing_required";
-      widget?: WidgetType;
-      configKey?: string;
-    };
     // A ReceiptConfig failed validateReceiptConfig. `reason`:
     //   not_object    — the input was not a plain object;
     //   not_string    — a present field was not a string;

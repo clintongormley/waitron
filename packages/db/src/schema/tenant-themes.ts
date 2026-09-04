@@ -4,35 +4,34 @@ import { tenants } from "./tenants.js";
 /**
  * The owner-authored base THEME for one tenant (design §4, SP-A.2 §16.3).
  *
- * ONE ROW PER TENANT (the till_layouts shape): `tenant_id` is the PRIMARY KEY, so it is both the row
- * identity and the tenant discriminator, and it doubles as the `ON CONFLICT` target the service
- * upserts against. A fresh tenant that has never picked a theme simply has no row — get-with-default
- * returns "no override" rather than seeding one (no backfill; the database is recreated
- * pre-production, CLAUDE.md §5).
+ * ONE ROW PER TENANT: `tenant_id` is the PRIMARY KEY, so it is both the row identity and the tenant
+ * discriminator, and it doubles as the `ON CONFLICT` target the service upserts against. A fresh
+ * tenant that has never picked a theme simply has no row — get-with-default returns "no override"
+ * rather than seeding one (no backfill; the database is recreated pre-production, CLAUDE.md §5).
  *
  * `theme` is PLAIN jsonb, deliberately NOT `.$type<>()`-annotated with the `@waitron/layouts` shape:
  * `@waitron/layouts` depends on `@waitron/db`, so importing its types here would be a circular
  * dependency. The service validates the shape on write; the database stores opaque jsonb. Same
- * rationale — and same precedent — as till_layouts (layouts.ts).
+ * rationale — and same precedent — as `canvases` (canvases.ts).
  *
  * FK via the array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count
  * a never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI process),
- * the same reason layouts.ts uses this form. `restrict`, not cascade: removing a tenant must never
- * silently discard its authored theme.
+ * the same reason management-sessions.ts uses this form. `restrict`, not cascade: removing a tenant
+ * must never silently discard its authored theme.
  *
  * `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`. The `FORCE`, the tenant-isolation policy and
- * the app_user grants (SELECT/INSERT/UPDATE — no DELETE, config is replaced in place like
- * till_layouts) are hand-written in the paired `--custom` migration (CLAUDE.md §3). No separate
- * tenant_id index: the PRIMARY KEY already provides a unique index on it. inmutabilidad requires FORCE.
+ * the app_user grants (SELECT/INSERT/UPDATE — no DELETE, config is replaced in place) are hand-written
+ * in the paired `--custom` migration (CLAUDE.md §3). No separate tenant_id index: the PRIMARY KEY
+ * already provides a unique index on it. inmutabilidad requires FORCE.
  */
 export const tenantThemes = pgTable(
   "tenant_themes",
   {
     tenantId: uuid("tenant_id").primaryKey(),
     theme: jsonb("theme").notNull(),
-    // Timestamp: `mode: "string"` follows the NEWER `devices` precedent (devices.ts), NOT `till_layouts`
-    // (which uses `mode: "date"`) — an inert Drizzle read-type choice, not a column-type difference; the
-    // "same precedent as till_layouts" note above is about the jsonb decision only, not this column.
+    // Timestamp: `mode: "string"` follows the `devices` precedent (devices.ts) — an inert Drizzle
+    // read-type choice, not a column-type difference; the "same precedent" note above is about the
+    // jsonb decision only, not this column.
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

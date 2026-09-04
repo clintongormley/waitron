@@ -222,7 +222,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
       // Composed inline rather than via `gated`, because it needs authorizeManager's returned
       // `authorizedBy` for `publishedByPersonId` — the same reason management-api.ts's GET
-      // /management-api/layout calls authorizeManager inline.
+      // /management-api/receipt composes authorizeManager inline.
       const breaches = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {

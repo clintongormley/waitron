@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
-import { LAYOUT_A, type LayoutDef, type TabDef } from "../layout.js";
+import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
-import type { TillProductGrid } from "../widgets/product-grid.js";
 
 const cafe: TillProduct = {
   id: "p1",
@@ -20,6 +19,9 @@ const cafe: TillProduct = {
 
 const products: TillProduct[] = [cafe];
 
+// The `counter` tab the app supplies from the device canvas (SP-B). It carries the sale-critical cards
+// the counter must always yield: product-grid, basket, total, tender-pay. The region/widget model is
+// gone — the screen renders solely through this tab, delegating its body to `till-card-grid`.
 const counterTab: TabDef = {
   key: "counter",
   title: "Counter",
@@ -36,9 +38,28 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     products,
+    counterTab,
     operatorName: "Ana",
     ...over,
   });
+
+/** The card grid the counter delegates its body to (SP-B4). Typed loosely enough to read the props the
+ * counter threads into it without importing the class. */
+const cardGrid = (el: TillCounterScreen) =>
+  el.shadowRoot!.querySelector<
+    HTMLElement & {
+      updateComplete: Promise<unknown>;
+      tab?: TabDef;
+      store: unknown;
+      products: TillProduct[];
+      heldOrders: unknown;
+      stationQueue: unknown;
+      defaultStationId?: string;
+      cardProvider: string;
+      tipsEnabled: boolean;
+      cardOutcome?: string;
+    }
+  >("till-card-grid");
 
 afterEach(cleanupWidgets);
 
@@ -47,30 +68,35 @@ describe("till-counter-screen", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);
   });
 
-  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders/station-queue in aside", async () => {
+  // SALE-PATH GUARD (SP-B4): a counter tab must ALWAYS yield the four sale-critical cards. The screen
+  // delegates the body to `till-card-grid`, so pierce the grid's own shadow root and prove product-grid,
+  // basket, total and tender-pay all render. Removing any card from the grid (or breaking the delegation)
+  // fails this — the regression the region-model test guarded, carried over to the grid path.
+  it("renders the counter tab's sale-critical cards (product-grid/basket/total/tender-pay) via the card grid", async () => {
     const { el } = await mount();
-    const main = el.shadowRoot!.querySelector(".region-main")!;
-    const aside = el.shadowRoot!.querySelector(".region-aside")!;
-
-    // product grid fills the main region and appears nowhere else
-    expect(main.querySelector("till-product-grid")).not.toBeNull();
-    expect(aside.querySelector("till-product-grid")).toBeNull();
-
-    // basket, total, tender-pay, the held-orders list and the (default-station) queue stack in the
-    // aside region and nowhere else — the `prep-queue` layout slot now renders the station-queue widget
-    expect(aside.querySelector("till-basket")).not.toBeNull();
-    expect(aside.querySelector("till-total")).not.toBeNull();
-    expect(aside.querySelector("till-tender-pay")).not.toBeNull();
-    expect(aside.querySelector("till-held-orders")).not.toBeNull();
-    expect(aside.querySelector("till-station-queue")).not.toBeNull();
-    expect(main.querySelector("till-basket")).toBeNull();
-    expect(main.querySelector("till-total")).toBeNull();
-    expect(main.querySelector("till-tender-pay")).toBeNull();
-    expect(main.querySelector("till-held-orders")).toBeNull();
-    expect(main.querySelector("till-station-queue")).toBeNull();
+    const grid = cardGrid(el)!;
+    expect(grid).not.toBeNull();
+    await grid.updateComplete;
+    expect(grid.shadowRoot!.querySelector("till-product-grid")).not.toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-total")).not.toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 
-  it("threads the default station's queue (and station id) through to the station-queue widget as a rail", async () => {
+  it("threads the counter tab through to the card grid", async () => {
+    const { el } = await mount();
+    expect(cardGrid(el)!.tab).toBe(counterTab);
+  });
+
+  it("renders the grid body and NONE of the legacy region containers (region model removed)", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".region-main")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".region-aside")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".grid-body")).not.toBeNull();
+  });
+
+  it("threads the default station's queue (and station id) through to the card grid", async () => {
     const stationQueue = [
       {
         orderId: "wo-1",
@@ -78,7 +104,6 @@ describe("till-counter-screen", () => {
         label: "Mesa 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "settled" as const,
-        // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds.
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         items: [
           {
@@ -94,13 +119,12 @@ describe("till-counter-screen", () => {
       },
     ];
     const { el } = await mount({ stationQueue, defaultStationId: "st-1" });
-    const queue = el.shadowRoot!.querySelector("till-station-queue")!;
-    expect((queue as unknown as { groups: unknown }).groups).toBe(stationQueue);
-    expect((queue as unknown as { view: string }).view).toBe("rail");
-    expect((queue as unknown as { stationId: string }).stationId).toBe("st-1");
+    const grid = cardGrid(el)!;
+    expect(grid.stationQueue).toBe(stationQueue);
+    expect(grid.defaultStationId).toBe("st-1");
   });
 
-  it("threads the held-orders list through to the held-orders widget", async () => {
+  it("threads the held-orders list through to the card grid", async () => {
     const heldOrders = [
       {
         id: "wo-1",
@@ -112,104 +136,39 @@ describe("till-counter-screen", () => {
       },
     ];
     const { el } = await mount({ heldOrders });
-    const held = el.shadowRoot!.querySelector("till-held-orders")!;
-    expect(held.orders).toBe(heldOrders);
+    expect(cardGrid(el)!.heldOrders).toBe(heldOrders);
   });
 
-  it("is layout-driven: a layout that omits `total` renders no total widget, keeping the rest", async () => {
-    const layout: LayoutDef = LAYOUT_A.filter((widget) => widget.type !== "total");
-    const { el } = await mount({ layout });
-    // the render follows the DATA — drop `total` from the layout and the widget is gone
-    expect(el.shadowRoot!.querySelector("till-total")).toBeNull();
-    // the widgets the layout still names are all present
-    expect(el.shadowRoot!.querySelector("till-product-grid")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
-  });
-
-  it("is layout-driven: an empty layout renders no widgets at all", async () => {
-    const { el } = await mount({ layout: [] });
-    expect(el.shadowRoot!.querySelector("till-product-grid")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-basket")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-total")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
-  });
-
-  it("renders the grid renderer when a counter tab is supplied", async () => {
-    const { el } = await mount({ counterTab });
-    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
-    // legacy region containers are gone in the grid path
-    expect(el.shadowRoot!.querySelector(".region-aside")).toBeNull();
-  });
-
-  it("falls back to the region model when no counter tab is supplied", async () => {
-    const { el } = await mount({});
-    expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".region-main")).not.toBeNull();
-  });
-
-  it("passes the SAME store instance to every widget (they coordinate through one store)", async () => {
+  it("passes the SAME store instance to the card grid (which coordinates the cards through it)", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mount({ store });
-    const grid = el.shadowRoot!.querySelector("till-product-grid")!;
-    const basket = el.shadowRoot!.querySelector("till-basket")!;
-    const total = el.shadowRoot!.querySelector("till-total")!;
-    const pay = el.shadowRoot!.querySelector("till-tender-pay")!;
-    expect(grid.store).toBe(store);
-    expect(basket.store).toBe(store);
-    expect(total.store).toBe(store);
-    expect(pay.store).toBe(store);
+    expect(cardGrid(el)!.store).toBe(store);
   });
 
-  it("threads cardProvider, tipsEnabled and cardOutcome through to the pay widget (Task 9)", async () => {
+  it("threads cardProvider, tipsEnabled and cardOutcome through to the card grid (Task 9)", async () => {
     const { el } = await mount({
       cardProvider: "stripe_on_device",
       tipsEnabled: true,
       cardOutcome: "declined",
     });
-    const pay = el.shadowRoot!.querySelector("till-tender-pay")!;
-    expect(pay.cardProvider).toBe("stripe_on_device");
-    expect(pay.tipsEnabled).toBe(true);
-    expect(pay.cardOutcome).toBe("declined");
+    const grid = cardGrid(el)!;
+    expect(grid.cardProvider).toBe("stripe_on_device");
+    expect(grid.tipsEnabled).toBe(true);
+    expect(grid.cardOutcome).toBe("declined");
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
     const { el } = await mount();
-    const pay = el.shadowRoot!.querySelector("till-tender-pay")!;
-    expect(pay.cardProvider).toBe("none");
-    expect(pay.tipsEnabled).toBe(false);
-    expect(pay.cardOutcome).toBeUndefined();
+    const grid = cardGrid(el)!;
+    expect(grid.cardProvider).toBe("none");
+    expect(grid.tipsEnabled).toBe(false);
+    expect(grid.cardOutcome).toBeUndefined();
   });
 
-  it("threads a product-grid's `columns` config through to the grid widget (product-grid.columns)", async () => {
-    const layout: LayoutDef = [{ type: "product-grid", region: "main", config: { columns: 4 } }];
-    const { el } = await mount({ layout });
-    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-    expect(grid.columns).toBe(4);
-  });
-
-  it("leaves `columns` unset when the product-grid config carries none", async () => {
-    const layout: LayoutDef = [{ type: "product-grid", region: "main", config: {} }];
-    const { el } = await mount({ layout });
-    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-    expect(grid.columns).toBeUndefined();
-  });
-
-  it("ignores a non-numeric `columns` config value, leaving the grid's responsive default", async () => {
-    // The config bag is `Record<string, unknown>`; the screen narrows `columns` to a number and passes
-    // it through only then, so a malformed value can never reach the widget as a bad column count.
-    const layout: LayoutDef = [
-      { type: "product-grid", region: "main", config: { columns: "four" } },
-    ];
-    const { el } = await mount({ layout });
-    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-    expect(grid.columns).toBeUndefined();
-  });
-
-  it("passes the products through to the product grid", async () => {
+  it("passes the products through to the card grid", async () => {
     const { el } = await mount();
-    const grid = el.shadowRoot!.querySelector("till-product-grid")!;
-    expect(grid.products).toBe(products);
+    // With no menu selected and no diet lens, the visible set is the whole product list (same ref).
+    expect(cardGrid(el)!.products).toBe(products);
   });
 
   // ── Menu diet filter (dietary-classification, Task 7) ────────────────────────────────────────
@@ -235,14 +194,16 @@ describe("till-counter-screen", () => {
     const { el } = await mount({ products: [veganDish, meatDish] });
     const filter = el.shadowRoot!.querySelector("till-diet-filter")!;
     expect(filter).not.toBeNull();
-    // Both dishes are in the grid before any lens.
-    let grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-    expect(grid.products.map((p) => p.id).sort()).toEqual(["meat", "vegan"]);
-    // Pick the vegan lens — the grid drops the meat dish.
+    // Both dishes are handed to the grid before any lens.
+    expect(
+      cardGrid(el)!
+        .products.map((p) => p.id)
+        .sort(),
+    ).toEqual(["meat", "vegan"]);
+    // Pick the vegan lens — the grid is handed only the vegan dish.
     filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
     await el.updateComplete;
-    grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-    expect(grid.products.map((p) => p.id)).toEqual(["vegan"]);
+    expect(cardGrid(el)!.products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
   it("shows the logged-in operator name in the header", async () => {
@@ -306,8 +267,9 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(
       t("allergens.open"),
     );
-    // Default: the sale body, not the allergen screen.
+    // Default: the sale body (the grid), not the allergen screen.
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
   });
 
@@ -317,9 +279,9 @@ describe("till-counter-screen", () => {
     await el.updateComplete;
     const screen = el.shadowRoot!.querySelector<TillAllergenScreen>("till-allergen-screen");
     expect(screen).not.toBeNull();
-    // The sale body (product tiles etc.) is gone — the allergen screen is NOT the tiles.
+    // The sale body (the grid) is gone — the allergen screen replaces it.
     expect(el.shadowRoot!.querySelector(".body")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-product-grid")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
     // The three inputs the screen needs are threaded through.
     expect(screen!.products).toBe(products);
     expect(screen!.locale).toBe(currentLocale());

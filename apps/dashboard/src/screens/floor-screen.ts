@@ -46,7 +46,7 @@ interface EditableTable {
 
 /**
  * The management dashboard's FLOOR-PLAN SCREEN: configures the venue's floor zones and dining
- * tables (FP-1, design §3d), mirroring `service-status-screen.ts`/`layout-screen.ts`. On connect it
+ * tables (FP-1, design §3d), mirroring `service-status-screen.ts`. On connect it
  * loads `api.listZones()` + `api.listTables()` into editable rows across two panels — Zonas and Mesas.
  * A Zona row edits its name + display order and Guardar-s it; a Mesa row edits its label + seat count
  * and Guardar-s it, and its zone <select> ASSIGNS the table to a zone the moment it changes. A
@@ -55,8 +55,8 @@ interface EditableTable {
  * Each mutation drives the PER-ITEM CRUD on the injected `api` and RELOADS both lists afterwards (the
  * `service-status-screen` idiom): FP-1's routes are per-item POST/PATCH/DELETE, not a single bulk PUT,
  * so create, save-row, assign-zone and deactivate each hit one endpoint then call `#load` to resync.
- * A row's save reads its CURRENT values from state at click time (like `layout-screen`'s `#save`),
- * never a stale render closure, so an edit made just before the click is the one that persists.
+ * A row's save reads its CURRENT values from state at click time (like `service-status-screen`'s
+ * `#saveRow`), never a stale render closure, so an edit made just before the click is the one that persists.
  *
  * The zone <select> can only ASSIGN a zone, never clear one: the table PATCH route takes a `zoneId`
  * string and has no null form (clearing is a deferred backlog follow-up). So the blank "— sin zona —"

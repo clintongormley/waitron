@@ -65,7 +65,7 @@ function inRange(value: string, min: number, max: number): boolean {
  * supplier invoice (factura recibida) — the scalar header (supplier identity, the two civil dates, the
  * gross total, the VAT regime, the deductible proportion, an optional note) plus an embedded DESGLOSE
  * SUB-EDITOR that manages a variable number of per-rate VAT lines (rate/base/tax + kind), each with an
- * add/remove control (the `layout-screen` add/remove-rows mechanic over a `@state() lines`).
+ * add/remove control (the add/remove-rows mechanic over a `@state() lines`).
  *
  * The purchases screen drives it by setting `.open` and (for an edit) `.invoice`, and hears one of two
  * events: `create-purchase` (a `PurchaseInvoiceInput`) or `update-purchase { id, patch }` (a full

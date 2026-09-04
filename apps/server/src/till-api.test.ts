@@ -7,8 +7,8 @@ import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
-import { DEFAULT_LAYOUT, DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
-import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
+import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
+import type { ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
   assignCatalogueToLocation,
@@ -718,7 +718,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // customer receipt, the till's UI locale, (7c) the location's pay-timing mode, and (integrated
     // card terminal) the card provider + tips flag the client picks its collect route / UI from. This
     // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off. The tenant has
-    // authored no layout, so `layout`/`receipt` are the built-in defaults (Task 8).
+    // authored no receipt or canvas, so `receipt` is the built-in default (Task 8) and `canvas` is the
+    // `till` form-factor default resolved even for this cookieless request (SP-B4); `layout` is gone.
     expect(body).toEqual({
       locale: "es-ES",
       // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
@@ -738,8 +739,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       courses: [],
       cardProvider: "none",
       tipsEnabled: false,
-      layout: DEFAULT_LAYOUT,
       receipt: DEFAULT_RECEIPT,
+      // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
+      // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
+      canvas: DEFAULT_CANVASES.till,
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
@@ -875,43 +878,37 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till returns the AUTHORED layout + receipt when the tenant has one, not the defaults", async () => {
-    // Seed a `till_layouts` row for the till's tenant (as the PGlite superuser, RLS bypassed — pure
-    // setup, like the other seeds here). `GET /api/till` must return THIS authored definition/receipt
-    // rather than DEFAULT_LAYOUT/DEFAULT_RECEIPT, proving the route reads the store rather than a
-    // constant. Cleaned up in `finally` so the shared-tenant default case above stays order-independent
-    // (CLAUDE.md §4). The authored layout differs from DEFAULT_LAYOUT (a product-grid columns config +
-    // a trimmed widget set) so a route that hardcoded the default would fail this.
-    const authored: LayoutDef = [
-      { type: "product-grid", region: "main", config: { columns: 5 } },
-      { type: "basket", region: "aside", config: {} },
-      { type: "total", region: "aside", config: {} },
-      { type: "tender-pay", region: "aside", config: {} },
-    ];
+  it("GET /api/till returns the AUTHORED receipt (tenant_receipts), not the default, and no `layout` field", async () => {
+    // Seed the till's tenant (as the PGlite superuser, RLS bypassed — pure setup, like the other seeds
+    // here) with an authored RECEIPT in `tenant_receipts`. `GET /api/till` must return it via
+    // `getReceipt`, proving the read hits its own store rather than a constant. The `layout` field is
+    // GONE from the payload as of SP-B4 (the counter renders from `canvas` now), so the test also pins
+    // its absence. Cleaned up in `finally` so the shared-tenant default case above stays
+    // order-independent (CLAUDE.md §4).
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
     await suite.db.execute(sql`
-      insert into till_layouts (tenant_id, definition, receipt)
-      values (${cfg.tenantId}, ${JSON.stringify(authored)}::jsonb, ${JSON.stringify(authoredReceipt)}::jsonb)`);
+      insert into tenant_receipts (tenant_id, receipt)
+      values (${cfg.tenantId}, ${JSON.stringify(authoredReceipt)}::jsonb)`);
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
       const res = await app.request("/api/till");
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { layout: LayoutDef; receipt: ReceiptConfig };
-      expect(body.layout).toEqual(authored);
-      expect(body.receipt).toEqual(authoredReceipt);
+      const body = (await res.json()) as { receipt: ReceiptConfig };
+      expect(body.receipt).toEqual(authoredReceipt); // from tenant_receipts
+      expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from till_layouts where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from tenant_receipts where tenant_id = ${cfg.tenantId}`);
     }
   });
 
   it("GET /api/till surfaces the calling device's assigned canvas when it carries a canvasId (SP-A.2 §16.3)", async () => {
-    // Additive boot read: a booting device (device cookie present) whose device has an assigned layout
-    // canvas gets the resolved CanvasDef under `canvas`, ALONGSIDE the unchanged layout/receipt (the
-    // counter still renders from layout/receipt until SP-B). Seed a canvas, enrol a `till` device bound
-    // to it, and prove `GET /api/till` resolves + returns it. Cleaned up in `finally` so the shared-tenant
-    // no-cookie assertion above stays order-independent (CLAUDE.md §4).
+    // A booting device (device cookie present) whose device has an assigned layout canvas gets the
+    // resolved CanvasDef under `canvas` (the counter renders from `canvas` — there is no `layout` field
+    // any more, SP-B4). Seed a canvas, enrol a `till` device bound to it, and prove `GET /api/till`
+    // resolves + returns it. Cleaned up in `finally` so the shared-tenant no-cookie assertion above
+    // stays order-independent (CLAUDE.md §4).
     const prof = await suite.db.execute<{ id: string }>(sql`
       insert into canvases (tenant_id, name, definition)
       values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
@@ -926,15 +923,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         canvas: unknown;
-        layout: LayoutDef;
         receipt: ReceiptConfig;
       };
       // The resolved CanvasDef, verbatim (the `getCanvas` definition).
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
-      // The pre-existing boot fields are UNCHANGED — the tenant authored no widget layout, so both stay
-      // the built-in defaults. The canvas is additive, NOT a replacement for layout/receipt (SP-B).
-      expect(body.layout).toEqual(DEFAULT_LAYOUT);
+      // The tenant authored no receipt, so it stays the built-in default. No `layout` field (SP-B4).
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
+      expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
       await suite.db.execute(sql`delete from canvases where tenant_id = ${cfg.tenantId}`);
@@ -950,25 +945,30 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         canvas: unknown;
-        layout: LayoutDef;
         receipt: ReceiptConfig;
       };
       // No stored canvas of this form factor → the built-in default for a till device.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
-      expect(body.layout).toEqual(DEFAULT_LAYOUT);
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
+      expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
     }
   });
 
-  it("omits the canvas entirely when the request carries no device cookie", async () => {
+  it("resolves the `till` form-factor default canvas when the request carries no device cookie", async () => {
+    // Cookieless (no device): the boot read now resolves the `till` form-factor default canvas
+    // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till when the tenant has authored none) rather than
+    // leaving `canvas` absent — this is the SP-B4 enabling change that guarantees the counter always has
+    // a canvas to render. No `layout` field either.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const res = await app.request("/api/till"); // no cookie header
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).not.toHaveProperty("canvas");
+    expect(body).toHaveProperty("canvas");
+    expect((body as { canvas: unknown }).canvas).toEqual(DEFAULT_CANVASES.till);
+    expect(body).not.toHaveProperty("layout");
   });
 });
 

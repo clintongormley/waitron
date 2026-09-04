@@ -5,28 +5,24 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 import { ReceiptScreen } from "./receipt-screen.js";
 
 /**
- * The receipt editor screen. Its `api` is a stub: `getLayout` returns a known layout+receipt the
- * screen loads on connect (it reads only the `receipt` half), `putReceipt` a spy the Guardar path
- * calls with the composed config. Assertions cover each behaviour on its own: the two fields LOAD from
- * `getLayout().receipt`; editing them and clicking Guardar calls `putReceipt` with the composed config;
+ * The receipt editor screen. Its `api` is a stub: `getReceipt` returns the known receipt trim the
+ * screen loads on connect, `putReceipt` a spy the Guardar path calls with the composed config.
+ * Assertions cover each behaviour on its own: the two fields LOAD from `getReceipt().receipt`;
+ * editing them and clicking Guardar calls `putReceipt` with the composed config;
  * a blank field yields an ABSENT key (so an empty input never sends `""` — the config matches
- * `DEFAULT_RECEIPT = {}` rather than `{ headerSubtitle: "" }`); a rejected `putReceipt`/`getLayout`
+ * `DEFAULT_RECEIPT = {}` rather than `{ headerSubtitle: "" }`); a rejected `putReceipt`/`getReceipt`
  * surfaces a `role="alert"` whose text is the LOCALISED copy for the code, never the raw wire code.
  */
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
-    getLayout: vi.fn().mockResolvedValue({
-      // The layout half is irrelevant to this screen; a bare definition keeps the shape honest.
-      definition: [{ type: "product-grid", region: "main", config: {} }],
-      receipt: { ...receipt },
-    }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight getLayout and the follow-up render. */
+/** Settles the in-flight getReceipt and the follow-up render. */
 async function flush(el: ReceiptScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -56,7 +52,7 @@ function typeFooter(el: ReceiptScreen, value: string): void {
 afterEach(cleanupWidgets);
 
 describe("receipt-screen", () => {
-  it("loads the two fields from getLayout().receipt on connect", async () => {
+  it("loads the two fields from getReceipt().receipt on connect", async () => {
     const api = stubApi(
       {},
       { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
@@ -64,7 +60,7 @@ describe("receipt-screen", () => {
     const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
     await flush(el);
 
-    expect(api.getLayout).toHaveBeenCalledTimes(1);
+    expect(api.getReceipt).toHaveBeenCalledTimes(1);
     const header = q(el, "[data-test=header-subtitle]") as HTMLElement & { value: string };
     const footer = q(el, "[data-test=footer-message]") as HTMLTextAreaElement;
     expect(header.value).toBe("Calle Mayor 1");
@@ -187,7 +183,7 @@ describe("receipt-screen", () => {
   });
 
   it("shows an error key when the initial load is rejected (and never rejects)", async () => {
-    const api = stubApi({ getLayout: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const api = stubApi({ getReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
     await flush(el);
 

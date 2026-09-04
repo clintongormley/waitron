@@ -12,10 +12,7 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
  */
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
-    getLayout: vi.fn().mockResolvedValue({
-      definition: [{ type: "product-grid", region: "main", config: {} }],
-      receipt: { ...receipt },
-    }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;

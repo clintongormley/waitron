@@ -16,7 +16,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
  * supplies `current_tenant_id()` and no function here sets a GUC. Proven under that exact shape in
  * `canvas-store.rls.test.ts` (real Postgres — RLS as the app role is a false pass on PGlite,
- * CLAUDE.md §4). Mirrors `store.ts` (till_layouts).
+ * CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
  *
  * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
@@ -24,7 +24,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * per-tenant name unique is translated to `canvas.name_taken` (see `asNameTaken`). `deleteCanvas`
  * authorises but has no definition to validate. Reads cast the opaque jsonb back to `CanvasDef`
  * WITHOUT re-running `validateCanvas` — the value was validated on the write that stored it and the
- * only writer is this service, the `getLayout` rationale (store.ts). The `as` cast re-attaches the
+ * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as` cast re-attaches the
  * shape the plain-jsonb column drops (it is not `.$type<>()`-annotated, to avoid a
  * `@waitron/layouts` → `@waitron/db` circular dependency, see `packages/db/src/schema/canvases.ts`).
  */
@@ -180,7 +180,7 @@ export async function deleteCanvas(
 
 /**
  * The tenant's first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
- * — the "return-a-default-when-unauthored" precedent from getLayout (store.ts). The form factor is
+ * — the "return-a-default-when-unauthored" precedent shared with `getReceipt` (receipt-store.ts). The form factor is
  * carried inside the opaque `definition` jsonb (`->> 'formFactor'`), not a column; "first" is by
  * `created_at` for a stable pick when a tenant has several of one form factor.
  */

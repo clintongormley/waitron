@@ -10,14 +10,14 @@ import { tenants } from "./tenants.js";
  * `definition` is PLAIN jsonb, deliberately NOT `.$type<>()`-annotated with the `@waitron/layouts`
  * shape: `@waitron/layouts` depends on `@waitron/db`, so importing its types here would be a circular
  * dependency. The store service validates the whole CanvasDef on write; the database stores opaque
- * jsonb. Same rationale — and same precedent — as `till_layouts` (layouts.ts).
+ * jsonb. Same rationale — and same precedent — as `tenant_themes` (tenant-themes.ts).
  *
  * FK `restrict`, not cascade: removing a tenant must never silently discard its authored canvases.
- * The `/* v8 ignore next *\/` on the thunk arrow addresses the SAME v8 quirk `till_layouts` documents —
+ * The `/* v8 ignore next *\/` on the thunk arrow addresses the SAME v8 quirk the FK-thunk form has —
  * drizzle-kit resolves the FK in a separate CLI process, so v8 counts the never-invoked arrow as an
- * uncovered function — but by a DIFFERENT remedy: `till_layouts` sidesteps it with the array
- * `foreignKey({...})` form (no thunk), whereas this table keeps the `.references(() => …)` thunk and
- * silences the false uncovered-function with the v8-ignore.
+ * uncovered function — but by a DIFFERENT remedy than the array `foreignKey({...})` form
+ * `management_sessions` and `tenant_themes` use (no thunk): this table keeps the `.references(() => …)`
+ * thunk and silences the false uncovered-function with the v8-ignore.
  *
  * `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`. The `FORCE`, the tenant-isolation policy and
  * the app_user grants (SELECT/INSERT/UPDATE/DELETE — canvases are deletable) are hand-written in the
@@ -33,9 +33,9 @@ export const canvases = pgTable(
       .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     definition: jsonb("definition").notNull(),
-    // Timestamps: `mode: "string"` follows the NEWER `devices` precedent (devices.ts), NOT `till_layouts`
-    // (which uses `mode: "date"`) — an inert Drizzle read-type choice, not a column-type difference; the
-    // "same precedent as till_layouts" note above is about the jsonb decision only, not these columns.
+    // Timestamps: `mode: "string"` follows the `devices` precedent (devices.ts) — an inert Drizzle
+    // read-type choice, not a column-type difference; the "same precedent" note above is about the
+    // jsonb decision only, not these columns.
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

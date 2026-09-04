@@ -103,10 +103,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
-    // The layout + receipt screens the nav mounts both load `getLayout` on connect; resolve it (and
-    // stub the two writers they call on Guardar) so navigating to either leaves no stray rejection.
-    getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
-    putLayout: vi.fn().mockResolvedValue(undefined),
+    // The receipt screen the nav mounts loads `getReceipt` on connect; resolve it (and stub the
+    // writer it calls on Guardar) so navigating to it leaves no stray rejection.
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     // The service-status screen the nav mounts loads this on connect; resolve it so navigating to it
     // leaves no stray rejection.
@@ -186,7 +185,6 @@ const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-o
 const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
-const layout = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-layout-screen");
 const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
 const statuses = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-service-status-screen");
@@ -211,8 +209,6 @@ const navStaff = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]");
 const navCatalogue = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]");
-const navLayout = (el: DashboardApp) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-layout]");
 const navReceipt = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]");
 const navStatuses = (el: DashboardApp) =>
@@ -239,7 +235,7 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The twenty manager faces the grouped sidebar switches between (for a manager/admin session —
+/** The nineteen manager faces the grouped sidebar switches between (for a manager/admin session —
  * `diagnostics` is manager-gated), every one keeping its `data-test` id. Order is the sidebar's render
  * order (pinned overview+sales, then Menu / Service / Team / Purchasing / Configuration). */
 const NAV_SCREENS = [
@@ -257,7 +253,6 @@ const NAV_SCREENS = [
   "approvals",
   "planned-actual",
   "purchases",
-  "layout",
   "receipt",
   "devices",
   "printers",
@@ -288,7 +283,6 @@ const SCREEN_TAGS = [
   "dashboard-sales-screen",
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
-  "dashboard-layout-screen",
   "dashboard-receipt-screen",
   "dashboard-service-status-screen",
   "dashboard-roster-screen",
@@ -651,20 +645,19 @@ describe("dashboard-app", () => {
 
   // Roster ("Turnos"), approvals ("Aprobaciones"), planned-actual ("Previsto vs real"), purchases
   // ("Compras") and service-status ("Estados de servicio") each have their own dedicated nav test
-  // above, so this test walks the remaining four faces (staff / catalogue / layout / receipt).
+  // above, so this test walks the remaining three faces (staff / catalogue / receipt).
   // Exactly one screen — and exactly one <h1> (each screen owns its own; the shell adds none) — shows
   // at a time.
-  it("navigates the four non-roster logged-in screens, one screen and one h1 at a time", async () => {
+  it("navigates the three non-roster logged-in screens, one screen and one h1 at a time", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
-    // Opens on overview (Task 9's non-staff landing), with all four nav controls present.
+    // Opens on overview (Task 9's non-staff landing), with all three nav controls present.
     expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
     expect(countH1(el)).toBe(1);
     expect(navStaff(el)).toBeTruthy();
     expect(navCatalogue(el)).toBeTruthy();
-    expect(navLayout(el)).toBeTruthy();
     expect(navReceipt(el)).toBeTruthy();
 
     // To staff.
@@ -672,13 +665,6 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
     expect(staff(el)).toBeTruthy();
-    expect(countH1(el)).toBe(1);
-
-    // To layout.
-    navLayout(el)!.click();
-    await flush(el);
-    expect(mountedScreens(el)).toEqual(["dashboard-layout-screen"]);
-    expect(layout(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
     // To receipt.
@@ -720,7 +706,7 @@ describe("dashboard-app", () => {
     expect(nav?.fields.screen).toBe("sales");
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the twenty manager
+  // The grouped static sidebar (Task 11): every group header renders, every one of the nineteen manager
   // faces (a manager session sees the gated `diagnostics` too) keeps its `data-test="nav-<screen>"` id,
   // and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
@@ -733,9 +719,9 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the twenty manager faces is present by its stable data-test id.
+    // …and every one of the nineteen manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(20);
+    expect(NAV_SCREENS).toHaveLength(19);
   });
 
   // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session
@@ -943,7 +929,6 @@ describe("dashboard-app", () => {
     expect(navSales(el)).toBeNull();
     expect(navStaff(el)).toBeNull();
     expect(navCatalogue(el)).toBeNull();
-    expect(navLayout(el)).toBeNull();
     expect(navReceipt(el)).toBeNull();
   });
 

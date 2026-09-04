@@ -100,8 +100,7 @@ export class CanvasGridPreview extends LitElement {
 
   #tile(card: CardInstance, index: number): TemplateResult {
     // The card-name key (`canvas_editor.card.<type>`) is present in both locales for every
-    // `CardType`; the cast is still required because the template literal widens to `string`
-    // (mirrors layout-screen.ts's `widget.<type>` pattern).
+    // `CardType`; the cast is still required because the template literal widens to `string`.
     const name = t(`canvas_editor.card.${card.type}` as StringKey);
     const badge = `${card.colSpan}×${card.rowSpan}`;
     const style = `grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}`;

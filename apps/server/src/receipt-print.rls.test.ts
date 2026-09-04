@@ -357,6 +357,38 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
   });
 
+  it("prints the tenant's authored receipt trim from tenant_receipts (SP-B4 rehome)", async () => {
+    // The receipt trim lives in `tenant_receipts`, read via `getReceipt`. Seed a trim there (raw insert
+    // under RLS as the app role — pure setup) and prove it renders in the printed ticket. Against the
+    // pre-rehome code (which read the trim from the old widget-layout row) this footer is absent, so the
+    // assertion fails — the by-source proof for the repoint.
+    const { cfg, each } = await setupVenue();
+    const printerId = await makePrinter(cfg, { transport: "network_tcp" });
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        insert into tenant_receipts (tenant_id, receipt)
+        values (${cfg.tenantId}, ${JSON.stringify({ footerMessage: "Gracias por su visita" })}::jsonb)`);
+    });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        lines: [{ productId: each.id, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    const decoded = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    expect(decoded).toContain("VERI*FACTU"); // still a real fiscal receipt
+    expect(decoded).toContain("Gracias por su visita"); // the authored trim renders around the art
+  });
+
   it("auto + printer + CARD: enqueues the receipt with NO kick and records NO drawer open", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);

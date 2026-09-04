@@ -2,7 +2,7 @@
 /**
  * Canonical types for the layout-CANVAS model (design §4): a canvas is a dashboard for one form
  * factor — 1+ tabs, each tab a grid, every screen a card. The dashboard + till keep bundle-decoupled
- * local copies of these shapes, as with the older WidgetInstance model in ./types.ts.
+ * local copies of these shapes.
  */
 
 /** The device form factors a canvas can target (design §4.1 — form factor is the sizing guardrail). */
@@ -12,8 +12,7 @@ export type FormFactor = (typeof FORM_FACTORS)[number];
 /**
  * The card catalogue — the single source of truth for placeable card kinds. "Big" cards fill a tab
  * (floor-plan, kds-board, expo, table-order, table-layout-editor); "small" cards share a grid. Adding
- * a card is a one-line change here + a contract in card-contract.ts. During SP-A the counter cards
- * overlap the older WIDGET_TYPES (./types.ts); the old tuple is removed once rendering swaps (SP-A end).
+ * a card is a one-line change here + a contract in card-contract.ts.
  */
 export const CARD_TYPES = [
   "product-grid",

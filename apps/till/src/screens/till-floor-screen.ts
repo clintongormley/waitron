@@ -775,8 +775,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** The state-specific body of a card. The switch is exhaustive over {@link TableState.state}'s three
-   * members (like the counter screen's `#widget`), so a new occupancy state is a compile error here
-   * rather than a silently blank card. */
+   * members, so a new occupancy state is a compile error here rather than a silently blank card. */
   #occupancy(table: TableState): TemplateResult {
     switch (table.state) {
       case "open-tab":

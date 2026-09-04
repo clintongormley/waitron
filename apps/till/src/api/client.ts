@@ -16,10 +16,10 @@
  * follow — a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
  */
 
-// The till's LOCAL layout/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
-// exactly like every interface below. `GET /api/till` carries the authored-or-default arrangement +
-// receipt trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
-import type { CanvasDef, LayoutDef, ReceiptConfig } from "../layout.js";
+// The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
+// exactly like every interface below. `GET /api/till` carries the device's layout canvas + the receipt
+// trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
+import type { CanvasDef, ReceiptConfig } from "../layout.js";
 // `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
@@ -39,11 +39,10 @@ export type FetchLike = typeof fetch;
  * `cardProvider: "none"`) — needed so the counter can choose whether to render the integrated-card
  * pay control at all, and whether that control prompts for a tip.
  *
- * `layout`/`receipt` (layout & receipt editors) are the owner-authored till arrangement and receipt
- * trim, or the built-in defaults when the tenant has never opened the editor — the server always sends
- * both (`getLayout` returns `DEFAULT_LAYOUT`/`DEFAULT_RECEIPT` on absence, `till-api.ts`). Like
- * `orderFlow`/`venueName` they carry no secrets, only the widget arrangement + footer text. The app
- * renders `layout` in place of the hardcoded `LAYOUT_A` and threads `receipt` to its ticket.
+ * `receipt` (receipt editor) is the owner-authored receipt trim, or the built-in default when the tenant
+ * has never opened the editor — the server always sends it (`getReceipt` returns `DEFAULT_RECEIPT` on
+ * absence, `till-api.ts`). Like `orderFlow`/`venueName` it carries no secrets, only the footer text. The
+ * app threads `receipt` to its ticket and renders the sale body from {@link canvas}.
  */
 export interface TillInfo {
   locale: string;
@@ -86,17 +85,16 @@ export interface TillInfo {
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
-  layout: LayoutDef;
   receipt: ReceiptConfig;
   /**
-   * The CALLING device's assigned layout CANVAS (SP-A.2 §16.3) — present for ANY enrolled device: the
-   * device's explicitly assigned canvas, or the form-factor DEFAULT the server falls back to when the
-   * device has none. ABSENT only when the boot request carried no device cookie at all (an
-   * un-enrolled/pre-pairing request). ADDITIVE: the app still renders from {@link layout}/{@link receipt}
-   * above. A LOCAL mirror of the server's `CanvasDef`, never imported from `@waitron/layouts` — the
-   * bundle rule. Consumed by SP-B1: the counter renders from this canvas's counter tab.
+   * The CALLING device's layout CANVAS (SP-A.2 §16.3) — the device's explicitly assigned canvas, or the
+   * form-factor DEFAULT the server falls back to when the device has none (a cookieless / pre-pairing
+   * request gets the `till` default). The server resolves one for EVERY boot, so this is REQUIRED (SP-B4
+   * dropped the old region-model `layout` it was additive to). A LOCAL mirror of the server's `CanvasDef`,
+   * never imported from `@waitron/layouts` — the bundle rule. The counter renders from this canvas's
+   * counter tab.
    */
-  canvas?: CanvasDef;
+  canvas: CanvasDef;
 }
 
 /**

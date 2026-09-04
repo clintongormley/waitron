@@ -13,9 +13,9 @@ import { tenants } from "./tenants.js";
 // SECURITY and the policy, so the same assertions there would be a false pass (CLAUDE.md §4). The
 // FORCE flag itself is proven by the fiscal-verifactu `inmutabilidad` metadata scan, which is the
 // only guard that can see it — as the owner is a superuser in this harness, removing FORCE leaves
-// this behavioural suite green. Mirrors layouts.rls.test.ts (till_layouts). canvases is
-// DELETABLE (canvases come and go), so this suite also proves the DELETE grant, which till_layouts
-// deliberately lacks.
+// this behavioural suite green. Mirrors tenant-themes.rls.test.ts. canvases is DELETABLE (canvases
+// come and go), so this suite also proves the DELETE grant, which the replace-in-place config tables
+// (tenant_themes / tenant_receipts) deliberately lack.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -60,7 +60,8 @@ describe("canvases under real row-level security", () => {
 
   it("lets the app role UPDATE and DELETE its own tenant's canvases (the full grant)", async () => {
     // canvases carries GRANT SELECT, INSERT, UPDATE, DELETE — canvases are mutable AND
-    // deletable, unlike till_layouts (no DELETE). Exercise UPDATE then DELETE as the app role under
+    // deletable, unlike the replace-in-place config tables (tenant_themes, no DELETE). Exercise UPDATE
+    // then DELETE as the app role under
     // its own GUC so both the grant verbs and the policy's USING+WITH CHECK are on the path.
     const tenantId = "33333333-3333-4333-8333-333333333333";
     await suite.admin.insert(tenants).values({

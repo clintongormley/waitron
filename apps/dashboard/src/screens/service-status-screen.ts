@@ -20,15 +20,15 @@ interface EditableStatus {
 
 /**
  * The management dashboard's SERVICE-STATUS SCREEN: configures the table statuses a server can set on a
- * table (design §3a), mirroring `receipt-screen.ts`/`layout-screen.ts`. On connect it loads
+ * table (design §3a), mirroring `receipt-screen.ts`. On connect it loads
  * `api.listStatuses()` (active + inactive) into editable rows; per row a manager edits the
  * label/colour/order/active toggle and Guardar-s it, and a "new status" form authors a fresh one.
  *
  * Each mutation drives the PER-ITEM CRUD on the injected `api` and RELOADS afterwards (the
  * `category-manager` idiom): Task 8's routes are per-item POST/PATCH/DELETE, not a single bulk PUT like
- * the layout/receipt config, so there is no "compose the whole thing and PUT it" path here — create,
+ * the receipt config, so there is no "compose the whole thing and PUT it" path here — create,
  * save-row and deactivate each hit one endpoint then call `#load` to resync. A row's save reads its
- * CURRENT values from state at click time (like `layout-screen`'s `#save`), never a stale render
+ * CURRENT values from state at click time, never a stale render
  * closure, so an edit made just before the click is the one that persists.
  *
  * Gating is server-side (`till.configure`): the shell hides this nav from a `staff` session and every
@@ -156,7 +156,7 @@ export class ServiceStatusScreen extends LitElement {
   /**
    * Persist the CURRENT values of the row `id` holds, then reload. Reads the row from state at click
    * time (not a captured render closure), so an edit made immediately before the click is what
-   * persists — the `layout-screen` `#save` discipline. A vanished row is a no-op. A rejection becomes
+   * persists — the reads-current-values `#saveRow` discipline. A vanished row is a no-op. A rejection becomes
    * the `errorKey` banner; never an unhandled rejection (called via `void`).
    */
   async #saveRow(id: string): Promise<void> {

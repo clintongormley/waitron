@@ -19,7 +19,6 @@ import "./screens/dashboard-sales-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/location-menus-screen.js";
-import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
@@ -38,16 +37,16 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
  * The faces of the management dashboard: sign in, view your own self-service schedule, manage staff,
- * author the catalogue, arrange the till layout, edit the receipt trim, configure the table service
+ * author the catalogue, edit the receipt trim, configure the table service
  * statuses, arrange the floor plan (zones + tables), configure the kitchen (stations + bump mode),
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
  * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- * `layout`, `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
- * `planned-actual`, `purchases`, `recipe`, `devices`, `printers` and `canvas-editor` are the nineteen
+ * `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
+ * `planned-actual`, `purchases`, `recipe`, `devices`, `printers` and `canvas-editor` are the eighteen
  * non-gated MANAGER faces the nav switches between (a manager/admin session also sees the gated
- * `diagnostics`, for twenty in all) — `overview` is also
+ * `diagnostics`, for nineteen in all) — `overview` is also
  * the post-login/post-probe LANDING for every non-staff role (Task 9); `my-schedule` is the sole face
  * of a `staff`-role session and carries no nav. All logged-in faces share the same chrome (logout, plus
  * the nav for a non-staff session).
@@ -60,7 +59,6 @@ type Screen =
   | "staff"
   | "catalogue"
   | "location-menus"
-  | "layout"
   | "receipt"
   | "statuses"
   | "floor"
@@ -134,7 +132,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     headerKey: "nav.group.configuration",
     items: [
-      { screen: "layout", labelKey: "nav.layout" },
       { screen: "receipt", labelKey: "nav.receipt" },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
@@ -149,7 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
  * machine (`login` | `my-schedule` | `overview` | `sales` | `staff` | `catalogue` | `location-menus` |
- * `layout` | `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
+ * `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
  * `purchases` | `recipe` | `devices` | `printers`) and does the event wiring the screens deliberately
  * do not:
  *
@@ -164,8 +161,8 @@ const NAV_GROUPS: NavGroup[] = [
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `overview` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the nineteen non-gated manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- *    `layout`, `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
+ *    the eighteen non-gated manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
+ *    `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
  *    `planned-actual`, `purchases`, `recipe`, `devices`, `printers` and `canvas-editor` (plus the gated
  *    `diagnostics`) — a plain local state change, no
  *    server call. A `staff` session has no
@@ -181,7 +178,7 @@ const NAV_GROUPS: NavGroup[] = [
  * `dashboard-sales-screen` the sole `<h1>Ventas y recaudación</h1>`, `dashboard-staff-screen` the sole
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-location-menus-screen` the sole `<h1>Menús por local</h1>`,
- * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
+ * `dashboard-receipt-screen` the sole
  * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
  * `dashboard-floor-screen` the sole `<h1>Sala</h1>`, `dashboard-kitchen-screen` the sole
  * `<h1>Cocina</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
@@ -337,8 +334,8 @@ export class DashboardApp extends LitElement {
 
   /** Whether the viewport is at/below the drawer breakpoint (Task 12). Tracked from `matchMedia` so the
    * shell knows when the sidebar is off-canvas: a CLOSED off-canvas sidebar must be made `inert` (see
-   * render) or its twenty nav buttons stay in the tab order and a11y tree while translated off-screen,
-   * so a keyboard user would tab through twenty invisible controls before reaching a visible one. At
+   * render) or its nineteen nav buttons stay in the tab order and a11y tree while translated off-screen,
+   * so a keyboard user would tab through nineteen invisible controls before reaching a visible one. At
    * desktop width the sidebar is in-flow and always interactive, so this is `false` there. */
   @state() private narrow = false;
 
@@ -570,7 +567,7 @@ export class DashboardApp extends LitElement {
       >
         <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
              breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
-             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its twenty nav buttons
+             off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nineteen nav buttons
              leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
              control; it is interactive at desktop width and whenever the drawer is open. -->
         ${
@@ -641,7 +638,7 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
-  /** The manager nav — the twenty-face switcher, shown only for a NON-staff session (a `staff` person
+  /** The manager nav — the nineteen-face switcher, shown only for a NON-staff session (a `staff` person
    * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
    * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
    * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
@@ -700,8 +697,6 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-location-menus-screen
           .api=${this.api}
         ></dashboard-location-menus-screen>`;
-      case "layout":
-        return html`<dashboard-layout-screen .api=${this.api}></dashboard-layout-screen>`;
       case "receipt":
         return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
       case "statuses":

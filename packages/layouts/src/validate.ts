@@ -1,18 +1,9 @@
 import { AppError } from "@waitron/shared";
-// Load this package's error-code registry so the `layout.invalid` / `receipt.invalid` throws below
-// have their `declare module "@waitron/shared"` augmentation in scope (reachability rule,
+// Load this package's error-code registry so the `receipt.invalid` throw below has its
+// `declare module "@waitron/shared"` augmentation in scope (reachability rule,
 // packages/shared/src/errors.ts).
 import "./errors.js";
-import type { LayoutDef, ReceiptConfig, WidgetType } from "./types.js";
-import { WIDGET_TYPES } from "./types.js";
-import { WIDGET_CONFIG } from "./widget-config.js";
-
-/**
- * The sale-critical widgets a sellable till MUST place (design D4). "A till that cannot sell is a
- * shop that cannot trade" (CLAUDE.md §5); `held-orders` / `prep-queue` stay optional. Relaxes when a
- * non-selling till type (a KDS) arrives.
- */
-const SALE_CRITICAL: readonly WidgetType[] = ["product-grid", "basket", "total", "tender-pay"];
+import type { ReceiptConfig } from "./types.js";
 
 /**
  * The character cap on each receipt trim field (design §5, assumption: 200). Exported so the editor
@@ -26,64 +17,6 @@ const RECEIPT_FIELDS = ["headerSubtitle", "footerMessage"] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isWidgetType(value: unknown): value is WidgetType {
-  return typeof value === "string" && (WIDGET_TYPES as readonly string[]).includes(value);
-}
-
-/**
- * Validate an untrusted `LayoutDef` (design §6). Returns the layout on success; throws
- * `layout.invalid` with a `reason` naming the first rule broken. Never echoes a user value — see
- * errors.ts for the param contract.
- */
-export function validateLayout(input: unknown): LayoutDef {
-  if (!Array.isArray(input)) {
-    throw new AppError("layout.invalid", { reason: "not_array" });
-  }
-  const seen = new Set<WidgetType>();
-  const result: LayoutDef = [];
-  for (const item of input) {
-    if (!isPlainObject(item) || !isWidgetType(item.type)) {
-      throw new AppError("layout.invalid", { reason: "unknown_widget" });
-    }
-    const type = item.type;
-    if (seen.has(type)) {
-      throw new AppError("layout.invalid", { reason: "duplicate", widget: type });
-    }
-    const region = item.region;
-    if (region !== "main" && region !== "aside") {
-      throw new AppError("layout.invalid", { reason: "bad_region", widget: type });
-    }
-    const config = item.config;
-    if (!isPlainObject(config)) {
-      throw new AppError("layout.invalid", { reason: "bad_config", widget: type });
-    }
-    const schema = WIDGET_CONFIG[type];
-    for (const [key, value] of Object.entries(config)) {
-      // OWN-property lookup, not a bare `schema[key]`: an index expression resolves prototype members
-      // (`toString`, `constructor`, `valueOf`, `hasOwnProperty`, `__proto__`) up the chain, so a
-      // hostile bag could ride a colliding key through (`toString`/`constructor` → accepted) or throw
-      // a raw TypeError → 500 (`valueOf`/`hasOwnProperty`/`__proto__`) instead of a clean `bad_config`.
-      // Verified by running the loop; the five cases are pinned in validate.test.ts. Fail-closed (D8).
-      const validator = Object.hasOwn(schema, key) ? schema[key] : undefined;
-      if (validator === undefined || !validator(value)) {
-        throw new AppError("layout.invalid", {
-          reason: "bad_config",
-          widget: type,
-          configKey: key,
-        });
-      }
-    }
-    seen.add(type);
-    result.push({ type, region, config });
-  }
-  for (const required of SALE_CRITICAL) {
-    if (!seen.has(required)) {
-      throw new AppError("layout.invalid", { reason: "missing_required", widget: required });
-    }
-  }
-  return result;
 }
 
 /**

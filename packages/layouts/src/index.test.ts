@@ -9,8 +9,8 @@ describe("@waitron/layouts barrel", () => {
     expect(typeof api.validateThemeOverride).toBe("function");
     expect(api.DEFAULT_CANVASES.till).toBeDefined();
   });
-  it("still exports the existing widget surface (transitional coexistence)", () => {
-    expect(api.WIDGET_TYPES).toBeDefined();
-    expect(typeof api.validateLayout).toBe("function");
+  it("exports the receipt-trim surface", () => {
+    expect(api.DEFAULT_RECEIPT).toBeDefined();
+    expect(typeof api.validateReceiptConfig).toBe("function");
   });
 });

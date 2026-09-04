@@ -61,9 +61,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The location-menus screen (reachable via the nav) loads these on connect.
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
     listLocationCatalogues: vi.fn().mockResolvedValue([]),
-    // The layout + receipt screens (reachable via the nav) load `getLayout` on connect.
-    getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
-    putLayout: vi.fn().mockResolvedValue(undefined),
+    // The receipt screen (reachable via the nav) loads `getReceipt` on connect.
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     // The approvals screen (reachable via the nav) loads both queues on connect.
     listPendingSwaps: vi.fn().mockResolvedValue([]),
@@ -259,24 +258,6 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(locationMenus!.shadowRoot?.querySelectorAll("h1") ?? []),
-    ];
-    expect(h1s).toHaveLength(1);
-    await expectNoA11yViolations(host);
-  });
-
-  it("the layout screen renders accessibly with a single, well-ordered heading", async () => {
-    // Navigate to the layout screen (its own <h1> "Disposición" is then the sole heading; the shell's
-    // nav chrome carries none), and scan the composed tree in this theme.
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
-    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-layout]")!.click();
-    await flush(el);
-    const layout = el.shadowRoot!.querySelector("dashboard-layout-screen");
-    expect(layout).toBeTruthy();
-    const h1s = [
-      ...el.shadowRoot!.querySelectorAll("h1"),
-      ...(layout!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);
