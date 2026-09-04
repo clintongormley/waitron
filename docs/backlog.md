@@ -1191,11 +1191,13 @@ genuinely-decision-bearing.
   vitest `--shard=i/N` (a matrix job), each shard emitting a partial-coverage `blob`, with a paired
   `test-heavy-merge` / `test-server-merge` job merging the blobs (`vitest --merge-reports`) and
   enforcing the 98/98/98/95 thresholds on the total. The `test:shard` / `test:merge` package scripts
-  carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring. NOTE
-  the merge job is a fixed SERIAL tax (v8 coverage source-map remap over the merged total, run after the
-  shards), so the win is sub-linear and more shards help only until shard-wall ≈ merge-wall — read the
-  realized per-job durations off the first unfiltered `main` run and bump the matrix (`shard: [1..N]`
-  AND the `--shard=i/N` denominator, together) if a single shard still dominates.
+  carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring AND the
+  script shapes. NOTE the merge job is a fixed SERIAL tax run after the shards (the blobs already hold
+  each shard's source-mapped coverage, so it deserializes and aggregates them, renders and
+  threshold-checks — no tests, no container; ~80s for db measured locally), so the win is sub-linear and
+  more shards help only until shard-wall ≈ merge-wall — read the realized per-job durations off the
+  first unfiltered `main` run and bump the matrix (`shard: [1..N]` AND the `--shard=i/N` denominator,
+  together) if a single shard still dominates.
 - **Job-sharding — remaining lever.** With db/server sharded, the next critical-path candidate is
   `mutation-verifactu` (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance
   the `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.

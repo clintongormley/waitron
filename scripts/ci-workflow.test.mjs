@@ -259,9 +259,40 @@ function artifactDownloadBase(body) {
   return line === undefined ? undefined : /pattern: (\S+?)-\*/.exec(line)?.[1];
 }
 
-/** Jobs that shard a package (`test:shard`) and jobs that merge the shards' coverage (`test:merge`). */
-const shardedJobs = jobs.filter(({ body }) => packageRunning(body, "test:shard") !== undefined);
-const mergeJobs = jobs.filter(({ body }) => packageRunning(body, "test:merge") !== undefined);
+// Jobs that shard a package (`test:shard`) and jobs that merge the shards' coverage (`test:merge`),
+// each carrying the package it acts on so the cases below read `job.pkg` rather than re-scanning.
+const shardedJobs = jobs
+  .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:shard") }))
+  .filter(({ pkg }) => pkg !== undefined);
+const mergeJobs = jobs
+  .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:merge") }))
+  .filter(({ pkg }) => pkg !== undefined);
+
+/**
+ * Assert a job's `if:` gates read exactly `code` plus one SCOPE_GATES-defined gate — the invariant a
+ * shard gated on `code` alone (running on every code change) breaks. Shared by the shard and merge
+ * gate cases so the meaning of "properly gated" lives in one place.
+ */
+function expectGatedOnCodePlusOneScope(read) {
+  const names = SCOPE_GATES.map((gate) => gate.output);
+  expect(read).toContain("code");
+  const own = read.filter((name) => name !== "code");
+  expect(own).toHaveLength(1);
+  expect(names).toContain(own[0]);
+}
+
+/** Every workspace member's package.json `scripts`, keyed by package name (never the root). */
+function scriptsByPackage() {
+  const map = new Map();
+  for (const pkg of pnpmLs(["ls", "-r", "--depth", "-1", "--json"])) {
+    if (resolve(pkg.path) === resolve(repoRoot)) continue;
+    map.set(
+      pkg.name,
+      JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8")).scripts ?? {},
+    );
+  }
+  return map;
+}
 
 /**
  * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout.
@@ -521,14 +552,7 @@ describe("the scope gates", () => {
   // runs on every code change — which is what both mutation jobs did until they were measured as
   // the critical path (ci.yml's own comments on them carry that receipt).
   it("gate every shard on `code` plus one gate of its own", () => {
-    const names = SCOPE_GATES.map((gate) => gate.output);
-    for (const shard of shards) {
-      const read = gatesRead(job(shard.id).body);
-      expect(read).toContain("code");
-      const own = read.filter((name) => name !== "code");
-      expect(own).toHaveLength(1);
-      expect(names).toContain(own[0]);
-    }
+    for (const shard of shards) expectGatedOnCodePlusOneScope(gatesRead(job(shard.id).body));
   });
 });
 
@@ -562,10 +586,9 @@ describe("the sharded jobs", () => {
   // stale blobs, or skips it while the shards ran.
   it("each pair to one merge job for the same package that needs it and shares its gate", () => {
     for (const shard of shardedJobs) {
-      const pkg = packageRunning(shard.body, "test:shard");
       const shardGate = gatesRead(shard.body).filter((name) => name !== "code");
-      const paired = mergeJobs.filter((merge) => packageRunning(merge.body, "test:merge") === pkg);
-      expect(paired, `${pkg} has ${paired.length} merge jobs, expected 1`).toHaveLength(1);
+      const paired = mergeJobs.filter((merge) => merge.pkg === shard.pkg);
+      expect(paired, `${shard.pkg} has ${paired.length} merge jobs, expected 1`).toHaveLength(1);
       expect(allNeedsOf(paired[0].body)).toContain(shard.id);
       expect(gatesRead(paired[0].body).filter((name) => name !== "code")).toEqual(shardGate);
     }
@@ -576,10 +599,7 @@ describe("the sharded jobs", () => {
   // out of the two `actions/*-artifact` steps, must match per package.
   it("upload a blob artifact the merge job downloads by matching prefix", () => {
     for (const shard of shardedJobs) {
-      const pkg = packageRunning(shard.body, "test:shard");
-      const merge = mergeJobs.find(
-        (candidate) => packageRunning(candidate.body, "test:merge") === pkg,
-      );
+      const merge = mergeJobs.find((candidate) => candidate.pkg === shard.pkg);
       const upload = artifactUploadBase(shard.body);
       const download = artifactDownloadBase(merge.body);
       expect(upload, `${shard.id} uploads no matrix-named blob artifact`).toBeDefined();
@@ -592,13 +612,56 @@ describe("the sharded jobs", () => {
   // gated on `code` alone would run its (no-test, but real install + download) job on every code
   // change, the same waste the mutation jobs were scoped to avoid.
   it("gate every merge job on `code` plus exactly one scope gate", () => {
-    const names = SCOPE_GATES.map((gate) => gate.output);
-    for (const merge of mergeJobs) {
-      const read = gatesRead(merge.body);
-      expect(read).toContain("code");
-      const own = read.filter((name) => name !== "code");
-      expect(own).toHaveLength(1);
-      expect(names).toContain(own[0]);
+    for (const merge of mergeJobs) expectGatedOnCodePlusOneScope(gatesRead(merge.body));
+  });
+});
+
+describe("the sharded packages' scripts", () => {
+  // The sharding MECHANISM lives half in ci.yml (guarded above) and half in each sharded package's
+  // `test:shard` / `test:merge` scripts, which ci.yml only NAMES — so the guards above cannot see them.
+  // Most drift there fails LOUD: a `test:shard` missing `--coverage` makes its blob merge to 0/0/0/0
+  // (thresholds fail), and a dropped `--coverage.thresholds.<m>=0` makes the shard enforce a threshold
+  // on its 1/Nth of the files (the shard fails red). But ONE drift is SILENT — a `test:merge` that lost
+  // `--coverage` merges the blobs, checks NO thresholds, and passes green with the coverage gate gone —
+  // which is exactly the class this repo guards. So the script shapes are pinned here.
+  const scripts = scriptsByPackage();
+  const shardedPackages = [...new Set(shardedJobs.map((shard) => shard.pkg))];
+
+  it("were found", () => {
+    // Extraction guard: an empty list makes every case below vacuous.
+    expect(shardedPackages.length).toBeGreaterThan(0);
+  });
+
+  it("each declare a test:shard that collects coverage into a blob with thresholds suppressed", () => {
+    for (const pkg of shardedPackages) {
+      const shard = scripts.get(pkg)?.["test:shard"];
+      expect(shard, `${pkg} has no test:shard script`).toBeDefined();
+      expect(shard).toContain("--coverage");
+      expect(shard).toContain("--reporter=blob");
+      for (const metric of ["statements", "lines", "functions", "branches"]) {
+        expect(shard, `${pkg} test:shard must zero the ${metric} threshold`).toContain(
+          `--coverage.thresholds.${metric}=0`,
+        );
+      }
     }
+  });
+
+  it("each declare a test:merge that enforces coverage on the merged blobs", () => {
+    for (const pkg of shardedPackages) {
+      const merge = scripts.get(pkg)?.["test:merge"];
+      expect(merge, `${pkg} has no test:merge script`).toBeDefined();
+      expect(merge).toContain("--merge-reports");
+      // The silent hole: `--merge-reports` WITHOUT `--coverage` checks no thresholds and passes green.
+      expect(merge, `${pkg} test:merge must pass --coverage or the gate checks nothing`).toContain(
+        "--coverage",
+      );
+    }
+  });
+
+  it("share one test:shard and one test:merge across every sharded package", () => {
+    // They are hand-copied across packages; keeping them identical stops the mechanism drifting between
+    // db and server, or a third package added later.
+    expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:shard"])).size).toBe(1);
+    expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:merge"])).size).toBe(1);
   });
 });
