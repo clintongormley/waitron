@@ -20,6 +20,8 @@
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:shard": "vitest run --coverage --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
+    "test:merge": "vitest --merge-reports .vitest-reports --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "demo:daily-close": "tsx scripts/daily-close-demo.ts",

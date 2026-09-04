@@ -2,6 +2,11 @@
 # rejecting a Prettier-normalized version of it.
 pnpm-lock.yaml
 
+# vitest `--reporter=blob` output — machine-written per-shard coverage blobs (see .gitignore). They
+# are generated during local shard runs and in CI, never hand-edited, so they must not fail
+# format:check when one is present in a working tree.
+.vitest-reports/
+
 # Prose content, not tooling's to reformat (see task constraints).
 docs/
 

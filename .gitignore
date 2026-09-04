@@ -10,6 +10,9 @@ build/
 # Test / tooling caches
 coverage/
 .vitest/
+# vitest `--reporter=blob` output — the per-shard coverage blobs the sharded CI jobs (test-heavy /
+# test-server) upload as artifacts and the merge jobs consume. Generated, never committed.
+.vitest-reports/
 .turbo/
 __screenshots__/
 
