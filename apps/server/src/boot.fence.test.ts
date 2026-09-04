@@ -337,13 +337,15 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       const axes = await readDeploymentAxes(suite.admin);
       expect(axes).toEqual({ mode: "primary", singletonRole: "primary" });
 
-      // Writes are open — the read-only gate is not mounted, so a POST reaches its OWN auth screen
-      // (management-session cookie missing → 401), NOT the gate's 403.
+      // Writes are open — the read-only gate is not mounted, so a POST reaches its OWN auth screen: the
+      // management-session cookie is missing → 401, NOT the gate's 403 and NOT a 404 (the route exists).
+      // Asserting the exact 401 (like the sync-source control below) proves the request passed the gate
+      // and reached the real handler, which `.not.toBe(403)` alone would not (a 404/500 passes that too).
       const write = await fetch(`${base}/management-api/catalogues`, {
         method: "POST",
         body: "{}",
       });
-      expect(write.status).not.toBe(403);
+      expect(write.status).toBe(401);
 
       // The singleton sync SOURCE IS mounted (isSingletonPrimary true): a tokenless request reaches the
       // peer-auth screen (401 sync.node_unauthorized), NOT a 404 — the route exists. This is the control

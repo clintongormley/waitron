@@ -2,9 +2,9 @@ import type { NodeStanding, SignedMembershipDocument } from "./types.js";
 
 /**
  * This node's standing in a held document, or `undefined` when the node is absent from the chart
- * (design §3). A pure lookup over `document.body.nodes` — no verification: the held document was
- * verified when it was adopted (membership-adopt.ts) or self-signed at promotion, so reading it back
- * for a role decision is reading our own authoritative state, exactly as the deployment axes are.
+ * (design §3). A pure lookup over `document.body.nodes` — no verification: a held document was already
+ * verified by its adoption path (or self-signed at promotion), so reading it back for a role decision
+ * is reading our own authoritative state, exactly as the deployment axes are.
  */
 export function standingOf(
   document: SignedMembershipDocument,
