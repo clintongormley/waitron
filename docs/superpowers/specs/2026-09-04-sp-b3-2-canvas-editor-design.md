@@ -172,12 +172,17 @@ concrete tokens (`layoutProfile`, `layout_profile`, `ProfileDef`, `DEFAULT_PROFI
   codes `profile.*`→`canvas.*` (**param shapes preserved**); the `index.ts` barrel; `card-contract.ts`
   and `theme.ts` **unchanged** (card/theme names keep). Update the barrel's `import "./errors.js"`
   reachability (guarded by `scripts/errors-reachable.test.ts`).
-- **`@waitron/db`** — `schema/layout-profiles.ts`→`canvases.ts` (table `layout_profiles`→`canvases`);
-  `devices.layout_profile_id`→`canvas_id` + the composite FK name (`devices_layout_profile_fk`→
-  `devices_canvas_fk`, with `bindingFkField` updated). One **custom drizzle migration** (drop/recreate,
-  pre-prod) re-establishing **FORCE RLS + `<t>_tenant_isolation` policy + SELECT/INSERT/UPDATE/DELETE
-  grants** on `canvases` (`.enableRLS()` emits ENABLE only). Regenerate the migration snapshot from the
-  schema (do not hand-edit — the Drizzle rebase-collision lesson).
+- **`@waitron/db`** — `schema/layout-profiles.ts`→`canvases.ts` (table `layout_profiles`→`canvases`;
+  uniques `layout_profiles_tenant_id_key`/`_tenant_name_key`→`canvases_*`; FK
+  `layout_profiles_tenant_id_tenants_id_fk`→`canvases_*`). **Both** `devices.layout_profile_id` **and**
+  `device_pairing_codes.layout_profile_id` (both in `schema/devices.ts`) → `canvas_id`, plus their
+  composite FKs `devices_layout_profile_fk`→`devices_canvas_fk` and
+  `device_pairing_codes_layout_profile_fk`→`device_pairing_codes_canvas_fk` (with `bindingFkField`
+  updated and `devices.fk.test.ts` following). One **custom drizzle migration** (drop/recreate,
+  pre-prod) re-establishing **FORCE RLS + `canvases_tenant_isolation` policy + SELECT/INSERT/UPDATE/DELETE
+  grants** on `canvases` (`.enableRLS()` emits ENABLE only — verbatim adaptation of `drizzle/0089`).
+  Regenerate the migration from the schema via the `db:generate`/`db:generate:custom` flow (do not
+  hand-edit snapshots — the Drizzle rebase-collision lesson).
 - **`apps/server`** — `management-api.ts` routes/handlers/imports; `requireProfileId`→`requireCanvasId`;
   `till-api.ts` boot resolution (`getProfile`/spread `profile:`→`canvas:`); `device-session.ts`
   capability read (`profile.definition`→`canvas.definition`); `device-api.ts` reassign route field; the
