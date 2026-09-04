@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 LANDED #204; B2 split into B2.1 (LANDED #206, 2026-09-03) + B2.2 (next).**
+- **SP-B — grid editor + rendering — B1 LANDED #204; B2 LANDED (B2.1 #206 + B2.2 #207, 2026-09-04); B3 next.**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -134,7 +134,8 @@ editor + rendering) is the sole remaining sub-project of this track.**
   drop old widget model + rehome receipt into a new `tenant_receipts` table. **Fluid width only** (no
   column reflow; orientation = form-factor). Not H2, but must preserve the sale path. SP-B2 design:
   [sp-b2-till-tab-shell](superpowers/specs/2026-09-03-sp-b2-till-tab-shell-and-card-wrap-design.md);
-  B2.1 plan: [sp-b2-1-tab-shell](superpowers/plans/2026-09-03-sp-b2-1-tab-shell-and-light-card-wrap.md).
+  B2.1 plan: [sp-b2-1-tab-shell](superpowers/plans/2026-09-03-sp-b2-1-tab-shell-and-light-card-wrap.md);
+  B2.2 plan: [sp-b2-2-heavy-screen-wrap](superpowers/plans/2026-09-04-sp-b2-2-heavy-screen-wrap.md).
   - **B1 LANDED #204:** `GET /api/till` resolves a `ProfileDef` for every enrolled device (explicit →
     else form-factor default via `deviceFormFactor`; cookieless unchanged); till-local `ProfileDef`
     mirror + `till-card-grid` fluid renderer; the counter renders from its profile `counter` tab with
@@ -153,19 +154,39 @@ editor + rendering) is the sole remaining sub-project of this track.**
     fail-**open** (was fail-closed). Not fiscal; the sale path was verified end-to-end through the
     shell. Reachability kept profile-neutral (station/expo/schedule reachable as affordance drill-ins;
     default-profile content + capability-driven reachability deferred to the B3 editor).
-  - **B2.2 (next):** wrap the two **heavy** bespoke screens — **station** (kds-board; device-mode/enrol
-    paths) and **table-order** (internal `WorkingOrderStore`, largest event surface) — as embedded
-    cards; land the first **reachable** kds-board capability→absent skip (un-skip its two
-    `it.skip` tests in `card-grid.test.ts`); and **re-enable the handheld shell** (handhelds + kds
-    devices stay on the legacy `screen`-enum in B2.1 because their primary card — table-order/kds-board
-    — renders `nothing` until wrapped, so `#shellActive()` excludes them). B2.2 gets its own plan.
-  - **B2.1 deferrals (recorded, not blocking):** the boot-into-floor prefetch in `#onLoggedIn`
-    (`#tabNeedsFloorData(firstTab)`) is written but **not deletion-proven** — no shipped profile is
-    floor-first (till is counter-first), so the branch is unreachable today; add a floor-first-profile
-    test when B3/B2.2 introduces one. A redundant "STILL hides" held-orders test in `card-grid.test.ts`
-    duplicates existing coverage (harmless). Copilot's overall verdict on #206 was "needs a closer
-    look / final human review" (expected for a change this size) — all its concrete findings were
-    fixed and threads resolved before land.
+  - **B2.2 LANDED #207 (2026-09-04):** the two **heavy** screens — **station** (kds-board) and
+    **table-order** — are wrapped as embedded cards (their own header/Back suppressed via the same
+    `embedded` seam expo/floor use; body-function controls — station's view-toggle, table-order's
+    drawer-handle — kept in an always-present actions bar). `till-card-grid` now renders `kds-board` →
+    `<till-station-screen embedded>` (device-mode/enrol props threaded) and `table-order` →
+    `<till-table-order-screen embedded>`; **only `notifications` still renders `nothing`**. The first
+    **reachable** `kds-board` capability→absent skip is un-skipped and proven by deletion. The profile
+    shell is **re-enabled for handheld + kds** (`#shellActive()` fence dropped): owner call 2026-09-04 —
+    **handheld = full shell header** (operator + Logout) with **no** Station/Expo/Schedule affordances;
+    **kds = kiosk** (a `tab-shell` `kiosk` flag suppresses the whole operator header). Handheld
+    table-order **mount duality**: opening a table switches to the **Order tab card** (a till keeps the
+    B2.1 open-table drill); the return to floor is the **Floor-tab tap**. Not fiscal; the sale path is
+    untouched (counter tab + `tender-pay` unchanged; table-order's embedded `tender-pay`/`pay-tab`
+    intact). Coverage held 95/95/90/88 (1201 till tests).
+  - **B2.2 review fixes (folded into #207):** two handheld post-transaction paths written when
+    handheld/kds were legacy-only were corrected — `#onNewSale` now lands on the device's **home tab**
+    (`profile.tabs[0]`, not a hardcoded `"counter"` a handheld has no tab for) and refreshes a stale
+    floor after a tab settlement; `#onLoggedIn`'s floor prefetch is guarded on `!#floorLoaded` so a
+    handheld login loads the floor once, not twice. A speculative dead `#onBackToFloor` branch (+ its
+    synthetic-event test) was removed in the simplify pass (the embedded card suppresses its Back, so
+    `back-to-floor` is only reachable from a till drill).
+  - **B2.2 deferrals (recorded, not blocking):** a handheld's **Order tab is directly tappable with no
+    active table**, showing an empty table-order surface — accepted as the authored-profile behaviour
+    (the owner authors `order` as a tab); revisit in the B3 editor if it wants a guard. A pre-existing
+    `till-floor-screen` doc comment that names `#goToScreen`'s face-set gate as the `back-to-counter`
+    guard is now slightly inaccurate for the shell path but **unreachable** (the embedded floor card
+    sets `canExitToCounter=false`) — left as-is (unedited file).
+  - **B2.1 deferrals (still recorded):** the boot-into-floor prefetch block in `#onLoggedIn` (the
+    `#inShell()` + `#tabNeedsFloorData(firstTab)` reload) is now guarded on `!#floorLoaded`, so it is
+    **still unreached by any shipped profile** — the handheld (phone) IS floor-first but its login loads
+    the floor via `#onShowFloor` first (setting the flag), and no non-handheld floor-first profile
+    exists yet; add a deletion-proof when the B3 editor lets the owner author one. The redundant "STILL
+    hides" held-orders test in `card-grid.test.ts` (harmless) remains.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
