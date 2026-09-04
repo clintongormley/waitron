@@ -9,7 +9,6 @@ import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi } from "./api/client.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { toWireLineExtras, toWireOption } from "./state/order-line.js";
-import { LAYOUT_A } from "./layout.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
@@ -57,7 +56,7 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
-import type { CanvasDef, LayoutDef, ReceiptConfig, TabDef } from "./layout.js";
+import type { CanvasDef, ReceiptConfig, TabDef } from "./layout.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -69,9 +68,11 @@ import type {
 } from "./widgets/tender-pay.js";
 
 /**
- * The faces of the till: sign in, ring up, print, the staff schedule, and (FP-1) the live floor and the
- * per-table ordering screen. One at a time. `"table-order"` is added here by Task 8 so `#renderScreen`
- * stays exhaustive (Ruling FP-D) — it renders a placeholder until Task 9 supplies `<till-table-order-screen>`.
+ * The lock-vs-not marker (SP-B4). Since the always-present device canvas took over the authenticated
+ * surface, {@link render} is `enrol-overlays → lock → shell`: `"lock"` (or a boot failure) renders the
+ * lock screen, and every other value flips the app into the canvas tab shell ({@link TillApp.#inShell}).
+ * The members past `"lock"`/`"counter"` name the SURFACE a nav action moved to (they drive
+ * {@link TillApp.#shellActive} and the handheld face-set below), no longer a distinct rendered screen.
  */
 type Screen =
   "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
@@ -110,30 +111,6 @@ const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 function displayQuantity(product: TillProduct, quantity: string): string {
   if (product.pricingUnit !== "each" || !quantity.includes(".")) return quantity;
   return quantity.replace(/0+$/, "").replace(/\.$/, "");
-}
-
-/**
- * Whether a received layout is the built-in default {@link LAYOUT_A}, compared by VALUE (serialised) —
- * the layout arrives as fresh JSON from `GET /api/till`, never the local `LAYOUT_A` reference. Design
- * §7: a DEFAULT (or absent) layout keeps slice 1's Mode-P prep-queue drop as the fallback
- * (`#layoutFor`); an AUTHORED layout — ANY structural difference, a reordering or a
- * per-widget config key — renders VERBATIM, the owner's choice (a prep-queue they placed under Mode P
- * simply shows its empty state).
- *
- * The serialised compare is exact because the till's `LAYOUT_A` (`layout.ts:47-54`) and the server's
- * `DEFAULT_LAYOUT` are the SAME literal in the same key order (`type`/`region`/`config`, empty bags) —
- * a verbatim copy, verified in `packages/layouts/src/defaults.ts`. A false-negative would cost only the
- * cosmetic Mode-P prep-queue drop, never a fiscal element. Both branches are proven by the
- * `default-copy → prep-queue dropped` and `authored → prep-queue survives` tests (making this return a
- * constant fails one or the other).
- */
-// `LAYOUT_A` is a module constant, so its serialisation never changes — compute it once at module
-// load rather than on every `isDefaultLayout` call, which `#layoutFor()` runs on every reactive
-// re-render of the live counter. (Imports are initialised before this runs, so `LAYOUT_A` is bound.)
-const LAYOUT_A_JSON = JSON.stringify(LAYOUT_A);
-
-function isDefaultLayout(layout: LayoutDef): boolean {
-  return JSON.stringify(layout) === LAYOUT_A_JSON;
 }
 
 /**
@@ -256,9 +233,10 @@ export class TillApp extends LitElement {
   /**
    * The key of the tab the canvas shell (SP-B2.1) currently shows — the shell's active tab. Set on
    * boot from the canvas's first tab ({@link #boot}) and updated by the shell's `tab-select`. Stays
-   * undefined for a canvasless boot, where {@link render} never reaches the shell branch and the legacy
-   * {@link #renderScreen} switch renders instead. This task RENDERS the shell + switches tabs; the
-   * drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is Task 8.
+   * undefined only before boot resolves a canvas (or on a boot FAILURE, where {@link render} shows the
+   * lock screen rather than the shell). Off-lock a successful boot always has a canvas, so the shell
+   * renders and this is set. The drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is
+   * on the shell surface.
    */
   @state() private activeTabKey?: string;
   /**
@@ -476,21 +454,13 @@ export class TillApp extends LitElement {
    */
   @state() private invoiceLocale = "es-ES";
   /**
-   * The owner-authored till layout as received from `GET /api/till` (layout & receipt editors), or
-   * `undefined` when the server omits it (an older server predating the editor). {@link layoutFor}
-   * renders an AUTHORED layout (present and structurally different from the built-in default) VERBATIM,
-   * and falls back to the Mode-P-filtered {@link LAYOUT_A} for a default or absent layout — see its own
-   * doc and {@link isDefaultLayout}.
-   */
-  @state() private receivedLayout?: LayoutDef;
-  /**
-   * The device's assigned layout CANVAS as received from `GET /api/till` (SP-B1), or `undefined` when
-   * the server omits it — an older server that predates SP-B1, or a request with no enrolled-device
-   * cookie (the server resolves a canvas for every enrolled device, assigned or the form-factor
-   * default, so a present cookie always yields one). The `#counterTab()` helper
-   * selects this canvas's `counter` tab and threads it to `till-counter-screen`; a screen handed no tab
-   * falls back to the region-model layout (Task 4), so a canvasless boot is unaffected. The canvas is a
-   * LOCAL mirror shape ({@link CanvasDef}), bundle-decoupled from `@waitron/layouts` like {@link LayoutDef}.
+   * The device's layout CANVAS as received from `GET /api/till` (SP-B). The server resolves one for
+   * EVERY boot — the device's assigned canvas, or the form-factor default (a cookieless request gets the
+   * `till` default) — so on a successful boot this is always set. It stays `undefined` only on a boot
+   * FAILURE (getTill rejects), where {@link render} shows the lock screen + `boot.error` banner rather
+   * than a blank shell. The shell renders this canvas's tabs; {@link #tabBody} hands the `counter` tab to
+   * `till-counter-screen` as its `counterTab`. A LOCAL mirror shape ({@link CanvasDef}), bundle-decoupled
+   * from `@waitron/layouts`.
    */
   @state() private canvas?: CanvasDef;
   /**
@@ -525,12 +495,12 @@ export class TillApp extends LitElement {
    * {@link TillApp.#onDiscardOrder}: that handler discards a held order named by the event's OWN `id`
    * and never touches `#store` — the currently loaded basket (and any outcome it carries) is
    * unaffected by discarding some other parked order. Read by `till-tender-pay` (Task 9, threaded
-   * through `#renderScreen`/`till-counter-screen`) to render retry / switch-tender / wait.
+   * through the counter screen / card grid) to render retry / switch-tender / wait.
    *
-   * Marked `private` like every other `@state()` field on this class — safe now that `#renderScreen`
-   * reads it (below), satisfying `tsconfig.base.json`'s `noUnusedLocals` the same way every sibling
-   * field does. It was temporarily NOT `private` while Task 9's widget (the first reader) did not yet
-   * exist; see git history on this line for the receipt that justified that, now moot.
+   * Marked `private` like every other `@state()` field on this class — {@link #tabBody} reads it
+   * (below), satisfying `tsconfig.base.json`'s `noUnusedLocals` the same way every sibling field does.
+   * It was temporarily NOT `private` while Task 9's widget (the first reader) did not yet exist; see git
+   * history on this line for the receipt that justified that, now moot.
    */
   @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
   /**
@@ -628,18 +598,15 @@ export class TillApp extends LitElement {
       this.courses = till.courses;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
-      // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
-      // `#layoutFor()` (authored → verbatim, default/absent → the Mode-P fallback); `receipt` is threaded
-      // to the ticket. `?? {}` handles an older server that omits `receipt` (the field is typed present).
-      this.receivedLayout = till.layout;
+      // The authored NON-FISCAL receipt trim (receipt editor), threaded to the ticket. `?? {}` handles
+      // an older server that omits `receipt` (the field is typed present).
       this.receipt = till.receipt ?? {};
-      // The device's assigned layout canvas (SP-B1). `#counterTab()` reads its `counter` tab and threads
-      // it to the counter screen; absent/no-counter-tab leaves the screen on its region-model fallback.
+      // The device's layout canvas (SP-B), always present on a successful boot. The shell renders its
+      // tabs; `#tabBody` hands the `counter` tab to the counter screen as its `counterTab`.
       this.canvas = till.canvas;
       // The initial active tab for the canvas tab shell (SP-B2.1) — the first authored tab (the
-      // `counter` tab by convention). `#renderScreen` stays the fallback when there is no canvas, so
-      // this is left undefined for a canvasless boot and `render()` never reaches the shell branch.
-      this.activeTabKey = till.canvas?.tabs[0]?.key;
+      // `counter` tab by convention).
+      this.activeTabKey = till.canvas.tabs[0]?.key;
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
@@ -1930,12 +1897,13 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Whether navigation should route through the drill-in STACK rather than the legacy `screen` enum —
-   * true ONLY on the canvas tab shell surface (SP-B2.1): a device canvas is present AND the shell is
-   * the active surface ({@link #shellActive}). Every rerouted nav handler branches on this; when it is
-   * false (a canvasless boot, or the lock/enrol overlays) the handler keeps its exact legacy
-   * `#setScreen`/`#goToScreen` behaviour. Since SP-B2.2 a handheld + kds with a canvas are shell devices too
-   * (the fence in {@link #shellActive} is gone), so only a CANVASLESS boot stays on the legacy path.
+   * Whether navigation should route through the drill-in STACK — true ONLY on the canvas tab shell
+   * surface: a canvas is present AND the shell is the active surface ({@link #shellActive}). Every
+   * rerouted nav handler branches on this and its `#setScreen`/`#goToScreen` else-arm still drives the
+   * `screen` state machine (SP-B4 keeps it as the lock-vs-not marker), though off-lock a successful boot
+   * always has a canvas, so that else-arm is only reached before login / on a boot failure — where
+   * {@link render} shows the lock screen, never a distinct legacy screen. Handheld + kds with a canvas
+   * are shell devices too (SP-B2.2 — the fence in {@link #shellActive} is gone).
    */
   #inShell(): boolean {
     return this.canvas !== undefined && this.#shellActive();
@@ -2067,46 +2035,15 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The layout the counter renders (design §7). An AUTHORED layout — one received from `GET /api/till`
-   * and structurally different from the built-in default (see {@link isDefaultLayout}) — renders
-   * VERBATIM: it is the owner's explicit choice, so no mode filter runs (a prep-queue they placed under
-   * Mode P simply shows its empty state).
-   *
-   * A DEFAULT or ABSENT layout keeps slice 1's fallback: `LAYOUT_A` minus the prep-queue widget under
-   * Mode P. Mode P has no automatic path into the kitchen (see `#refreshStationQueue`'s doc), so the widget would
-   * only ever show its empty state there; Modes I/T enqueue automatically at placing (design §5) and
-   * are the modes prep-queue exists for. `layout.ts` itself stays plain data (its own stated invariant)
-   * — this derivation lives here, in the composition root, not there.
-   */
-  #layoutFor(): LayoutDef {
-    if (this.receivedLayout !== undefined && !isDefaultLayout(this.receivedLayout)) {
-      return this.receivedLayout;
-    }
-    return this.orderFlow === "prepay"
-      ? LAYOUT_A.filter((widget) => widget.type !== "prep-queue")
-      : LAYOUT_A;
-  }
-
-  /**
-   * The `counter` tab of the device's assigned canvas (SP-B1), or `undefined` when there is no canvas
-   * or it declares no `counter` tab. Threaded to `till-counter-screen.counterTab`; when undefined the
-   * counter screen falls back to the region-model layout (Task 4), so a canvasless boot is unchanged.
-   */
-  #counterTab(): TabDef | undefined {
-    return this.canvas?.tabs.find((tab) => tab.key === "counter");
-  }
-
-  /**
-   * Whether the canvas tab shell (SP-B2.1) should render in place of the legacy `#renderScreen`
-   * switch. True ONLY for the authenticated surface the shell replaces: the operator (or a kds display)
-   * has passed the lock screen (`screen !== "lock"`) and no enrol overlay is open. Handheld + kds are
-   * now shell devices (SP-B2.2): the phone-portrait canvas's `order` tab (a `table-order` card) and the
-   * kds canvas's `kitchen` tab (a `kds-board` card) both render their embedded screens through the grid
-   * now, so the B2.1 fence (`!deviceMode && !handheldMode`) that kept them on the legacy screen-enum is
-   * removed — a shell would no longer hand either a dead tab. Only the STILL-canvasless boot (no
-   * `canvas`) keeps `#renderScreen`, via {@link #inShell}. The enrolling overlays are already handled
-   * ahead of this branch in {@link render}; they are guarded here too so the predicate reads true only
-   * for the surface it names, independent of render order.
+   * Whether the canvas tab shell (SP-B2.1) should render in place of the lock screen. True ONLY for the
+   * authenticated surface the shell covers: the operator (or a kds display) has passed the lock screen
+   * (`screen !== "lock"`) and no enrol overlay is open. Handheld + kds are shell devices (SP-B2.2): the
+   * phone-portrait canvas's `order` tab (a `table-order` card) and the kds canvas's `kitchen` tab (a
+   * `kds-board` card) both render their embedded screens through the grid, so no device kind is fenced
+   * off the shell. Only a boot FAILURE (no `canvas`) keeps the app on the lock screen off this predicate,
+   * via {@link #inShell}. The enrolling overlays are already handled ahead of this branch in
+   * {@link render}; they are guarded here too so the predicate reads true only for the surface it names,
+   * independent of render order.
    */
   #shellActive(): boolean {
     return this.screen !== "lock" && !this.handheldEnrolling && !this.tillEnrolling;
@@ -2153,8 +2090,8 @@ export class TillApp extends LitElement {
    * suppressed — the shell owns the chrome), the SP-B1 card grid for every other tab. */
   #tabBody(tab: TabDef): TemplateResult {
     if (tab.key === "counter") {
-      // Same prop list as `#renderScreen`'s `counter` arm, plus `embedded` (the shell owns the header)
-      // and `counterTab=${tab}` (the shell's active tab IS the counter tab). Only the header relocates.
+      // `embedded` (the shell owns the header) and `counterTab=${tab}` (the shell's active tab IS the
+      // counter tab, which the counter screen delegates to its card grid). Only the header relocates.
       return html`<till-counter-screen
         embedded
         .api=${this.api}
@@ -2170,7 +2107,6 @@ export class TillApp extends LitElement {
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .busy=${this.submitting || this.placing}
-        .layout=${this.#layoutFor()}
         .counterTab=${tab}
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
@@ -2215,13 +2151,12 @@ export class TillApp extends LitElement {
 
   /**
    * The shell's `drill` overlay body (SP-B2.1) — the screen stacked over the active tab, or `nothing`
-   * when no drill is open (the tab body itself is on top). Each case mounts the SAME element its
-   * {@link #renderScreen} arm mounts, with the SAME props VERBATIM plus `slot="drill"` — NON-EMBEDDED, so
-   * every drill-in keeps its OWN header/Back/Close chrome (an `embedded` mount would suppress the Back and
-   * trap the user with no way out). The screens' own `back-to-counter`/`back-to-floor`/`close-allergens`/
-   * `new-sale` events drive the pop (wired on the app wrapper in {@link render}). The `allergens` case
-   * mirrors how {@link TillCounterScreen} feeds its LOCAL overlay — the FULL product set + the operator/
-   * invoice locales — the shell just owns the button now.
+   * when no drill is open (the tab body itself is on top). Each case mounts a screen with `slot="drill"`
+   * — NON-EMBEDDED, so every drill-in keeps its OWN header/Back/Close chrome (an `embedded` mount would
+   * suppress the Back and trap the user with no way out). The screens' own `back-to-counter`/
+   * `back-to-floor`/`close-allergens`/`new-sale` events drive the pop (wired on the app wrapper in
+   * {@link render}). The `allergens` case mirrors how {@link TillCounterScreen} feeds its LOCAL overlay —
+   * the FULL product set + the operator/invoice locales — the shell just owns the button now.
    */
   /** The shell's active-tab body (SP-B2.1) — {@link #tabBody} of the {@link #activeTab}, or `nothing`
    * when no tab resolves (a canvas with no tabs). Extracted from `render` so the shell subtree reads
@@ -2366,12 +2301,14 @@ export class TillApp extends LitElement {
               // whatever screen the boot left set.
               this.tillEnrolling
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : // The canvas tab shell (SP-B2.1) replaces the legacy `screen`-enum switch once a device
-                // canvas is present AND the operator is on the authenticated surface it covers
-                // (`#shellActive`). A canvasless boot — every legacy-path test stub — keeps `#renderScreen`.
-                // Both arms are keyed on the active locale: a locale switch changes the key, so Lit DISCARDS
-                // and rebuilds the subtree, repainting every child in the new language (the screens/shell hold
-                // no LocaleChangeController of their own). A same-locale re-render keeps the key and reuses it.
+              : // The canvas tab shell (SP-B2.1) IS the authenticated surface once the operator (or a kds
+                // display) is off the lock screen (`#shellActive`) and a canvas is present — which a
+                // successful boot always resolves (SP-B4). The ELSE arm is the lock screen: the initial
+                // lock state, and a boot FAILURE (canvas undefined + `boot.error` banner above) — NOT a
+                // blank shell. Both arms are keyed on the active locale: a locale switch changes the key,
+                // so Lit DISCARDS and rebuilds the subtree, repainting every child in the new language
+                // (the screens/shell hold no LocaleChangeController of their own). A same-locale re-render
+                // keeps the key and reuses it.
                 this.#inShell()
                 ? keyed(
                     currentLocale(),
@@ -2390,101 +2327,20 @@ export class TillApp extends LitElement {
                       ${this.#drillBody() /* Task 8 fills the drill overlay */}
                     </till-tab-shell>`,
                   )
-                : keyed(currentLocale(), this.#renderScreen())
+                : // The lock screen. `deviceEnrolled` gates its device-setup affordances (§C2): an
+                  // already-enrolled device — a handheld or a till (both STAY on lock) or a KDS — must not
+                  // offer "set up as kitchen display", or a waiter could re-enrol an in-service device as a
+                  // KDS and escape the shell.
+                  keyed(
+                    currentLocale(),
+                    html`<till-lock-screen
+                      .api=${this.api}
+                      .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
+                    ></till-lock-screen>`,
+                  )
         }
       </div>
     `;
-  }
-
-  #renderScreen(): TemplateResult {
-    switch (this.screen) {
-      case "lock":
-        // `deviceEnrolled` gates the lock screen's device-setup affordances (§C2): an already-enrolled
-        // device — a handheld or a till (both STAY on lock) or a KDS — must not offer "set up as kitchen
-        // display", or a waiter could re-enrol an in-service device as a KDS and escape the shell.
-        return html`<till-lock-screen
-          .api=${this.api}
-          .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
-        ></till-lock-screen>`;
-      case "counter":
-        return html`<till-counter-screen
-          .api=${this.api}
-          .store=${this.#store}
-          .products=${this.products}
-          .menus=${this.menus}
-          .selectedMenuId=${this.selectedCatalogueId}
-          .heldOrders=${this.heldOrders}
-          .stationQueue=${this.stationQueue}
-          .defaultStationId=${this.#defaultStationId()}
-          .operatorName=${this.operatorName}
-          .invoiceLocale=${this.invoiceLocale}
-          .orderFlow=${this.orderFlow}
-          .stage=${this.stage}
-          .busy=${this.submitting || this.placing}
-          .layout=${this.#layoutFor()}
-          .counterTab=${this.#counterTab()}
-          .cardProvider=${this.cardProvider}
-          .tipsEnabled=${this.tipsEnabled}
-          .cardOutcome=${this.cardOutcome}
-        ></till-counter-screen>`;
-      case "ticket":
-        return html`<till-ticket-view
-          .result=${this.result}
-          .issuer=${this.issuer}
-          .invoiceLocale=${this.invoiceLocale}
-          .receipt=${this.receipt}
-        ></till-ticket-view>`;
-      case "schedule":
-        return html`<till-schedule-screen
-          .api=${this.api}
-          .staff=${this.staff}
-          .operatorPersonId=${this.operatorPersonId}
-        ></till-schedule-screen>`;
-      case "floor":
-        return html`<till-floor-screen
-          .zones=${this.zones}
-          .tables=${this.tables}
-          .api=${this.api}
-          .canEdit=${this.canEdit}
-          .canExitToCounter=${!this.handheldMode}
-        ></till-floor-screen>`;
-      // FP-1 (Ruling FP-D): the per-table ordering screen. It renders from the app-owned tab lines
-      // (loaded via `getTabLines`, reloaded after each round/serve) and emits `send-round`/`serve-line`/
-      // `pay-tab`/`set-status`/`back-to-floor`, wired on the app wrapper above. `orderId` rides through
-      // (the tab's working-order id) for parity with the placeholder it replaces; the app owns the writes.
-      case "table-order":
-        return html`<till-table-order-screen
-          .lines=${this.tabLines}
-          .products=${this.products}
-          .menus=${this.menus}
-          .selectedMenuId=${this.selectedCatalogueId}
-          .statuses=${this.statuses}
-          .courses=${this.courses}
-          .fireControl=${this.fireControl}
-          .tables=${this.tables}
-          .orderId=${this.activeTabId}
-          .busy=${this.submitting}
-        ></till-table-order-screen>`;
-      // KDS-1 (design §5a): the kitchen's station-display screen. It OWNS its own fetching via `.api`
-      // (the station list + the active station's queue) and handles its own advances, so the app just
-      // hands it the api + the venue bump mode and switches; `back-to-counter` (wired above) returns.
-      case "station":
-        return html`<till-station-screen
-          .api=${this.api}
-          .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
-          .deviceMode=${this.deviceMode}
-          .initialDeviceStation=${this.initialDeviceStation}
-        ></till-station-screen>`;
-      // KDS-3 (design §5): the expo/pass display. Like the station screen it OWNS its own fetching +
-      // levers via `.api`, so the app just hands it the api + the venue fire-control mode (which gates
-      // the pass's Fire lever) and switches; `back-to-counter` (wired above) returns.
-      case "expo":
-        return html`<till-expo-screen
-          .api=${this.api}
-          .fireControl=${this.fireControl}
-        ></till-expo-screen>`;
-    }
   }
 }
 

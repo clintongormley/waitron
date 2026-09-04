@@ -155,8 +155,8 @@ describe("TillApi", () => {
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
-    // The boot payload now also carries the authored-or-default `layout` (the widget arrangement) and
-    // `receipt` (the non-fiscal trim) — the client passes both through untouched, typed as `TillInfo`,
+    // The boot payload carries the device's layout `canvas` (SP-B4 — the region-model `layout` is gone)
+    // and the non-fiscal `receipt` trim — the client passes both through untouched, typed as `TillInfo`,
     // so this literal is a compile-time proof the shape carries them and the `.toEqual` a runtime proof
     // they round-trip.
     const info = {
@@ -168,10 +168,18 @@ describe("TillApi", () => {
       fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,
-      layout: [
-        { type: "product-grid", region: "main", config: { columns: 4 } },
-        { type: "basket", region: "aside", config: {} },
-      ],
+      canvas: {
+        formFactor: "till",
+        capabilities: [],
+        tabs: [
+          {
+            key: "counter",
+            title: "Counter",
+            columns: 12,
+            cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } }],
+          },
+        ],
+      },
       receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));
@@ -188,8 +196,8 @@ describe("TillApi", () => {
     expect(init.body).toBeUndefined();
     expect(init.headers).toBeUndefined();
     expect(r).toEqual(info);
-    // The layout + receipt survive the round-trip typed.
-    expect(r.layout[0]).toEqual({ type: "product-grid", region: "main", config: { columns: 4 } });
+    // The canvas + receipt survive the round-trip typed.
+    expect(r.canvas.tabs[0].key).toBe("counter");
     expect(r.receipt).toEqual({
       headerSubtitle: "Calle Mayor 1",
       footerMessage: "Gracias por su visita",

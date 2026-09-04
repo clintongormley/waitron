@@ -60,12 +60,11 @@ export class TillProductGrid extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /**
-   * The per-widget config key `product-grid.columns` (layout & receipt editors): fix the grid to
-   * exactly this many equal-width columns. Unset (the default) keeps the responsive
-   * `repeat(auto-fill, minmax(9rem, 1fr))` grid in the stylesheet below. Threaded from the layout by
-   * `till-counter-screen`, which narrows the config bag's `unknown` to a number; the value is validated
-   * to 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`), so the interpolation below is a plain
-   * integer, never free text.
+   * The per-card config key `product-grid.columns`: fix the grid to exactly this many equal-width
+   * columns. Unset (the default) keeps the responsive `repeat(auto-fill, minmax(9rem, 1fr))` grid in the
+   * stylesheet below. Threaded from the card by `till-card-grid`, which narrows the config bag's
+   * `unknown` to a number; the value's 1..12 bound is stated by the per-card contract server-side
+   * (`@waitron/layouts` `CARD_CONTRACTS`), so the interpolation below is a plain integer, never free text.
    */
   @property({ type: Number }) columns?: number;
 

@@ -3,18 +3,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
-import { LAYOUT_A, type LayoutDef, type TabDef, type WidgetInstance } from "../layout.js";
-// Side-effect imports: registering each widget element so the layout below can render its tag. The
-// screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
-import "../widgets/product-grid.js";
-import "../widgets/basket.js";
-import "../widgets/total.js";
-import "../widgets/tender-pay.js";
-import "../widgets/held-orders.js";
-import "../widgets/station-queue.js";
-// The SP-B1 grid renderer (Task 3). When a counter TAB is supplied the screen delegates its widget
-// body to this element, which lays the tab's cards on a fluid grid; the region model below stays the
-// fallback for when no tab is supplied (its removal is B4). Named only as a tag, never as a class.
+import type { TabDef } from "../layout.js";
+// The SP-B card grid — the screen delegates its whole sale body to this element, which lays the
+// counter tab's cards on a fluid grid. It self-registers every card it can place (product-grid/basket/
+// total/tender-pay/held-orders/station-queue), so the screen names it only as a tag, never as a class.
 import "../widgets/card-grid.js";
 // The multi-menu switcher shown above the grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
@@ -22,7 +14,7 @@ import "../widgets/menu-switcher.js";
 // dietary lens via `filterProductsByDiet`. Rendered only when some product carries a published diet.
 import "../widgets/diet-filter.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
-// a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
+// a card, so it is registered here and toggled in `render`, replacing the grid body when open.
 import "./till-allergen-screen.js";
 // The post-login language chooser in the header (per-user-language-preference). It only EMITS a
 // composed `locale-selected`; `till-app` persists the pick and switches the locale.
@@ -47,19 +39,19 @@ import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 const BRAND = "Waitron";
 
 /**
- * The Counter POS shell: the header the operator sees and the LAYOUT COMPOSITION of the four sale
- * widgets. It owns exactly two things — the header (venue/till label, the logged-in operator, a Log
- * out control) and the arrangement — and nothing about the sale itself.
+ * The Counter POS shell: the header the operator sees and the sale body. It owns exactly two things —
+ * the header (venue/till label, the logged-in operator, a Log out control) plus the menu/diet chrome —
+ * and nothing about the sale itself.
  *
- * The arrangement is DATA: {@link render} iterates {@link layout} and maps each {@link WidgetInstance}'s
- * `type` to its element (`#widget`), dropping it into the `main` or `aside` region. It hardcodes no
- * widget tags in the markup, so a different `LayoutDef` (a later slice's editor output) rearranges or
- * drops widgets without the screen changing — the configurable-dashboard seam (spec §3).
+ * The sale body is DATA-DRIVEN through the device canvas: {@link render} hands the {@link counterTab}
+ * to {@link TillCardGrid}, which lays the tab's cards on a fluid grid. The screen hardcodes no card
+ * tags in its own markup — a different tab (an editor's output) rearranges or drops cards without the
+ * screen changing (the configurable-canvas seam, SP-B). The old region/widget model is gone.
  *
- * The widgets do NOT talk to the screen or to each other: every one is handed the SAME {@link store}
- * (and the product grid the {@link products}), and they coordinate through it. The screen never
- * handles `confirm-payment` or a product tap — `confirm-payment` is composed and bubbles past here to
- * the app (Task 19); the only event this screen owns is `logout`.
+ * The cards do NOT talk to the screen or to each other: every one is handed the SAME {@link store}
+ * (and the product grid the {@link products}) by the grid, and they coordinate through it. The screen
+ * never handles `confirm-payment` or a product tap — `confirm-payment` is composed and bubbles past
+ * here to the app (Task 19); the only event this screen owns is `logout`.
  */
 @customElement("till-counter-screen")
 export class TillCounterScreen extends LitElement {
@@ -100,33 +92,13 @@ export class TillCounterScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .body {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: var(--wt-space-4);
-        align-items: start;
+      /* The sale body stacks the menu/diet chrome above the card grid, which owns its own internal
+         grid. */
+      .body.grid-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
         padding: var(--wt-space-4);
-      }
-
-      .region-aside {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-
-      /* The grid path (SP-B1) stacks the menu/diet chrome above the card grid, which owns its own
-         internal grid — so it overrides the region model's two-column body layout. */
-      .grid-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-
-      /* Narrow screens (a phone or a split view) stack the aside UNDER the grid, one column. */
-      @media (max-width: 48rem) {
-        .body {
-          grid-template-columns: 1fr;
-        }
       }
     `,
   ];
@@ -150,14 +122,15 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /**
    * The DEFAULT station's queue (KDS-1, design §3e — "the counter prep-queue becomes the default
-   * station"), grouped by order, handed to the station-queue widget the `prep-queue` layout slot now
-   * renders (the app owns and refreshes them). Defaults empty so a layout that includes `prep-queue`
-   * renders its empty state until the app wires a live refresh.
+   * station"), grouped by order, threaded to the card grid for its `prep-queue` card to render (the app
+   * owns and refreshes them). Defaults empty so a tab that carries a `prep-queue` card renders its empty
+   * state until the app wires a live refresh.
    */
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   /**
-   * The DEFAULT station's id (KDS-1), threaded to the station-queue widget — its whole-ticket bump is
-   * keyed by station. Absent when the venue has no default station configured. The counter's own queue is
+   * The DEFAULT station's id (KDS-1), threaded through the card grid to the station-queue card — its
+   * whole-ticket bump is keyed by station. Absent when the venue has no default station configured. The
+   * counter's own queue is
    * per-line (line mode), so this is passed for correctness rather than exercised here.
    */
   @property({ attribute: false }) defaultStationId?: string;
@@ -198,13 +171,12 @@ export class TillCounterScreen extends LitElement {
    * single-flight double-file guard (see `till-app`'s `submitting`).
    */
   @property({ type: Boolean }) busy = false;
-  /** The arrangement to render. Defaults to slice 1's {@link LAYOUT_A}; a later editor supplies its own. */
-  @property({ attribute: false }) layout: LayoutDef = LAYOUT_A;
   /**
-   * The profile's COUNTER tab (SP-B1). When set, the screen delegates its widget body to
-   * {@link TillCardGrid} — the cards laid on a fluid grid — instead of the region model. When unset
-   * (undefined), the {@link layout} region model below renders unchanged as the fallback (its removal
-   * is B4). Task 5 wires this from the boot profile.
+   * The device canvas's COUNTER tab (SP-B). The screen delegates its whole sale body to
+   * {@link TillCardGrid}, which lays this tab's cards on a fluid grid. Threaded by the app from the
+   * boot canvas ({@link TillApp.#tabBody}); a successful boot always resolves a canvas, so this is
+   * always supplied off-lock. When undefined the grid renders nothing (the region model it replaced
+   * is gone — SP-B4).
    */
   @property({ attribute: false }) counterTab?: TabDef;
   /**
@@ -287,57 +259,8 @@ export class TillCounterScreen extends LitElement {
   }
 
   /**
-   * Map one layout entry to its element, handing over the shared store (and, for the grid, the
-   * products). The switch is exhaustive over {@link WidgetType}, so adding a widget type without a
-   * case here is a compile error rather than a silently-dropped widget.
-   */
-  #widget(instance: WidgetInstance): TemplateResult {
-    switch (instance.type) {
-      case "product-grid": {
-        // Thread the one wired per-widget config key, `product-grid.columns`. The config bag is
-        // `Record<string, unknown>`, so narrow to a number and pass it through only then — a
-        // missing/malformed value leaves the widget's responsive auto-fill default (its own `columns`
-        // doc). The value is validated 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`).
-        const columns = instance.config.columns;
-        return html`<till-product-grid
-          .products=${this.#gridProducts()}
-          .store=${this.store}
-          .columns=${typeof columns === "number" ? columns : undefined}
-        ></till-product-grid>`;
-      }
-      case "basket":
-        return html`<till-basket .store=${this.store}></till-basket>`;
-      case "total":
-        return html`<till-total .store=${this.store}></till-total>`;
-      case "tender-pay":
-        return html`<till-tender-pay
-          .store=${this.store}
-          .busy=${this.busy}
-          .mode=${this.orderFlow}
-          .stage=${this.stage}
-          .cardProvider=${this.cardProvider}
-          .tipsEnabled=${this.tipsEnabled}
-          .cardOutcome=${this.cardOutcome}
-        ></till-tender-pay>`;
-      case "held-orders":
-        return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
-      case "prep-queue":
-        // KDS-1: the `prep-queue` layout slot now renders the default station's queue as a ticket RAIL
-        // (cards grouped by order — #63's counter UX), per-line bump (line mode). The kanban board + the
-        // station picker live on the dedicated station-display screen.
-        return html`<till-station-queue
-          .groups=${this.stationQueue}
-          .view=${"rail"}
-          .stationId=${this.defaultStationId}
-        ></till-station-queue>`;
-    }
-  }
-
-  /**
-   * The menu switcher + diet filter shown above the grid. Rendered identically in both the region
-   * fallback (inside `.region-main`) and the grid path (above `till-card-grid`), so switching to the
-   * profile tab keeps the same menu/diet chrome. The diet filter is shown only when some product
-   * carries a published diet ({@link #hasDietData}).
+   * The menu switcher + diet filter shown above the card grid. The diet filter is shown only when some
+   * product carries a published diet ({@link #hasDietData}).
    */
   #menuControls(): TemplateResult {
     return html`
@@ -360,16 +283,17 @@ export class TillCounterScreen extends LitElement {
   }
 
   /**
-   * The sale body when a counter TAB is supplied (SP-B1): the menu/diet chrome above, then the profile
-   * tab's cards laid out by {@link TillCardGrid}. The grid is fed the SAME data the region `#widget`
-   * bindings use today — crucially `#gridProducts()` (menu + diet narrowed), never the raw `products`,
-   * so `till-card-grid` stays dumb and today's filtering behaviour is preserved here.
+   * The sale body (SP-B): the menu/diet chrome above, then the counter tab's cards laid out by
+   * {@link TillCardGrid}. The grid is fed `#gridProducts()` (menu + diet narrowed), never the raw
+   * `products`, so `till-card-grid` stays dumb and the menu/diet filtering lives here. The tab is
+   * {@link counterTab}; a boot always resolves one, so it is present off-lock (an undefined tab leaves
+   * the grid rendering nothing).
    */
-  #gridBody(tab: TabDef): TemplateResult {
+  #gridBody(): TemplateResult {
     return html`<div class="body grid-body">
       ${this.#menuControls()}
       <till-card-grid
-        .tab=${tab}
+        .tab=${this.counterTab}
         .store=${this.store}
         .products=${this.#gridProducts()}
         .heldOrders=${this.heldOrders}
@@ -386,8 +310,6 @@ export class TillCounterScreen extends LitElement {
   }
 
   override render() {
-    const inRegion = (region: WidgetInstance["region"]) =>
-      this.layout.filter((widget) => widget.region === region);
     return html`
       <div class="screen">
         ${
@@ -442,17 +364,7 @@ export class TillCounterScreen extends LitElement {
                 .invoiceLocale=${this.invoiceLocale}
                 @close-allergens=${() => this.#closeAllergens()}
               ></till-allergen-screen>`
-            : this.counterTab !== undefined
-              ? this.#gridBody(this.counterTab)
-              : html`<div class="body">
-                  <div class="region region-main">
-                    ${this.#menuControls()}
-                    ${inRegion("main").map((widget) => this.#widget(widget))}
-                  </div>
-                  <div class="region region-aside">
-                    ${inRegion("aside").map((widget) => this.#widget(widget))}
-                  </div>
-                </div>`
+            : this.#gridBody()
         }
       </div>
     `;

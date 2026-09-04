@@ -12,8 +12,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
-import type { TillProductGrid } from "./widgets/product-grid.js";
-import { LAYOUT_A, type LayoutDef, type CanvasDef } from "./layout.js";
+import type { CanvasDef } from "./layout.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -144,10 +143,75 @@ const till = {
   // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
   cardProvider: "none" as const,
   tipsEnabled: false,
-  // `layout`/`receipt` are DELIBERATELY omitted (an older server that predates the editor): #boot then
-  // leaves the received layout undefined, so #layoutFor()'s Mode-P prep-queue drop applies as the
-  // fallback and the ticket receipt defaults to {} — the slice-1 behaviour every pre-Task-9 test relies
-  // on. The `authored layout + receipt` suite supplies them explicitly.
+  // The device's layout CANVAS (SP-B4) — always present on a successful boot, so every test that logs in
+  // boots into the tab shell with the embedded counter screen. Mirrors the server's default `till` canvas
+  // (`packages/layouts/src/default-canvases.ts`): a `counter` tab carrying the sale-critical cards + a
+  // `floor` tab. It adds a `prep-queue` card gated `visibleWhen: ["has-items"]` (the default canvas omits
+  // it) so the mode-dependent station-queue assertions below still hold: Mode P never refreshes the queue
+  // (empty ⇒ the has-items gate hides the card), Modes I/T populate it (⇒ shown). `receipt` is
+  // DELIBERATELY omitted (an older server that predates the editor) so the ticket receipt defaults to {} —
+  // the `receipt` suite supplies it explicitly.
+  canvas: {
+    formFactor: "till",
+    capabilities: [],
+    tabs: [
+      {
+        key: "counter",
+        title: "Counter",
+        columns: 12,
+        cards: [
+          { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+          { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+          { type: "total", colSpan: 4, rowSpan: 1, config: {} },
+          { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+          { type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] },
+          { type: "prep-queue", colSpan: 8, rowSpan: 3, config: {}, visibleWhen: ["has-items"] },
+        ],
+      },
+      {
+        key: "floor",
+        title: "Floor",
+        columns: 24,
+        cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+      },
+    ],
+  } satisfies CanvasDef,
+};
+
+/** The form-factor canvas a `handheld` device boots (SP-B): a `floor` tab + an `order` tab (a
+ * `table-order` card). The server resolves this for a phone-portrait device. */
+const phoneCanvasDef: CanvasDef = {
+  formFactor: "phone-portrait",
+  capabilities: [],
+  tabs: [
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 12,
+      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 12,
+      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+  ],
+};
+
+/** The form-factor canvas a `kds_station` device boots (SP-B): one `kitchen` tab carrying the
+ * `kds-board` card (its embedded station screen renders through the grid, gated on `act-as-kds`). */
+const kdsCanvasDef: CanvasDef = {
+  formFactor: "kds",
+  capabilities: ["act-as-kds"],
+  tabs: [
+    {
+      key: "kitchen",
+      title: "Kitchen",
+      columns: 24,
+      cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+  ],
 };
 
 const placedResult = {
@@ -307,24 +371,54 @@ const overrideDialog = (el: TillApp) =>
   );
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
-const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+/** The canvas tab shell (SP-B) — present whenever the app is off-lock (a canvas always resolves on a
+ * successful boot). Navigation between tabs is driven by its `tab-select` event. */
+const shell = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+/** The card grid mounted directly as a non-counter TAB's body (SP-B4) — the floor/order/kitchen tabs
+ * render through it. (The counter tab's body is the counter screen, whose OWN grid `counterGrid` reaches;
+ * this one is only present when a non-counter tab is active, so it is unambiguous.) */
+const activeTabGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+/** Navigate the shell to `key` (the tab-strip tap the embedded screens no longer surface as buttons). */
+const selectTab = (el: TillApp, key: string): void => emit(shell(el)!, "tab-select", { key });
+/** The floor screen — on the shell it renders inside the active `floor` tab's card grid (a `floor-plan`
+ * card), so pierce that grid's shadow root. `null` off the floor tab. */
+const floor = (el: TillApp) =>
+  (activeTabGrid(el)?.shadowRoot?.querySelector("till-floor-screen") as TillFloorScreen | null) ??
+  null;
+/** The station screen — a till reaches it as a `drill` overlay (app shadow); a KDS canvas mounts it as
+ * its `kitchen` tab's `kds-board` card (inside the active tab's card grid). Look in both. */
 const station = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen");
+  (el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen") ??
+    (activeTabGrid(el)?.shadowRoot?.querySelector(
+      "till-station-screen",
+    ) as TillStationScreen | null) ??
+    null) as TillStationScreen | null;
 /** The handheld enrol screen (handheld-tableside Task 8), present only while `handheldEnrolling` is set;
  * queried by tag (its class is not imported here — the app only needs to know it is mounted). */
 const handheldEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-handheld-enrol-screen");
 /** The till enrol screen (SP-A.2 device unification), present only while `tillEnrolling` is set; queried
  * by tag (its class is not imported here — the app only needs to know it is mounted). */
 const tillEnrol = (el: TillApp) => el.shadowRoot!.querySelector("till-enrol-screen");
+/** The table-order screen — a TILL opens it as a `drill` (app shadow); a handheld/tablet whose canvas
+ * authors an `order` tab mounts it as that tab's card (inside the active tab's card grid). Look in both. */
 const tableOrder = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
-/** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
+  (el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
+    (activeTabGrid(el)?.shadowRoot?.querySelector(
+      "till-table-order-screen",
+    ) as TillTableOrderScreen | null) ??
+    null) as TillTableOrderScreen | null;
+/** The card grid the embedded counter screen delegates its sale body to (SP-B4) — the sale cards render
+ * inside ITS shadow root, so the pay/queue helpers pierce through it. */
+const counterGrid = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+/** The pay card, now inside the card grid's shadow root (SP-B4 — the counter renders from the canvas). */
 const tenderPay = (el: TillApp) =>
-  counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-/** The station-queue widget nested inside the counter screen's shadow root (the default-station queue),
- * or `null` when the layout (Mode P) omits it. */
+  counterGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+/** The station-queue card inside the card grid, or `null` when the `prep-queue` card is hidden (its
+ * `has-items` gate — Mode P never populates the queue, so it stays hidden). */
 const stationQueueWidget = (el: TillApp) =>
-  counter(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue");
+  counterGrid(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 /** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -356,7 +450,7 @@ async function toTicket(el: TillApp): Promise<void> {
  * screen (FP-1). The app must be mounted with `getTablesState` returning `table` so the floor has it. */
 async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOrderScreen> {
   await toCounter(el);
-  emit(counter(el)!, "show-floor");
+  selectTab(el, "floor");
   await flush(el);
   emit(floor(el)!, "open-table", { tableId: table.id, hasOpenTab: table.hasOpenTab });
   await flush(el);
@@ -496,7 +590,10 @@ describe("till-app", () => {
       // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
       // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
       // guard must never withhold the venue default from the operator-less device path.
-      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
+      // A kds_station device boots the KDS canvas (its `kitchen` tab's `kds-board` card mounts the
+      // station screen through the grid). Venue default en-GB (≠ es-ES) makes the device-path
+      // venue-default `setLocale` observable.
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", canvas: kdsCanvasDef }),
       // The kind-aware probe (Task 7): a `kds_station` identity keeps the existing behaviour — the boot
       // then PREFETCHES the bound station's queue (`getDeviceStation`), a DELIBERATE second authenticated
       // read that preserves the `initialDeviceStation` optimisation. Only the mock plumbing changes here;
@@ -508,7 +605,8 @@ describe("till-app", () => {
     });
     await flush(el);
     expect(currentApi.getDeviceStation).toHaveBeenCalled();
-    // Straight past the lock screen — a device never logs in.
+    // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
+    // onto the kitchen tab, whose kds-board card mounts the station screen (SP-B2.2).
     expect(lock(el)).toBeNull();
     const s = station(el);
     expect(s).not.toBeNull();
@@ -522,6 +620,9 @@ describe("till-app", () => {
     // the lock screen — the waiter PIN-logs-in, then lands on the floor rather than the counter POS.
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
+      // A handheld boots the phone canvas (floor + order tabs); its first tab is `floor`, so login lands
+      // the waiter there.
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -566,6 +667,7 @@ describe("till-app", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -603,12 +705,13 @@ describe("till-app", () => {
       emit(floor(el)!, "open-table", { tableId: openTable.id, hasOpenTab: openTable.hasOpenTab });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
-      // A stray back-to-counter bubbling up from the table-order subtree must be gated too — the handheld
-      // stays on `table-order` (a face-set member), never falls through to the counter.
+      // A stray back-to-counter bubbling up from the table-order subtree must not reach the counter POS.
+      // On the shell it sets the active tab to `counter`, but the phone canvas authors NO counter tab, so
+      // the shell falls back to its first tab (`floor`, a face-set member) — never the counter.
       emit(tableOrder(el)!, "back-to-counter");
       await flush(el);
-      expect(tableOrder(el)).not.toBeNull();
-      expect(counter(el)).toBeNull();
+      expect(counter(el)).toBeNull(); // containment: the counter POS is unreachable on a handheld
+      expect(floor(el)).not.toBeNull(); // fell back to the floor tab
     });
   });
 
@@ -639,14 +742,14 @@ describe("till-app", () => {
         .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
     });
     await flush(el);
-    // Leave a stale device-mode state behind: setup-device flips deviceMode on and navigates to station.
+    // Leave a stale device-mode state behind: setup-device flips deviceMode on (its `screen = "station"`
+    // no longer renders a distinct legacy screen — the shell owns rendering now, SP-B4).
     emit(lock(el)!, "setup-device");
     await flush(el);
-    expect(station(el)).not.toBeNull();
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
-    // Re-boot (the enrol path) with the identity now `handheld`. Emit from the station element — it
-    // bubbles to the app's `@handheld-enrolled` handler, which re-runs `#boot`.
-    emit(station(el)!, "handheld-enrolled");
+    // Re-boot (the enrol path) with the identity now `handheld`. Emit `handheld-enrolled` (it bubbles to
+    // the app's handler, which re-runs `#boot`) from the shell present in the interim device-mode state.
+    emit(shell(el)!, "handheld-enrolled");
     await flush(el);
     // The re-boot reset the stale device state before re-probing: a handheld waits on the lock screen,
     // never the station the prior setup-device left it on, and deviceMode is cleared.
@@ -679,13 +782,14 @@ describe("till-app", () => {
   it("the lock screen's set-up affordance routes a fresh display into device mode", async () => {
     const { el } = await mountApp();
     await flush(el);
-    // The lock screen emits `setup-device`; the app switches to the station screen in device mode so an
-    // unenrolled display can reach the enrol view.
+    // The lock screen emits `setup-device`; the app enters device mode (deviceMode=true, off the lock
+    // screen). NOTE (SP-B4): a fresh display's cookieless boot resolves the `till` form-factor canvas, so
+    // the shell now renders that canvas rather than the legacy station-screen-then-enrol flow — reaching
+    // the KDS enrol view from here is a device-enrolment concern left to a later slice, not the sale path.
     emit(lock(el)!, "setup-device");
     await flush(el);
-    const s = station(el);
-    expect(s).not.toBeNull();
-    expect(s!.deviceMode).toBe(true);
+    expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
+    expect(lock(el)).toBeNull(); // left the lock screen (the shell is active)
   });
 
   // §C2 containment/identity. An enrolled handheld returns to the lock screen on every logout/cold boot
@@ -1894,7 +1998,8 @@ describe("till-app", () => {
     await flush(el);
 
     expect(schedule(el)).not.toBeNull();
-    expect(counter(el)).toBeNull();
+    // On the shell the schedule is a DRILL overlaying the still-mounted counter tab.
+    expect(counter(el)).not.toBeNull();
     // Basket-preserving, like logout: navigating to the schedule never loses the half-built order.
     expect(store.lines).toHaveLength(1);
     // The roster (from listStaff) and the logged-in operator id reach the schedule screen.
@@ -1939,7 +2044,7 @@ describe("till-app", () => {
       store.addProduct(cafe, "2");
       await el.updateComplete;
 
-      emit(c, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
 
       expect(floor(el)).not.toBeNull();
@@ -1958,9 +2063,9 @@ describe("till-app", () => {
         getTablesState: vi.fn().mockRejectedValue({ code: "server.internal" }),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
-      const c = await toCounter(el);
+      await toCounter(el);
 
-      emit(c, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
 
       // A failed read shows the floor anyway (degrade gracefully), with tables left at their default.
@@ -1973,8 +2078,8 @@ describe("till-app", () => {
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
 
       // The floor screen gets the app's api (for the on-till placement writes) and the manager gate.
@@ -1982,6 +2087,14 @@ describe("till-app", () => {
       expect(floor(el)!.api).toBe(currentApi);
       expect(floor(el)!.canEdit).toBe(false);
     });
+
+    // FP-2 privilege propagation, canvas model (SP-B): the on-till floor editor is now a permission-locked
+    // `table-layout-editor` card, gated at the CELL by the grid's `canConfigureTill` (permission→locked,
+    // SP-B2.1). So the end-to-end assertion is that the operator's server-computed `till.configure` reaches
+    // the floor tab's card grid as `canConfigureTill` — the input that unlocks/locks that card. (The card's
+    // own lock rendering is covered by card-grid's suite.)
+    const gridConfigurable = (el: TillApp) =>
+      (activeTabGrid(el) as unknown as { canConfigureTill: boolean }).canConfigureTill;
 
     it("a login WITH the till.configure capability lights up the on-till floor editor, end-to-end", async () => {
       const { el } = await mountApp({
@@ -1996,11 +2109,10 @@ describe("till-app", () => {
         canConfigureTill: true,
       });
       await flush(el);
-      emit(counter(el)!, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
 
-      expect(floor(el)!.canEdit).toBe(true);
-      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).not.toBeNull();
+      expect(gridConfigurable(el)).toBe(true);
 
       // Logging out drops the privilege so the next operator starts un-privileged.
       emit(floor(el)!, "back-to-counter");
@@ -2009,9 +2121,9 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      emit(counter(el)!, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
-      expect(floor(el)!.canEdit).toBe(false);
+      expect(gridConfigurable(el)).toBe(false);
     });
 
     it("a login WITHOUT the till.configure capability keeps the on-till floor editor hidden, end-to-end", async () => {
@@ -2022,11 +2134,10 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      emit(counter(el)!, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
 
-      expect(floor(el)!.canEdit).toBe(false);
-      expect(floor(el)!.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
+      expect(gridConfigurable(el)).toBe(false);
     });
 
     it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {
@@ -2034,8 +2145,8 @@ describe("till-app", () => {
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
       // The initial floor load read each once.
       expect(currentApi.getTablesState).toHaveBeenCalledOnce();
@@ -2060,8 +2171,8 @@ describe("till-app", () => {
           .mockRejectedValue({ code: "server.internal" }),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
       expect(floor(el)!.tables).toEqual([freeTable]);
 
@@ -2080,8 +2191,8 @@ describe("till-app", () => {
         listZones: vi.fn().mockResolvedValue([floorZone]),
         openTab,
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
 
       emit(floor(el)!, "open-table", { tableId: "t1", hasOpenTab: false });
@@ -2089,7 +2200,9 @@ describe("till-app", () => {
 
       // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
       expect(openTab).toHaveBeenCalledWith("t1");
-      expect(floor(el)).toBeNull();
+      // On a TILL the table-order screen opens as a DRILL over the floor tab (SP-B §5), which stays
+      // mounted (inert) underneath — the drill is what the operator sees.
+      expect(floor(el)).not.toBeNull();
       // The real table-order screen (Ruling FP-D) now holds the slot, pointed at the freshly-opened tab
       // id (the app stored `openTab`'s new id in activeTabId and threads it through as `.orderId`).
       const screen = tableOrder(el);
@@ -2104,8 +2217,8 @@ describe("till-app", () => {
         listZones: vi.fn().mockResolvedValue([floorZone]),
         openTab,
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
 
       emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
@@ -2114,7 +2227,8 @@ describe("till-app", () => {
       // An occupied table already has a tab — no fresh openTab, just the transition. The screen points
       // at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
       expect(openTab).not.toHaveBeenCalled();
-      expect(floor(el)).toBeNull();
+      // The table-order drill overlays the still-mounted floor tab (SP-B §5, till path).
+      expect(floor(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-7");
     });
 
@@ -2126,8 +2240,8 @@ describe("till-app", () => {
         listZones: vi.fn().mockResolvedValue([floorZone]),
         openTab,
       });
-      const c = await toCounter(el);
-      emit(c, "show-floor");
+      await toCounter(el);
+      selectTab(el, "floor");
       await flush(el);
 
       emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
@@ -2146,7 +2260,7 @@ describe("till-app", () => {
       store.addProduct(cafe, "2");
       await el.updateComplete;
 
-      emit(c, "show-floor");
+      selectTab(el, "floor");
       await flush(el);
       expect(floor(el)).not.toBeNull();
 
@@ -2200,7 +2314,28 @@ describe("till-app", () => {
         // table reaches the table-order screen. It may settle at `POST /api/sales` for cash OR a manual
         // card tender (the server firewall permits both, fencing only the INTEGRATED reader, `/api/pay`),
         // so the pay section SHOWS with both tenders.
+        // A handheld boots a PHONE canvas (SP-B): a `floor` tab + an `order` tab (a `table-order` card).
+        // Opening a table SWITCHES to the order tab, mounting the table-order screen as that tab's card.
+        const phoneCanvas: CanvasDef = {
+          formFactor: "phone-portrait",
+          capabilities: [],
+          tabs: [
+            {
+              key: "floor",
+              title: "Floor",
+              columns: 12,
+              cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+            },
+            {
+              key: "order",
+              title: "Order",
+              columns: 12,
+              cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+            },
+          ],
+        };
         const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
           getDeviceIdentity: vi
             .fn()
             .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -2740,9 +2875,11 @@ describe("till-app", () => {
         emit(screen, "back-to-floor");
         await flush(el);
 
-        // A fresh occupancy read (a just-paid table shows free) and the floor is shown again.
+        // On the shell, back-to-floor pops the table-order drill and REFRESHES the floor tables-only
+        // (`#refreshFloor`) — a just-paid table shows free — but NOT the zones, which are static within a
+        // session (SP-B2.1). So tables re-read (twice total), zones untouched (once).
         expect(getTablesState).toHaveBeenCalledTimes(2);
-        expect(listZones).toHaveBeenCalledTimes(2);
+        expect(listZones).toHaveBeenCalledTimes(1);
         expect(floor(el)).not.toBeNull();
         expect(tableOrder(el)).toBeNull();
       });
@@ -3220,7 +3357,8 @@ describe("till-app", () => {
       const c = await toCounter(el);
       expect(tenderPay(el).mode).toBe("prepay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(stationQueueWidget(el)).toBeNull(); // Mode P's layout omits the widget entirely
+      // Mode P never fetches the queue, so the counter tab's has-items-gated prep-queue card stays hidden.
+      expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(c.products).toEqual([cafe]); // sanity: still a normal counter otherwise
     });
@@ -3228,6 +3366,8 @@ describe("till-app", () => {
     it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
+        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("invoice_first");
@@ -3241,6 +3381,8 @@ describe("till-app", () => {
     it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
+        getStationQueue: vi.fn().mockResolvedValue([stationGroup]),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
@@ -3263,7 +3405,8 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(stationQueueWidget(el)!.groups).toEqual([]);
+      // No default station ⇒ the queue is never fetched ⇒ empty ⇒ the has-items gate hides the card.
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
     it("place-order (fresh basket): parks then places, moves to the collect stage, refreshes the prep queue", async () => {
@@ -3535,7 +3678,8 @@ describe("till-app", () => {
       expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing");
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      expect(stationQueueWidget(el)!.groups).toEqual([]);
+      // The refresh returned an EMPTY queue (the item advanced off), so the has-items gate hides the card.
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
     it("a failed advance-ticket-item still refreshes the queue and shows a non-fatal error", async () => {
@@ -3573,7 +3717,8 @@ describe("till-app", () => {
       expect(currentApi.markCollected).toHaveBeenCalledWith("wo-1");
       // once on entering the counter, once after the handover — so the collected order drops off the queue.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      expect(stationQueueWidget(el)!.groups).toEqual([]);
+      // The refresh returned an EMPTY queue (the order handed over), so the has-items gate hides the card.
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
     it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {
@@ -3602,9 +3747,10 @@ describe("till-app", () => {
       await flush(el);
 
       expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
-      expect(counter(el)).toBeNull();
-      // The basket survives the trip (till-owned store, not per-counter), like the schedule/floor nav —
-      // still one line even while the counter is unmounted and the station screen is showing.
+      // On the shell the station display is a DRILL overlaying the counter tab, which stays mounted
+      // (inert) underneath — the drill is what the operator sees.
+      expect(counter(el)).not.toBeNull();
+      // The basket survives the trip (till-owned store, not per-counter), like the schedule/floor nav.
       expect(c.store.lines).toHaveLength(1);
 
       // Back returns to the counter with the basket intact.
@@ -3656,7 +3802,8 @@ describe("till-app", () => {
       await flush(el);
 
       expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
-      expect(counter(el)).toBeNull();
+      // On the shell the expo/pass display is a DRILL overlaying the still-mounted counter tab.
+      expect(counter(el)).not.toBeNull();
       // The basket survives the trip (till-owned store), like the station/schedule/floor nav.
       expect(c.store.lines).toHaveLength(1);
 
@@ -3684,91 +3831,17 @@ describe("till-app", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // Layout & receipt editors (Task 9): #boot reads `layout`/`receipt` from GET /api/till. An AUTHORED
-  // layout (structurally different from the built-in default) renders VERBATIM — no Mode-P filter, the
-  // owner's choice (design §7); a DEFAULT or ABSENT layout keeps slice 1's Mode-P prep-queue drop as
-  // the fallback (#layoutFor). `receipt` is threaded to the ticket view. The `till` fixture above OMITS
-  // both fields, so every pre-Task-9 test exercises the ABSENT→fallback branch.
+  // Receipt editor: #boot reads `receipt` from GET /api/till and threads it to the ticket view. The
+  // `till` fixture above OMITS it (an older server predating the editor), so it defaults to {}. (The old
+  // region-model `layout` and its Mode-P prep-queue-drop fallback were removed in SP-B4 — the counter
+  // renders solely from the canvas's `counter` tab; its cards' visibility is the canvas's concern now.)
   // ---------------------------------------------------------------------------------------------
 
-  describe("authored layout + receipt (design §7)", () => {
-    // A full 6-widget layout, but prep-queue FIRST — a structural difference from LAYOUT_A (reordered),
-    // so it is AUTHORED, not the default.
-    const authoredReordered: LayoutDef = [
-      { type: "prep-queue", region: "aside", config: {} },
-      { type: "product-grid", region: "main", config: {} },
-      { type: "basket", region: "aside", config: {} },
-      { type: "total", region: "aside", config: {} },
-      { type: "tender-pay", region: "aside", config: {} },
-      { type: "held-orders", region: "aside", config: {} },
-    ];
-
-    const gridOf = (el: TillApp) =>
-      counter(el)!.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-
-    it("renders an AUTHORED layout verbatim — under Mode P an authored prep-queue is NOT dropped", async () => {
-      // The two-branch proof (this is the AUTHORED half): under Mode P the default fallback would drop
-      // prep-queue, but an authored layout is rendered verbatim, so the owner's prep-queue survives.
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          orderFlow: "prepay",
-          layout: authoredReordered,
-          receipt: {},
-        }),
-      });
-      const c = await toCounter(el);
-      // the authored arrangement reached the counter verbatim (order preserved)
-      expect(c.layout).toEqual(authoredReordered);
-      // and under Mode P the authored prep-queue is present — the mode filter did NOT run
-      expect(stationQueueWidget(el)).not.toBeNull();
-    });
-
-    it("threads an authored product-grid `columns` config end to end to the grid widget", async () => {
-      // A full layout identical to the default EXCEPT product-grid carries `columns: 4` — a config
-      // difference makes it AUTHORED (rendered verbatim), and the value reaches the real grid widget.
-      const authoredColumns: LayoutDef = [
-        { type: "product-grid", region: "main", config: { columns: 4 } },
-        { type: "basket", region: "aside", config: {} },
-        { type: "total", region: "aside", config: {} },
-        { type: "tender-pay", region: "aside", config: {} },
-        { type: "held-orders", region: "aside", config: {} },
-        { type: "prep-queue", region: "aside", config: {} },
-      ];
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, layout: authoredColumns, receipt: {} }),
-      });
-      await toCounter(el);
-      expect(gridOf(el).columns).toBe(4);
-    });
-
-    it("a layout structurally EQUAL to the default keeps the Mode-P prep-queue drop (default detection)", async () => {
-      // The two-branch proof (this is the DEFAULT half): a VALUE-copy of LAYOUT_A (not the local
-      // reference — it arrives as fresh JSON) is detected as the default, so under Mode P the fallback
-      // still drops prep-queue exactly as slice 1 shipped. Making isDefaultLayout return a constant
-      // false breaks this (prep-queue would survive); returning constant true breaks the authored test.
-      const defaultCopy: LayoutDef = LAYOUT_A.map((w) => ({ ...w, config: { ...w.config } }));
-      const { el } = await mountApp({
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, orderFlow: "prepay", layout: defaultCopy, receipt: {} }),
-      });
-      await toCounter(el);
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
-    it("falls back to #layoutFor() when GET /api/till OMITS `layout` (older server): Mode P drops prep-queue", async () => {
-      // The `till` fixture carries no `layout` — #boot leaves receivedLayout undefined, so #layoutFor()
-      // applies the Mode-P prep-queue drop, the slice-1 behaviour, unchanged.
-      const { el } = await mountApp();
-      await toCounter(el);
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
+  describe("receipt trim (design §8)", () => {
     it("threads the receipt trim from getTill through to the ticket view", async () => {
       const receipt = { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, layout: LAYOUT_A, receipt }),
+        getTill: vi.fn().mockResolvedValue({ ...till, receipt }),
       });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
@@ -3790,8 +3863,8 @@ describe("till-app", () => {
   });
 
   describe("layout canvas (SP-B1)", () => {
-    // A `till` canvas whose `counter` tab is what #boot reads and #counterTab() selects. Only the
-    // fields the assertion checks (key/columns) are load-bearing; the rest complete a valid CanvasDef.
+    // A `till` canvas whose `counter` tab is what #boot reads and #tabBody threads to the counter screen.
+    // Only the fields the assertion checks (key/columns) matter; the rest complete a valid CanvasDef.
     const counterCanvas: CanvasDef = {
       formFactor: "till",
       capabilities: [],
@@ -3853,17 +3926,6 @@ describe("till-app", () => {
       expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
       expect(counter(el)).toBeNull();
       expect(shell(el)!.activeTabKey).toBe("floor");
-    });
-
-    it("keeps the legacy screen-enum (no shell) when the boot carries no canvas", async () => {
-      // The default `till` fixture omits `canvas`, so `#shellActive()` is never reached and
-      // `#renderScreen` renders the counter screen with its OWN header — the false direction of the
-      // shell branch, checked so a shell that renders unconditionally would fail here.
-      const { el } = await mountApp();
-      await toCounter(el);
-      expect(shell(el)).toBeNull();
-      expect(counter(el)).not.toBeNull();
-      expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
     });
 
     it("a HANDHELD with a canvas renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
@@ -4498,14 +4560,15 @@ describe("till-app", () => {
       expect(lock(el)).not.toBeNull(); // still pre-login
     });
 
-    it("login switches the UI to the operator's stored locale — a DEEP counter child renders English", async () => {
+    it("login switches the UI to the operator's stored locale — a DEEP shell child renders English", async () => {
       // Venue default es-ES; the operator's stored locale is en-GB. On login the app resolves en-GB and
-      // `setLocale`s it; the `keyed(currentLocale(), …)` wrapper recreates the counter subtree, so a deep child
-      // (the logout button, inside the counter's OWN shadow root) renders in English, not Spanish.
+      // `setLocale`s it; the `keyed(currentLocale(), …)` wrapper recreates the shell subtree, so a deep child
+      // (the logout button — SP-B4 relocated it from the counter's own header into the shell header) renders
+      // in English, not Spanish.
       const { el } = await mountApp();
-      const c = await toCounterAs(el, "en-GB");
+      await toCounterAs(el, "en-GB");
       expect(currentLocale()).toBe("en-GB");
-      const logout = c.shadowRoot!.querySelector(".logout")!;
+      const logout = shell(el)!.shadowRoot!.querySelector(".logout")!;
       expect(logout.textContent).toContain(t("action.logout", "en-GB")); // "Log out"
       expect(logout.textContent).not.toContain(t("action.logout", "es-ES")); // not "Cerrar sesión"
     });
@@ -4602,12 +4665,14 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("locale.unsupported"); // never leaks the code
     });
 
-    it("threads the api down to the counter so its chooser can load the offered locales", async () => {
+    it("renders the language chooser in the shell header so it can load the offered locales", async () => {
       const { el } = await mountApp();
       const c = await toCounterAs(el, null);
-      // The counter renders the chooser and is handed the app's api (its `loadLocales` reads getLocales).
+      // The counter is still handed the app's api (threaded by the shell's tab body).
       expect(c.api).toBe(currentApi);
-      expect(c.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+      // SP-B4: the language chooser relocated from the embedded counter's (suppressed) header into the
+      // shell header, wired to the app's `loadLocales` (which reads getLocales).
+      expect(shell(el)!.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
     });
 
     it("does not revert the locale if the app disconnects mid-logout", async () => {
@@ -4696,17 +4761,18 @@ describe("till-app", () => {
       .fn()
       .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
 
-    /** The menu switcher inside the counter's main region. */
+    /** The menu switcher the counter screen renders above the card grid (SP-B4 — the region model is gone). */
     const switcher = (el: TillApp) =>
-      counter(el)!.shadowRoot!.querySelector<HTMLElement>(".region-main till-menu-switcher")!;
+      counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
     /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
     const switcherButtons = (el: TillApp) => [
       ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
     ];
-    /** The product names the counter GRID is currently showing (its `wt-button.tile` labels). */
+    /** The product names the counter GRID is currently showing (its `wt-button.tile` labels) — the
+     * product-grid card lives inside the counter's card grid shadow root (SP-B4). */
     const gridNames = (el: TillApp) =>
       [
-        ...counter(el)!
+        ...counterGrid(el)!
           .shadowRoot!.querySelector("till-product-grid")!
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
