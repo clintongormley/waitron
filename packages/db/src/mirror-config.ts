@@ -12,6 +12,10 @@ export interface MirrorConnection {
   relayUrl: string;
   boxHostname: string;
   boxCaPem: string;
+  // The nodeId of the PRIMARY this mirror pulls from — its sync ORIGIN, distinct from this node's
+  // OWN identity (`config.till.nodeId`). Written owner-role at adopt (the primary's nodeId); read at
+  // mirror boot to drive the pull peer's origin. See the schema doc on `origin_node_id`.
+  originNodeId: string;
 }
 
 /**
@@ -33,13 +37,17 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
     relay_url: string;
     box_hostname: string;
     box_ca_pem: string;
-  }>(sql`select relay_url, box_hostname, box_ca_pem from mirror_config where id = 1`);
+    origin_node_id: string;
+  }>(
+    sql`select relay_url, box_hostname, box_ca_pem, origin_node_id from mirror_config where id = 1`,
+  );
   const row = rows.rows[0];
   if (row === undefined) return null;
   return {
     relayUrl: row.relay_url,
     boxHostname: row.box_hostname,
     boxCaPem: row.box_ca_pem,
+    originNodeId: row.origin_node_id,
   };
 }
 
@@ -61,6 +69,7 @@ export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Pr
       relayUrl: cfg.relayUrl,
       boxHostname: cfg.boxHostname,
       boxCaPem: cfg.boxCaPem,
+      originNodeId: cfg.originNodeId,
     })
     .onConflictDoUpdate({
       target: mirrorConfig.id,
@@ -68,6 +77,7 @@ export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Pr
         relayUrl: cfg.relayUrl,
         boxHostname: cfg.boxHostname,
         boxCaPem: cfg.boxCaPem,
+        originNodeId: cfg.originNodeId,
         adoptedAt: sql`now()`,
       },
     });
