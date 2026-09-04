@@ -587,7 +587,8 @@ export interface Course {
  * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
  * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
  * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
- * redeemed its pairing code. The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
+ * redeemed its pairing code. `layoutProfileId` is the device's currently-assigned layout profile (null =
+ * the form-factor default). The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
  * server orders NEWEST-enrolled first; the screen renders that order as-is. NOT imported from `apps/server`
  * (the #70 bundle rule the shapes above follow); a mismatch surfaces as a runtime shape error a view test
  * catches, not a compile break.
@@ -600,6 +601,7 @@ export interface DeviceRow {
   active: boolean;
   lastSeenAt: string | null;
   enrolledAt: string;
+  layoutProfileId: string | null;
 }
 
 /** One `GET /management-api/profiles` row — a tenant layout profile as the profile picker needs it. The
@@ -1857,6 +1859,16 @@ export class DashboardApi {
    * `{ code: "device.not_found" }`. Never a hard delete — a device is a durable identity. */
   revokeDevice(id: string): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
+  }
+
+  /** `POST /management-api/devices/:id/assign-profile` — reassign (or clear) a device's layout profile
+   * (device.manage-gated): `layoutProfileId` a tenant profile's id, or `null` to fall back to the
+   * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`
+   * and a bad/foreign profile `{ code: "device.binding_invalid" }`. */
+  reassignDevice(id: string, layoutProfileId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/assign-profile`, "POST", {
+      layoutProfileId,
+    });
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────

@@ -50,6 +50,7 @@ const devices: DeviceRow[] = [
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
+    layoutProfileId: "p1",
   },
   {
     id: "d2",
@@ -59,6 +60,7 @@ const devices: DeviceRow[] = [
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
+    layoutProfileId: null,
   },
 ];
 
