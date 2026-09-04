@@ -53,6 +53,13 @@ function toggleMembership<T>(
   return all.filter((x) => set.has(x));
 }
 
+/** Clamp a card span: colSpan to `1..columns`, rowSpan to `≥1`. The single source of the span clamp —
+ * the stepper (`#setSpan`) and the resize drag (`#setSpans`) both route through it, so the two paths
+ * can never diverge. */
+function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number): number {
+  return field === "colSpan" ? Math.min(Math.max(value, 1), columns) : Math.max(value, 1);
+}
+
 /**
  * The management dashboard's CANVAS EDITOR screen (SP-B3.2) — the venue's central surface for the
  * per-device grid layouts ("canvases"). LIST mode loads the tenant's
@@ -463,11 +470,34 @@ export class CanvasEditorScreen extends LitElement {
     if (tab === undefined) return;
     const value = Number.parseInt(raw, 10);
     if (Number.isNaN(value)) return;
-    const clamped =
-      field === "colSpan" ? Math.min(Math.max(value, 1), tab.columns) : Math.max(value, 1);
+    const clamped = clampSpan(field, value, tab.columns);
     this.#updateActiveTab((t) => ({
       ...t,
       cards: t.cards.map((card, i) => (i === index ? { ...card, [field]: clamped } : card)),
+    }));
+  }
+
+  /** Rewrite one card's BOTH spans in a SINGLE draft rebuild, each clamped via `clampSpan` (colSpan
+   * `1..columns`, rowSpan `≥1`). The resize-drag counterpart to the per-field `#setSpan` stepper —
+   * one `#updateActiveTab` clone rather than two. */
+  #setSpans(index: number, spans: { colSpan: number; rowSpan: number }): void {
+    const draft = this.draft;
+    if (draft === null) return;
+    const tab = draft.tabs[this.activeTabIndex];
+    if (tab === undefined) return;
+    const current = tab.cards[index];
+    if (current === undefined) return;
+    const colSpan = clampSpan("colSpan", spans.colSpan, tab.columns);
+    const rowSpan = clampSpan("rowSpan", spans.rowSpan, tab.columns);
+    // A resize drag re-emits raw spans each cell it crosses; past the clamp bound (raw colSpan 13,
+    // 14, 15… above `columns`, or 0, −1… below the minimum) every one snaps to the SAME clamped
+    // result, so skip the rebuild when neither clamped span differs from the card's current spans —
+    // no #updateActiveTab clone, no re-render. The output is already correct; only the wasted work
+    // is removed. A genuine change still rewrites.
+    if (colSpan === current.colSpan && rowSpan === current.rowSpan) return;
+    this.#updateActiveTab((t) => ({
+      ...t,
+      cards: t.cards.map((card, i) => (i === index ? { ...card, colSpan, rowSpan } : card)),
     }));
   }
 
@@ -489,22 +519,54 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = null;
   }
 
-  /** Swap the selected card with its neighbour (`delta` −1 = up, +1 = down); a no-op at either end.
-   * The selection follows the card to its new index. */
+  /** Move the selected card to its neighbour (`delta` −1 = up, +1 = down); a no-op at either end that
+   * fires no draft rebuild. For an adjacent move a splice equals a swap, so this delegates to
+   * `#moveCardTo` (which follows the selection) — the `to` bounds guard here keeps the boundary a true
+   * no-op rather than letting `#moveCardTo` clamp an out-of-range target back in and rewrite. */
   #moveCard(delta: -1 | 1): void {
-    const draft = this.draft;
     const from = this.#selectedCardIndex();
-    if (draft === null || from === null) return;
+    if (from === null) return;
+    const draft = this.draft;
+    if (draft === null) return;
     const tab = draft.tabs[this.activeTabIndex];
     if (tab === undefined) return;
     const to = from + delta;
     if (to < 0 || to >= tab.cards.length) return;
+    this.#moveCardTo(from, to);
+  }
+
+  /** Reorder a card within the active tab: remove it at `from` and insert it at `to` (an index in the
+   * array AFTER the removal). This is the direct-manipulation counterpart to the ↑/↓ swap — the
+   * layout is FLOW-based, so a drag "move" is a splice, not an x/y placement. The selection follows
+   * the card to its landing index. `#moveCard` (keyboard) stays a swap; both are kept. */
+  #moveCardTo(from: number, to: number): void {
+    const draft = this.draft;
+    if (draft === null) return;
+    const tab = draft.tabs[this.activeTabIndex];
+    if (tab === undefined) return;
+    if (from < 0 || from >= tab.cards.length) return;
     const cards = [...tab.cards];
-    const moved = cards[from]!;
-    cards[from] = cards[to]!;
-    cards[to] = moved;
+    const [moved] = cards.splice(from, 1);
+    const landing = Math.min(Math.max(to, 0), cards.length);
+    cards.splice(landing, 0, moved!);
     this.#updateActiveTab((t) => ({ ...t, cards }));
-    this.selection = { card: to };
+    this.selection = { card: landing };
+  }
+
+  /** Apply a `move-card` drag intent from the preview. */
+  #onMoveCard(event: CustomEvent<{ from: number; to: number }>): void {
+    event.stopPropagation();
+    this.#moveCardTo(event.detail.from, event.detail.to);
+  }
+
+  /** Apply a `resize-card` drag intent from the preview: select the resized card and write both spans
+   * through `#setSpans`, which clamps each via the shared `clampSpan` (colSpan 1..columns, rowSpan ≥1)
+   * in ONE draft rebuild — no duplicated clamp, no double clone. */
+  #onResizeCard(event: CustomEvent<{ index: number; colSpan: number; rowSpan: number }>): void {
+    event.stopPropagation();
+    const { index, colSpan, rowSpan } = event.detail;
+    this.selection = { card: index };
+    this.#setSpans(index, { colSpan, rowSpan });
   }
 
   /** Discard the draft and return to the list, clearing the error banner too. */
@@ -1183,6 +1245,10 @@ export class CanvasEditorScreen extends LitElement {
               @select-card=${(e: CustomEvent<{ index: number }>) => {
                 this.selection = { card: e.detail.index };
               }}
+              @move-card=${(e: CustomEvent<{ from: number; to: number }>) => this.#onMoveCard(e)}
+              @resize-card=${(
+                e: CustomEvent<{ index: number; colSpan: number; rowSpan: number }>,
+              ) => this.#onResizeCard(e)}
             ></canvas-grid-preview>
           </div>
           <aside class="sidebar">${this.#renderPalette()} ${panel}</aside>
