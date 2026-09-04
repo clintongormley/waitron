@@ -6,8 +6,9 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-// Side-effect import: register <canvas-grid-preview> (the shared thumbnail/canvas unit, Task B4) so
-// the list can render each canvas's first tab as an inert preview.
+// Side-effect import: register <canvas-grid-preview> (the shared thumbnail/canvas unit) — the list
+// renders each canvas's first tab as an inert preview with it, and the editor renders its live tab
+// as the interactive canvas.
 import "./canvas-editor/canvas-grid-preview.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -32,7 +33,7 @@ import type { Canvas, DashboardApi } from "../api/client.js";
 /**
  * The column count a freshly-added tab starts on, per form factor — the same figures the built-in
  * default canvases use for their primary tab (`DEFAULT_CANVASES`): a 12-column till/tablet, a 4-column
- * phone, a 24-column KDS. B7's tab-settings panel lets the operator change it afterwards.
+ * phone, a 24-column KDS. The tab-settings panel lets the operator change it afterwards.
  */
 const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
   till: 12,
@@ -43,23 +44,23 @@ const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
 
 /**
  * The management dashboard's CANVAS EDITOR screen (SP-B3.2) — the venue's central surface for the
- * per-device grid layouts ("canvases"). This task (B5) implements its LIST mode: it loads the tenant's
+ * per-device grid layouts ("canvases"). LIST mode loads the tenant's
  * canvases (`api.listCanvases()`), and renders each as a card carrying its name, a form-factor badge,
  * tab/card counts and an inert `<canvas-grid-preview>` thumbnail of its first tab, plus per-row Editar /
  * Duplicar / Eliminar controls. It also offers a Crear dialog (name + form-factor) that seeds a fresh
  * draft from the built-in default for that form factor and enters EDITOR mode.
  *
- * EDITOR mode (Tasks B6/B7) is the draft editor. B6 is the structural layer: a tab bar (select/add
- * tab), the interactive `<canvas-grid-preview>` as the canvas, a palette that appends a card at its
- * default spans, and — when a card tile is selected — a property panel with colSpan/rowSpan steppers,
- * remove, and ↑/↓ reorder. B7 adds the rest of the property panel (per-card CONFIG + `visibleWhen`
- * toggles + permission/capability notes), TAB settings (title/columns/delete, with a last-tab guard),
- * CANVAS settings (name/form-factor/capabilities), and the real SAVE (`#save`): it refuses an empty
+ * EDITOR mode is the draft editor: a tab bar (select/add tab), the interactive
+ * `<canvas-grid-preview>` as the canvas, a palette that appends a card at its default spans, and —
+ * when a card tile is selected — a property panel with colSpan/rowSpan steppers, remove, and ↑/↓
+ * reorder, plus the rest of the property panel (per-card CONFIG + `visibleWhen` toggles +
+ * permission/capability notes), TAB settings (title/columns/delete, with a last-tab guard), CANVAS
+ * settings (name/form-factor/capabilities), and the real SAVE (`#save`): it refuses an empty
  * name, runs the light client validator (`validateCanvasDraft`) — a broken draft shows the banner and
  * does not write — then `createCanvas`/`updateCanvas` on `editingId` and returns to the reloaded list.
  * Every draft edit goes through `#updateDraft`, which assigns a FRESH `CanvasDef` (never mutates in
  * place) so Lit and the preview re-render. `Cancelar` returns to the list, clearing the draft. The
- * editor root keeps the B5 `editor-placeholder` seam (its `data-editing-id`/`data-form-factor`
+ * editor root keeps the `editor-placeholder` seam (its `data-editing-id`/`data-form-factor`
  * attributes).
  *
  * DEFENSIVE PARSE. A canvas's `definition` crosses the client boundary as opaque `unknown` (the #70
@@ -228,8 +229,7 @@ export class CanvasEditorScreen extends LitElement {
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  /** Which mode is showing. `list` is the canvas gallery (this task); `editor` is the draft grid
-   * editor (Tasks B6/B7). */
+  /** Which mode is showing. `list` is the canvas gallery; `editor` is the draft grid editor. */
   @state() private mode: "list" | "editor" = "list";
 
   /** The tenant's canvases, (re)loaded on connect and after every mutation. */
@@ -250,8 +250,8 @@ export class CanvasEditorScreen extends LitElement {
   // Eliminar dialog state: the canvas armed for deletion (null = closed).
   @state() private deleteTarget: Canvas | null = null;
 
-  // Editor-mode draft (Task B6 structural editing; B7 config/save): the parsed definition being edited,
-  // its name, and the id of the canvas being edited (null for a freshly-created draft not yet saved).
+  // Editor-mode draft: the parsed definition being edited, its name, and the id of the canvas being
+  // edited (null for a freshly-created draft not yet saved).
   @state() private draft: CanvasDef | null = null;
   @state() private draftName = "";
   @state() private editingId: string | null = null;
@@ -259,8 +259,9 @@ export class CanvasEditorScreen extends LitElement {
   /** Which tab of the draft the canvas + palette act on. */
   @state() private activeTabIndex = 0;
 
-  /** What the property panel targets: a card by index, the tab, the whole canvas, or nothing selected.
-   * B6 wires only the `card` branch; `tab`/`canvas` are B7's settings panels. */
+  /** What the property panel targets: a card by index, the tab, or the whole canvas — rendering the
+   * card panel, the tab-settings panel, or the canvas-settings panel respectively, or nothing when
+   * `null`. */
   @state() private selection: { card: number } | { tab: true } | { canvas: true } | null = null;
 
   /** True while a `#save` write is in flight, so Guardar disables itself and no second write races. */
@@ -333,8 +334,8 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   /** Seed a fresh draft from the built-in default for the chosen form factor and enter editor mode.
-   * The save is Task B7 — nothing is written to the server here. `structuredClone` gives the editor a
-   * private copy it can mutate without touching the shared `DEFAULT_CANVASES` template. */
+   * Nothing is written to the server here — that happens on Guardar (`#save`). `structuredClone` gives
+   * the editor a private copy it can mutate without touching the shared `DEFAULT_CANVASES` template. */
   #confirmCreate(): void {
     this.draft = structuredClone(DEFAULT_CANVASES[this.createFormFactor]);
     this.draftName = this.createName;
@@ -353,7 +354,7 @@ export class CanvasEditorScreen extends LitElement {
    * editor mode. Routed through the screen's `errorKey` pattern: a `getCanvas` rejection — or a
    * definition the defensive parse rejects — sets the banner and stays in LIST mode rather than
    * entering a broken editor (and never becomes an unhandled rejection; the caller `void`-invokes it).
-   * B7's save writes the draft back. */
+   * Guardar (`#save`) writes the draft back. */
   async #openEditor(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -396,7 +397,7 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   /** Append a fresh, empty tab and make it active. Its column count comes from the form factor's
-   * default; the operator renames/resizes it in B7's tab-settings. */
+   * default; the operator renames/resizes it in the tab-settings panel. */
   #addTab(): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -1117,7 +1118,7 @@ export class CanvasEditorScreen extends LitElement {
 
   /** Editor mode: tab bar, interactive canvas, palette and the property panel for the current
    * selection (card / tab-settings / canvas-settings). Guardar validates the draft and persists it via
-   * `#save` (create or update on `editingId`); Cancelar discards. The editor root keeps the B5
+   * `#save` (create or update on `editingId`); Cancelar discards. The editor root keeps the
    * `editor-placeholder` seam so the `data-editing-id`/`data-form-factor` hooks still resolve. */
   #renderEditor(): TemplateResult {
     const draft = this.draft;

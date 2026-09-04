@@ -183,6 +183,10 @@ concrete tokens (`layoutProfile`, `layout_profile`, `ProfileDef`, `DEFAULT_PROFI
   grants** on `canvases` (`.enableRLS()` emits ENABLE only — verbatim adaptation of `drizzle/0089`).
   Regenerate the migration from the schema via the `db:generate`/`db:generate:custom` flow (do not
   hand-edit snapshots — the Drizzle rebase-collision lesson).
+
+  > **2026-09-04 (as-built):** Phase A shipped a RENAME migration (0100/0101), not drop/recreate — the
+  > (tenant_id,id) UNIQUE is an FK target that can't be dropped; FORCE RLS + policy + grants re-asserted
+  > on `canvases`.
 - **`apps/server`** — `management-api.ts` routes/handlers/imports; `requireProfileId`→`requireCanvasId`;
   `till-api.ts` boot resolution (`getProfile`/spread `profile:`→`canvas:`); `device-session.ts`
   capability read (`profile.definition`→`canvas.definition`); `device-api.ts` reassign route field; the
@@ -356,6 +360,10 @@ concurrently with other browser-mode suites**. Coverage bar `95/95/90/88`.
 - **Phase A is behaviour-preserving.** Only names change; the migration is drop/recreate (pre-prod, no
   backfill). The renamed `canvases` table re-establishes FORCE RLS + policy + grants (not just
   `.enableRLS()`), and the inmutabilidad guard must be green after.
+
+  > **2026-09-04 (as-built):** Phase A shipped a RENAME migration (0100/0101), not drop/recreate — the
+  > (tenant_id,id) UNIQUE is an FK target that can't be dropped; FORCE RLS + policy + grants re-asserted
+  > on `canvases`.
 - **Phase B adds no server route, migration, grant or new table.**
 - **Bundle rule.** The dashboard/till never runtime-import `@waitron/layouts`; local mirror types +
   the parity-tested contract mirror. `definition` crosses the client boundary as `unknown`.

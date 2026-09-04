@@ -1858,7 +1858,7 @@ export class DashboardApi {
   getCanvas(id: string): Promise<Canvas> {
     return this.#request<Canvas>(`/management-api/canvases/${id}`, "GET");
   }
-  /** `POST /management-api/canvases` — create; returns the new id at 201. `definition` is a validated ProfileDef the server re-validates. */
+  /** `POST /management-api/canvases` — create; returns the new id at 201. `definition` is a validated CanvasDef the server re-validates. */
   createCanvas(name: string, definition: unknown): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/canvases", "POST", { name, definition });
   }

@@ -85,11 +85,8 @@ export class CanvasGridPreview extends LitElement {
     const tab = this.tab;
     if (tab === null) return nothing;
     if (tab.cards.length === 0) {
-      // `canvas_editor.empty_tab` lands in B5 (both locales); the cast bridges the not-yet-present
-      // key, and `t` degrades to the English base meanwhile.
-      return html`<div class="empty" data-test="empty-grid">
-        ${t("canvas_editor.empty_tab" as StringKey)}
-      </div>`;
+      // `canvas_editor.empty_tab` is a plain string-literal key, present in both locales.
+      return html`<div class="empty" data-test="empty-grid">${t("canvas_editor.empty_tab")}</div>`;
     }
     return html`<div
       class="grid"
@@ -102,9 +99,9 @@ export class CanvasGridPreview extends LitElement {
   }
 
   #tile(card: CardInstance, index: number): TemplateResult {
-    // The card-name key (`canvas_editor.card.<type>`) lands in B5 across both locales; until then
-    // `t` degrades to the English base, so the cast bridges the not-yet-present key (mirrors
-    // layout-screen.ts's `widget.<type>` pattern).
+    // The card-name key (`canvas_editor.card.<type>`) is present in both locales for every
+    // `CardType`; the cast is still required because the template literal widens to `string`
+    // (mirrors layout-screen.ts's `widget.<type>` pattern).
     const name = t(`canvas_editor.card.${card.type}` as StringKey);
     const badge = `${card.colSpan}×${card.rowSpan}`;
     const style = `grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}`;
