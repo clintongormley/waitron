@@ -51,8 +51,11 @@ export interface AdoptDeps {
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
-  /** Persists `<stateDir>/modules.json` so the mirror's next boot migrates/wires the primary's
-   * enabled set (SP-1d). Injected — bound to `writeModuleConfig(config.stateDir, …)` in boot. */
+  /** Persists `<stateDir>/modules.json` so the mirror's next boot sees the primary's enabled set
+   * (SP-1d) — drives reconcile-drift logging now, SP-2's per-module pull filter later. It does NOT
+   * change what the mirror migrates: a fresh mirror already migrated every table in setup mode, so
+   * the trading-boot filter is a no-op over an already-complete schema. Injected — bound to
+   * `writeModuleConfig(config.stateDir, …)` in boot. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
   databaseUrl: string;
