@@ -1503,6 +1503,9 @@ declare module "@waitron/shared" {
      * failure surfaces as one clear boot-time cause and no silently-truncated fiscal backup can ship.
      * No params. */
     "backup.role_rls_fenced": Record<string, never>;
+    /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
+     * before decryption is even attempted. `reason` is a short machine tag. */
+    "backup.artifact_invalid": { reason: string };
     /**
      * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
