@@ -36,8 +36,16 @@ composition scaffolding the later slices extend.
   helper (§4).
 - Nine `WaitronModule` descriptors, one per current migration set (core, identity, workforce, workforce-es,
   fiscal, payments, scheduler, credentials, sync), each carrying its migration info + `tier` + `version`.
-  Each descriptor is **owned by its package** (exported from it) where the package exists; the composition
-  root assembles them into `ALL_MODULES`.
+  **SP-1a centralizes these in the composition root** (`apps/server/src/modules.ts`): the descriptors here
+  carry only *generic* fields (`name`/`tier`/`version`/`migrations`) — no domain knowledge — so listing
+  them in `apps/server` (which already legitimately knows which modules exist) leaks nothing. **Package
+  ownership is a later slice, and becomes *required* the moment a descriptor carries domain content** — the
+  `sync` enrolment (SP-2) and the fiscal module's `vocabulary`/cards (SP-3/SP-4) — because swappability
+  needs a module's own descriptor to live *in* its package, so replacing the package replaces the
+  descriptor. Moving the nine generic descriptors into their packages now would touch nine packages for no
+  behaviour gain; it rides the slice that first needs it. (Recorded on the SP-1a whole-branch/simplify
+  review — the earlier draft of this bullet said "owned by its package… where the package exists," which
+  overstated what this narrow slice does.)
 - Converting the migration seam: `boot.ts:505` derives its set list from `ALL_MODULES` (§4). This is
   **boot-only** — `migrations.manifest.json` stays a live runtime source for its other consumers
   (provisioning's `instance-apply`/`instance-state`/`status-command`, the dev scripts, the test harnesses,
@@ -176,7 +184,9 @@ tested primitive rather than inventing it.
 - **SP-1c** replaces the explicit `ALL_MODULES` order with the derived dependency graph + version gates
   (`requires`).
 - **SP-2** consumes `expectedSchemaVersion`/`appliedSchemaVersion` for the skew gate, and adds the typed
-  `sync` field to the descriptor.
+  `sync` field to the descriptor — the first *domain content* on a descriptor, so **package ownership
+  begins here** (§2): each domain's descriptor moves into its own package (`apps/server` then imports and
+  assembles them), which is what swappability requires.
 - **SP-3** turns `fiscal`'s descriptor into the full fiscal module (its `sync` enrolment = H2's lane, its
   `vocabulary`, its gated `provisioningSeeds`).
 - **No UI**, so **parallel-safe with the B3.2 session.**
