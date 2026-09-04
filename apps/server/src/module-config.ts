@@ -8,7 +8,7 @@ import { ALL_MODULES } from "./modules.js";
  * Read `<stateDir>/modules.json` into the desired ModuleConfig (spec §2). Absent file = every module
  * enabled (today's behaviour). A present-but-unparseable file is reported as `module.config_invalid`
  * rather than a bare `SyntaxError`, so a hand-edited file fails with a classified, actionable code.
- * Read at boot before migrations (spec §1.3) — the enabled set is not a DB row.
+ * Read at boot before migrations (architecture §1.3) — the enabled set is not a DB row.
  */
 export async function readModuleConfig(stateDir: string): Promise<ModuleConfig> {
   let text: string;

@@ -528,12 +528,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // for nothing, and it means the pool is never asked to double as the migrator's connection: the
   // two connection strings can differ, and `applyMigrations` now opens its own connection from
   // whichever string it is given rather than migrating over a pool built from a different one.
-  // SP-1b: the on-box `modules.json` desired set, read BEFORE migrations — exactly when the decision
-  // is needed (spec §1.3). Read UNCONDITIONALLY (both modes need it: trading for the migration filter
-  // + drift log, setup for the provisioning gate below), so a malformed file fails fast, once, before
-  // any migration or pool. Setup mode still migrates the FULL schema (the wizard needs it — SP-1a §4
-  // "setup-migrates-all"); trading mode migrates only the enabled set (default: all). `enabledModules`
-  // never drops `core` — it is `mandatory`, and `parseModuleConfig` refuses disabling a mandatory module.
+  // SP-1b: the on-box `modules.json` desired set, read BEFORE the migration run — exactly when the
+  // decision is needed (architecture §1.3). Read UNCONDITIONALLY (both modes need it: trading for the
+  // migration filter + drift log, setup for the provisioning gate below), so a malformed file fails
+  // fast, once, before the migration run (only the short-lived stamp probe above has opened yet).
+  // Setup mode still migrates the FULL schema (the wizard needs it — SP-1a §4 "setup-migrates-all");
+  // trading mode migrates only the enabled set (default: all). `enabledModules` never drops `core` —
+  // it is `mandatory`, and `parseModuleConfig` refuses disabling a mandatory module.
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
@@ -551,11 +552,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   //
   // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
   // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool: the drizzle
-  // journal tables (`__drizzle_migrations_*`) are owned by the migrator role, and the least-privileged
-  // deployment role the pool authenticates as holds no SELECT on them, so a `db`-pool read would fault
-  // 42501 — the same reason the stamp probe above also runs on the migrator connection rather than the
-  // pool. (No committed test exercises the least-privileged-pool path here; the committed drift test
-  // uses the migrator/superuser URL throughout.) They also run auto-commit — a plain per-statement
+  // journal tables (`__drizzle_migrations_*`) are owned by the migrator role, which therefore has
+  // SELECT on them; the least-privileged deployment role the pool authenticates as is granted no such
+  // SELECT, so the pool is the wrong connection for this read — the same reason the stamp probe above
+  // runs on the migrator connection rather than the pool. (The committed drift test uses the
+  // migrator/superuser URL throughout, so it does not itself exercise the least-privileged-pool
+  // role — the grant asymmetry is the design rationale, not an in-tree receipt.) They also run
+  // auto-commit — a plain per-statement
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.

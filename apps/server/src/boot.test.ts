@@ -819,7 +819,7 @@ describe("startServer, against a real container as the deployment role", () => {
   }, 60_000);
 
   it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
-    // SP-1b's trading-mode filter (spec §1.3): on a trading boot the migration seam migrates only the
+    // SP-1b's trading-mode filter (architecture §1.3): on a trading boot the migration seam migrates only the
     // sets the on-box `<stateDir>/modules.json` enables, not every module. A pristine `template0` clone
     // is the ONLY harness that can PROVE a skip — the pre-migrated `manifest` template already carries
     // every `__drizzle_migrations_<name>` journal, so a filtered run there could never make one ABSENT
@@ -1436,7 +1436,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
     // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
     // mode-derived value (live → production, provision.ts:94) — NOT `config.environment`, which
-    // `boot.ts` (line 697) never threads into `provisionVenue`. So this isolates the SEAL without
+    // `boot.ts` (line 695) never threads into `provisionVenue`. So this isolates the SEAL without
     // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
     // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
     const port = await freePort();

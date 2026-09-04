@@ -10,6 +10,17 @@
 
 **Spec:** [docs/superpowers/specs/2026-09-04-module-sp1b-enablement-and-reconcile.md](../specs/2026-09-04-module-sp1b-enablement-and-reconcile.md)
 
+> **Deviations landed in the finish-branch simplify pass (2026-09-04) — the task code blocks below
+> predate these; the SHIPPED code is what governs.** (1) `parseModuleConfig`'s second argument is
+> `modules: readonly WaitronModule[]`, not `known: readonly string[]` — it reads each descriptor's
+> `tier` so the mandatory check is generic. (2) The mandatory-disable error code is
+> **`module.mandatory_not_disableable`** with params `{ module: string }`, NOT
+> `module.core_not_disableable` / `Record<string, never>` as Task 1/2 show — generalized from a
+> hardcoded `"core"` to `tier === "mandatory"` so the generic package names no module. (3) `boot.ts`
+> reads `modules.json` **once, unconditionally** before the mode branch (both modes reuse the one
+> value), rather than the trading-only read Task 5 sketches. Behaviour is unchanged; these are the
+> quality cleanups from the reuse/altitude review.
+
 ## Global Constraints
 
 - **The gate** (run before pushing): `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test`. Per-package coverage is `test:coverage` (CI runs coverage, not plain `test`) — thresholds `98/98/98/95` for `@waitron/module`, `@waitron/server` (apps/server), `@waitron/provisioning`.

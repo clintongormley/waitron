@@ -75,8 +75,9 @@ the decision precedes any row.
 
 - A module is enabled **unless** it appears with value `false`. Absent key = enabled. Absent file =
   every module enabled (today's behaviour).
-- `core` is `mandatory` and cannot be disabled: writing `"core": false` is a **loud config error**
-  (`module.core_not_disableable`), never a silent override.
+- A `mandatory`-tier module (`core` today) cannot be disabled: writing `"core": false` is a **loud
+  config error** (`module.mandatory_not_disableable`, param `{ module }`), never a silent override.
+  The check is tier-driven, not name-driven — it protects any future mandatory module too.
 - An unknown module name (not in the module list) is a **loud config error**
   (`module.config_unknown`) — a typo that silently disabled nothing is the failure mode we refuse.
 - A malformed file (not an object, `modules` not an object, a value that is not a boolean) is a
@@ -87,7 +88,7 @@ the decision precedes any row.
 never imports an app). The domain concept is the module system, so `module.*` is the correct prefix
 by the house convention (name the concept, not the throwing package —
 `packages/shared/src/errors.ts`). SP-1b adds a new `packages/module/src/errors.ts` declaring
-`module.config_invalid` / `module.config_unknown` / `module.core_not_disableable`, re-imported from
+`module.config_invalid` / `module.config_unknown` / `module.mandatory_not_disableable`, re-imported from
 the package barrel (the root reachability guard, `scripts/errors-reachable.test.ts`, requires it).
 `@waitron/module` gains a `@waitron/shared` dependency for `AppError`.
 
@@ -239,11 +240,27 @@ only thing that drops tables) is explicitly **out of scope** — it is the guard
 architecture §6, never applied to `core` or a chained fiscal module, and no runtime disables a
 production module in SP-1b anyway.
 
+**Two scoping clarifications for the next slices:**
+
+- **Only the `provision-only` tier is guarded against unsafe disable.** SP-1b refuses provisioning
+  when a provision-only module is off, but disabling a **toggleable** module that is in fact
+  load-bearing (identity, sync, payments — all still statically wired) migrates a partial schema and
+  then fails boot loudly. That is the deliberate non-goal (fail loud, never silent corruption, never
+  reached under default-on); the tier label `toggleable` becomes real only once the static-wiring
+  inversion lands (SP-2/SP-4 + core-extraction). Until then, disabling a non-fiscal module is "off at
+  your own risk".
+- **The trading-mode filter also applies in MIRROR mode.** A mirror is part of the trading branch
+  (`config.till` is defined; `mode='mirror'` is read later), so a hand-edited `modules.json` on a
+  mirror would skip tables the primary replicates into. Under default-on this never happens; SP-1d
+  (cross-node config replication) is what bootstraps `modules.json` onto a mirror at adopt, and must
+  keep a mirror's enabled set consistent with its primary's for exactly this reason.
+
 ## 6. Testing
 
 - **`parseModuleConfig` (pure, `@waitron/module`)** — default-on for absent keys; absent/empty input →
   all enabled; a non-object, a non-object `modules`, and a non-boolean value each throw
-  `module.config_invalid`; `core: false` throws `module.core_not_disableable`; an unknown name throws
+  `module.config_invalid`; disabling a `mandatory` module (`core: false`) throws
+  `module.mandatory_not_disableable`; an unknown name throws
   `module.config_unknown`; a well-formed disable of a toggleable module yields the expected set. Proven
   by deletion for each validation branch (remove the check → the rejection test fails → restore).
 - **`reconcile` (pure)** — the three classes (`toMigrate`/`steady`/`softDisabled`) over hand-built
