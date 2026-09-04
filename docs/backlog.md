@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (the editor UI, next); B4 after.**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (in flight on `feat/sp-b3-2-grid-editor`: Phase A profile→canvas rename LANDED on the branch, Phase B the editor UI next); B4 after.**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -201,11 +201,32 @@ editor + rendering) is the sole remaining sub-project of this track.**
     profile-CRUD endpoints (list/get/create/update/delete) already existed server-side (verified) — untouched;
     the editor that calls them is B3.2. No migration / no new grant / not fiscal. B3.1's fuller value lands
     with B3.2 (authored profiles to choose from).
-  - **B3.2 (next):** the dashboard **grid editor** — a placeholder-tile canvas (drag/move/resize) + a card
-    palette from `CARD_CONTRACTS` + a property panel (per card/tab/profile) + client-side `validateProfile`
-    mirror, calling the existing profile-CRUD endpoints. Live card renders are a committed follow-on (v1 =
-    placeholder tiles at the same card-host seam). Gets its own brainstorm/spec-slice + plan. Parent design
-    §8. This is the SP-B **schedule risk** (the product-facing UI).
+  - **B3.2 (in flight, branch `feat/sp-b3-2-grid-editor`):** the dashboard **grid editor**, split into its
+    own Phase A + Phase B (owner call 2026-09-04, distinct from the B3.1/B3.2 split above). Design:
+    [sp-b3-2-canvas-editor-design](superpowers/specs/2026-09-04-sp-b3-2-canvas-editor-design.md); plans:
+    [sp-b3-2a-profile-to-canvas-rename](superpowers/plans/2026-09-04-sp-b3-2a-profile-to-canvas-rename.md),
+    [sp-b3-2b-canvas-editor](superpowers/plans/2026-09-04-sp-b3-2b-canvas-editor.md). Parent design §8 (now
+    carries a dated pointer to the rename).
+    - **Phase A — `profile` → `canvas` rename, LANDED on the branch (behaviour-preserving).** Today's
+      "layout profile" is renamed **canvas**, reserving "profile" for a future, bigger device profile
+      (capabilities are staying on the canvas record **transitionally** — see the deferral below). Renamed:
+      table `layout_profiles`→`canvases` (RENAME migration, not drop/recreate — an FK-target constraint
+      can't be dropped); type `ProfileDef`→`CanvasDef`; error codes `profile.*`→`canvas.*`; the
+      `devices`/`device_pairing_codes` `layout_profile_id` column→`canvas_id`; routes
+      `/management-api/profiles[/:id]`→`/management-api/canvases[/:id]` and
+      `/management-api/devices/:id/assign-profile`→`/assign-canvas`; the till's `TillInfo.profile`/`/api/till`
+      `profile` key→`canvas`, including the SP-C dev-switcher's till-side mirror (`DevProfile`→`DevCanvas`,
+      not in the original task inventory, caught in review); the dashboard client type
+      `LayoutProfile`→`Canvas`. No behaviour change, no new grant, no new table. Whole-workspace
+      `pnpm test` green after the final task (30 packages / 10038 tests).
+    - **Phase B (next):** the placeholder-tile canvas (drag/move/resize) + a card palette from
+      `CARD_CONTRACTS` + a property panel (per card/tab/canvas) + client-side `validateCanvas` mirror,
+      calling the renamed canvas-CRUD endpoints. Live card renders stay a committed follow-on (v1 =
+      placeholder tiles at the same card-host seam). This is the SP-B **schedule risk** (the
+      product-facing UI).
+    - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
+      **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
+      profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
