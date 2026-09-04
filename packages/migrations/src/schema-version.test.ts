@@ -48,6 +48,21 @@ describe("expectedSchemaVersion", () => {
     ) as { entries: unknown[] };
     expect(expectedSchemaVersion(core, null)).toBe(journal.entries.length);
   });
+
+  it("throws migrations.set_missing for a set whose journal is absent, not a bare ENOENT", async () => {
+    // A packaging fault must fail LOUD as a classified domain error — the same one
+    // `migrationOptionsFor` throws — not as an unclassified Node `ENOENT`. The temp root exists but
+    // holds no `core/meta/_journal.json`.
+    const root = mkdtempSync(join(tmpdir(), "waitron-schema-version-missing-"));
+    try {
+      const set = { name: "core", table: "__drizzle_migrations_x", from: "unused" };
+      const error = await captureError(() => Promise.resolve(expectedSchemaVersion(set, root)));
+      expect(isAppError(error) && error.code).toBe("migrations.set_missing");
+      expect(isAppError(error) && error.params).toMatchObject({ name: "core" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("appliedSchemaVersion — input validation", () => {

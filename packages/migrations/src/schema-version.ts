@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { type Database, pgErrorCode } from "@waitron/db";
@@ -25,9 +25,16 @@ const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
  */
 export function expectedSchemaVersion(set: MigrationSet, root: string | null): number {
   const folder = resolveMigrationsFolder(set, root);
-  const journal = JSON.parse(readFileSync(join(folder, "meta", "_journal.json"), "utf8")) as {
-    entries: unknown[];
-  };
+  const journalPath = join(folder, "meta", "_journal.json");
+  // Same guard, same domain error as `migrationOptionsFor`: a set whose journal is absent is a
+  // packaging fault, and it fails LOUD with a classified `migrations.set_missing` rather than a
+  // bare `ENOENT` from `readFileSync`. (A journal that is PRESENT but unparseable still escapes as
+  // a `SyntaxError` — that is a corrupt shipped artefact, not the "set is missing" this code names,
+  // and it too fails loud.)
+  if (!existsSync(journalPath)) {
+    throw new AppError("migrations.set_missing", { name: set.name, folder });
+  }
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: unknown[] };
   return journal.entries.length;
 }
 
