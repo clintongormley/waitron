@@ -60,16 +60,26 @@ export function manifestSets(): MigrationSet[] {
  * in development and fails at boot in the shipped artefact, which is the worst available failure
  * mode. Only the `migrationsTable` names come from the packages, and `manifest.test.ts` pins them.
  */
+/**
+ * Where a single set's SQL lives, resolved exactly as {@link migrationOptionsFor} resolves it — the
+ * `root === null` from-source branch and the bundle-root branch both live here so a second consumer
+ * (`expectedSchemaVersion`, which reads `<folder>/meta/_journal.json`) shares one implementation
+ * rather than copy-pasting the path logic. The resolution rules — and why the base is
+ * `import.meta.url`'s parent, not `process.cwd()` — are documented on {@link migrationOptionsFor}.
+ */
+export function resolveMigrationsFolder(set: MigrationSet, root: string | null): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return root === null
+    ? resolve(here, "..", set.from)
+    : join(isAbsolute(root) ? root : resolve(here, "..", root), set.name);
+}
+
 export function migrationOptionsFor(
   sets: readonly MigrationSet[],
   root: string | null,
 ): MigrationOptions[] {
-  const here = dirname(fileURLToPath(import.meta.url));
   return sets.map((set) => {
-    const migrationsFolder =
-      root === null
-        ? resolve(here, "..", set.from)
-        : join(isAbsolute(root) ? root : resolve(here, "..", root), set.name);
+    const migrationsFolder = resolveMigrationsFolder(set, root);
     // One check collapses two distinct filesystem states into the same rejection: the folder is
     // absent, or the folder exists but carries no `meta/_journal.json` (empty, or populated with
     // something else). That collapse is deliberate — Drizzle's own migrator only rejects the
