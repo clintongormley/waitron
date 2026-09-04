@@ -31,7 +31,9 @@ import {
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
+import { serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
+import { readModuleConfig } from "./module-config.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 
 /**
@@ -69,6 +71,12 @@ export interface MirrorBundle {
   relayUrl: string;
   syncToken: string;
   reservedIdentity: ReservedIdentity;
+  /**
+   * The primary's enabled-module set as a sparse override map (SP-1b's modules.json inner map), read
+   * fresh at mint time. `{}` when nothing is disabled (default-on). The mirror re-validates it against
+   * its own ALL_MODULES and writes its own modules.json from it (SP-1d adopt bootstrap).
+   */
+  moduleOverrides: Record<string, boolean>;
 }
 
 /**
@@ -175,6 +183,12 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     name: "cloud mirror",
   });
 
+  // SP-1d: snapshot the primary's enabled-module set (its on-box modules.json) so the mirror inherits
+  // it at adopt. Read FRESH here, not from boot — the operator may have edited the file since the
+  // primary booted; the mint reflects the current desired set. A malformed primary file surfaces its
+  // module.config_* code here (fail loud), which is correct — do not ship an unparseable set.
+  const moduleOverrides = serializeModuleConfig(await readModuleConfig(deps.stateDir));
+
   return {
     rows,
     designated: deps.designated,
@@ -184,5 +198,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     relayUrl: deps.relayUrl,
     syncToken: token,
     reservedIdentity: { ...reserved, endorsement },
+    moduleOverrides,
   };
 }

@@ -7,8 +7,11 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
+import { parseModuleConfig } from "@waitron/module";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { authenticatePeer } from "@waitron/sync";
+import { ALL_MODULES } from "./modules.js";
+import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
@@ -210,6 +213,49 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     expect(bundleA.rows.nodes.map((r) => r.id)).not.toContain(b.nodeId);
     expect(bundleA.rows.tills.map((r) => r.id)).not.toContain(b.tillId);
     expect(bundleA.rows.invoiceSeries.map((r) => r.id)).not.toContain(b.seriesId);
+  });
+
+  it("carries the primary's on-box module overrides", async () => {
+    // The mint reads <stateDir>/modules.json FRESH at assemble time. Seed a disabling override on a
+    // toggleable module and assert the bundle carries exactly that sparse map, so the mirror inherits
+    // the primary's enabled-module set at adopt (SP-1d). Clean the fixture up in `finally` so the
+    // shared stateDir has no modules.json for the `{}` sibling test, order-independently.
+    const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
+    await writeModuleConfig(
+      stateDir,
+      parseModuleConfig({ modules: { [toggleable]: false } }, ALL_MODULES),
+    );
+    try {
+      const bundle = await assembleMirrorBundle({
+        appDb,
+        retentionDb,
+        ring: RING,
+        stateDir,
+        relayUrl: "https://relay.test:9000/",
+        boxHostname: "waitron.local",
+        designated: await setupVenue(),
+        standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      });
+      expect(bundle.moduleOverrides).toEqual({ [toggleable]: false });
+    } finally {
+      await rm(join(stateDir, "modules.json"), { force: true });
+    }
+  });
+
+  it("carries {} when the primary has no modules.json", async () => {
+    // The shared stateDir carries only tls/ca.crt (no modules.json), so readModuleConfig returns the
+    // default all-enabled config and serializeModuleConfig yields an empty override map.
+    const bundle = await assembleMirrorBundle({
+      appDb,
+      retentionDb,
+      ring: RING,
+      stateDir,
+      relayUrl: "https://relay.test:9000/",
+      boxHostname: "waitron.local",
+      designated: await setupVenue(),
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    });
+    expect(bundle.moduleOverrides).toEqual({});
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {

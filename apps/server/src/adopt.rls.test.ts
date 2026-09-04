@@ -158,6 +158,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       relayUrl: "https://relay.test:9000/",
       syncToken: "peer-token-adopt-001",
       reservedIdentity: nextReservedIdentity(),
+      moduleOverrides: {},
     };
 
     const persisted: PersistTradingArgs[] = [];
@@ -256,6 +257,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       relayUrl: "https://relay.test:9000/",
       syncToken: "peer-token-adopt-002",
       reservedIdentity: nextReservedIdentity(),
+      moduleOverrides: {},
     };
 
     let standby: { nodeId: string; publicKey: string } | undefined;
@@ -310,6 +312,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       relayUrl: "https://relay.test:9000/",
       syncToken: "peer-token-adopt-003",
       reservedIdentity,
+      moduleOverrides: {},
     };
 
     let capturedStandby: { nodeId: string; publicKey: string } | undefined;
