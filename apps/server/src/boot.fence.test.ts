@@ -5,10 +5,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { serve } from "@hono/node-server";
+import type { ServerType } from "@hono/node-server";
+import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   readDeploymentAxes,
+  readNodeMembership,
   setSingletonRole,
   stampDeployment,
   writeNodeMembership,
@@ -16,9 +20,16 @@ import {
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
-import type { SignedMembershipDocument } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type MembershipDocumentBody,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
+import { enrolPeer } from "@waitron/sync";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
+import { mountSyncApi } from "./sync-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { roleUrl } from "./testing/postgres.js";
 
@@ -76,6 +87,42 @@ const SYNC_PEERS = JSON.stringify([
 // afresh), so the deployment stamp + singleton_role flips it performs are isolated to this file.
 const suite = useTemplateDb({ template: "manifest" });
 
+// A SECOND clone, the live gossip PEER for Case C/D: a plain sync source that advertises a signed
+// membership document on its /sync-api/hello. The booted primary's REAL pull worker drains this peer
+// and hands the advertised document to the REAL adoptMembership callback (boot.ts) — the runtime path
+// that must schedule the restart-into-fenced when the document supersedes-and-fences this node. It
+// only SERVES (never stamped); its held node_membership is rewritten per test.
+const peerSource = useTemplateDb({ template: "manifest" });
+
+// The peer's origin id (served on /hello, the id the booted primary pulls with `?originId=`).
+const PEER_SOURCE_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+// A trusted SIGNER identity distinct from the till node: its public half is stamped on a `nodes` row in
+// the booted primary's tenant (below), so `readMembershipTrustSet` trusts a document this key signs,
+// exactly as it trusts the till's own key. The private half signs the advertised documents in-process.
+const SIGNER_NODE_ID = "77777777-7777-4777-8777-777777777777";
+const SIGNER_KP = generateNodeKeyPair();
+
+/** A membership document (design §3/§5) signed by the trusted SIGNER key, naming THIS node with
+ * `standing` at `term`. Advertised by the live peer on /hello; the booted primary re-runs the accept
+ * fence against it (membership-adopt.ts) and persists it iff strictly newer. `term: 6` supersedes the
+ * held term-5 self-doc the primary boots with. */
+function peerDoc(
+  term: number,
+  standing: "sell-only" | "serving-primary",
+): SignedMembershipDocument {
+  const body: MembershipDocumentBody = {
+    term,
+    nodes: [{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }],
+  };
+  return {
+    body,
+    signerNodeId: SIGNER_NODE_ID,
+    signature: signDocumentBody(body, SIGNER_KP.privateKey),
+    endorsements: [],
+  };
+}
+
 // The box key ring `establishNodeIdentity` seals under, built from the SAME credentials key boot loads.
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -85,6 +132,13 @@ const RING = loadKeyRing({
 let migrationsRoot: string;
 let appDatabaseUrl: string;
 let syncDatabaseUrl: string;
+
+// The live gossip peer (Case C/D): a real HTTP server serving the peer clone's /sync-api, the Bearer
+// every pull presents, and the reader pool the /hello + /log handlers read through.
+let peerSourceReader: Database;
+let peerToken: string;
+let peerServer: ServerType;
+let peerBaseUrl: string;
 
 /** Seed the boot till's tenant + location + node (so boot's `readOrderFlow` / `readVenueLocale` reads
  * resolve) plus a node identity, mirroring boot.promote.test.ts's `seedTillIdentity`. */
@@ -146,12 +200,52 @@ beforeAll(async () => {
 
   appDatabaseUrl = roleUrl(suite.pg.uri, "app_login", "app_pw");
   syncDatabaseUrl = roleUrl(suite.pg.uri, "sync_applier", "ap");
+
+  // Stand up the live gossip peer for Case C/D. The /hello + /log handlers read through a
+  // sync_applier pool (app_user's SELECT), exactly as boot builds the source reader; the peer enrols
+  // the Bearer the booted primary presents from WAITRON_SYNC_PEERS. Stamp the primary's `nodes` row
+  // with the trusted SIGNER public key so its `readMembershipTrustSet` accepts the advertised document
+  // (the till + location the FK references were seeded above by `seedTillIdentity`).
+  peerSourceReader = await peerSource.pg.connectAs("sync_applier", "ap");
+  peerToken = (
+    await enrolPeer(peerSource.admin, { subscriberId: "fence-gossip", name: "fence-gossip" })
+  ).token;
+  await suite.admin.execute(sql`
+    insert into nodes (id, tenant_id, location_id, name, public_key)
+    values (${SIGNER_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
+            'Peer signer', ${SIGNER_KP.publicKey})
+    on conflict do nothing`);
+  const app = new Hono();
+  mountSyncApi(
+    app,
+    {
+      db: peerSourceReader,
+      tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+      nodeId: PEER_SOURCE_NODE,
+      environment: "production",
+    },
+    () => {},
+  );
+  const peerPort = await new Promise<number>((resolve) => {
+    peerServer = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, (info: AddressInfo) =>
+      resolve(info.port),
+    );
+  });
+  peerBaseUrl = `http://127.0.0.1:${peerPort}`;
 }, 180_000);
 
 afterAll(async () => {
+  if (peerServer !== undefined)
+    await new Promise<void>((resolve) => peerServer.close(() => resolve()));
+  if (peerSourceReader !== undefined) await peerSourceReader.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
 });
+
+/** The WAITRON_SYNC_PEERS JSON pointing the booted primary at the live gossip peer (Case C/D). */
+function livePeers(): string {
+  return JSON.stringify([{ nodeId: PEER_SOURCE_NODE, url: peerBaseUrl, token: peerToken }]);
+}
 
 /** An OS-assigned free port, released before use (boot.promote.test.ts's helper — WAITRON_HTTP_PORT
  * rejects "0", so the host cannot bind an ephemeral port itself). */
@@ -168,7 +262,7 @@ async function freePort(): Promise<number> {
 
 /** Boot a trading server against this clone with sync enabled (a dead peer), the shared env for both
  * cases. */
-async function bootFenceServer(port: number) {
+async function bootFenceServer(port: number, syncPeers: string = SYNC_PEERS) {
   return startServer({
     ...KEY_ENV,
     ...TICK_ENV,
@@ -179,7 +273,7 @@ async function bootFenceServer(port: number) {
     WAITRON_MIGRATIONS_DATABASE_URL: suite.pg.uri,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_SYNC_PEERS: SYNC_PEERS,
+    WAITRON_SYNC_PEERS: syncPeers,
     WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
   });
 }
@@ -250,6 +344,74 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       expect(source.status).toBe(401);
     } finally {
       await server.close();
+    }
+  }, 60_000);
+});
+
+describe("boot fence gossip (real Postgres): a superseding document adopted at runtime restarts into the fenced posture", () => {
+  it("Case C: an unfenced running primary adopts a superseding sell-only document → schedules a restart-into-fenced", async () => {
+    // The primary boots UNFENCED: singleton axis 'primary' and a held self-doc that keeps it serving.
+    await setSingletonRole(suite.admin, "primary");
+    await writeNodeMembership(suite.admin, selfDoc("serving-primary"));
+    // The live peer advertises a strictly-newer (term 6 > 5) document marking THIS node sell-only.
+    await writeNodeMembership(peerSource.admin, peerDoc(6, "sell-only"));
+
+    // SAFETY (CLAUDE.md §4): the fencing adopt schedules `setTimeout(() => process.kill(pid, "SIGTERM"), 0)`.
+    // Spy on process.kill so the restart NEVER fires a real SIGTERM at the vitest worker; assert it was
+    // scheduled. Installed BEFORE boot so the next-tick timer hits the spy, restored in `finally`.
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    const port = await freePort();
+    const server = await bootFenceServer(port, livePeers());
+    try {
+      await poll(async () => server.health.lastPassAt ?? undefined);
+
+      // The pull worker drained the peer, verified the trusted document, and PERSISTED it: this node's
+      // held membership bumps to term 6 — read back through the admin connection (the row on disk, not
+      // the callback's return), the honest proof the adoption actually happened.
+      const held = await poll(async () => {
+        const m = await readNodeMembership(suite.admin);
+        return m !== null && m.body.term === 6 ? m : undefined;
+      });
+      expect(held).not.toBeNull();
+      expect(held!.body.term).toBe(6);
+
+      // ...and because the newly-adopted document fences a node that booted unfenced, the next-tick
+      // restart-into-fenced was scheduled: process.kill fired into the spy, never a real SIGTERM.
+      await poll(async () => (killSpy.mock.calls.length > 0 ? true : undefined));
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+    }
+  }, 60_000);
+
+  it("Case D (negative control): a superseding document that keeps this node serving-primary is adopted but schedules NO restart", async () => {
+    // Same unfenced boot, but the advertised strictly-newer document keeps this node SERVING — the adopt
+    // must persist (term bumps) WITHOUT scheduling a restart (shouldFenceRestart is false: not fenced).
+    await setSingletonRole(suite.admin, "primary");
+    await writeNodeMembership(suite.admin, selfDoc("serving-primary"));
+    await writeNodeMembership(peerSource.admin, peerDoc(6, "serving-primary"));
+
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    const port = await freePort();
+    const server = await bootFenceServer(port, livePeers());
+    try {
+      await poll(async () => server.health.lastPassAt ?? undefined);
+
+      // The adopt DID happen — the held document bumps to term 6 (the branch was reached and evaluated).
+      const held = await poll(async () => {
+        const m = await readNodeMembership(suite.admin);
+        return m !== null && m.body.term === 6 ? m : undefined;
+      });
+      expect(held!.body.term).toBe(6);
+
+      // Give any erroneously-scheduled next-tick restart timer ample time to fire, then prove it did not:
+      // a serving-primary document does not fence, so no SIGTERM is ever requested.
+      await delay(300);
+      expect(killSpy).not.toHaveBeenCalledWith(process.pid, "SIGTERM");
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
     }
   }, 60_000);
 });

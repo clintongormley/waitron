@@ -109,7 +109,7 @@ import { readBackupStatus } from "./backup-status.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
-import { isFenced } from "./membership-fence.js";
+import { isFenced, shouldFenceRestart } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
@@ -1291,7 +1291,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // Now reachable: with a real trust set the node accepts a trusted, strictly-newer document. Covered
       // by boot.test.ts's "boot reads a REAL trust set …" case (it drives this very callback), and the
       // accept fence + persist it delegates to are proven end-to-end in membership-gossip.e2e.test.ts.
-      if (outcome.accepted) log("info", "membership.adopted", { term: outcome.document.body.term });
+      if (outcome.accepted) {
+        log("info", "membership.adopted", { term: outcome.document.body.term });
+        // Membership rejoin R1 (design §6 step 2): if this document fences THIS node while it is
+        // running unfenced (was serving-primary this boot), restart into the fenced posture — the boot
+        // path (reconcile axes + mount the read-only gate) applies on reboot. Same next-tick SIGTERM
+        // R3b promotion uses (boot.ts): fire on the NEXT tick so the pull loop's tick returns first;
+        // the supervisor reboots the box. `requestRestart` is only wired in the setup branch, so the
+        // inline process.kill form is used here, as the mirror promote does.
+        if (shouldFenceRestart(fenced, outcome.document, till.nodeId)) {
+          log("info", "membership.fenced_restart", { term: outcome.document.body.term });
+          setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+        }
+      }
     };
     const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
       runSyncPull({
