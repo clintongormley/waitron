@@ -922,7 +922,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // A mirror gates by mode (per-request, so a live promotion lifts it, design §10); a fenced
       // returned ex-primary (membership rejoin R1) gates on the boot-captured `fenced` — it leaves the
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
-      readOnlyGate(() => holders.mode.current === "mirror" || fenced),
+      readOnlyGate(
+        () => holders.mode.current === "mirror" || fenced,
+        // Let the peer-authenticated sync source through the fence: a fenced node serves its own-origin
+        // drain source (R2), and the carrier's cursor report (POST /sync-api/cursor) is how the disposal
+        // guard learns its progress. A mirror mounts no /sync-api, so this is a no-op there.
+        (c) => c.req.path.startsWith("/sync-api/"),
+      ),
     );
   }
   if (isMirror) {
