@@ -53,7 +53,7 @@ Extract the scrypt parameters + derivation that `recovery-bundle.ts` uses (`reco
 - Modify: `apps/server/src/recovery-bundle.ts` (use the shared derive; keep envelope bytes identical)
 
 **Interfaces:**
-- Produces: `SCRYPT_PARAMS: { N: number; r: number; p: number; keylen: number; maxmem: number }`; `deriveKey(passphrase: string, salt: Buffer): Buffer` (32-byte key).
+- Produces: `type ScryptParams = { N: number; r: number; p: number; keylen: number; maxmem: number }`; `SCRYPT_PARAMS: ScryptParams`; `deriveKey(passphrase: string, salt: Buffer, params?: ScryptParams): Buffer` (32-byte key; `params` defaults to `SCRYPT_PARAMS`). **`decryptBundle` must pass the envelope's recorded `{N, r, p}`** so a bundle stays decryptable after a future `SCRYPT_PARAMS` change (self-describing KDF — an existing property that must be preserved). `encryptBundle` uses the default. See the Task 1 ruling in the SDD ledger.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -209,11 +209,15 @@ Expected: FAIL — `Cannot find module './artifact-cipher.js'`.
 // apps/server/src/artifact-cipher.ts
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import { deriveKey } from "./scrypt-kdf.js";
+import { deriveKey, SCRYPT_PARAMS, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
 
 const MAGIC = Buffer.from("WBK1"); // Waitron BacKup, format 1
 const VERSION = 1;
+/** The version byte selects the KDF cost params, so an artifact stays decryptable after a future
+ * SCRYPT_PARAMS hardening: bump to VERSION 2 for new writes and keep v1's params in this map.
+ * (Same self-describing-KDF property the recovery bundle keeps — see the Task 1 ruling.) */
+const KDF_BY_VERSION: Record<number, ScryptParams> = { 1: SCRYPT_PARAMS };
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;
@@ -238,7 +242,9 @@ export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer 
   if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) {
     throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
   }
-  if (buf[MAGIC.length] !== VERSION) {
+  const version = buf[MAGIC.length];
+  const params = KDF_BY_VERSION[version];
+  if (params === undefined) {
     throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
   }
   let off = MAGIC.length + 1;
@@ -246,7 +252,7 @@ export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer 
   const iv = buf.subarray(off, (off += IV_LEN));
   const tag = buf.subarray(off, (off += TAG_LEN));
   const ct = buf.subarray(off);
-  const decipher = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt), iv);
+  const decipher = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt, params), iv);
   decipher.setAuthTag(tag);
   try {
     return Buffer.concat([decipher.update(ct), decipher.final()]);
