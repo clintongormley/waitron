@@ -133,12 +133,14 @@ export interface StartedServer {
   promoteLocalSecondaryToPrimary?: (attestation: FenceAttestation) => Promise<PromotionResult>;
   /**
    * Promote a read-only MIRROR to the venue's primary in-process (R3 design §4; parent SIF spec §5b) —
-   * on the identity the mirror already holds (R3a). Runs the point-of-no-return owner transaction (mode →
-   * primary, singleton_role → primary, term-guarded endorsed document), then rewrites `trading.env` with
-   * the cloud's OWN reserved standard series id and RESTARTS the box into `mode=primary` (a mirror is not
-   * selling, so a brief restart costs nothing). Present only in MIRROR mode; a non-mirror trading box omits
-   * it and exposes `promoteLocalSecondaryToPrimary` instead. IN-PROCESS ONLY: no network endpoint yet (spec
-   * §8). Requires a fence attestation or it refuses (`promotion.fence_not_attested`).
+   * on the identity the mirror already holds (R3a). Rewrites `trading.env` with the cloud's OWN reserved
+   * standard series id BEFORE the point-of-no-return (inert on a still-read-only mirror; owner decision
+   * 2026-09-04, see `promote.ts` `MirrorPromoteDeps.persistTradingEnv`), then runs the PONR owner
+   * transaction (mode → primary, singleton_role → primary, term-guarded endorsed document), then RESTARTS
+   * the box into `mode=primary` (a mirror is not selling, so a brief restart costs nothing). Present only
+   * in MIRROR mode; a non-mirror trading box omits it and exposes `promoteLocalSecondaryToPrimary` instead.
+   * IN-PROCESS ONLY: no network endpoint yet (spec §8). Requires a fence attestation or it refuses
+   * (`promotion.fence_not_attested`).
    */
   promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
