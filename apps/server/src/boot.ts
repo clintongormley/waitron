@@ -7,6 +7,8 @@ import {
   createPostgresDb,
   readDeploymentAxes,
   readMembershipTrustSet,
+  readNodeMembership,
+  setSingletonRole,
   readMirrorConfig,
   withTenant,
   type Database,
@@ -107,6 +109,7 @@ import { readBackupStatus } from "./backup-status.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
+import { isFenced } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
@@ -826,7 +829,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Both axes from ONE read (a single MVCC snapshot), so the initial holder pair is never torn — the
   // same single-snapshot guarantee `refreshDeploymentHolders` relies on: two separate reads under READ
   // COMMITTED could straddle a concurrent promotion and yield an impossible `(mirror, primary)` pair.
-  const axes = await readDeploymentAxes(db);
+  // Membership rejoin R1 (design §6): a returned ex-primary that holds a superseding document marking
+  // it sell-only/evicted must come up FENCED, not as the primary its saved axes still claim. The held
+  // document is authority above the persisted axes (wire-protocol §8), and the reconciliation is
+  // DEMOTE-ONLY — it can never self-promote. Read UNVERIFIED: the row was verified when adopted
+  // (membership-adopt.ts) or self-signed at promotion, so reading our own authoritative state back
+  // needs no re-verify, exactly as the deployment axes are trusted.
+  const heldMembership = await readNodeMembership(db);
+  const fenced = isFenced(heldMembership, config.till.nodeId);
+  let axes = await readDeploymentAxes(db);
+  if (fenced && axes.singletonRole === "primary") {
+    // Demote the singleton axis on the OWNER pool (app_user holds no UPDATE on deployment) — the same
+    // dev-correct migrationsDatabaseUrl owner-write R3b promote uses (withOwnerDb). Idempotent: a
+    // second fenced boot already reads 'secondary' and skips. mode stays 'primary' — the (primary,
+    // secondary) pair is valid (deployment_role_valid_ck); the read-only gate below, not the mode,
+    // enforces the fence. This stops the submitter/reconciler/config-writer via their existing
+    // isSingletonPrimary gates with no worker-gating code change.
+    const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+    try {
+      await setSingletonRole(ownerDb, "secondary");
+    } finally {
+      await ownerDb.close();
+    }
+    axes = await readDeploymentAxes(db);
+  }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
   // The four primary-only SINGLETON duties below (sync SOURCE, retention sweep, scheduled backup, outbound
@@ -867,11 +893,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
   // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
   // it, matching the loadKeyRing / mirror-config db-cleanup discipline in this branch.
-  if (isMirror) {
+  if (isMirror || fenced) {
     app.use(
       "*",
-      readOnlyGate(() => holders.mode.current === "mirror"),
+      // A mirror gates by mode (per-request, so a live promotion lifts it, design §10); a fenced
+      // returned ex-primary (membership rejoin R1) gates on the boot-captured `fenced` — it leaves the
+      // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
+      readOnlyGate(() => holders.mode.current === "mirror" || fenced),
     );
+  }
+  if (isMirror) {
     try {
       await ensureMirrorViewer(db, config.till.tenantId);
     } catch (error) {
