@@ -171,7 +171,7 @@ export interface CanvasDef {
 }
 
 // The built-in default canvases (design §4.3) — a dashboard-LOCAL copy of
-// `packages/layouts/src/default-canvases.ts`, one profile per form factor, that a NEW canvas seeds
+// `packages/layouts/src/default-canvases.ts`, one canvas per form factor, that a NEW canvas seeds
 // from (`structuredClone(DEFAULT_CANVASES[ff])`) when the operator picks a form factor in the Crear
 // dialog. It lives here rather than being runtime-imported for the same reason the rest of this file
 // does — `@waitron/layouts`' barrel drags `@waitron/db` into the browser bundle — and is kept honest

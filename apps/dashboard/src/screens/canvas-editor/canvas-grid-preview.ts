@@ -116,13 +116,14 @@ export class CanvasGridPreview extends LitElement {
       data-test="tile-${index}"
       style=${style}
       aria-pressed=${selected ? "true" : "false"}
-      @click=${() => this.#select(index)}
+      @click=${(event: MouseEvent) => this.#select(event, index)}
     >
       ${body}
     </button>`;
   }
 
-  #select(index: number): void {
+  #select(event: MouseEvent, index: number): void {
+    event.stopPropagation();
     this.dispatchEvent(
       new CustomEvent<{ index: number }>("select-card", {
         detail: { index },

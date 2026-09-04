@@ -54,7 +54,7 @@ describe("card-contracts mirror parity", () => {
     }
   });
 
-  it("mirrors the built-in default canvases (one profile per form factor)", () => {
+  it("mirrors the built-in default canvases (one canvas per form factor)", () => {
     expect(DEFAULT_CANVASES).toEqual(SRC_DEF);
   });
 });
