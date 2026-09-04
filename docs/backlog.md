@@ -244,6 +244,17 @@ editor + rendering) is the sole remaining sub-project of this track.**
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
       **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
       profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
+  - **SP-B4 deferred follow-on — fresh-display KDS enrol flow.** The lock screen's *set up as kitchen
+    display* affordance (`#onSetupDevice` → `deviceMode` + `screen="station"`) used to reach the station
+    screen's on-mount-401 enrol view via the legacy `#renderScreen` `case "station"`. SP-B4 removed that
+    arm, and (Task 3) a fresh cookieless display now resolves the `till` form-factor canvas, so `#inShell()`
+    is true and the shell renders the till counter tab instead of the KDS enrol view. Not the sale path,
+    not a blank screen (pre-production, no live KDS). Rework the fresh-KDS enrol path — an enrol overlay
+    like the till/handheld `setup` paths, or reconcile with SP-A.2 pairing-code enrolment + B2.2's kiosk
+    shell. A fresh display and an already-enrolled KDS both end at `deviceMode`+`screen="station"`, so there
+    is no clean render split without this rework. (Recorded by SP-B4; the test asserting the current
+    deferred behaviour is `till-app.test.ts` "the lock screen's set-up affordance routes a fresh display
+    into device mode".)
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
