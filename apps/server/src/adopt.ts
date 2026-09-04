@@ -3,6 +3,7 @@ import { adoptVenue } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
 import { sealMirrorToken } from "./mirror-token.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
+import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import type { TradingConfig } from "./trading-config.js";
 import "./errors.js";
 
@@ -36,10 +37,15 @@ export interface AdoptDeps {
   /** The mirror's OWN vault key. The token is re-sealed under it (design §6); a value sealed with the
    * primary's key cannot be opened here. */
   ring: KeyRing;
-  /** Fetches the bundle from the primary. Injected so the HTTP call (Task 9) is stubbable and the
-   * orchestration is testable against a hand-built bundle. Throws `mirror.bundle_fetch_failed` on a
-   * failed fetch — surfaced by the fetcher, not this orchestrator. */
-  fetchBundle: (primaryUrl: string, credential: AdoptCredential) => Promise<MirrorBundle>;
+  /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
+   * can reserve + endorse it (membership promotion R2). Injected so the HTTP call (Task 9) is stubbable
+   * and the orchestration is testable against a hand-built bundle. Throws `mirror.bundle_fetch_failed`
+   * on a failed fetch — surfaced by the fetcher, not this orchestrator. */
+  fetchBundle: (
+    primaryUrl: string,
+    credential: AdoptCredential,
+    standby: { nodeId: string; publicKey: string },
+  ) => Promise<MirrorBundle>;
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
@@ -56,10 +62,12 @@ export interface AdoptDeps {
 
 /**
  * Adopt an existing venue into this mirror's own database (design §5), the mirror-side analogue of
- * `provisionVenue`. It fetches the primary's bundle, inserts the identity scaffold with the primary's
- * EXACT ids (never `registerSif` — `adoptVenue` guarantees that, so no second fiscal chain is forked,
- * CLAUDE.md §5), stamps the environment + `mirror` mode, seals the sync token in the mirror's OWN
- * vault, writes the DB-stored connection config, and persists `trading.env` for the restart.
+ * `provisionVenue`. It mints the standby's identity in memory, fetches the primary's bundle (sending
+ * that identity for reservation + endorsement), inserts the identity scaffold with the primary's EXACT
+ * ids (never `registerSif` — `adoptVenue` guarantees that, so no second fiscal chain is forked,
+ * CLAUDE.md §5), stamps the environment + `mirror` mode, establishes the standby's DORMANT identity from
+ * the reserved bundle (design §6 R2), seals the sync token in the mirror's OWN vault, writes the
+ * DB-stored connection config, and persists `trading.env` for the restart.
  *
  * The order is load-bearing: `stampDeployment` runs BEFORE `setDeploymentMode`, which throws
  * `deployment.not_stamped` on an unstamped database (the `mode` UPDATE needs the singleton row). The
@@ -77,12 +85,38 @@ export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
 ): Promise<{ tenantId: string }> {
-  const bundle = await deps.fetchBundle(req.primaryUrl, req.credential);
+  // Mint the standby's own identity in memory BEFORE the fetch (design §6 R2): its public half + nodeId
+  // are sent to the primary, which reserves the standby's fiscal identity and endorses its key, returning
+  // both in `bundle.reservedIdentity`. The private half stays local until it is sealed below.
+  const standby = generateStandbyIdentity();
+  const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
+    nodeId: standby.nodeId,
+    publicKey: standby.publicKey,
+  });
   const { designated, rows } = bundle;
 
   await stampDeployment(deps.ownerDb, bundle.environment);
   await adoptVenue(rows, designated, { db: deps.ownerDb });
   await setDeploymentMode(deps.ownerDb, "mirror");
+  // Establish the standby's DORMANT identity from the reserved bundle (design §6 R2), after the tenant +
+  // parent rows exist (the vault + node/series FKs are restrict) and before the token seal. All inert:
+  // the reserved SIF is keyed to the standby's OWN nodeId, so no sale (which resolves `config.till.nodeId`
+  // — unchanged, the primary's) touches it and the box stays read-only until an R3 promotion. The
+  // standby's node mirrors the primary's modules: read the primary's designated node row from the bundle
+  // (camelCase `$inferInsert` rows, `Record<string, unknown>`) for its name + filing/tax modules.
+  const primaryNode = bundle.rows.nodes.find((n) => n.id === designated.nodeId);
+  await establishReservedStandbyIdentity(
+    { ownerDb: deps.ownerDb, ring: deps.ring },
+    {
+      tenantId: designated.tenantId,
+      locationId: designated.locationId,
+      standby,
+      nodeName: `${(primaryNode?.name as string) ?? "venue"} (standby)`,
+      filingModule: (primaryNode?.filingModule as string | null) ?? null,
+      taxModule: (primaryNode?.taxModule as string | null) ?? null,
+      reserved: bundle.reservedIdentity,
+    },
+  );
   await sealMirrorToken(deps.ownerDb, deps.ring, designated.tenantId, bundle.syncToken);
   await writeMirrorConfig(deps.ownerDb, {
     relayUrl: bundle.relayUrl,

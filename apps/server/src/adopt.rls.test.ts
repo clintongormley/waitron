@@ -9,6 +9,7 @@ import {
   readDeploymentMode,
   readMembershipTrustSet,
   readMirrorConfig,
+  readNodeEndorsement,
   setNodePublicKey,
   tenants,
   tills,
@@ -24,8 +25,9 @@ import {
   type AdoptVenueRows,
 } from "@waitron/provisioning";
 import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
-import type { MirrorBundle } from "./mirror-bundle.js";
+import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
+import { readNodeIdentityKey } from "./node-identity.js";
 
 // Real Postgres, not PGlite: adopt inserts the parent rows and stamps deployment/mirror_config on the
 // OWNER connection, seals the token into FORCE-RLS `tenant_credentials`, and the read-back runs as
@@ -50,6 +52,32 @@ let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(80_000_000 + nifCounter).padStart(8, "0")}K`;
+}
+
+// The dormant fiscal + membership identity the primary reserves for the standby (design §6 R2), the
+// `bundle.reservedIdentity` the primary mints in Task 4. The mirror DB is shared across this suite's
+// tests, so each reservation needs its OWN (nif, idSistemaInformatico, numeroInstalacion) — the global
+// `registro_sif_instalacion_uq` (never-reuse per NIF) 23505s a duplicate — and its own series codes.
+// The endorsement is stored VERBATIM on the standby's node row (jsonb); adopt performs no signature
+// check, so a representative shape suffices here (the real signing round-trip lives in mirror-bundle-*).
+let reservedCounter = 0;
+function nextReservedIdentity(): ReservedIdentity {
+  reservedCounter += 1;
+  return {
+    nif: `${String(90_000_000 + reservedCounter).padStart(8, "0")}K`,
+    idSistemaInformatico: "WAITRON-STANDBY",
+    numeroInstalacion: reservedCounter,
+    series: [
+      { code: `SA-${reservedCounter}`, purpose: "standard" },
+      { code: `SR-${reservedCounter}`, purpose: "rectificative" },
+    ],
+    endorsement: {
+      nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      publicKey: "STANDBY_PUB",
+      endorsedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      signature: "ENDORSEMENT_SIG",
+    },
+  };
 }
 
 /** Provision a fresh venue on the source (as the owner) and read back its five parent-row sets +
@@ -129,10 +157,12 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
       relayUrl: "https://relay.test:9000/",
       syncToken: "peer-token-adopt-001",
+      reservedIdentity: nextReservedIdentity(),
     };
 
     const persisted: PersistTradingArgs[] = [];
     let fetchArgs: { primaryUrl: string; credential: AdoptCredential } | undefined;
+    let capturedStandby: { nodeId: string; publicKey: string } | undefined;
     const credential: AdoptCredential = {
       personId: "99999999-9999-9999-9999-999999999999",
       password: "dashPass123",
@@ -142,8 +172,9 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       {
         ownerDb: mirror.admin,
         ring: RING,
-        fetchBundle: async (primaryUrl, cred) => {
+        fetchBundle: async (primaryUrl, cred, standby) => {
           fetchArgs = { primaryUrl, credential: cred };
+          capturedStandby = standby;
           return bundle;
         },
         persistTrading: async (a) => {
@@ -189,6 +220,12 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       sql`select id from tenants where id = ${designated.tenantId}`,
     );
     expect(t.rows).toHaveLength(1);
+
+    // R2: the orchestrator generated the standby identity in memory and threaded it into the fetch, so
+    // the primary could reserve + endorse it. (The dormant-identity outcomes are asserted in full by the
+    // dedicated test below.)
+    expect(capturedStandby?.nodeId).toBeDefined();
+    expect(capturedStandby?.publicKey).toBeDefined();
   });
 
   it("a mirror inherits the primary's trust anchor through the replicated node row (no adopt change)", async () => {
@@ -211,13 +248,18 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
       relayUrl: "https://relay.test:9000/",
       syncToken: "peer-token-adopt-002",
+      reservedIdentity: nextReservedIdentity(),
     };
 
+    let standby: { nodeId: string; publicKey: string } | undefined;
     await adoptFromPrimary(
       {
         ownerDb: mirror.admin,
         ring: RING,
-        fetchBundle: async () => bundle,
+        fetchBundle: async (_url, _cred, s) => {
+          standby = s;
+          return bundle;
+        },
         persistTrading: async () => {},
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
@@ -232,10 +274,89 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       },
     );
 
-    // The mirror's app pool now reads the primary's key back as the venue's sole trust anchor — proof the
+    // The mirror's app pool now reads the primary's key back as the venue's trust anchor — proof the
     // trust anchor inherited through replication alone. Assert the VALUE (not mere presence) so a dropped
-    // or mis-replicated `public_key` fails here.
+    // or mis-replicated `public_key` fails here. R2 adds the standby's OWN dormant node to the same set
+    // (its public key rides `reservedIdentity`), so the set now carries both — the primary as the anchor,
+    // and the standby the venue will trust once promoted.
     const trust = await readMembershipTrustSet(mirrorApp, designated.tenantId);
-    expect(trust).toEqual({ [designated.nodeId]: PRIMARY_PUB });
+    expect(trust).toEqual({
+      [designated.nodeId]: PRIMARY_PUB,
+      [standby!.nodeId]: standby!.publicKey,
+    });
+  });
+
+  it("establishes the standby's dormant identity from the bundle's reservedIdentity", async () => {
+    // R2 round-trip (design §6): adopt mints the standby identity in memory, sends it to the primary for
+    // reservation + endorsement, then persists the returned `reservedIdentity` as a DORMANT identity on
+    // the mirror — a sealed private key, its own node row carrying the endorsement, a reserved SIF keyed
+    // to its OWN nodeId (never `designated.nodeId`, so no sale resolves it), and reserved series. None of
+    // it makes the mirror sellable; it lies inert until an R3 promotion.
+    const { rows, designated } = await buildBundleParts();
+    const reservedIdentity = nextReservedIdentity();
+    const bundle: MirrorBundle = {
+      rows,
+      designated,
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+      relayUrl: "https://relay.test:9000/",
+      syncToken: "peer-token-adopt-003",
+      reservedIdentity,
+    };
+
+    let capturedStandby: { nodeId: string; publicKey: string } | undefined;
+    await adoptFromPrimary(
+      {
+        ownerDb: mirror.admin,
+        ring: RING,
+        fetchBundle: async (_url, _cred, standby) => {
+          capturedStandby = standby;
+          return bundle;
+        },
+        persistTrading: async () => {},
+        databaseUrl: "postgres://app@mirror/db",
+        migrationsDatabaseUrl: "postgres://owner@mirror/db",
+        syncDatabaseUrl: "postgres://sync@mirror/db",
+      },
+      {
+        primaryUrl: "https://primary.test/",
+        credential: {
+          personId: "99999999-9999-9999-9999-999999999999",
+          password: "dashPass123",
+        },
+      },
+    );
+
+    // The standby identity crossed to the fetcher (a fresh nodeId, distinct from the designated node).
+    expect(capturedStandby).toBeDefined();
+    expect(capturedStandby!.nodeId).not.toBe(designated.nodeId);
+
+    // The standby's private key is sealed on the mirror under `membership.node_key` — `readNodeIdentityKey`
+    // returns it (throwing `credentials.missing` if it were never established), so a non-empty string here
+    // proves the seal.
+    const sealedKey = await readNodeIdentityKey(mirrorApp, RING, designated.tenantId);
+    expect(typeof sealedKey).toBe("string");
+    expect(sealedKey.length).toBeGreaterThan(0);
+
+    // Exactly ONE reserved (dormant) registro_sif for this tenant, keyed to the standby's OWN nodeId with
+    // the primary-allocated number — NOT `designated.nodeId`, so the mirror still has no LIVE selling SIF
+    // and forks no chain (CLAUDE.md §5). Scoped by tenant_id: the mirror DB is shared across this suite.
+    const reservedSif = await mirror.admin.execute<{ numero_instalacion: number; node_id: string }>(
+      sql`select numero_instalacion, node_id from registro_sif
+          where revocado_en is null and tenant_id = ${designated.tenantId}`,
+    );
+    expect(reservedSif.rows).toHaveLength(1);
+    expect(reservedSif.rows[0]!.node_id).toBe(capturedStandby!.nodeId);
+    expect(reservedSif.rows[0]!.node_id).not.toBe(designated.nodeId);
+    expect(reservedSif.rows[0]!.numero_instalacion).toBe(reservedIdentity.numeroInstalacion);
+
+    // The primary's endorsement of the standby's key is stored on the standby's node row, verbatim.
+    const endorsement = await readNodeEndorsement(
+      mirrorApp,
+      designated.tenantId,
+      capturedStandby!.nodeId,
+    );
+    expect(endorsement).toEqual(reservedIdentity.endorsement);
   });
 });

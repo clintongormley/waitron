@@ -15,6 +15,7 @@ import {
   asAppUser,
   readDeploymentMode,
   readMirrorConfig,
+  readNodeEndorsement,
   stampDeployment,
   withTenant,
   type Database,
@@ -45,6 +46,7 @@ import {
 } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
 // C2b — the HEADLINE end-to-end (Task 11): a fresh mirror in SETUP mode adopts a bundle fetched from a
 // booted primary, then REBOOTS into mirror mode and pulls + serves the primary's catalogues read-only
@@ -207,8 +209,9 @@ let capturedBundle: MirrorBundle | undefined;
 async function fetchBundleCapturing(
   url: string,
   credential: AdoptCredential,
+  standby: { nodeId: string; publicKey: string },
 ): Promise<MirrorBundle> {
-  const bundle = await fetchMirrorBundle(url, credential);
+  const bundle = await fetchMirrorBundle(url, credential, standby);
   capturedBundle = bundle;
   return bundle;
 }
@@ -312,6 +315,16 @@ beforeAll(async () => {
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
+
+  // A real trading primary establishes its own membership identity at setup (the setup-api provision
+  // handler calls this beside sealAeat). `applyVenue` alone does not, so seal it here under RING — the
+  // key `assembleMirrorBundle` unseals to endorse the standby's key (membership promotion R2). Without
+  // it the bundle mint throws `credentials.missing`.
+  await establishNodeIdentity(
+    { ownerDb: primary.admin, ring: RING },
+    designated.tenantId,
+    designated.nodeId,
+  );
 
   appDb = await primary.pg.connectAs("app_login", "app_pw");
   retentionDb = await primary.pg.connectAs("sync_pruner", "pp");
@@ -432,6 +445,9 @@ beforeAll(async () => {
     {
       appDb,
       retentionDb,
+      // The box vault key that unseals the primary's identity key to endorse the standby (R2). RING
+      // stands in for both the primary's and the mirror's box key in this suite (see its note).
+      ring: RING,
       stateDir: primaryStateDir,
       relayUrl: relayClientUrl,
       boxHostname: "box.test",
@@ -515,11 +531,30 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     );
     expect(mirrorTill.rows[0]!.receiptPrinterId).toBeNull();
 
-    // THE KEY FISCAL ASSERTION: adopt forked NO second chain. `registro_sif` is empty on the mirror
-    // (adoptVenue never calls registerSif — CLAUDE.md §5); the primary holds its own single row. The SIF
-    // arrives on the mirror only via the pulled sync_log, and catalogues carry none.
-    expect(await registroSifCount(mirror.admin)).toBe(0);
+    // THE KEY FISCAL ASSERTION (R2): adopt forked NO LIVE chain, but it DID reserve the standby's
+    // DORMANT identity (design §6). The mirror now holds exactly ONE `registro_sif`, keyed to its OWN
+    // standby nodeId — NOT `designated.nodeId`, the selling node the mirror boots as (config.till.nodeId)
+    // — so no sale resolves it (`currentSif` gates on (tenant, node)) and the box still serves read-only
+    // (the 403 write assertion below). adoptVenue still never calls `registerSif` (CLAUDE.md §5); this row
+    // is the reserved insert, on a fresh empty chain, never a resume of the primary's. The primary holds
+    // its own single LIVE row, unchanged.
+    const mirrorSifs = await mirror.admin.execute<{ node_id: string }>(
+      sql`select node_id from registro_sif where revocado_en is null and tenant_id = ${designated.tenantId}`,
+    );
+    expect(mirrorSifs.rows).toHaveLength(1);
+    const standbyNodeId = mirrorSifs.rows[0]!.node_id;
+    expect(standbyNodeId).not.toBe(designated.nodeId); // still no live SIF for the selling node
     expect(await registroSifCount(primary.admin)).toBe(1);
+
+    // ROUND-TRIP CONFIRMED: the standby's private key is sealed on the mirror (a non-empty read proves
+    // it — `readNodeIdentityKey` throws `credentials.missing` otherwise), and the primary's endorsement
+    // of the standby's key — signed with the primary's OWN identity key over the real HTTP mint — is
+    // stored on the standby's node row, endorsedBy the designated (primary) node.
+    const sealedStandbyKey = await readNodeIdentityKey(mirror.admin, RING, designated.tenantId);
+    expect(sealedStandbyKey.length).toBeGreaterThan(0);
+    const endorsement = await readNodeEndorsement(mirror.admin, designated.tenantId, standbyNodeId);
+    expect(endorsement?.nodeId).toBe(standbyNodeId);
+    expect(endorsement?.endorsedBy).toBe(designated.nodeId);
 
     // The DB-stored connection config + sealed token adopt wrote — what the reboot reads INSTEAD of env.
     const cfg = await readMirrorConfig(mirror.admin);
@@ -601,8 +636,8 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     // `assertPresent(tx, "location", …)` line and this test goes green wrongly (the mismatch is accepted).
     const bogusLocationId = "00000000-0000-4000-8000-0000000000ff";
     const wrappedDeps = adoptDeps({
-      fetchBundle: async (url, credential) => {
-        const bundle = await fetchMirrorBundle(url, credential);
+      fetchBundle: async (url, credential, standby) => {
+        const bundle = await fetchMirrorBundle(url, credential, standby);
         return { ...bundle, designated: { ...bundle.designated, locationId: bogusLocationId } };
       },
     });

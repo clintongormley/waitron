@@ -85,6 +85,86 @@ async function mintNumeroInstalacion(
 }
 
 /**
+ * Reserve — but do not register — the next installation number for (NIF, IdSIF). The single-writer
+ * counter bump `registerSif` performs, exposed on its own so the PRIMARY can allocate a standby's
+ * number and hand it down in the adopt bundle (design §4: the primary is the sole allocator per NIF;
+ * a standby's DB is a copy and must never mint). The standby persists the returned number via
+ * `writeReservedSif` on ITS database — it never touches `contadores_instalacion`. Returns the number
+ * the caller may use (the pre-increment value); the counter is advanced and the number is permanently
+ * consumed (a never-promoted standby simply burns one cheap sequential number — gaps are permitted,
+ * design §7).
+ */
+export function reserveInstallationNumber(
+  tx: Transaction,
+  params: { nif: string; idSistemaInformatico: string },
+): Promise<number> {
+  return mintNumeroInstalacion(tx, params.nif, params.idSistemaInformatico);
+}
+
+/**
+ * Reset a node's `cadenas` head to a fresh, empty chain — a distinct chain, never a resume of
+ * anyone's (findings §1; CLAUDE.md §5). Upserts the (tenant, node) row to a both-null pointer
+ * (`ultimoRegistroId`/`ultimaHuella`), so the next append is treated as the chain's first record.
+ * `secuencia` is deliberately left OUT of the SET clause: it is OUR outbox ordering aid, never
+ * AEAT's, and resetting it would collide with UNIQUE (tenant_id, node_id, secuencia) on the very
+ * next append.
+ *
+ * Shared verbatim by `registerSif` (a new installation number is a new SIF identity, hence a new
+ * chain) and `writeReservedSif` (a reserved node is brand-new, with no prior identity to retire).
+ */
+function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Promise<unknown> {
+  return tx
+    .insert(cadenas)
+    .values({ tenantId, nodeId })
+    .onConflictDoUpdate({
+      target: [cadenas.tenantId, cadenas.nodeId],
+      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: sql`now()` },
+    });
+}
+
+/**
+ * Persist a DORMANT reserved SIF on a standby's own database (design §6 R2), keyed to the standby's
+ * OWN nodeId with the number the PRIMARY allocated (`numeroInstalacion`) — NOT re-allocated here. It
+ * is inert because no sale resolves this node (`config.till.nodeId` stays the primary's until a
+ * promotion), and `currentSif` gates on `(tenant, node)`. A fresh empty `cadenas` head (both-null
+ * pointer) makes it a brand-new chain, never a resume of anyone's (CLAUDE.md §5). No prior identity to
+ * retire — a reserved node is new. The `registro_sif_instalacion_uq` unique on
+ * (nif, id_sistema_informatico, numero_instalacion) is the never-reuse backstop; a duplicate number
+ * raises 23505.
+ */
+export async function writeReservedSif(
+  tx: Transaction,
+  params: {
+    tenantId: TenantId;
+    nodeId: NodeId;
+    nif: string;
+    idSistemaInformatico: string;
+    numeroInstalacion: number;
+  },
+): Promise<{ id: string }> {
+  const [inserted] = await tx
+    .insert(registroSif)
+    .values({
+      tenantId: params.tenantId,
+      nodeId: params.nodeId,
+      nif: params.nif,
+      idSistemaInformatico: params.idSistemaInformatico,
+      numeroInstalacion: params.numeroInstalacion,
+    })
+    .returning({ id: registroSif.id });
+
+  /* v8 ignore start */
+  if (inserted === undefined) {
+    throw new Error("registro_sif: reserved insert returned no row");
+  }
+  /* v8 ignore stop */
+
+  await resetChainHead(tx, params.tenantId, params.nodeId);
+
+  return { id: inserted.id };
+}
+
+/**
  * Register a node, or re-register a reimaged one. Always mints a fresh number.
  *
  * Re-registration is IMPLICIT rather than gated behind an `allowReRegistration` flag. A wiped node
@@ -147,17 +227,8 @@ export async function registerSif(
   }
   /* v8 ignore stop */
 
-  // A new installation number is a new SIF identity, therefore a NEW CHAIN (findings §1). Break
-  // the pointer. `secuencia` is deliberately untouched by leaving it out of the SET clause: it is
-  // OUR ordering aid for the outbox, never AEAT's, and resetting it would collide with
-  // UNIQUE (tenant_id, node_id, secuencia) on the very next append.
-  await tx
-    .insert(cadenas)
-    .values({ tenantId: params.tenantId, nodeId: params.nodeId })
-    .onConflictDoUpdate({
-      target: [cadenas.tenantId, cadenas.nodeId],
-      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: sql`now()` },
-    });
+  // A new installation number is a new SIF identity, therefore a NEW CHAIN (findings §1).
+  await resetChainHead(tx, params.tenantId, params.nodeId);
 
   return {
     id: inserted.id,

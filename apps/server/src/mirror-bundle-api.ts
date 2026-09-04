@@ -18,6 +18,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
+import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -34,10 +35,13 @@ import type { Logger } from "./logger.js";
  * scopes the auth transaction. `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN.
  * `relayUrl` is the primary's own relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is
  * configured — the endpoint then refuses `mirror.no_relay` rather than minting an undial-able bundle.
+ * `ring` is the box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and
+ * endorse the standby's key (design §6 R2).
  */
 export interface MirrorBundleApiDeps {
   appDb: Database;
   retentionDb: Database;
+  ring: KeyRing;
   stateDir: string;
   relayUrl: string | undefined;
   boxHostname: string;
@@ -51,9 +55,11 @@ export interface MirrorBundleApiDeps {
  * an unknown person a 404 (`loginManagerById` throws `person.not_found` for an id that resolves to no
  * row — unlike the email dashboard login, which folds unknown-vs-wrong into `password.invalid`; there
  * is no enumeration surface to hide on this trusted server-to-server path). `mirror.no_relay` is
- * the primary-has-no-tunnel refusal (this task wires its 400). A registered code absent here defaults to
- * 400 via `run` — which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary
- * is always stamped) would land if `assembleMirrorBundle` ever threw it.
+ * the primary-has-no-tunnel refusal (this task wires its 400). `mirror.standby_invalid` is the
+ * malformed-standby-identity refusal — a distinct 400 client fault from a bad credential (401), so it
+ * is NOT folded into `password.invalid`. A registered code absent here defaults to 400 via `run` —
+ * which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary is always
+ * stamped) would land if `assembleMirrorBundle` ever threw it.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
@@ -62,6 +68,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.not_found": 404,
   "authorization.not_permitted": 403,
   "mirror.no_relay": 400,
+  "mirror.standby_invalid": 400,
 };
 
 /**
@@ -86,7 +93,13 @@ export function mountMirrorBundleApi(
       // (The `isUuid` screen turns a malformed id into this clean 401 rather than a `22P02` → opaque 500
       // when it reaches the `uuid` column.) `readJsonBody` coerces an empty/malformed/`null` body to
       // `{}` so a degenerate body falls through to this screen rather than a 500.
-      const body = await readJsonBody<{ personId?: string; password?: string; totp?: string }>(c);
+      const body = await readJsonBody<{
+        personId?: string;
+        password?: string;
+        totp?: string;
+        standbyNodeId?: string;
+        standbyPublicKey?: string;
+      }>(c);
       if (
         typeof body.personId !== "string" ||
         !isUuid(body.personId) ||
@@ -96,6 +109,23 @@ export function mountMirrorBundleApi(
         throw new AppError("password.invalid", {});
       }
       const { personId, password, totp } = body;
+
+      // The standby identity the primary will reserve + endorse rides in the same body and is REQUIRED
+      // on every request (Task 5's fetcher always sends it; pre-production, no bwc). Screened exactly
+      // like the credential above — a non-string/non-UUID `standbyNodeId` or a non-string/empty
+      // `standbyPublicKey` is refused as `mirror.standby_invalid` (a distinct 400 client fault, NOT the
+      // 401 a bad credential gets). This runs AFTER the credential screen so a malformed credential
+      // still reports as `password.invalid`, and BEFORE auth so a well-formed request is fully shaped
+      // before any database work.
+      if (
+        typeof body.standbyNodeId !== "string" ||
+        !isUuid(body.standbyNodeId) ||
+        typeof body.standbyPublicKey !== "string" ||
+        body.standbyPublicKey === ""
+      ) {
+        throw new AppError("mirror.standby_invalid", {});
+      }
+      const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
 
       // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when enrolled),
       // `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user` under the
@@ -131,10 +161,12 @@ export function mountMirrorBundleApi(
       const bundle = await assembleMirrorBundle({
         appDb: deps.appDb,
         retentionDb: deps.retentionDb,
+        ring: deps.ring,
         stateDir: deps.stateDir,
         relayUrl: deps.relayUrl,
         boxHostname: deps.boxHostname,
         designated: deps.designated,
+        standby,
       });
       // The token appears once, here, and is never logged.
       return c.json(bundle);

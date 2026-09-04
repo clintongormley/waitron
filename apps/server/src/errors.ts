@@ -1371,6 +1371,24 @@ declare module "@waitron/shared" {
      */
     "mirror.no_relay": Record<string, never>;
     /**
+     * A mirror-bundle request carried a malformed STANDBY identity (membership promotion R2) — the
+     * `standbyNodeId` was absent or not a UUID, or the `standbyPublicKey` was absent or empty. The
+     * primary reserves the standby's fiscal identity and endorses its key, so a well-formed standby
+     * node id + public key is required on every request. A CLIENT request-shape fault, reported as HTTP
+     * 400 by the bundle route's local STATUS map — deliberately NOT folded into `password.invalid`
+     * (401): a bad standby identity is a distinct fault from a bad credential, and mislabelling it as a
+     * credential error would mislead the operator (the rule §1's error-code conventions give).
+     *
+     * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
+     * same `sync.*`/`tunnel.*` no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
+     * standby's key is not echoed. `mirror.*` names the DOMAIN CONCEPT — here the cloud-mirror
+     * adoption handshake, specifically the standby identity a bundle request must carry for the primary
+     * to reserve + endorse — never the throwing package (`tenant.not_found`'s note above gives the
+     * rule); `server.*` is reserved for facts about the process itself, and "the standby identity is
+     * malformed" is a fact about the mirror-bundle request, not the process. Never renamed once shipped.
+     */
+    "mirror.standby_invalid": Record<string, never>;
+    /**
      * A mirror could not FETCH or PARSE the bundle from the primary (sync cloud-mirror C2b) — the pull
      * over the tunnel/relay failed (a network error, a non-2xx from the primary's bundle endpoint) or the
      * bytes it returned were not a bundle the mirror could parse. This is a MIRROR-SIDE upstream failure,

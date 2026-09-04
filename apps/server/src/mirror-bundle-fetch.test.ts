@@ -31,6 +31,18 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
   relayUrl: "https://relay.example/abc",
   syncToken: "plaintext-sync-token",
+  reservedIdentity: {
+    nif: "B00000000",
+    idSistemaInformatico: "WAITRON-01",
+    numeroInstalacion: 7,
+    series: [{ code: "A-7", purpose: "standard" }],
+    endorsement: {
+      nodeId: "55555555-5555-5555-5555-555555555555",
+      publicKey: "STANDBY_PUB",
+      endorsedBy: "44444444-4444-4444-4444-444444444444",
+      signature: "SIG",
+    },
+  },
 };
 
 // The admin login the primary authenticates — the structured `AdoptCredential` the fetcher serialises
@@ -38,6 +50,13 @@ const SAMPLE_BUNDLE: MirrorBundle = {
 const CREDENTIAL: AdoptCredential = {
   personId: "99999999-9999-9999-9999-999999999999",
   password: "correct-horse-battery",
+};
+
+// The standby identity the mirror mints in memory (Task 3 `generateStandbyIdentity`) and the fetcher
+// sends to the primary for endorsement + number allocation — only its public half + nodeId travel.
+const STANDBY = {
+  nodeId: "55555555-5555-5555-5555-555555555555",
+  publicKey: "STANDBY_PUB",
 };
 
 const servers: ServerType[] = [];
@@ -74,18 +93,24 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     });
     const base = await startServer(app);
 
-    const bundle = await fetchMirrorBundle(base, CREDENTIAL);
+    const bundle = await fetchMirrorBundle(base, CREDENTIAL, STANDBY);
 
     // The body parsed back to the exact bundle the primary served — including a scalar field read, so
     // this is a real MirrorBundle and not merely a deep-equal on opaque JSON.
     expect(bundle).toEqual(SAMPLE_BUNDLE);
     expect(bundle.syncToken).toBe("plaintext-sync-token");
     // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
-    // OBJECT serialised as the JSON body (the shape the primary's dashboard-login screen authenticates).
+    // OBJECT plus the standby identity, serialised as the JSON body. The primary authenticates the
+    // credential fields and reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`
+    // (membership promotion R2) — so both must ride the body flattened alongside the credential.
     expect(seen).toEqual({
       method: "POST",
       path: "/management-api/mirror-bundle",
-      body: JSON.stringify(CREDENTIAL),
+      body: JSON.stringify({
+        ...CREDENTIAL,
+        standbyNodeId: STANDBY.nodeId,
+        standbyPublicKey: STANDBY.publicKey,
+      }),
     });
   });
 
@@ -98,7 +123,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     });
     const base = await startServer(app);
 
-    const bundle = await fetchMirrorBundle(`${base}/`, CREDENTIAL);
+    const bundle = await fetchMirrorBundle(`${base}/`, CREDENTIAL, STANDBY);
 
     expect(bundle).toEqual(SAMPLE_BUNDLE);
     expect(path).toBe("/management-api/mirror-bundle");
@@ -114,7 +139,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
       "ftp://x",
       "not-a-url",
     ]) {
-      const error = await fetchMirrorBundle(bad, CREDENTIAL).catch((e: unknown) => e);
+      const error = await fetchMirrorBundle(bad, CREDENTIAL, STANDBY).catch((e: unknown) => e);
       expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
     }
   });
@@ -126,7 +151,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     );
     const base = await startServer(app);
 
-    const error = await fetchMirrorBundle(base, CREDENTIAL).catch((e: unknown) => e);
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
@@ -137,7 +162,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     );
     const base = await startServer(app);
 
-    const error = await fetchMirrorBundle(base, CREDENTIAL).catch((e: unknown) => e);
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
@@ -151,7 +176,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
       server.close((err) => (err ? reject(err) : resolve())),
     );
 
-    const error = await fetchMirrorBundle(base, CREDENTIAL).catch((e: unknown) => e);
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 });

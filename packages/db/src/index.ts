@@ -93,6 +93,13 @@ export {
   writeNodeMembershipTx,
 } from "./node-membership.js";
 export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./node-identity.js";
+export {
+  insertReservedNodeTx,
+  insertReservedSeriesTx,
+  readNodeEndorsement,
+  type ReservedNodeInput,
+  type ReservedSeriesInput,
+} from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant, type TenantTxOptions } from "./tenancy.js";

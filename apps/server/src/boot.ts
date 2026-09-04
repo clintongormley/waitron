@@ -1439,6 +1439,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       {
         appDb: db,
         retentionDb,
+        // The box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and endorse
+        // the standby's key (membership promotion R2). Already in scope for `sealAeat`/identity above.
+        ring,
         stateDir: config.stateDir,
         // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and
         // `packages/sync/src/pull.ts` builds `${trimSlash(peer.url)}/sync-api/hello` → `undiciFetch`,
