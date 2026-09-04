@@ -874,16 +874,20 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editor renderers ─────────────────────────────────────────────────────────────────────────────
 
-  /** The tab bar: one button per draft tab (selecting `activeTabIndex`) plus a `+ Tab` button. */
+  /** The tab bar: one button per draft tab (selecting `activeTabIndex`) plus a `+ Tab` button.
+   * The buttons are a plain group, NOT an ARIA `tablist`: `wt-button` wraps a native `<button>` in its
+   * shadow root, so `role="tab"` on the host (which forwards only `aria-label`) leaves the real
+   * focusable control nested inside it — axe flags `aria-required-children` / `nested-interactive` /
+   * `no-focusable-content`. The active tab is conveyed with `aria-current` (a GLOBAL ARIA property,
+   * valid on any element, so no `aria-allowed-attr` issue) plus the `primary` variant. */
   #renderTabBar(draft: CanvasDef): TemplateResult {
-    return html`<div class="tabbar" role="tablist">
+    return html`<div class="tabbar">
       ${draft.tabs.map(
         (tab, index) =>
           html`<wt-button
             size="sm"
             variant=${index === this.activeTabIndex ? "primary" : "secondary"}
-            role="tab"
-            aria-selected=${index === this.activeTabIndex ? "true" : "false"}
+            aria-current=${index === this.activeTabIndex ? "true" : nothing}
             data-test="tab-btn-${tab.key}"
             @click=${() => this.#selectTab(index)}
             >${tab.title}</wt-button

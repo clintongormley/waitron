@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (in flight on `feat/sp-b3-2-grid-editor`: Phase A profile→canvas rename LANDED on the branch, Phase B the editor UI next); B4 after.**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED on `feat/sp-b3-2-grid-editor`, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 after.**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -201,7 +201,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
     profile-CRUD endpoints (list/get/create/update/delete) already existed server-side (verified) — untouched;
     the editor that calls them is B3.2. No migration / no new grant / not fiscal. B3.1's fuller value lands
     with B3.2 (authored profiles to choose from).
-  - **B3.2 (in flight, branch `feat/sp-b3-2-grid-editor`):** the dashboard **grid editor**, split into its
+  - **B3.2 (LANDED on branch `feat/sp-b3-2-grid-editor`, 2026-09-04):** the dashboard **canvas editor**, split into its
     own Phase A + Phase B (owner call 2026-09-04, distinct from the B3.1/B3.2 split above). Design:
     [sp-b3-2-canvas-editor-design](superpowers/specs/2026-09-04-sp-b3-2-canvas-editor-design.md); plans:
     [sp-b3-2a-profile-to-canvas-rename](superpowers/plans/2026-09-04-sp-b3-2a-profile-to-canvas-rename.md),
@@ -219,11 +219,28 @@ editor + rendering) is the sole remaining sub-project of this track.**
       not in the original task inventory, caught in review); the dashboard client type
       `LayoutProfile`→`Canvas`. No behaviour change, no new grant, no new table. Whole-workspace
       `pnpm test` green after the final task (30 packages / 10038 tests).
-    - **Phase B (next):** the placeholder-tile canvas (drag/move/resize) + a card palette from
-      `CARD_CONTRACTS` + a property panel (per card/tab/canvas) + client-side `validateCanvas` mirror,
-      calling the renamed canvas-CRUD endpoints. Live card renders stay a committed follow-on (v1 =
-      placeholder tiles at the same card-host seam). This is the SP-B **schedule risk** (the
-      product-facing UI).
+    - **Phase B — the canvas editor UI, LANDED on the branch.** The management dashboard's
+      `dashboard-canvas-editor-screen` (nav `nav.canvases`): a **list mode** (create-from-default-per-form-factor,
+      duplicate, delete, with a per-row `<canvas-grid-preview>` thumbnail of the first tab) and an
+      **editor mode** (tab bar with add-tab/tab-settings, the placeholder-tile canvas, a card palette from
+      `CARD_CONTRACTS`, and a property panel per card/tab/canvas — colSpan/rowSpan steppers, per-card
+      config + `visibleWhen` toggles + permission/capability warnings, tab title/columns/last-tab-guarded
+      delete, canvas name/form-factor/capabilities). Client-side `validateCanvas` mirror (a DB-free
+      deep-import of the pure `@waitron/layouts` `card-contract`/`canvas` modules, drift-guarded) + a local
+      contract mirror keep the #70 bundle rule (the dashboard never runtime-imports `@waitron/layouts`;
+      `definition` crosses the client boundary as `unknown`, defensively parsed). +4 API-client methods
+      (`listCanvases`/`getCanvas`/`createCanvas`/`updateCanvas`/`deleteCanvas`). a11y-clean in both themes
+      (the tab bar is a plain button group with `aria-current`, **not** an ARIA `tablist` — `wt-button`
+      wraps a native button, so `role="tab"` on the host nests interactive controls; fixed in B8). Dashboard
+      `test:coverage` green (1285 tests, 95/95/90/88). This was the SP-B **schedule risk** (the
+      product-facing UI). Built tasks B1–B8; a11y + final gate = B8.
+    - **Deferred follow-ons from Phase B:**
+      - **Pointer drag / move / resize.** v1 authors spans through property-panel steppers + ↑/↓ reorder
+        and selects by click; direct-manipulation drag-and-resize of the placeholder tiles is a follow-on.
+      - **Live card renders.** v1 renders placeholder tiles at the shared card-host seam (`<canvas-grid-preview>`);
+        rendering the real cards in the editor/preview is a committed follow-on.
+      - **Visual theme editor** (also listed under Follow-ons below).
+      - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
       **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
       profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
